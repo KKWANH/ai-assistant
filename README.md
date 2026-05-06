@@ -1,0 +1,253 @@
+# Local AI Workspace (AIWS)
+
+AIWS is a local-first personal AI workspace for organizing conversations and writing threads by project, optional subproject, and session.
+
+This MVP focuses on a reliable file-based foundation:
+
+- CLI mode for fully local terminal workflows.
+- Local UI mode bound to `127.0.0.1`.
+- Server UI mode bound to `0.0.0.0` with required password authentication.
+- Two-level project hierarchy: `project` or `project/subproject`.
+- JSONL and Markdown archives for every session.
+- Reusable project skills with parent-to-subproject inheritance.
+
+## Install For Local Development
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Test
+
+```bash
+python -m pytest
+```
+
+## CLI Example
+
+```bash
+aiws init --root ~/.ai-workspace
+aiws skills list --root ~/.ai-workspace
+
+aiws account create kwanho \
+  --root ~/.ai-workspace \
+  --password "change-this" \
+  --admin
+
+aiws account create parent \
+  --root ~/.ai-workspace \
+  --password "change-this-too"
+
+aiws project create "AI System" \
+  --root ~/.ai-workspace \
+  --owner kwanho \
+  --visibility private \
+  --skills andrej-karpathy-skills \
+  --notes "Local-first AI gateway for Mac mini."
+
+aiws project create "Local Runner" \
+  --root ~/.ai-workspace \
+  --parent ai-system
+
+aiws session create ai-system/local-runner "Ollama MVP" \
+  --root ~/.ai-workspace
+
+aiws session append ai-system/local-runner ollama-mvp \
+  --root ~/.ai-workspace \
+  --role user \
+  --content "How should we implement the Ollama runner?"
+
+aiws prompt ai-system/local-runner ollama-mvp \
+  --root ~/.ai-workspace
+```
+
+## Accounts And Project Visibility
+
+AIWS uses a file-based MVP account store at:
+
+```text
+workspace_root/users.json
+```
+
+Passwords are hashed with PBKDF2-SHA256. Projects can be:
+
+- `private`: visible to the owner and admin accounts.
+- `public`: visible to every logged-in account.
+
+Admin accounts can list every project and inspect per-account usage counters.
+
+```bash
+aiws account list --root ~/.ai-workspace
+aiws project list --root ~/.ai-workspace --user kwanho
+```
+
+Accounts also have profile context used for conversations:
+
+```bash
+aiws account update kwanho \
+  --root ~/.ai-workspace \
+  --name "Kwanho Kim" \
+  --age "40" \
+  --job "Engineer" \
+  --situation "Building a local-first AI workspace." \
+  --language ko \
+  --memory "Prefers concise Korean answers."
+```
+
+The UI profile page supports language selection and image-only avatar upload.
+
+This is intentionally simple for the MVP. For broader internet exposure, keep AIWS behind Cloudflare Tunnel or Tailscale and avoid exposing the raw port directly.
+
+## Ask With Ollama
+
+Install and run Ollama separately, then pull a model:
+
+```bash
+ollama serve
+ollama pull qwen3:0.6b
+```
+
+Ask stores both the user message and assistant response in the session:
+
+```bash
+aiws ask ai-system/local-runner ollama-mvp \
+  --root ~/.ai-workspace \
+  --provider ollama \
+  --model qwen3:0.6b \
+  --content "What should we implement next?"
+```
+
+For better local quality on a 24GB Mac, try `qwen3:8b` after the smoke test works.
+
+Kimi uses Moonshot's OpenAI-compatible API. Set one of:
+
+```bash
+export AIWS_KIMI_API_KEY="..."
+export MOONSHOT_API_KEY="..."
+```
+
+Then run:
+
+```bash
+aiws ask ai-system/local-runner ollama-mvp \
+  --root ~/.ai-workspace \
+  --provider kimi \
+  --model kimi-k2.5 \
+  --search-mode auto \
+  --content "What is the latest context I should consider?"
+```
+
+Model cost estimates:
+
+```bash
+aiws models costs --root ~/.ai-workspace
+```
+
+Search modes:
+
+- `off`: never add search context.
+- `auto`: search only for freshness-sensitive prompts.
+- `always`: always attach search metadata.
+
+The current search module records search-mode metadata and has a provider interface boundary. A real web-search provider is the next increment.
+
+## Attachments
+
+The web UI can upload session attachments:
+
+- text: `.txt`, `.md`
+- documents: `.pdf`, `.docx`
+- images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
+
+Text extraction is lightweight and intentionally conservative. Full OCR and rich PDF parsing are future modules.
+
+## Runtime Launcher
+
+Run AIWS and local model services together:
+
+```bash
+aiws run \
+  --root ~/.ai-workspace \
+  --mode local \
+  --port 8765 \
+  --models ollama \
+  --idle-timeout 1800 \
+  --status-path ~/.ai-workspace/runtime-status.json
+```
+
+`aiws run` starts the UI, starts `ollama serve` when requested, writes a JSON status file, and stops the owned Ollama process after the workspace has been idle for the configured timeout. Use `--models none` to run only the UI.
+
+The older generic supervisor remains available for arbitrary commands:
+
+```bash
+aiws supervise --status-path /tmp/aiws-status.json -- aiws ui start --root ~/.ai-workspace --mode local --port 8765
+```
+
+## Local UI
+
+```bash
+aiws run \
+  --root ~/.ai-workspace \
+  --mode local \
+  --port 8765 \
+  --models ollama
+```
+
+Open `http://127.0.0.1:8765`.
+
+## Server UI
+
+```bash
+aiws run \
+  --root ~/.ai-workspace \
+  --mode server \
+  --port 8765 \
+  --models ollama
+```
+
+Server mode binds to `0.0.0.0` and refuses to start without a password. Put it behind Cloudflare Tunnel, Tailscale, or a trusted reverse proxy before exposing it outside your network.
+
+If accounts already exist in the workspace, server mode can use account login instead of the legacy `--password` bootstrap guard.
+
+## Hosting Recommendation
+
+For this product, the recommended low-cost path is:
+
+1. Run AIWS on the Mac mini.
+2. Keep the canonical files on the Mac mini.
+3. Use Tailscale for private family access first.
+4. Use Cloudflare Tunnel later if browser-only public-domain access is needed.
+
+Vercel is not the first choice for AIWS because the app needs local file storage, local Ollama, and long-running local services. A serverless deployment would either lose the local-first storage advantage or require moving state/model calls elsewhere.
+
+Detailed docs:
+
+- [Hosting Runbook](docs/HOSTING_RUNBOOK.md)
+- [Security Test Plan](docs/SECURITY_TEST_PLAN.md)
+
+## Storage Layout
+
+```text
+workspace_root/
+  projects/
+    ai-system/
+      project.json
+      sessions/
+        ollama-mvp/
+          session.json
+          messages.jsonl
+          session.md
+      local-runner/
+        project.json
+        sessions/
+          ...
+  skills/
+    andrej-karpathy-skills/
+      CLAUDE.md
+```
+
+## Not Implemented Yet
+
+This MVP includes initial Ollama and Kimi providers, account login, file attachments, cost estimates, and a Tailscale-oriented hosting runbook. OpenAI, Claude, Gemini, live web search, OCR, RAG, family permissions, and Cloudflare Tunnel automation remain future extension points.
