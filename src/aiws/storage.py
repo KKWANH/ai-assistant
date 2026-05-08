@@ -15,6 +15,7 @@ from typing import Any
 SUPPORTED_SKILL_FILES = ("CLAUDE.md", "SKILL.md", "skills.md", "README.md")
 SUPPORTED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 SUPPORTED_LANGUAGES = {"en", "ko"}
+GENERAL_CHAT_PREFIX = "general-chat"
 
 DEFAULT_SKILL_NAME = "andrej-karpathy-skills"
 DEFAULT_SKILL_FILE = "CLAUDE.md"
@@ -299,9 +300,45 @@ def update_account_profile(
             raise WorkspaceError("Language must be en or ko.")
         profile["language"] = language
     if memory:
-        memories = profile.setdefault("memory", [])
-        memories.append({"content": memory, "created_at": utc_now(), "source": "manual"})
+        append_account_memory(root, username_slug, memory, source="manual", users=users)
     save_users(root, users)
+    return public_account(user)
+
+
+def append_account_memory(
+    root: str | Path,
+    username: str,
+    content: str,
+    *,
+    source: str = "auto",
+    metadata: dict[str, Any] | None = None,
+    users: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    text = " ".join(content.split())
+    if not text:
+        raise WorkspaceError("Memory content must not be empty.")
+    username_slug = slugify(username)
+    user_data = users or load_users(root)
+    user = user_data["users"].get(username_slug)
+    if not user:
+        raise WorkspaceError(f"Account does not exist: {username_slug}")
+    profile = user.setdefault("profile", {})
+    memories = profile.setdefault("memory", [])
+    if any(item.get("content") == text for item in memories):
+        if users is None:
+            save_users(root, user_data)
+        return public_account(user)
+    memories.append(
+        {
+            "content": text[:500],
+            "created_at": utc_now(),
+            "source": source,
+            "metadata": metadata or {},
+        }
+    )
+    profile["memory"] = memories[-100:]
+    if users is None:
+        save_users(root, user_data)
     return public_account(user)
 
 
@@ -465,6 +502,41 @@ def create_project(
     return project
 
 
+def general_chat_project_path(username: str | None) -> str:
+    owner = slugify(username) if username else "local"
+    return f"{GENERAL_CHAT_PREFIX}-{owner}"
+
+
+def ensure_general_chat_project(root: str | Path, username: str | None) -> dict[str, Any]:
+    init_workspace(root)
+    project_path = general_chat_project_path(username)
+    if project_json_path(root, project_path).exists():
+        return load_project(root, project_path)
+    owner = slugify(username) if username and has_accounts(root) else None
+    project = create_project(
+        root,
+        "General chats",
+        slug=project_path,
+        notes="Projectless chats are stored here internally.",
+        owner=owner,
+        visibility="private",
+    )
+    project["hidden"] = True
+    write_json(project_json_path(root, project_path), project)
+    return project
+
+
+def create_general_chat_session(
+    root: str | Path,
+    username: str | None,
+    title: str,
+    *,
+    slug: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    project = ensure_general_chat_project(root, username)
+    return project["path"], create_session(root, project["path"], title, slug=slug)
+
+
 def load_project(root: str | Path, project_path: str) -> dict[str, Any]:
     ensure_project_exists(root, project_path)
     return read_json(project_json_path(root, project_path))
@@ -483,6 +555,8 @@ def list_projects(root: str | Path) -> list[dict[str, Any]]:
 
 
 def can_access_project(root: str | Path, project: dict[str, Any], username: str | None) -> bool:
+    if not has_accounts(root):
+        return True
     if project.get("visibility", "private") == "public":
         return True
     if username and project.get("owner") == slugify(username):
@@ -491,7 +565,19 @@ def can_access_project(root: str | Path, project: dict[str, Any], username: str 
 
 
 def list_visible_projects(root: str | Path, username: str | None) -> list[dict[str, Any]]:
-    return [project for project in list_projects(root) if can_access_project(root, project, username)]
+    return [
+        project
+        for project in list_projects(root)
+        if not project.get("hidden") and can_access_project(root, project, username)
+    ]
+
+
+def list_visible_general_chat_projects(root: str | Path, username: str | None) -> list[dict[str, Any]]:
+    return [
+        project
+        for project in list_projects(root)
+        if project.get("hidden") and can_access_project(root, project, username)
+    ]
 
 
 def ensure_project_access(root: str | Path, project_path: str, username: str | None) -> None:
@@ -587,6 +673,134 @@ def append_message(
     return message
 
 
+def create_execution_run(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    *,
+    title: str = "Programming run",
+    mode: str = "programming",
+    actor: str | None = None,
+) -> dict[str, Any]:
+    load_session(root, project_path, session_slug)
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(4)
+    runs_root = session_dir(root, project_path, session_slug) / "runs"
+    run_dir = runs_root / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
+    run = {
+        "id": run_id,
+        "title": title,
+        "mode": mode,
+        "actor": slugify(actor) if actor else None,
+        "status": "running",
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+    write_json(run_dir / "run.json", run)
+    (run_dir / "events.jsonl").write_text("", encoding="utf-8")
+    regenerate_run_markdown(root, project_path, session_slug, run_id)
+    return run
+
+
+def run_dir(root: str | Path, project_path: str, session_slug: str, run_id: str) -> Path:
+    if not re.fullmatch(r"[0-9]{14}-[a-f0-9]{8}", run_id):
+        raise WorkspaceError("Run id is invalid.")
+    return session_dir(root, project_path, session_slug) / "runs" / run_id
+
+
+def load_execution_run(root: str | Path, project_path: str, session_slug: str, run_id: str) -> dict[str, Any]:
+    path = run_dir(root, project_path, session_slug, run_id) / "run.json"
+    if not path.exists():
+        raise WorkspaceError(f"Run does not exist: {run_id}")
+    return read_json(path)
+
+
+def update_execution_run_status(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    run_id: str,
+    status: str,
+) -> dict[str, Any]:
+    if status not in {"running", "completed", "failed", "cancelled"}:
+        raise WorkspaceError("Run status is invalid.")
+    run = load_execution_run(root, project_path, session_slug, run_id)
+    run["status"] = status
+    run["updated_at"] = utc_now()
+    write_json(run_dir(root, project_path, session_slug, run_id) / "run.json", run)
+    regenerate_run_markdown(root, project_path, session_slug, run_id)
+    return run
+
+
+def append_run_event(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    run_id: str,
+    *,
+    event_type: str,
+    content: str,
+    metadata: dict[str, Any] | None = None,
+    actor: str | None = None,
+    mirror_to_session: bool = True,
+) -> dict[str, Any]:
+    load_execution_run(root, project_path, session_slug, run_id)
+    event = {
+        "type": event_type,
+        "content": content,
+        "created_at": utc_now(),
+        "metadata": metadata or {},
+    }
+    events_path = run_dir(root, project_path, session_slug, run_id) / "events.jsonl"
+    with events_path.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(event, ensure_ascii=False) + "\n")
+    if mirror_to_session:
+        append_message(
+            root,
+            project_path,
+            session_slug,
+            role="tool",
+            content=content,
+            metadata={"run_id": run_id, "event_type": event_type, **(metadata or {})},
+            actor=actor,
+        )
+    regenerate_run_markdown(root, project_path, session_slug, run_id)
+    return event
+
+
+def read_run_events(root: str | Path, project_path: str, session_slug: str, run_id: str) -> list[dict[str, Any]]:
+    events_path = run_dir(root, project_path, session_slug, run_id) / "events.jsonl"
+    if not events_path.exists():
+        raise WorkspaceError(f"Run events do not exist: {run_id}")
+    events = []
+    for line in events_path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            events.append(json.loads(line))
+    return events
+
+
+def regenerate_run_markdown(root: str | Path, project_path: str, session_slug: str, run_id: str) -> None:
+    run = load_execution_run(root, project_path, session_slug, run_id)
+    events_path = run_dir(root, project_path, session_slug, run_id) / "events.jsonl"
+    events = []
+    if events_path.exists():
+        events = read_run_events(root, project_path, session_slug, run_id)
+    lines = [
+        f"# {run['title']}",
+        "",
+        f"- Run: `{run_id}`",
+        f"- Mode: `{run['mode']}`",
+        f"- Status: `{run['status']}`",
+        "",
+    ]
+    for event in events:
+        lines.extend([f"## {event['type']}", "", event["content"], ""])
+    (run_dir(root, project_path, session_slug, run_id) / "run.md").write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
+
+
 def read_messages(root: str | Path, project_path: str, session_slug: str) -> list[dict[str, Any]]:
     path = session_dir(root, project_path, session_slug) / "messages.jsonl"
     if not path.exists():
@@ -657,18 +871,21 @@ def build_prompt_context(root: str | Path, project_path: str, session_slug: str)
     messages = read_messages(root, project_path, session_slug)
     lines = ["# AIWS Prompt Context", ""]
 
-    lines.append("## Projects")
-    for project in projects:
-        lines.extend(
-            [
-                f"### {project['title']}",
-                f"- Path: `{project['path']}`",
-                f"- Slug: `{project['slug']}`",
-            ]
-        )
-        if project.get("notes"):
-            lines.extend(["", project["notes"]])
-        lines.append("")
+    if any(project.get("hidden") for project in projects):
+        lines.extend(["## Chat Scope", "Projectless general chat.", ""])
+    else:
+        lines.append("## Projects")
+        for project in projects:
+            lines.extend(
+                [
+                    f"### {project['title']}",
+                    f"- Path: `{project['path']}`",
+                    f"- Slug: `{project['slug']}`",
+                ]
+            )
+            if project.get("notes"):
+                lines.extend(["", project["notes"]])
+            lines.append("")
 
     skill_names = resolve_skill_names(root, project_path)
     lines.extend(["## Skills", ""])

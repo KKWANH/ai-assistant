@@ -15,6 +15,7 @@ dev = ["pytest>=8"]
 
 [project.scripts]
 aiws = "aiws.cli:main"
+aiws-cloudflare = "aiws.cloudflare:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

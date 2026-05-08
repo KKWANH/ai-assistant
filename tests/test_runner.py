@@ -93,6 +93,32 @@ def test_ask_includes_account_context(tmp_path, monkeypatch):
     assert "Likes Korean UI." in system
 
 
+def test_ask_updates_account_memory_for_future_context(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret")
+    storage.create_project(root, "AI System", owner="kwanho")
+    storage.create_session(root, "ai-system", "Planning")
+
+    def fake_urlopen(req, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    runner.ask(
+        str(root),
+        "ai-system",
+        "planning",
+        provider="ollama",
+        model="qwen3:0.6b",
+        content="나는 로컬 AI 작업실을 가족도 쉽게 쓰길 원해.",
+        actor="kwanho",
+    )
+
+    memories = storage.load_account(root, "kwanho")["profile"]["memory"]
+    assert memories[-1]["source"] == "auto"
+    assert "가족도 쉽게" in memories[-1]["content"]
+
+
 def test_unknown_provider_is_rejected(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")

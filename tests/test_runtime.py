@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import sys
 
 from aiws import runtime as runtime_module
 from aiws.runtime import LocalRuntime, ManagedProcess
@@ -40,7 +41,7 @@ def test_runtime_builds_ui_and_ollama_processes(tmp_path, monkeypatch):
     processes = runtime.build_processes()
 
     assert [process.name for process in processes] == ["aiws-ui", "ollama"]
-    assert processes[0].command[:5] == ["aiws", "ui", "start", "--root", str(tmp_path)]
+    assert processes[0].command[:7] == [sys.executable, "-m", "aiws.cli", "ui", "start", "--root", str(tmp_path)]
     assert processes[1].command == ["/usr/local/bin/ollama", "serve"]
 
 

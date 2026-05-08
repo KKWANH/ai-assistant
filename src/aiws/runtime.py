@@ -7,6 +7,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,7 +86,19 @@ class LocalRuntime:
         self._last_activity_mtime = 0.0
 
     def build_processes(self) -> list[ManagedProcess]:
-        ui_command = ["aiws", "ui", "start", "--root", self.root, "--mode", self.mode, "--port", str(self.port)]
+        ui_command = [
+            sys.executable,
+            "-m",
+            "aiws.cli",
+            "ui",
+            "start",
+            "--root",
+            self.root,
+            "--mode",
+            self.mode,
+            "--port",
+            str(self.port),
+        ]
         if self.password:
             ui_command.extend(["--password", self.password])
         processes = [ManagedProcess("aiws-ui", ui_command)]
@@ -111,7 +124,7 @@ class LocalRuntime:
         storage.init_workspace(self.root)
         probe_host = "127.0.0.1" if self.mode == "local" else "127.0.0.1"
         if is_port_open(probe_host, self.port):
-            print(f"Haru Assistant is already running at http://{probe_host}:{self.port}")
+            print(f"Assistant is already running at http://{probe_host}:{self.port}")
             return
         self.processes = self.build_processes()
         self._last_activity_mtime = self.newest_workspace_mtime()

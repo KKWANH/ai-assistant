@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import os
 from functools import partial
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import attachments, costs
@@ -40,13 +43,20 @@ class AIWSHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:
-        if self.require_auth and not self.is_authenticated() and self.path != "/login":
-            self.redirect("/login")
-            return
         parsed = urlparse(self.path)
         path = parsed.path
+        public_asset = path.startswith("/assets/") or path in {"/vite.svg"}
+        if self.require_auth and not self.is_authenticated() and path != "/login" and not public_asset:
+            self.redirect("/login")
+            return
         if path == "/login":
-            self.page("Login", self.login_form())
+            self.serve_spa()
+        elif path == "/api/workspace":
+            self.api_workspace()
+        elif path == "/api/account":
+            self.api_account()
+        elif path == "/api/runtime":
+            self.api_runtime()
         elif path.startswith("/api/chat/"):
             parts = unquote(path.removeprefix("/api/chat/")).split("/")
             if len(parts) < 2:
@@ -56,13 +66,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 project_path = "/".join(parts[:-1])
                 self.api_chat(project_path, session_slug)
         elif path == "/":
-            self.page("Assistant", self.home(), layout="chat")
+            self.serve_spa()
         elif path == "/projects":
-            self.page("Projects", self.projects())
+            self.serve_spa()
         elif path == "/projects/new":
-            self.page("Create Project", self.project_form())
+            self.serve_spa()
         elif path == "/profile":
-            self.page("Profile", self.profile_page())
+            self.serve_spa()
         elif path == "/admin":
             self.page("Admin", self.admin_page())
         elif path.startswith("/avatar/"):
@@ -77,16 +87,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 project_path = "/".join(parts[:-2])
                 self.serve_attachment(project_path, session_slug, filename)
         elif path.startswith("/chat/"):
-            parts = unquote(path.removeprefix("/chat/")).split("/")
-            if len(parts) < 2:
-                self.not_found()
-            else:
-                session_slug = parts[-1]
-                project_path = "/".join(parts[:-1])
-                self.page("Chat", self.chat_page(project_path, session_slug), layout="chat")
+            self.serve_spa()
         elif path.startswith("/project/"):
-            project_path = unquote(path.removeprefix("/project/"))
-            self.page("Project", self.project_detail(project_path))
+            self.serve_spa()
+        elif path.startswith("/assets/") or path in {"/vite.svg"}:
+            self.serve_static_asset(path)
         elif path.startswith("/prompt/"):
             parts = unquote(path.removeprefix("/prompt/")).split("/")
             if len(parts) < 2:
@@ -118,6 +123,73 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, status=400)
             return
 
+        if parsed.path == "/api/logout":
+            self.send_response(303)
+            self.send_header("Location", "/login")
+            self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Max-Age=0")
+            self.end_headers()
+            return
+
+        if parsed.path.startswith("/api/sessions/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/sessions/"))
+            try:
+                data = self.form_data()
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_access(self.root, project_path, self.current_username())
+                session = storage.create_session(self.root, project_path, data["title"])
+                self.send_json({"session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/chats":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            try:
+                data = self.form_data()
+                project_path, session = storage.create_general_chat_session(
+                    self.root,
+                    self.current_username(),
+                    data.get("title", "").strip() or "New chat",
+                )
+                self.send_json({"project_path": project_path, "session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/profile":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            username = self.current_username()
+            if not username or not storage.has_accounts(self.root):
+                self.send_json({"error": "Profile is available after account login."}, status=400)
+                return
+            try:
+                data = self.form_data()
+                account = storage.update_account_profile(
+                    self.root,
+                    username,
+                    name=data.get("name", ""),
+                    age=data.get("age", ""),
+                    job=data.get("job", ""),
+                    situation=data.get("situation", ""),
+                    language=data.get("language", "ko"),
+                    memory=data.get("memory", ""),
+                )
+                avatar_upload = self._multipart_files.get("avatar")
+                if avatar_upload and avatar_upload[1]:
+                    storage.set_account_avatar(self.root, username, avatar_upload[0], avatar_upload[1])
+                    account = storage.public_account(storage.load_account(self.root, username))
+                self.send_json({"account": account})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
         if parsed.path == "/login":
             data = self.form_data()
             username = data.get("username", "")
@@ -131,7 +203,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_header("Set-Cookie", f"{SESSION_COOKIE}={cookie_value}; HttpOnly; SameSite=Lax")
                 self.end_headers()
             else:
-                self.page("Login", self.login_form("Invalid password."))
+                self.redirect("/login?error=1")
             return
 
         if self.require_auth and not self.is_authenticated():
@@ -153,7 +225,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.redirect(f"/project/{project['path']}")
         elif parsed.path.startswith("/sessions/"):
             project_path = unquote(parsed.path.removeprefix("/sessions/"))
-            storage.ensure_project_access(self.root, project_path, self.current_username())
+            if storage.has_accounts(self.root):
+                storage.ensure_project_access(self.root, project_path, self.current_username())
             session = storage.create_session(self.root, project_path, data["title"])
             self.redirect(f"/chat/{project_path}/{session['slug']}")
         elif parsed.path.startswith("/append/"):
@@ -335,15 +408,121 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 storage.ensure_project_access(self.root, project_path, self.current_username())
             project = storage.load_project(self.root, project_path)
             session = storage.load_session(self.root, project_path, session_slug)
+            messages = storage.read_messages(self.root, project_path, session_slug)
             self.send_json(
                 {
-                    "project": {"path": project_path, "title": project["title"]},
+                    "project": {
+                        "path": project_path,
+                        "title": project["title"],
+                        "hidden": bool(project.get("hidden", False)),
+                        "visibility": project.get("visibility", "private"),
+                    },
                     "session": {"slug": session_slug, "title": session["title"]},
-                    "messages": [self.message_json(message) for message in storage.read_messages(self.root, project_path, session_slug)],
+                    "messages": [self.message_json(message) for message in messages],
+                    "skills": storage.resolve_skill_names(self.root, project_path),
+                    "attachments": [
+                        attachment_view(project_path, session_slug, item)
+                        for item in attachments.list_attachments(self.root, project_path, session_slug)
+                    ],
+                    "latest": latest_assistant_metadata(messages),
                 }
             )
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
+
+    def api_workspace(self) -> None:
+        try:
+            projects = storage.list_visible_projects(self.root, self.current_username()) if storage.has_accounts(self.root) else storage.list_projects(self.root)
+            chats = storage.list_visible_general_chat_projects(self.root, self.current_username())
+            self.send_json(
+                {
+                    "projects": [self.project_json(project) for project in projects if not project.get("hidden")],
+                    "chats": [self.project_json(project) for project in chats],
+                    "account": self.current_account_json(),
+                }
+            )
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=400)
+
+    def api_account(self) -> None:
+        self.send_json({"account": self.current_account_json()})
+
+    def api_runtime(self) -> None:
+        workspace = storage.workspace_path(self.root)
+        run_dir = Path(os.environ.get("AIWS_RUN_DIR", str(workspace / "run"))).expanduser()
+        status_path = Path(os.environ.get("AIWS_STATUS_PATH", str(workspace / "runtime-status.json"))).expanduser()
+        url_path = run_dir / "cloudflare-url.txt"
+        status: dict[str, object] = {"status": "unknown", "cloudflare_url": "", "port": self.server.server_port}
+        if status_path.exists():
+            try:
+                loaded = json.loads(status_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    status.update(loaded)
+            except json.JSONDecodeError:
+                status["message"] = "Runtime status file is not valid JSON."
+        if url_path.exists():
+            status["cloudflare_url"] = url_path.read_text(encoding="utf-8").strip()
+        self.send_json({"runtime": status})
+
+    def current_account_json(self) -> dict[str, object]:
+        username = self.current_username()
+        if username and storage.has_accounts(self.root):
+            try:
+                account = storage.public_account(storage.load_account(self.root, username))
+                avatar = account.get("profile", {}).get("avatar") if isinstance(account.get("profile"), dict) else ""
+                if avatar:
+                    account["avatar_url"] = f"/avatar/{username}"
+                return account
+            except storage.WorkspaceError:
+                pass
+        return {"username": username or "local", "display_name": username or "local", "admin": False, "profile": {}}
+
+    def project_json(self, project: dict[str, object]) -> dict[str, object]:
+        project_path = str(project["path"])
+        sessions = storage.list_sessions(self.root, project_path)
+        first_session_url = f"/chat/{project_path}/{sessions[0]['slug']}" if sessions else ""
+        return {
+            "path": project_path,
+            "title": project.get("title", project_path),
+            "created_at": project.get("created_at", ""),
+            "parent": project.get("parent", ""),
+            "level": 1 if project.get("parent") else 0,
+            "visibility": project.get("visibility", "private"),
+            "hidden": bool(project.get("hidden", False)),
+            "firstSessionUrl": first_session_url,
+            "sessions": [
+                {
+                    "slug": session["slug"],
+                    "title": session["title"],
+                    "created_at": session.get("created_at", ""),
+                }
+                for session in sessions
+            ],
+        }
+
+    def serve_spa(self) -> None:
+        index = web_dist_path() / "index.html"
+        if not index.exists():
+            self.page("Assistant", '<div id="root"></div><p>Build the React UI with <code>cd web && npm run build</code>.</p>')
+            return
+        self.serve_file(index, "text/html; charset=utf-8")
+
+    def serve_static_asset(self, path: str) -> None:
+        dist = web_dist_path()
+        target = (dist / path.removeprefix("/")).resolve()
+        if not str(target).startswith(str(dist.resolve())) or not target.exists() or not target.is_file():
+            self.not_found()
+            return
+        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        self.serve_file(target, content_type)
+
+    def serve_file(self, path: Path, content_type: str) -> None:
+        content = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
 
     def send_json(self, payload: dict[str, object], *, status: int = 200) -> None:
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -409,28 +588,49 @@ class AIWSHandler(BaseHTTPRequestHandler):
   <style>
     :root {{
       color-scheme: dark;
-      --bg: #0b0f14;
-      --surface: #101720;
-      --surface-2: #151f2c;
-      --surface-3: #1b2837;
-      --border: #273545;
-      --muted: #92a2b5;
-      --ink: #eef4fb;
-      --soft: #cdd8e6;
-      --blue: #72a7ff;
-      --green: #40d27f;
-      --green-2: #16894c;
-      --danger: #ff6b7a;
-      --shadow: 0 22px 70px rgba(0, 0, 0, .32);
+      --desk-bg: #15100d;
+      --desk-grain: rgba(255, 255, 255, .024);
+      --paper: #f1e3c7;
+      --paper-warm: #dfc99f;
+      --paper-edge: #9e7e4e;
+      --ink: #241b14;
+      --muted-ink: #6e5c48;
+      --leather: #17100e;
+      --leather-dark: #090706;
+      --brass: #c49a43;
+      --brass-dark: #7d5a22;
+      --graphite: #111820;
+      --glass: rgba(42, 35, 28, .64);
+      --highlight: rgba(255, 247, 218, .55);
+      --border: rgba(137, 105, 59, .36);
+      --muted: #b8a98d;
+      --soft: #f2e8d4;
+      --blue: #91b7ff;
+      --green: #64c98e;
+      --green-2: #2e8153;
+      --danger: #d06a62;
+      --radius-card: 18px;
+      --radius-button: 13px;
+      --shadow-low: 0 3px 8px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255,255,255,.08);
+      --shadow-mid: 0 14px 32px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255,255,255,.12);
+      --shadow-high: 0 28px 70px rgba(0, 0, 0, .44), inset 0 1px 0 rgba(255,255,255,.14);
+      --inner-shadow: inset 0 2px 8px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255,255,255,.08);
+      --bg: var(--desk-bg);
+      --surface: #211915;
+      --surface-2: #f0dfbd;
+      --surface-3: #241c16;
+      --shadow: var(--shadow-mid);
     }}
     * {{ box-sizing: border-box; }}
     body {{
       min-height: 100vh;
       margin: 0;
-      color: var(--ink);
+      color: var(--soft);
       background:
-        radial-gradient(circle at 18% 0%, rgba(64, 210, 127, .10), transparent 28rem),
-        linear-gradient(180deg, #0b0f14 0%, #0e141c 100%);
+        radial-gradient(circle at 18% 0%, rgba(255, 225, 160, .18), transparent 28rem),
+        radial-gradient(circle at 80% 18%, rgba(95, 65, 28, .16), transparent 30rem),
+        repeating-linear-gradient(104deg, transparent 0 14px, var(--desk-grain) 15px 16px),
+        linear-gradient(140deg, #201712 0%, #0e0b09 54%, #17100d 100%);
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.5;
     }}
@@ -440,8 +640,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
       top: 0;
       z-index: 10;
       border-bottom: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(11, 15, 20, .82);
+      background: linear-gradient(180deg, rgba(26, 18, 14, .94), rgba(12, 9, 7, .9));
       backdrop-filter: blur(18px);
+      box-shadow: var(--shadow-low);
     }}
     nav {{ max-width: none; margin: 0; padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }}
     .brand {{ margin-right: auto; color: var(--ink); text-decoration: none; font-weight: 900; font-size: 15px; letter-spacing: 0; }}
@@ -459,28 +660,44 @@ class AIWSHandler(BaseHTTPRequestHandler):
       padding: 11px 12px;
       border: 1px solid var(--border);
       border-radius: 10px;
-      background: #0d131b;
-      color: var(--ink);
+      background: rgba(12, 10, 8, .72);
+      color: var(--soft);
       font: inherit;
       outline: none;
+      box-shadow: var(--inner-shadow);
     }}
     input:focus, textarea:focus, select:focus {{ border-color: rgba(114, 167, 255, .8); box-shadow: 0 0 0 3px rgba(114, 167, 255, .16); }}
     textarea {{ min-height: 112px; resize: vertical; }}
     button {{
       padding: 10px 16px;
-      border: 1px solid var(--green-2);
-      border-radius: 10px;
-      background: linear-gradient(180deg, #25b963, #16894c);
-      color: #fff;
+      border: 1px solid rgba(255, 232, 165, .28);
+      border-radius: var(--radius-button);
+      background: linear-gradient(180deg, #d6ae57, #986d25);
+      color: #19110b;
       font-weight: 800;
       cursor: pointer;
+      box-shadow: var(--shadow-low);
     }}
+    button:active, .physical-button:active {{ transform: translateY(1px); box-shadow: var(--inner-shadow); }}
     pre {{ white-space: pre-wrap; background: #0d131b; color: var(--soft); padding: 16px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }}
     code {{ background: rgba(255, 255, 255, .08); color: var(--soft); padding: 2px 5px; border-radius: 5px; }}
     label {{ display: block; font-weight: 800; margin-bottom: 7px; color: var(--soft); }}
     .muted {{ color: var(--muted); }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }}
-    .panel {{ border: 1px solid var(--border); border-radius: 16px; padding: 18px; background: rgba(16, 23, 32, .84); box-shadow: var(--shadow); }}
+    .surface, .panel {{ border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; background: linear-gradient(155deg, rgba(255,239,203,.08), rgba(39,27,20,.78)); box-shadow: var(--shadow-mid); }}
+    .desk-panel {{ border: 1px solid rgba(255, 230, 176, .16); border-radius: 24px; background: linear-gradient(145deg, rgba(42,29,21,.84), rgba(13,10,8,.9)); box-shadow: var(--shadow-high); }}
+    .leather-rail {{ background: radial-gradient(circle at 12% 0%, rgba(255,226,174,.09), transparent 15rem), repeating-linear-gradient(70deg, rgba(255,255,255,.025) 0 1px, transparent 1px 7px), linear-gradient(180deg, #1b1210, #080706); }}
+    .paper-surface {{ background: linear-gradient(145deg, #f6e8ca, #ddc596); color: var(--ink); border-color: rgba(110,82,40,.34); box-shadow: var(--shadow-mid); }}
+    .graphite-surface {{ background: linear-gradient(145deg, #18212b, #0c1117); color: var(--soft); box-shadow: var(--inner-shadow); }}
+    .workbench-panel {{ border-left: 1px solid rgba(255, 230, 176, .18); background: linear-gradient(160deg, rgba(55,45,35,.72), rgba(21,17,14,.86)); backdrop-filter: blur(18px); box-shadow: inset 1px 0 0 rgba(255,255,255,.08); overflow: auto; padding: 16px; }}
+    .workbench-section {{ margin-bottom: 14px; }}
+    .workbench-section h3, .section-label {{ margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }}
+    .workbench-tabs {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }}
+    .workbench-tabs button {{ padding: 7px 6px; font-size: 12px; color: var(--soft); background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.08); }}
+    .workbench-tabs button.active {{ background: linear-gradient(180deg, #e4bd62, #9f7228); color: #1b1209; box-shadow: var(--inner-shadow); }}
+    .physical-button {{ background: linear-gradient(180deg, rgba(255,248,224,.12), rgba(0,0,0,.18)); border: 1px solid var(--border); border-radius: var(--radius-button); box-shadow: var(--shadow-low); }}
+    .brass-button {{ background: linear-gradient(180deg, #e4bd62, #9f7228); color: #1b1209; }}
+    .inset-field {{ box-shadow: var(--inner-shadow); background: rgba(10,8,7,.62); }}
     .toolbar {{ display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }}
     .button-link {{ display: inline-block; padding: 10px 14px; border-radius: 999px; background: var(--green-2); color: #fff; text-decoration: none; font-weight: 800; }}
     .secondary {{ background: rgba(255, 255, 255, .06); color: var(--soft); border: 1px solid var(--border); }}
@@ -495,14 +712,16 @@ class AIWSHandler(BaseHTTPRequestHandler):
       padding: 13px 15px;
       border: 1px solid var(--border);
       border-radius: 18px;
-      background: var(--surface-2);
+      background: linear-gradient(145deg, #f4e6c8, #ddc493);
       color: var(--ink);
       overflow-wrap: anywhere;
+      box-shadow: var(--shadow-mid);
     }}
-    .message.user {{ background: #1f6f50; border-color: #2c9a69; border-bottom-right-radius: 5px; }}
-    .message.assistant {{ background: #172231; border-bottom-left-radius: 5px; }}
-    .message.system, .message.tool {{ background: #111923; color: var(--soft); }}
-    .message-role {{ font-weight: 800; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; color: rgba(238, 244, 251, .72); margin-bottom: 4px; }}
+    .message.user {{ background: linear-gradient(145deg, #efe0bb, #cfae72); border-color: rgba(159,114,40,.52); border-bottom-right-radius: 5px; }}
+    .message.assistant {{ background: linear-gradient(145deg, #fff0ce, #e2c791); border-bottom-left-radius: 5px; }}
+    .message.system, .message.tool {{ background: linear-gradient(145deg, #1b242e, #0d1218); color: var(--soft); }}
+    .message-role {{ font-weight: 900; text-transform: uppercase; font-size: 11px; letter-spacing: .06em; color: rgba(83, 60, 29, .72); margin-bottom: 4px; }}
+    .message.system .message-role, .message.tool .message-role {{ color: var(--muted); }}
     .error {{ border-color: rgba(255, 107, 122, .7); background: rgba(255, 107, 122, .08); }}
     .cost-note {{ font-size: 13px; color: var(--muted); margin-top: -6px; }}
     table {{ border-collapse: collapse; width: 100%; }}
@@ -512,37 +731,41 @@ class AIWSHandler(BaseHTTPRequestHandler):
     .session-list {{ display: grid; gap: 12px; }}
     .session-card {{ display: block; color: var(--ink); text-decoration: none; border: 1px solid var(--border); border-radius: 16px; padding: 16px; background: rgba(16, 23, 32, .82); }}
     .session-card:hover {{ border-color: rgba(114, 167, 255, .55); background: rgba(21, 31, 44, .96); }}
-    .chat-shell {{ height: 100%; min-height: 0; display: grid; grid-template-columns: 312px minmax(0, 1fr); position: relative; }}
+    .chat-shell {{ height: 100%; min-height: 0; display: grid; grid-template-columns: 312px minmax(0, 1fr) 340px; position: relative; }}
     .sidebar-toggle {{ position: absolute; opacity: 0; pointer-events: none; }}
     .sidebar-button {{ display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255, 255, 255, .06); color: var(--soft); cursor: pointer; }}
-    .chat-sidebar {{ min-height: 0; border-right: 1px solid var(--border); background: #070c12; padding: 14px; overflow: auto; }}
+    .chat-sidebar {{ min-height: 0; border-right: 1px solid var(--border); padding: 14px; overflow: auto; }}
+    .chat-sidebar.leather-rail {{ background: radial-gradient(circle at 18% 0%, rgba(255,226,174,.1), transparent 18rem), repeating-linear-gradient(78deg, rgba(255,255,255,.03) 0 1px, transparent 1px 8px), linear-gradient(180deg, #1b1210, #070605); }}
     .chat-sidebar-top {{ display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }}
     .chat-sidebar h2 {{ margin: 0; font-size: 17px; flex: 1; }}
     .tree-group {{ margin: 8px 0 10px; }}
-    .tree-project {{ display: block; padding: 11px 12px; border-radius: 12px; color: #fff; text-decoration: none; font-weight: 800; }}
-    .tree-subproject {{ display: block; padding: 9px 10px 9px 24px; border-radius: 12px; color: var(--soft); text-decoration: none; }}
+    .folder-card, .tree-project {{ display: block; position: relative; padding: 11px 12px; border-radius: 12px; color: #fff; text-decoration: none; font-weight: 800; background: linear-gradient(145deg, rgba(70,47,31,.92), rgba(31,22,17,.92)); border: 1px solid rgba(255, 226, 174, .15); box-shadow: var(--shadow-low); }}
+    .folder-card::before, .tree-project::before {{ content: ""; position: absolute; top: -7px; left: 14px; width: 72px; height: 10px; border-radius: 8px 8px 0 0; background: linear-gradient(180deg, #9f7435, #5b3d21); border: 1px solid rgba(255,226,174,.18); border-bottom: 0; }}
+    .tree-subproject {{ display: block; padding: 9px 10px 9px 24px; border-radius: 12px; color: var(--soft); text-decoration: none; background: rgba(255,255,255,.035); }}
     .tree-project.active, .tree-subproject.active, .tree-session.active {{ background: var(--surface-2); }}
-    .tree-session {{ display: block; padding: 9px 10px 9px 36px; border-radius: 12px; color: var(--soft); text-decoration: none; }}
+    .session-slip, .tree-session {{ display: block; padding: 9px 10px 9px 36px; border-radius: 12px; color: var(--soft); text-decoration: none; background: linear-gradient(145deg, rgba(244,224,184,.08), rgba(255,255,255,.025)); border: 1px solid transparent; }}
     .tree-date {{ display: block; margin-top: 1px; color: var(--muted); font-size: 12px; font-weight: 500; }}
-    .tree-project:hover, .tree-subproject:hover, .tree-session:hover {{ background: rgba(255, 255, 255, .06); }}
+    .tree-project:hover, .tree-subproject:hover, .tree-session:hover {{ filter: brightness(1.08); border-color: rgba(228,189,98,.28); }}
     .sidebar-actions {{ display: grid; gap: 8px; margin: 10px 0 16px; }}
     .sidebar-actions details {{ border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.04); padding: 10px; }}
     .sidebar-actions summary {{ cursor: pointer; font-weight: 800; color: var(--soft); }}
     .sidebar-actions input, .sidebar-actions textarea, .sidebar-actions select {{ margin-top: 8px; padding: 8px 9px; font-size: 14px; }}
     .sidebar-actions button {{ width: 100%; margin-top: 8px; padding: 8px 10px; }}
+    .project-filter {{ margin: 8px 0 12px; }}
     .sidebar-toggle:checked ~ .chat-sidebar {{ display: none; }}
     .sidebar-toggle:checked ~ .chat-main {{ grid-column: 1 / -1; }}
-    .chat-main {{ min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }}
+    .chat-main {{ min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: linear-gradient(145deg, rgba(29,20,15,.62), rgba(9,8,7,.68)); }}
     .home-shell .chat-main {{ display: grid; place-items: center; }}
     .home-start {{ text-align: center; max-width: 760px; padding: 24px; }}
     .home-start h1 {{ font-size: clamp(30px, 5vw, 46px); }}
-    .chat-top {{ padding: 14px 20px; border-bottom: 1px solid var(--border); background: rgba(13, 19, 27, .72); display: flex; gap: 12px; align-items: center; }}
+    .chat-top {{ padding: 14px 20px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, rgba(45,31,22,.76), rgba(19,14,11,.76)); display: flex; gap: 12px; align-items: center; }}
     .chat-title {{ min-width: 0; }}
     .chat-top h1 {{ font-size: clamp(22px, 3vw, 34px); margin-bottom: 4px; }}
     .chat-feed {{ min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 22px 24px; scroll-behavior: smooth; }}
     .empty-chat {{ min-height: 42vh; display: grid; place-items: center; text-align: center; color: var(--muted); }}
-    .composer {{ border-top: 1px solid var(--border); background: rgba(11, 15, 20, .98); padding: 12px 18px 14px; z-index: 3; }}
-    .composer-panel {{ max-width: 920px; margin: 0 auto; border: 1px solid var(--border); border-radius: 18px; padding: 12px; background: var(--surface); }}
+    .composer {{ border-top: 1px solid var(--border); background: linear-gradient(180deg, rgba(20,15,12,.96), rgba(10,8,7,.98)); padding: 12px 18px 14px; z-index: 3; }}
+    .composer-panel {{ max-width: 920px; margin: 0 auto; border: 1px solid var(--border); border-radius: 20px; padding: 12px; background: linear-gradient(145deg, #e9d5aa, #b89152); box-shadow: var(--shadow-high); }}
+    .composer-panel textarea {{ color: var(--ink); background: linear-gradient(145deg, #fff0ce, #e7cfa0); border-radius: 14px; }}
     .composer textarea {{ min-height: 74px; border: 0; background: transparent; box-shadow: none; padding: 8px; }}
     .composer-actions {{ display: grid; grid-template-columns: auto 1fr 150px 132px auto; gap: 10px; align-items: center; }}
     .attach-button {{ display: inline-grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--soft); cursor: pointer; font-weight: 900; }}
@@ -568,6 +791,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
     .image-lightbox.open {{ display: grid; }}
     .image-lightbox img {{ max-width: min(96vw, 1200px); max-height: 86vh; object-fit: contain; border-radius: 16px; box-shadow: var(--shadow); }}
     .image-lightbox button {{ position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border-radius: 999px; padding: 0; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.2); }}
+    .status-lamp {{ display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--green); box-shadow: 0 0 12px rgba(100,201,142,.8); margin-right: 6px; }}
+    .skill-card {{ display: block; padding: 9px 10px; margin: 6px 0; border-radius: 12px; background: linear-gradient(145deg, #eddbb5, #caa66d); color: var(--ink); border: 1px solid rgba(104,74,31,.28); box-shadow: var(--shadow-low); font-weight: 800; }}
+    .context-strip {{ display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }}
+    .status-chip {{ display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09); color: var(--muted); font-size: 12px; }}
+    .archive-hint {{ display: block; padding: 8px 9px; border-radius: 12px; background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.08); color: var(--muted); font-size: 12px; }}
+    .code-block {{ background: linear-gradient(145deg, #131b23, #070a0d); color: #e6edf5; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px; overflow: auto; box-shadow: var(--inner-shadow); }}
+    @media (prefers-reduced-motion: reduce) {{ * {{ animation: none !important; transition: none !important; }} }}
     .compact-form {{ display: flex; gap: 10px; align-items: end; }}
     @media (max-width: 860px) {{
       body.chat-body {{ overflow: hidden; }}
@@ -577,6 +807,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
       .chat-body main {{ height: calc(100vh - 89px); min-height: 0; padding: 0; }}
       .chat-shell {{ grid-template-columns: 1fr; }}
       .chat-sidebar {{ display: none; position: absolute; inset: 0 auto 0 0; width: min(86vw, 330px); z-index: 8; box-shadow: var(--shadow); }}
+      .workbench-panel {{ display: none; }}
       .sidebar-toggle:checked ~ .chat-sidebar {{ display: block; }}
       .sidebar-toggle:checked ~ .chat-main {{ grid-column: auto; }}
       .chat-main {{ min-height: 0; }}
@@ -597,9 +828,17 @@ class AIWSHandler(BaseHTTPRequestHandler):
       const textarea = composer ? composer.querySelector("textarea") : null;
       const lightbox = document.querySelector("[data-lightbox]");
       const lightboxImage = document.querySelector("[data-lightbox-image]");
+      const quickSearch = document.querySelector("[data-project-filter]");
+      const workbenchTabs = document.querySelectorAll("[data-workbench-tab]");
+      const workbenchPanels = document.querySelectorAll("[data-workbench-panel]");
       let sending = false;
       let previewUrl = null;
       if (feed) feed.scrollTop = feed.scrollHeight;
+      function autosize() {{
+        if (!textarea) return;
+        textarea.style.height = "auto";
+        textarea.style.height = Math.min(textarea.scrollHeight, 210) + "px";
+      }}
       function clearSelectedFile() {{
         if (fileInput) fileInput.value = "";
         if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -641,10 +880,17 @@ class AIWSHandler(BaseHTTPRequestHandler):
       }}
       function renderMessage(message) {{
         const role = escapeHtml(message.role || "message");
-        const content = escapeHtml(message.content || "").replaceAll("\\n", "<br>");
+        const content = renderContent(message.content || "");
         const meta = [message.provider, message.model].filter(Boolean).map(escapeHtml).join(" ");
         const cost = message.estimated_cost !== null && message.estimated_cost !== undefined ? `<div class="muted">estimated cost: USD ${{escapeHtml(message.estimated_cost)}}</div>` : "";
         return `<div class="message-row ${{role}}"><div class="message ${{role}}"><div class="message-role">${{role}}</div><div>${{content}}</div>${{renderAttachments(message.attachments)}}${{meta ? `<div class="muted">${{meta}}</div>` : ""}}${{cost}}</div></div>`;
+      }}
+      function renderContent(value) {{
+        const parts = String(value).split(/```/);
+        return parts.map((part, index) => {{
+          if (index % 2 === 1) return `<pre class="code-block"><code>${{escapeHtml(part).trim()}}</code></pre>`;
+          return escapeHtml(part).replaceAll("\\n", "<br>");
+        }}).join("");
       }}
       function setMessages(messages) {{
         if (!feed) return;
@@ -706,6 +952,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         const formData = new FormData(composer);
         appendOptimistic();
         textarea.value = "";
+        autosize();
         clearSelectedFile();
         try {{
           const response = await fetch(composer.dataset.apiAction || composer.action, {{
@@ -726,11 +973,33 @@ class AIWSHandler(BaseHTTPRequestHandler):
         }}
       }});
       if (textarea) textarea.addEventListener("keydown", (event) => {{
-        if (event.key === "Enter" && !event.shiftKey) {{
+        if (event.key === "Enter" && (!event.shiftKey || event.metaKey || event.ctrlKey)) {{
           event.preventDefault();
           composer.requestSubmit();
         }}
       }});
+      if (textarea) textarea.addEventListener("input", autosize);
+      autosize();
+      if (quickSearch) quickSearch.addEventListener("input", () => {{
+        const needle = quickSearch.value.trim().toLowerCase();
+        document.querySelectorAll("[data-tree-item]").forEach((item) => {{
+          item.style.display = item.textContent.toLowerCase().includes(needle) ? "" : "none";
+        }});
+      }});
+      document.addEventListener("keydown", (event) => {{
+        if (event.key === "/" && quickSearch && document.activeElement !== textarea) {{
+          event.preventDefault();
+          quickSearch.focus();
+        }}
+      }});
+      function selectWorkbenchTab(name) {{
+        if (!name) return;
+        workbenchTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.workbenchTab === name));
+        workbenchPanels.forEach((panel) => panel.hidden = panel.dataset.workbenchPanel !== name);
+        localStorage.setItem("aiws-workbench-tab", name);
+      }}
+      workbenchTabs.forEach((tab) => tab.addEventListener("click", () => selectWorkbenchTab(tab.dataset.workbenchTab)));
+      selectWorkbenchTab(localStorage.getItem("aiws-workbench-tab") || "context");
       let dragDepth = 0;
       window.addEventListener("dragenter", (event) => {{
         if (!fileInput) return;
@@ -791,7 +1060,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def home(self) -> str:
         return f"""<div class="chat-shell home-shell">
   <input class="sidebar-toggle" id="sidebar-toggle" type="checkbox">
-  <aside class="chat-sidebar">
+  <aside class="chat-sidebar leather-rail">
     <div class="chat-sidebar-top">
       <h2>Workspace</h2>
       <label class="sidebar-button" for="sidebar-toggle" title="Toggle sidebar">☰</label>
@@ -804,6 +1073,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
       <p class="muted">왼쪽에서 프로젝트와 세션을 고르거나 새 프로젝트를 만들면 바로 대화를 시작할 수 있습니다.</p>
     </div>
   </section>
+  {self.render_workbench()}
 </div>"""
 
     def projects(self) -> str:
@@ -857,6 +1127,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
 </a>"""
             )
         language = self.language()
+        skill_cards = "".join(f'<div class="skill-card">{html(skill)}</div>' for skill in active_skills)
         return f"""<section class="hero">
   <div>
     <h1>{html(project['title'])}</h1>
@@ -866,7 +1137,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
   <a class="button-link secondary" href="/projects">Projects</a>
 </section>
 <div class="grid">
-  <div class="panel"><strong>{html(t(language, 'active_skills'))}</strong><div>{self.skill_pills(active_skills) or '<span class="muted">No skills selected.</span>'}</div></div>
+  <div class="panel"><strong>{html(t(language, 'active_skills'))}</strong><div>{skill_cards or '<span class="muted">No skills selected.</span>'}</div></div>
   <form class="panel" method="post" action="/sessions/{project_path}">
     <h3>Create Session</h3>
     <div class="compact-form">
@@ -887,7 +1158,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         rendered_messages = "".join(self.message_block(message) for message in messages)
         return f"""<div class="chat-shell">
   <input class="sidebar-toggle" id="sidebar-toggle" type="checkbox">
-  <aside class="chat-sidebar">
+  <aside class="chat-sidebar leather-rail">
     <div class="chat-sidebar-top">
       <h2>Workspace</h2>
       <label class="sidebar-button" for="sidebar-toggle" title="Toggle sidebar">☰</label>
@@ -900,6 +1171,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
       <div class="chat-title">
         <h1>{html(session['title'])}</h1>
         <div class="muted">{html(project['title'])} · <code>{html(project_path)}</code> · <a href="/prompt/{project_path}/{session_slug}">prompt context</a></div>
+        <div class="context-strip">{self.context_chips(project_path, session_slug, messages)}</div>
       </div>
     </div>
     <div class="chat-feed">
@@ -922,6 +1194,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
       </div>
     </form>
   </section>
+  {self.render_workbench(project_path, session_slug, project=project, session=session, messages=messages)}
 </div>"""
 
     def workspace_tree(self, active_project_path: str, active_session_slug: str) -> str:
@@ -938,7 +1211,15 @@ class AIWSHandler(BaseHTTPRequestHandler):
             groups.append(self.project_tree_block(project, active_project_path, active_session_slug, level="root"))
             for child in by_parent.get(str(project["path"]), []):
                 groups.append(self.project_tree_block(child, active_project_path, active_session_slug, level="child"))
-        return self.sidebar_actions(active_project_path) + ("".join(groups) or '<p class="muted">No projects yet.</p>')
+        empty = """<div class="surface">
+  <strong>No projects yet.</strong>
+  <p class="muted">Create your first project. Projects hold sessions, skills, files, and context.</p>
+</div>"""
+        return (
+            self.sidebar_actions(active_project_path)
+            + '<input class="project-filter inset-field" data-project-filter placeholder="Search workspace">'
+            + ("".join(groups) or empty)
+        )
 
     def sidebar_actions(self, active_project_path: str) -> str:
         owner = html(self.current_username() or "")
@@ -974,18 +1255,111 @@ class AIWSHandler(BaseHTTPRequestHandler):
         for session in sessions:
             session_active = " active" if project_path == active_project_path and session["slug"] == active_session_slug else ""
             session_links.append(
-                f"""<a class="tree-session{session_active}" href="/chat/{project_path}/{session['slug']}">
+                f"""<a class="tree-session{session_active}" data-tree-item href="/chat/{project_path}/{session['slug']}">
   {html(session['title'])}
   <span class="tree-date">{html(short_date(session.get('created_at')))}</span>
 </a>"""
             )
         return f"""<div class="tree-group">
-  <a class="{project_class}{active}" href="/project/{project_path}">
+  <a class="{project_class}{active}" data-tree-item href="/project/{project_path}">
     {html(project['title'])}
     <span class="tree-date">{html(short_date(project.get('created_at')))}</span>
   </a>
   {''.join(session_links)}
 </div>"""
+
+    def context_chips(self, project_path: str, session_slug: str, messages: list[dict[str, object]]) -> str:
+        skills = storage.resolve_skill_names(self.root, project_path)
+        attachment_count = len(attachments.list_attachments(self.root, project_path, session_slug))
+        latest = latest_assistant_metadata(messages)
+        provider = html(str(latest.get("provider") or "ollama"))
+        model = html(str(latest.get("model") or "qwen3:0.6b"))
+        search_mode = html(str(latest.get("search_mode") or "off"))
+        return (
+            f'<span class="status-chip"><span class="status-lamp"></span>{provider}</span>'
+            f'<span class="status-chip">{model}</span>'
+            f'<span class="status-chip">Search {search_mode}</span>'
+            f'<span class="status-chip">{len(skills)} skills</span>'
+            f'<span class="status-chip">{attachment_count} files</span>'
+        )
+
+    def render_workbench(
+        self,
+        project_path: str | None = None,
+        session_slug: str | None = None,
+        *,
+        project: dict[str, object] | None = None,
+        session: dict[str, object] | None = None,
+        messages: list[dict[str, object]] | None = None,
+    ) -> str:
+        if not project_path or not session_slug or not project or not session:
+            return """<aside class="workbench-panel">
+  <div class="workbench-section">
+    <h3>Workbench</h3>
+    <div class="surface">Artifacts, drafts, and generated files will appear here.</div>
+  </div>
+</aside>"""
+        messages = messages or []
+        skills = storage.resolve_skill_names(self.root, project_path)
+        skill_cards = "".join(f'<div class="skill-card">{html(skill)}</div>' for skill in skills) or '<p class="muted">No active skills.</p>'
+        file_cards = self.attachment_workbench_cards(project_path, session_slug)
+        latest = latest_assistant_metadata(messages)
+        return f"""<aside class="workbench-panel" aria-label="Workbench">
+  <div class="workbench-tabs">
+    <button type="button" data-workbench-tab="context">Context</button>
+    <button type="button" data-workbench-tab="files">Files</button>
+    <button type="button" data-workbench-tab="prompt">Prompt</button>
+    <button type="button" data-workbench-tab="dev">Dev</button>
+  </div>
+  <section class="workbench-section" data-workbench-panel="context">
+    <h3>Context</h3>
+    <div class="surface">
+      <p><strong>{html(project['title'])}</strong></p>
+      <p class="muted"><code>{html(project_path)}</code> · <code>{html(session_slug)}</code></p>
+      <p>{html(project.get('notes', '') or 'No project notes yet.')}</p>
+    </div>
+    <h3>Active Skills / 활성 스킬</h3>
+    {skill_cards}
+  </section>
+  <section class="workbench-section" data-workbench-panel="files" hidden>
+    <h3>Files</h3>
+    {file_cards}
+  </section>
+  <section class="workbench-section" data-workbench-panel="prompt" hidden>
+    <h3>Prompt Context</h3>
+    <a class="physical-button button-link secondary" href="/prompt/{project_path}/{session_slug}">Open prompt context</a>
+    <p class="archive-hint">Project metadata, notes, inherited skills, session metadata, messages, and selected attachment text are assembled here.</p>
+  </section>
+  <section class="workbench-section" data-workbench-panel="dev" hidden>
+    <h3>Dev</h3>
+    <div class="graphite-surface surface">
+      <p><span class="status-lamp"></span>{html(str(latest.get('provider') or 'provider pending'))}</p>
+      <p>Model: <code>{html(str(latest.get('model') or 'not selected'))}</code></p>
+      <p>Search: <code>{html(str(latest.get('search_mode') or 'off'))}</code></p>
+      <p>Cost: <code>{html(str(latest.get('cost') if latest.get('cost') is not None else 'n/a'))}</code></p>
+    </div>
+    <p class="archive-hint">JSONL and Markdown archives live under the session folder in the local workspace.</p>
+    <pre class="code-block"><code>aiws prompt {html(project_path)} {html(session_slug)} --root ~/.ai-workspace</code></pre>
+  </section>
+</aside>"""
+
+    def attachment_workbench_cards(self, project_path: str, session_slug: str) -> str:
+        items = attachments.list_attachments(self.root, project_path, session_slug)
+        if not items:
+            return '<div class="surface">Drop files here or use Attach file. No files yet.</div>'
+        cards = []
+        for item in items[-8:]:
+            view = attachment_view(project_path, session_slug, item)
+            name = html(view["filename"])
+            url = html(view["url"])
+            if view["is_image"]:
+                cards.append(
+                    f'<button class="attachment-card attachment-preview" type="button" data-preview-src="{url}" data-preview-name="{name}">'
+                    f'<img src="{url}" alt="{name}"><span>{name}</span></button>'
+                )
+            else:
+                cards.append(f'<a class="attachment-card attachment-file surface" href="{url}" target="_blank" rel="noopener">{name}</a>')
+        return "".join(cards)
 
     def profile_page(self) -> str:
         username = self.current_username()
@@ -1076,7 +1450,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     f'<div class="muted">estimated cost: '
                     f'{html(cost.get("currency", "USD"))} {html(cost.get("estimated_cost"))}</div>'
                 )
-        content = html(message.get("content", "")).replace("\n", "<br>")
+        content = render_content(message.get("content", ""))
         return f"""<div class="message-row {html(role)}"><div class="message {html(role)}">
 <div class="message-role">{html(role)}</div>
 <div>{content}</div>
@@ -1185,6 +1559,33 @@ def html(value: object) -> str:
     )
 
 
+def render_content(value: object) -> str:
+    parts = str(value).split("```")
+    rendered = []
+    for index, part in enumerate(parts):
+        if index % 2 == 1:
+            rendered.append(f'<pre class="code-block"><code>{html(part.strip())}</code></pre>')
+        else:
+            rendered.append(html(part).replace("\n", "<br>"))
+    return "".join(rendered)
+
+
+def latest_assistant_metadata(messages: list[dict[str, object]]) -> dict[str, object]:
+    for message in reversed(messages):
+        if message.get("role") != "assistant":
+            continue
+        metadata = message.get("metadata", {})
+        cost = metadata.get("cost", {}) if isinstance(metadata, dict) else {}
+        search = metadata.get("search", {}) if isinstance(metadata, dict) else {}
+        return {
+            "provider": message.get("provider"),
+            "model": message.get("model"),
+            "cost": cost.get("estimated_cost") if isinstance(cost, dict) else None,
+            "search_mode": search.get("mode") if isinstance(search, dict) else None,
+        }
+    return {}
+
+
 def selected(value: object, expected: str) -> str:
     return "selected" if value == expected else ""
 
@@ -1192,6 +1593,10 @@ def selected(value: object, expected: str) -> str:
 def short_date(value: object) -> str:
     text = str(value or "")
     return text[:10] if len(text) >= 10 else text
+
+
+def web_dist_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
 def image_content_type(extension: str) -> str:

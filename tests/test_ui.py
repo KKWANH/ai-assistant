@@ -1,7 +1,9 @@
 from functools import partial
 from http.server import ThreadingHTTPServer
+import re
 from threading import Thread
 from urllib import parse, request
+from pathlib import Path
 
 import pytest
 
@@ -69,24 +71,30 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
     base_url = f"http://127.0.0.1:{server.server_port}"
     try:
         page = request.urlopen(f"{base_url}/project/ai-system/local-runner", timeout=5).read().decode("utf-8")
-        assert "Sessions" in page
-        assert "/chat/ai-system/local-runner/ollama-mvp" in page
-        assert "활성 스킬" in page
+        assert '<div id="root"></div>' in page
+        assert "/assets/" in page
 
         chat = request.urlopen(f"{base_url}/chat/ai-system/local-runner/ollama-mvp", timeout=5).read().decode("utf-8")
-        assert "chat-shell" in chat
-        assert "Workspace" in chat
-        assert "data-attachment-input" in chat
-        assert 'class="brand" href="/">Assistant</a>' in chat
-        assert "data-remove-attachment" in chat
-        assert "data-lightbox" in chat
-        assert "data-preview-src" in chat
-        assert 'data-api-action="/api/ask/ai-system/local-runner/ollama-mvp"' in chat
-        assert "fetch(composer.dataset.apiAction" in chat
-        assert 'enctype="multipart/form-data"' in chat
-        assert "무엇을 도와드릴까요?" in chat
-        assert "search_mode" in chat
-        assert "Attach file" in chat
+        assert '<div id="root"></div>' in chat
+
+        bundle_text = "".join(path.read_text(encoding="utf-8") for path in (Path.cwd() / "web" / "dist" / "assets").glob("*.js"))
+        style_text = "".join(path.read_text(encoding="utf-8") for path in (Path.cwd() / "web" / "dist" / "assets").glob("*.css"))
+        assert "Workspace" in bundle_text
+        assert "data-attachment-input" in bundle_text
+        assert "data-remove-attachment" in bundle_text
+        assert "data-lightbox" in bundle_text
+        assert "data-preview-src" in bundle_text
+        assert "data-api-action" in bundle_text
+        assert "무엇을 도와드릴까요?" in bundle_text
+        assert "search_mode" in bundle_text
+        assert "Attach file" in bundle_text
+        assert "Search auto" in bundle_text
+        assert "local, fastest, basic" in bundle_text
+        assert "공개 범위" in bundle_text
+        assert "Logout" in bundle_text
+        assert "multipart/form-data" in bundle_text
+        assert ".workbench" in style_text
+        assert ".composer" in style_text
 
         payload = parse.urlencode(
             {
@@ -129,6 +137,13 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         response = opener.open(req, timeout=5)
         assert response.status == 200
         assert response.headers["Content-Type"].startswith("application/json")
+
+        workspace = request.urlopen(f"{base_url}/api/workspace", timeout=5).read().decode("utf-8")
+        assert "Local Runner" in workspace
+        assert "Ollama MVP" in workspace
+        runtime = request.urlopen(f"{base_url}/api/runtime", timeout=5).read().decode("utf-8")
+        assert '"runtime"' in runtime
+        assert '"port"' in runtime
     finally:
         server.shutdown()
         server.server_close()
@@ -172,6 +187,75 @@ def test_admin_dashboard_requires_admin_and_shows_usage(tmp_path):
         # No cookie means no admin even when auth is disabled.
         page = request.urlopen(f"{base_url}/admin", timeout=5).read().decode("utf-8")
         assert "Forbidden" in page
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_home_renders_workspace_shell_and_empty_state(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=False, password=None)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        page = request.urlopen(f"{base_url}/", timeout=5).read().decode("utf-8")
+        assert '<div id="root"></div>' in page
+        workspace = request.urlopen(f"{base_url}/api/workspace", timeout=5).read().decode("utf-8")
+        assert '"projects": []' in workspace
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_login_uses_react_shell_and_public_assets_when_auth_required(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=True, password="secret")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        page = request.urlopen(f"{base_url}/login", timeout=5).read().decode("utf-8")
+        assert '<div id="root"></div>' in page
+        assert "Assistant" in page
+        asset_match = re.search(r'src="([^"]*assets/[^"]+\.js)"', page)
+        assert asset_match
+        asset = request.urlopen(f"{base_url}{asset_match.group(1)}", timeout=5)
+        assert asset.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_api_can_create_projectless_chat(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=False, password=None)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        payload = parse.urlencode({"title": "Loose chat"}).encode("utf-8")
+        req = request.Request(f"{base_url}/api/chats", data=payload, method="POST")
+        response = request.urlopen(req, timeout=5)
+        body = response.read().decode("utf-8")
+        assert response.status == 200
+        assert "general-chat-local" in body
+
+        workspace = request.urlopen(f"{base_url}/api/workspace", timeout=5).read().decode("utf-8")
+        assert '"projects": []' in workspace
+        assert "Loose chat" in workspace
     finally:
         server.shutdown()
         server.server_close()

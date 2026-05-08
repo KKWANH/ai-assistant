@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 from . import runner
 from . import costs
+from .env import load_env
 from . import storage
 from .runtime import LocalRuntime
 from .supervisor import StatusSupervisor
@@ -104,6 +106,17 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--actor")
     ask.add_argument("--search-mode", choices=["off", "auto", "always"], default="off")
     add_root(ask)
+
+    code = subcommands.add_parser("code", help="Run programming-mode commands and archive them in a session.")
+    code_sub = code.add_subparsers(dest="code_command", required=True)
+    code_run = code_sub.add_parser("run", help="Execute a shell command and store command/output events.")
+    code_run.add_argument("project_path")
+    code_run.add_argument("session_slug")
+    code_run.add_argument("--command", dest="shell_command", required=True)
+    code_run.add_argument("--title", default="Programming run")
+    code_run.add_argument("--actor")
+    code_run.add_argument("--cwd", default=".")
+    add_root(code_run)
 
     run_command = subcommands.add_parser("run", help="Run AIWS UI and optional local model services.")
     run_command.add_argument("--mode", choices=["local", "server"], default="local")
@@ -252,6 +265,55 @@ def run(args: argparse.Namespace) -> int:
         print(response)
         return 0
 
+    if args.command == "code" and args.code_command == "run":
+        run_record = storage.create_execution_run(
+            args.root,
+            args.project_path,
+            args.session_slug,
+            title=args.title,
+            actor=args.actor,
+        )
+        storage.append_run_event(
+            args.root,
+            args.project_path,
+            args.session_slug,
+            run_record["id"],
+            event_type="command",
+            content=f"$ {args.shell_command}",
+            metadata={"cwd": str(Path(args.cwd).resolve())},
+            actor=args.actor,
+        )
+        result = subprocess.run(
+            args.shell_command,
+            cwd=args.cwd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = result.stdout
+        if result.stderr:
+            output += ("\n" if output else "") + result.stderr
+        storage.append_run_event(
+            args.root,
+            args.project_path,
+            args.session_slug,
+            run_record["id"],
+            event_type="output",
+            content=output or "(no output)",
+            metadata={"returncode": result.returncode},
+            actor=args.actor,
+        )
+        storage.update_execution_run_status(
+            args.root,
+            args.project_path,
+            args.session_slug,
+            run_record["id"],
+            "completed" if result.returncode == 0 else "failed",
+        )
+        print(run_record["id"])
+        return result.returncode
+
     if args.command == "run":
         models = {item.strip().lower() for item in args.models.split(",") if item.strip()}
         runtime = LocalRuntime(
@@ -284,6 +346,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_env()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

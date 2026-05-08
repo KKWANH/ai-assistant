@@ -2,6 +2,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib-env.sh
+source "$REPO_ROOT/scripts/lib-env.sh"
+aiws_load_env "$REPO_ROOT"
 WORKSPACE_ROOT="${AIWS_ROOT:-$HOME/.ai-workspace}"
 PORT="${AIWS_PORT:-8765}"
 

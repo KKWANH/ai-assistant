@@ -7,6 +7,7 @@ import os
 from urllib import error, request
 
 from aiws import storage
+from aiws.env import load_env
 
 DEFAULT_KIMI_URL = "https://api.moonshot.ai/v1/chat/completions"
 
@@ -15,6 +16,7 @@ class KimiProvider:
     name = "kimi"
 
     def __init__(self, endpoint: str = DEFAULT_KIMI_URL, api_key: str | None = None) -> None:
+        load_env()
         self.endpoint = endpoint
         self.api_key = api_key or os.environ.get("AIWS_KIMI_API_KEY") or os.environ.get("MOONSHOT_API_KEY")
 

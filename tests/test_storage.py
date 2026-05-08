@@ -151,3 +151,48 @@ def test_account_profile_memory_language_and_avatar(tmp_path):
 
     with pytest.raises(storage.WorkspaceError, match="image file"):
         storage.set_account_avatar(root, "kwanho", "avatar.txt", b"hello")
+
+
+def test_projectless_general_chat_is_hidden_from_project_list(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret", admin=True)
+
+    project_path, session = storage.create_general_chat_session(root, "kwanho", "Quick thought")
+
+    assert project_path == "general-chat-kwanho"
+    assert session["slug"] == "quick-thought"
+    assert storage.load_project(root, project_path)["hidden"] is True
+    assert storage.list_visible_projects(root, "kwanho") == []
+    assert [project["path"] for project in storage.list_visible_general_chat_projects(root, "kwanho")] == [
+        "general-chat-kwanho"
+    ]
+
+    context = storage.build_prompt_context(root, project_path, "quick-thought")
+    assert "Projectless general chat" in context
+
+
+def test_execution_run_events_are_structured_and_mirrored_to_session(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Coding")
+
+    run = storage.create_execution_run(root, "ai-system", "coding", title="Pytest run")
+    event = storage.append_run_event(
+        root,
+        "ai-system",
+        "coding",
+        run["id"],
+        event_type="command",
+        content="$ python -m pytest",
+        metadata={"cwd": "/repo"},
+    )
+    storage.update_execution_run_status(root, "ai-system", "coding", run["id"], "completed")
+
+    assert event["type"] == "command"
+    assert storage.load_execution_run(root, "ai-system", "coding", run["id"])["status"] == "completed"
+    assert storage.read_run_events(root, "ai-system", "coding", run["id"])[0]["content"] == "$ python -m pytest"
+    messages = storage.read_messages(root, "ai-system", "coding")
+    assert messages[0]["role"] == "tool"
+    assert messages[0]["metadata"]["run_id"] == run["id"]
+    run_md = storage.run_dir(root, "ai-system", "coding", run["id"]) / "run.md"
+    assert "Pytest run" in run_md.read_text(encoding="utf-8")
