@@ -110,7 +110,19 @@ def test_cli_ask_prints_response(tmp_path, capsys, monkeypatch):
     assert cli.main(["project", "create", "AI System", "--root", str(root)]) == 0
     assert cli.main(["session", "create", "ai-system", "Ollama MVP", "--root", str(root)]) == 0
 
-    def fake_ask(root_arg, project_path, session_slug, *, provider, model, content, actor=None, search_mode="off"):
+    def fake_ask(
+        root_arg,
+        project_path,
+        session_slug,
+        *,
+        provider,
+        model,
+        content,
+        actor=None,
+        search_mode="off",
+        allow_remote=False,
+        confirm_cost=False,
+    ):
         assert root_arg == str(root)
         assert project_path == "ai-system"
         assert session_slug == "ollama-mvp"
@@ -119,6 +131,8 @@ def test_cli_ask_prints_response(tmp_path, capsys, monkeypatch):
         assert content == "Hello"
         assert actor is None
         assert search_mode == "off"
+        assert allow_remote is False
+        assert confirm_cost is False
         return "Hi from Ollama"
 
     monkeypatch.setattr(runner, "ask", fake_ask)

@@ -118,11 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
     ask = subcommands.add_parser("ask", help="Append a user message, call a provider, and store the response.")
     ask.add_argument("project_path")
     ask.add_argument("session_slug")
-    ask.add_argument("--provider", required=True, choices=["ollama", "kimi"])
+    ask.add_argument("--provider", required=True, choices=["ollama", "kimi", "gemini", "openai"])
     ask.add_argument("--model", required=True)
     ask.add_argument("--content", required=True)
     ask.add_argument("--actor")
     ask.add_argument("--search-mode", choices=["off", "auto", "always"], default="off")
+    ask.add_argument("--allow-remote", action="store_true")
+    ask.add_argument("--confirm-cost", action="store_true")
     add_root(ask)
 
     code = subcommands.add_parser("code", help="Run programming-mode commands and archive them in a session.")
@@ -310,6 +312,8 @@ def run(args: argparse.Namespace) -> int:
             content=args.content,
             actor=args.actor,
             search_mode=args.search_mode,
+            allow_remote=args.allow_remote,
+            confirm_cost=args.confirm_cost,
         )
         print(response)
         return 0

@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import os
+
 from . import costs, search, storage
+from .env import load_env
+from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
 from .providers.ollama import OllamaProvider
+from .providers.openai import OpenAIProvider
+
+
+REMOTE_PROVIDERS = {"kimi", "gemini", "openai"}
 
 
 MEMORY_MARKERS = (
@@ -30,6 +38,10 @@ def get_provider(provider: str):
         return OllamaProvider()
     if provider == "kimi":
         return KimiProvider()
+    if provider == "gemini":
+        return GeminiProvider()
+    if provider == "openai":
+        return OpenAIProvider()
     raise storage.WorkspaceError(f"Unsupported provider: {provider}")
 
 
@@ -47,7 +59,12 @@ def ask(
     user_metadata: dict[str, object] | None = None,
     stored_content: str | None = None,
     provider_attachments: list[dict[str, str]] | None = None,
+    allow_remote: bool = False,
+    confirm_cost: bool = False,
 ) -> str:
+    load_env()
+    provider = provider or os.environ.get("AIWS_DEFAULT_PROVIDER", "ollama")
+    model = model or default_model_for_provider(provider)
     account_context = storage.account_context(root, actor)
     resolved_results = search_results or []
     if search.should_search(search_mode, content) and not resolved_results:
@@ -57,8 +74,11 @@ def ask(
         + search.format_search_context(resolved_results)
         + storage.build_prompt_context(root, project_path, session_slug)
     )
+    input_tokens = costs.rough_token_count(prompt_context + content)
+    max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
+    estimated = costs.estimate_cost(provider, model, input_tokens, max_output_tokens)
+    enforce_remote_guardrails(root, actor, provider, estimated, allow_remote=allow_remote, confirm_cost=confirm_cost)
     client = get_provider(provider)
-    cost = costs.estimate_cost(provider, model, costs.rough_token_count(prompt_context + content))
     storage.append_message(
         root,
         project_path,
@@ -69,7 +89,9 @@ def ask(
         actor=actor,
     )
     response = client.chat(model=model, system=prompt_context, content=content, attachments=provider_attachments)
-    assistant_metadata = {"cost": cost, "search": search.results_metadata(search_mode, resolved_results)}
+    output_tokens = costs.rough_token_count(response)
+    actual = costs.estimate_cost(provider, model, input_tokens, output_tokens)
+    assistant_metadata = {"cost": actual, "search": search.results_metadata(search_mode, resolved_results)}
     storage.append_message(
         root,
         project_path,
@@ -81,9 +103,63 @@ def ask(
         metadata=assistant_metadata,
         actor=actor,
     )
+    if provider in REMOTE_PROVIDERS:
+        storage.append_model_usage(
+            root,
+            {
+                "user_id": storage.slugify(actor) if actor else "local",
+                "chat_id": f"{project_path}/{session_slug}",
+                "provider": provider,
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cached_input_tokens": 0,
+                "estimated_usd": estimated.get("estimated_cost"),
+                "actual_usd": actual.get("estimated_cost"),
+            },
+        )
     storage.record_usage(root, actor, asks=1)
     maybe_update_account_memory(root, actor, stored_content if stored_content is not None else content, project_path, session_slug)
     return response
+
+
+def default_model_for_provider(provider: str) -> str:
+    if provider == "ollama":
+        return os.environ.get("AIWS_DEFAULT_MODEL", "qwen3:4b")
+    if provider == "kimi":
+        return os.environ.get("AIWS_KIMI_DEFAULT_MODEL", "kimi-k2.5")
+    if provider == "gemini":
+        return os.environ.get("AIWS_GEMINI_DEFAULT_MODEL", "gemini-2.5-flash-lite")
+    if provider == "openai":
+        return os.environ.get("AIWS_OPENAI_DEFAULT_MODEL", "gpt-5.1-codex")
+    return ""
+
+
+def enforce_remote_guardrails(
+    root: str,
+    actor: str | None,
+    provider: str,
+    estimate: dict[str, object],
+    *,
+    allow_remote: bool,
+    confirm_cost: bool,
+) -> None:
+    if provider not in REMOTE_PROVIDERS:
+        return
+    if os.environ.get("AIWS_DISABLE_REMOTE_BY_DEFAULT", "true").lower() in {"1", "true", "yes"} and not allow_remote:
+        raise storage.WorkspaceError("Remote model use is disabled by default. Confirm cloud use to continue.")
+    estimated_usd = float(estimate.get("estimated_cost") or 0.0)
+    threshold = float(os.environ.get("AIWS_REQUIRE_CONFIRM_OVER_USD", "0.25"))
+    if estimated_usd >= threshold and not confirm_cost:
+        raise storage.WorkspaceError(f"Estimated remote model cost is USD {estimated_usd:.4f}. Confirm cost to continue.")
+    daily_limit = float(os.environ.get("AIWS_DAILY_USD_LIMIT", "2"))
+    monthly_limit = float(os.environ.get("AIWS_MONTHLY_USD_LIMIT", "20"))
+    day_total = storage.model_usage_total_usd(root, actor, period="day")
+    month_total = storage.model_usage_total_usd(root, actor, period="month")
+    if day_total + estimated_usd > daily_limit:
+        raise storage.WorkspaceError("Daily API budget would be exceeded.")
+    if month_total + estimated_usd > monthly_limit:
+        raise storage.WorkspaceError("Monthly API budget would be exceeded.")
 
 
 def maybe_update_account_memory(

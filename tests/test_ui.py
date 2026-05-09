@@ -51,6 +51,8 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         user_metadata=None,
         stored_content=None,
         provider_attachments=None,
+        allow_remote=False,
+        confirm_cost=False,
     ):
         calls["root"] = root_arg
         calls["project_path"] = project_path
@@ -91,14 +93,19 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "무엇을 도와드릴까요?" in bundle_text
         assert "search_mode" in bundle_text
         assert "Attach file" in bundle_text
-        assert "로컬 컨텍스트 우선" in bundle_text
-        assert "검색 안 함" in bundle_text
-        assert "웹 검색 준비 중" in bundle_text
+        assert "Local context only" in bundle_text
+        assert "Search off" in bundle_text
+        assert "Search web (준비 중)" in bundle_text
         assert "최근 대화" in bundle_text
         assert "가족 공유" in bundle_text
         assert "현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다." in bundle_text
         assert "Artifacts, drafts, and generated files will appear here." not in bundle_text
-        assert "local, fastest, basic" in bundle_text
+        assert "Local only" in bundle_text
+        assert "Cheap cloud" in bundle_text
+        assert "Gemini Pro" in bundle_text
+        assert "Kimi thinking" in bundle_text
+        assert "aiws_model_mode" in bundle_text
+        assert "window.confirm" not in bundle_text
         assert "공개 범위" in bundle_text
         assert "Logout" in bundle_text
         assert "multipart/form-data" in bundle_text
@@ -312,6 +319,8 @@ def test_kimi_image_upload_is_passed_as_vision_attachment(tmp_path, monkeypatch)
         user_metadata=None,
         stored_content=None,
         provider_attachments=None,
+        allow_remote=False,
+        confirm_cost=False,
     ):
         calls["provider"] = provider
         calls["provider_attachments"] = provider_attachments

@@ -10,6 +10,7 @@ import secrets
 import shutil
 import tarfile
 from datetime import datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -335,6 +336,54 @@ def record_usage(root: str | Path, username: str | None, *, messages: int = 0, a
     usage["messages"] = int(usage.get("messages", 0)) + messages
     usage["asks"] = int(usage.get("asks", 0)) + asks
     save_users(root, users)
+
+
+def model_usage_jsonl_path(root: str | Path) -> Path:
+    path = workspace_path(root) / "usage"
+    path.mkdir(parents=True, exist_ok=True)
+    return path / "model_usage.jsonl"
+
+
+def append_model_usage(root: str | Path, record: dict[str, Any]) -> dict[str, Any]:
+    saved = dict(record)
+    saved.setdefault("created_at", utc_now())
+    with model_usage_jsonl_path(root).open("a", encoding="utf-8") as file:
+        file.write(json.dumps(saved, ensure_ascii=False) + "\n")
+    return saved
+
+
+def list_model_usage(root: str | Path, username: str | None = None) -> list[dict[str, Any]]:
+    path = model_usage_jsonl_path(root)
+    if not path.exists():
+        return []
+    username_slug = slugify(username) if username else None
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(item, dict):
+            continue
+        if username_slug and item.get("user_id") != username_slug:
+            continue
+        items.append(item)
+    return items
+
+
+def model_usage_total_usd(root: str | Path, username: str | None, *, period: str) -> float:
+    now = date.today()
+    total = 0.0
+    for item in list_model_usage(root, username):
+        created_at = str(item.get("created_at", ""))
+        if period == "day" and not created_at.startswith(now.isoformat()):
+            continue
+        if period == "month" and not created_at.startswith(now.isoformat()[:7]):
+            continue
+        total += float(item.get("actual_usd") or item.get("estimated_usd") or 0.0)
+    return round(total, 8)
 
 
 def update_account_profile(

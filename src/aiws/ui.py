@@ -512,6 +512,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             provider_attachments=provider_attachments,
             actor=self.current_username(),
             search_mode=data.get("search_mode", "off"),
+            allow_remote=data.get("allow_remote") in {"1", "true", "yes"},
+            confirm_cost=data.get("confirm_cost") in {"1", "true", "yes"},
         )
         if visible_content:
             storage.maybe_update_default_session_title(self.root, project_path, session_slug, visible_content)

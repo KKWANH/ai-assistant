@@ -19,16 +19,20 @@ class KimiProvider:
 
     def __init__(
         self,
-        endpoint: str = DEFAULT_KIMI_URL,
+        endpoint: str | None = None,
         api_key: str | None = None,
         models: list[str] | None = None,
         timeout: int = 120,
     ) -> None:
         load_env()
-        self.endpoint = endpoint
+        base_url = os.environ.get("AIWS_KIMI_BASE_URL", "").rstrip("/")
+        resolved_endpoint = endpoint or (f"{base_url}/chat/completions" if base_url else DEFAULT_KIMI_URL)
+        self.endpoint = resolved_endpoint
         self.api_key = api_key or os.environ.get("AIWS_KIMI_API_KEY") or os.environ.get("MOONSHOT_API_KEY")
         configured_models = os.environ.get("AIWS_KIMI_MODELS", "")
-        self.models = models or [item.strip() for item in configured_models.split(",") if item.strip()] or list(DEFAULT_KIMI_MODELS)
+        default_model = os.environ.get("AIWS_KIMI_DEFAULT_MODEL", "").strip()
+        env_models = [item.strip() for item in configured_models.split(",") if item.strip()]
+        self.models = models or env_models or [item for item in [default_model, *DEFAULT_KIMI_MODELS] if item]
         self.timeout = timeout
 
     def chat(

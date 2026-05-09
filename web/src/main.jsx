@@ -2,18 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const DEFAULT_MODEL = "qwen3:0.6b";
-const MODEL_OPTIONS = [
-  { value: "qwen3:0.6b", label: "qwen3:0.6b - local, fastest, basic" },
-  { value: "qwen3:8b", label: "qwen3:8b - local, better, slower" },
-  { value: "kimi-k2.5", label: "Kimi K2.5 - cloud, cheap, strong" },
-  { value: "kimi-k2.6", label: "Kimi K2.6 - cloud, latest if enabled" },
-  { value: "kimi-k2-thinking", label: "Kimi Thinking - cloud, smarter, slower" },
+const DEFAULT_MODEL = "qwen3:4b";
+const MODEL_MODES = [
+  { value: "local", label: "Local only", short: "빠른 로컬 AI", provider: "ollama", model: "qwen3:4b", cloud: false, cost: "$0 local" },
+  { value: "cheap", label: "Cheap cloud", short: "저렴한 클라우드", provider: "gemini", model: "gemini-2.5-flash-lite", cloud: true, cost: "~$0.10/M in · ~$0.40/M out" },
+  { value: "gemini-pro", label: "Gemini Pro", short: "Gemini 고성능", provider: "gemini", model: "gemini-2.5-pro", cloud: true, cost: "~$1.25/M in · ~$10/M out" },
+  { value: "smart", label: "Smart cloud", short: "Kimi 고성능", provider: "kimi", model: "kimi-k2.6", cloud: true, cost: "est. ~$0.75/M in · ~$3.50/M out" },
+  { value: "kimi-thinking", label: "Kimi thinking", short: "Kimi 추론 강화", provider: "kimi", model: "kimi-k2-thinking", cloud: true, cost: "est. ~$0.60/M in · ~$2.50/M out" },
+  { value: "coding", label: "Coding expensive", short: "코딩 고성능", provider: "openai", model: "gpt-5.1-codex", cloud: true, cost: "est. ~$1.25/M in · ~$10/M out" },
 ];
 const SEARCH_OPTIONS = [
-  { value: "off", label: "검색 안 함" },
-  { value: "auto", label: "로컬 컨텍스트 우선" },
-  { value: "always", label: "웹 검색 준비 중" },
+  { value: "off", label: "Search off" },
+  { value: "auto", label: "Local context only" },
+  { value: "always", label: "Search web (준비 중)" },
 ];
 
 function apiPath(path) {
@@ -39,11 +40,29 @@ async function fetchJson(path, options) {
 }
 
 function csrfHeader() {
-  const token = document.cookie
-    .split("; ")
-    .find((item) => item.startsWith("aiws_csrf="))
-    ?.split("=")[1];
+  const token = getCookie("aiws_csrf");
   return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
+function getCookie(name) {
+  return document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${name}=`))
+    ?.split("=")[1];
+}
+
+function setCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
+function savedModelMode() {
+  const value = decodeURIComponent(getCookie("aiws_model_mode") || "local");
+  return MODEL_MODES.some((item) => item.value === value) ? value : "local";
+}
+
+function savedSearchMode() {
+  const value = decodeURIComponent(getCookie("aiws_search_mode") || "auto");
+  return SEARCH_OPTIONS.some((item) => item.value === value) ? value : "auto";
 }
 
 function App() {
@@ -456,9 +475,8 @@ function CenterPane({ chat, activePath, account, onAsk, onPreview, error, naviga
 
 function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "" }) {
   const [content, setContent] = useState("");
-  const [provider, setProvider] = useState("ollama");
-  const [model, setModel] = useState(DEFAULT_MODEL);
-  const [searchMode, setSearchMode] = useState("auto");
+  const [mode, setMode] = useState(savedModelMode);
+  const [searchMode, setSearchMode] = useState(savedSearchMode);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -466,6 +484,15 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   const [startError, setStartError] = useState("");
   const inputRef = useRef(null);
   const power = isPowerMode(account);
+  const selectedMode = modelMode(mode);
+
+  useEffect(() => {
+    setCookie("aiws_model_mode", mode);
+  }, [mode]);
+
+  useEffect(() => {
+    setCookie("aiws_search_mode", searchMode);
+  }, [searchMode]);
 
   useEffect(() => {
     if (!file || !file.type.startsWith("image/")) {
@@ -526,9 +553,13 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
         });
         const askForm = new FormData();
         askForm.set("content", content.trim());
-        askForm.set("provider", provider);
-        askForm.set("model", model);
+        askForm.set("provider", selectedMode.provider);
+        askForm.set("model", selectedMode.model);
         askForm.set("search_mode", searchMode);
+        if (selectedMode.cloud) {
+          askForm.set("allow_remote", "1");
+          askForm.set("confirm_cost", "1");
+        }
         if (file) askForm.set("attachment", file);
         const payload = await fetchJson(`/api/ask/${createdProjectPath}/${createdSession.slug}`, {
           method: "POST",
@@ -573,7 +604,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
             <div className="selected-file">
               {previewUrl && <img src={previewUrl} alt={file.name} />}
               <span>{file.name}</span>
-              <small>{provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
+              <small>{selectedMode.provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
               <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
             </div>
           )}
@@ -590,16 +621,13 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
             </label>
             {power && (
               <>
-                <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                  <option value="ollama">ollama</option>
-                  <option value="kimi">kimi</option>
-                </select>
-                <select value={model} onChange={(event) => setModel(event.target.value)}>
-                  {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                <select value={mode} onChange={(event) => setMode(event.target.value)} aria-label="Model mode">
+                  {MODEL_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
                 <select value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
                   {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
+                <ModePrice mode={selectedMode} />
               </>
             )}
             {!power && <span className="composer-scope">빠른 로컬 AI로 시작합니다</span>}
@@ -776,15 +804,23 @@ function AttachmentList({ attachments, onPreview }) {
 
 function Composer({ activePath, onAsk, account, power }) {
   const [content, setContent] = useState("");
-  const [provider, setProvider] = useState("ollama");
-  const [model, setModel] = useState(DEFAULT_MODEL);
-  const [searchMode, setSearchMode] = useState("auto");
+  const [mode, setMode] = useState(savedModelMode);
+  const [searchMode, setSearchMode] = useState(savedSearchMode);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
   const textRef = useRef(null);
+  const selectedMode = modelMode(mode);
+
+  useEffect(() => {
+    setCookie("aiws_model_mode", mode);
+  }, [mode]);
+
+  useEffect(() => {
+    setCookie("aiws_search_mode", searchMode);
+  }, [searchMode]);
 
   useEffect(() => {
     if (!file) {
@@ -824,9 +860,13 @@ function Composer({ activePath, onAsk, account, power }) {
     if (sending || (!content.trim() && !file)) return;
     const form = new FormData();
     form.set("content", content);
-    form.set("provider", provider);
-    form.set("model", model);
+    form.set("provider", selectedMode.provider);
+    form.set("model", selectedMode.model);
     form.set("search_mode", searchMode);
+    if (selectedMode.cloud) {
+      form.set("allow_remote", "1");
+      form.set("confirm_cost", "1");
+    }
     if (file) form.set("attachment", file);
 
     const optimistic = {
@@ -895,7 +935,7 @@ function Composer({ activePath, onAsk, account, power }) {
         <div className="selected-file">
           {previewUrl && <img src={previewUrl} alt={file.name} />}
           <span>{file.name}</span>
-          <small>{provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
+          <small>{selectedMode.provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
           <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
         </div>
       )}
@@ -915,13 +955,10 @@ function Composer({ activePath, onAsk, account, power }) {
       </div>
       {power && (
         <div className="advanced-controls">
-          <label><span>Provider</span><select name="provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
-            <option value="ollama">ollama</option>
-            <option value="kimi">kimi</option>
+          <label><span>Mode</span><select name="model_mode" value={mode} onChange={(event) => setMode(event.target.value)}>
+            {MODEL_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select></label>
-          <label><span>Model</span><select name="model" value={model} onChange={(event) => setModel(event.target.value)}>
-            {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select></label>
+          <label><span>Selected</span><ModePrice mode={selectedMode} field /></label>
           <label><span>Search</span><select name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
             {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select></label>
@@ -931,8 +968,22 @@ function Composer({ activePath, onAsk, account, power }) {
   );
 }
 
+function ModePrice({ mode, field = false }) {
+  return (
+    <div className={`mode-detail mode-price ${field ? "field-like" : ""}`}>
+      <strong>{mode.label}</strong>
+      <span>{mode.provider} · {mode.model}</span>
+      <small>{mode.cost}</small>
+    </div>
+  );
+}
+
 function modelLabel(model) {
-  return MODEL_OPTIONS.find((item) => item.value === model)?.label || model;
+  return MODEL_MODES.find((item) => item.model === model)?.label || model;
+}
+
+function modelMode(value) {
+  return MODEL_MODES.find((item) => item.value === value) || MODEL_MODES[0];
 }
 
 function searchLabel(mode) {
