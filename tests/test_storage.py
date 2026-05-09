@@ -106,6 +106,11 @@ def test_accounts_project_visibility_and_usage(tmp_path):
     parent = storage.create_account(root, "Parent", "parent-secret")
 
     assert admin["username"] == "kwanho"
+    assert admin["nickname"] == "Kwanho Kim"
+    assert storage.create_account(root, "benetea", "secret")["nickname"] == "Chungja Byun"
+    assert storage.create_account(root, "dosadol", "secret")["nickname"] == "Gunwoo Kim"
+    assert storage.create_account(root, "kwanho0096", "secret")["nickname"] == "Kwanho Kim"
+    assert storage.display_name_for_username(None) == "Kwanho Kim"
     assert storage.authenticate_account(root, "kwanho", "secret")["admin"] is True
     assert storage.authenticate_account(root, "parent", "wrong") is None
 
@@ -171,6 +176,24 @@ def test_projectless_general_chat_is_hidden_from_project_list(tmp_path):
     assert "Projectless general chat" in context
 
 
+def test_projectless_general_chat_accepts_blank_and_duplicate_titles(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    project_path, first = storage.create_general_chat_session(root, None, "")
+    _, second = storage.create_general_chat_session(root, None, "New chat")
+
+    assert project_path == "general-chat-local"
+    assert first["slug"] == "new-chat"
+    assert first["title"] == "New chat"
+    assert second["slug"] == "new-chat-2"
+
+    storage.append_message(root, project_path, first["slug"], role="user", content="Hello", actor="kwanho")
+    assert storage.read_messages(root, project_path, first["slug"])[0]["actor"] == "kwanho"
+    updated = storage.maybe_update_default_session_title(root, project_path, first["slug"], "첨부한 pdf 파일을 분석해줘")
+    assert updated["title"] == "첨부한 pdf 파일을 분석해줘"
+
+
 def test_execution_run_events_are_structured_and_mirrored_to_session(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")
@@ -196,3 +219,48 @@ def test_execution_run_events_are_structured_and_mirrored_to_session(tmp_path):
     assert messages[0]["metadata"]["run_id"] == run["id"]
     run_md = storage.run_dir(root, "ai-system", "coding", run["id"]) / "run.md"
     assert "Pytest run" in run_md.read_text(encoding="utf-8")
+
+
+def test_project_goal_round_trip_and_codex_prompt(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    markdown = """# Goal
+
+## Objective
+Build a trustworthy family AI workspace.
+
+## Current Status
+MVP is running.
+
+## Next Actions
+- Improve PDF previews
+- Add Codex prompt copy
+
+## Success Criteria
+- Tests pass
+
+## Test Commands
+- .venv/bin/python -m pytest
+"""
+
+    goal = storage.set_goal_from_markdown(root, "ai-system", markdown)
+
+    assert goal["objective"] == "Build a trustworthy family AI workspace."
+    assert "Improve PDF previews" in goal["next_actions"]
+    assert (storage.project_dir(root, "ai-system") / "GOAL.md").exists()
+    prompt = storage.codex_goal_prompt(root, "ai-system", "planning")
+    assert "Build a trustworthy family AI workspace." in prompt
+    assert "Session: planning" in prompt
+
+
+def test_workspace_backup_and_restore(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    backup = storage.create_workspace_backup(root, tmp_path / "backup")
+
+    assert backup.name == "backup.tar.gz"
+
+    restored = storage.restore_workspace_backup(backup, tmp_path / "restored")
+    assert storage.load_project(restored, "ai-system")["title"] == "AI System"
+    with pytest.raises(storage.WorkspaceError, match="not empty"):
+        storage.restore_workspace_backup(backup, restored)

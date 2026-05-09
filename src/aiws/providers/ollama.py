@@ -16,7 +16,14 @@ class OllamaProvider:
     def __init__(self, endpoint: str = DEFAULT_OLLAMA_URL) -> None:
         self.endpoint = endpoint
 
-    def chat(self, *, model: str, system: str, content: str) -> str:
+    def chat(
+        self,
+        *,
+        model: str,
+        system: str,
+        content: str,
+        attachments: list[dict[str, str]] | None = None,
+    ) -> str:
         payload = {
             "model": model,
             "stream": False,

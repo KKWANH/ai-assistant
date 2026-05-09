@@ -7,12 +7,13 @@ const MODEL_OPTIONS = [
   { value: "qwen3:0.6b", label: "qwen3:0.6b - local, fastest, basic" },
   { value: "qwen3:8b", label: "qwen3:8b - local, better, slower" },
   { value: "kimi-k2.5", label: "Kimi K2.5 - cloud, cheap, strong" },
+  { value: "kimi-k2.6", label: "Kimi K2.6 - cloud, latest if enabled" },
   { value: "kimi-k2-thinking", label: "Kimi Thinking - cloud, smarter, slower" },
 ];
 const SEARCH_OPTIONS = [
-  { value: "off", label: "Search off" },
-  { value: "auto", label: "Search auto" },
-  { value: "always", label: "Search always" },
+  { value: "off", label: "검색 안 함" },
+  { value: "auto", label: "로컬 컨텍스트 우선" },
+  { value: "always", label: "웹 검색 준비 중" },
 ];
 
 function apiPath(path) {
@@ -21,12 +22,28 @@ function apiPath(path) {
 
 async function fetchJson(path, options) {
   const response = await fetch(apiPath(path), {
-    headers: { Accept: "application/json", ...(options?.headers || {}) },
+    headers: { Accept: "application/json", ...csrfHeader(), ...(options?.headers || {}) },
     ...options,
   });
-  const payload = await response.json();
+  const text = await response.text();
+  let payload = {};
+  if (text.trim()) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error(text.slice(0, 240) || `Request returned non-JSON response (${response.status}).`);
+    }
+  }
   if (!response.ok) throw new Error(payload.error || "Request failed.");
   return payload;
+}
+
+function csrfHeader() {
+  const token = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith("aiws_csrf="))
+    ?.split("=")[1];
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
 }
 
 function App() {
@@ -102,13 +119,14 @@ function App() {
         <CenterPane
           chat={chat}
           activePath={activePath}
+          account={workspace?.account}
           onAsk={afterAsk}
           onPreview={setLightbox}
           error={error}
           navigate={navigate}
           refreshWorkspace={refreshWorkspace}
         />
-        <Workbench chat={chat} activePath={activePath} runtime={runtime} onPreview={setLightbox} />
+        <Workbench chat={chat} activePath={activePath} runtime={runtime} onPreview={setLightbox} onChat={setChat} />
       </main>
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
@@ -145,6 +163,7 @@ function LoginPage() {
         </div>
         {hasError && <div className="system-note compact">사용자 이름 또는 비밀번호가 올바르지 않습니다.</div>}
         <form className="login-form" method="post" action="/login">
+          <input type="hidden" name="_csrf" value={document.cookie.split("; ").find((item) => item.startsWith("aiws_csrf="))?.split("=")[1] || ""} />
           <label>
             <span>사용자 이름</span>
             <input name="username" autoComplete="username" autoFocus />
@@ -176,7 +195,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const projects = workspace?.projects || [];
   const chats = workspace?.chats || [];
-  const account = workspace?.account || { username: "local", display_name: "local", profile: {} };
+  const account = workspace?.account || { username: "local", nickname: "Kwanho Kim", display_name: "Kwanho Kim", profile: {} };
   const activeIsGeneralChat = chats.some((project) => project.path === activePath.projectPath);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -204,8 +223,8 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
       <nav className="project-tree" aria-label="Workspace">
         {!workspace && <div className="empty-card">Loading workspace...</div>}
         {chats.length > 0 && (
-          <section className="tree-section">
-            <h2>Chats</h2>
+          <section className="tree-section chat-section">
+            <h2><span>Personal chats</span><em>Chat</em></h2>
             {chats.flatMap((project) =>
               project.sessions.map((session) => (
                 <button
@@ -214,6 +233,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
                   className={`session-slip general ${project.path === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
                   onClick={() => navigate(`/chat/${project.path}/${session.slug}`)}
                 >
+                  <em className="item-kind">Chat</em>
                   <span>{session.title}</span>
                   <small>{session.created_at?.slice(0, 10) || "chat"}</small>
                 </button>
@@ -221,6 +241,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
             )}
           </section>
         )}
+        {workspace && projects.length > 0 && <div className="tree-heading"><span>Projects</span><em>Project</em></div>}
         {workspace && projects.length === 0 && (
           <div className="empty-card">
             <strong>No projects yet.</strong>
@@ -249,6 +270,7 @@ function ProjectNode({ project, activePath, navigate }) {
         onClick={() => navigate(project.firstSessionUrl || `/project/${project.path}`)}
       >
         <span>{project.title}</span>
+        <em className="item-kind">Project</em>
         <small>{project.created_at?.slice(0, 10) || "local"}</small>
       </button>
       <div className="session-list">
@@ -259,6 +281,7 @@ function ProjectNode({ project, activePath, navigate }) {
             className={`session-slip ${project.path === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
             onClick={() => navigate(`/chat/${project.path}/${session.slug}`)}
           >
+            <em className="item-kind">Session</em>
             <span>{session.title}</span>
             <small>{session.created_at?.slice(0, 10) || "session"}</small>
           </button>
@@ -277,7 +300,7 @@ function NewProjectForm({ onCreated }) {
     event.preventDefault();
     if (!canSubmit) return;
     const form = new URLSearchParams({ title, visibility });
-    await fetch("/projects", { method: "POST", body: form });
+    await fetch("/projects", { method: "POST", body: form, headers: csrfHeader() });
     setTitle("");
     setVisibility("private");
     setOpen(false);
@@ -307,7 +330,7 @@ function NewGeneralChatForm({ onCreated }) {
     if (creating) return;
     setCreating(true);
     const form = new URLSearchParams({ title: "New chat" });
-    const response = await fetch("/api/chats", { method: "POST", body: form });
+    const response = await fetch("/api/chats", { method: "POST", body: form, headers: csrfHeader() });
     const payload = await response.json();
     setCreating(false);
     if (!response.ok) throw new Error(payload.error || "Could not create chat.");
@@ -328,7 +351,7 @@ function NewSessionForm({ projectPath, onCreated }) {
     event.preventDefault();
     if (!canSubmit) return;
     const form = new URLSearchParams({ title });
-    const response = await fetch(`/api/sessions/${projectPath}`, { method: "POST", body: form });
+    const response = await fetch(`/api/sessions/${projectPath}`, { method: "POST", body: form, headers: csrfHeader() });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create session.");
     setTitle("");
@@ -346,10 +369,10 @@ function NewSessionForm({ projectPath, onCreated }) {
   );
 }
 
-function CenterPane({ chat, activePath, onAsk, onPreview, error, navigate, refreshWorkspace }) {
+function CenterPane({ chat, activePath, account, onAsk, onPreview, error, navigate, refreshWorkspace }) {
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
-      <StartPane error={error} navigate={navigate} refreshWorkspace={refreshWorkspace} onAsk={onAsk} />
+      <StartPane error={error} navigate={navigate} refreshWorkspace={refreshWorkspace} onAsk={onAsk} account={account} />
     );
   }
 
@@ -363,33 +386,48 @@ function CenterPane({ chat, activePath, onAsk, onPreview, error, navigate, refre
         <div className="context-chips">
           <span>Provider {chat?.latest?.provider || "ollama"}</span>
           <span>Model {modelLabel(chat?.latest?.model || DEFAULT_MODEL)}</span>
-          <span>{searchLabel(chat?.latest?.search_mode || "auto")}</span>
+          <span>{searchLabel(chat?.latest?.search_mode || "off")}</span>
         </div>
       </div>
       <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} />
-      <Composer activePath={activePath} onAsk={onAsk} />
+      <Composer activePath={activePath} onAsk={onAsk} account={account} />
     </section>
   );
 }
 
-function StartPane({ error, navigate, refreshWorkspace, onAsk }) {
+function StartPane({ error, navigate, refreshWorkspace, onAsk, account }) {
   const [content, setContent] = useState("");
   const [provider, setProvider] = useState("ollama");
   const [model, setModel] = useState(DEFAULT_MODEL);
-  const [searchMode, setSearchMode] = useState("auto");
+  const [searchMode, setSearchMode] = useState("off");
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
 
   async function submit(event) {
     event.preventDefault();
     if (starting) return;
     setStarting(true);
+    setStartError("");
     try {
-      const createForm = new URLSearchParams({ title: content.trim().slice(0, 48) || "New chat" });
+      const createForm = new URLSearchParams({ title: content.trim().slice(0, 48) });
       const created = await fetchJson("/api/chats", { method: "POST", body: createForm });
       const path = `/chat/${created.project_path}/${created.session.slug}`;
       navigate(path);
       refreshWorkspace().catch(() => {});
       if (content.trim()) {
+        onAsk({
+          project: { path: created.project_path, title: "General chats", hidden: true },
+          session: created.session,
+          messages: [
+            { role: "user", actor_display: accountDisplayName(account), content: content.trim(), attachments: [] },
+            { role: "assistant", pending: true, content: "", attachments: [] },
+          ],
+          skills: [],
+          attachments: [],
+          goal: {},
+          codex_prompt: "",
+          latest: {},
+        });
         const askForm = new FormData();
         askForm.set("content", content.trim());
         askForm.set("provider", provider);
@@ -402,6 +440,8 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk }) {
         onAsk(payload);
       }
       setContent("");
+    } catch (err) {
+      setStartError(err.message || "Could not start chat.");
     } finally {
       setStarting(false);
     }
@@ -433,11 +473,9 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk }) {
             <button className="send-key" type="submit" disabled={starting}>{starting ? <span className="typing" /> : "Send"}</button>
           </div>
         </form>
-        <div className="quick-actions" aria-label="Suggested actions">
-          <button type="button">이미지 만들기</button>
-          <button type="button">글쓰기 또는 편집</button>
-          <button type="button">필요한 항목 찾기</button>
-        </div>
+        {starting && <WaitingNotice label="Assistant is preparing your answer" />}
+        <p className="honest-note">웹 검색과 이미지 생성은 아직 꺼져 있습니다. 현재는 저장된 프로젝트/세션/파일 컨텍스트만 사용합니다.</p>
+        {startError && <div className="system-note">{startError}</div>}
         {error && <div className="system-note">{error}</div>}
       </div>
     </section>
@@ -469,27 +507,113 @@ function MessageTimeline({ messages, onPreview }) {
 
 function MessageCard({ message, onPreview }) {
   return (
-    <article className={`message-card ${message.role}`}>
+    <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
       <div className="message-meta">
-        <strong>{message.role}</strong>
+        <strong>{messageAuthorLabel(message)}</strong>
+        {message.created_at && <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>}
         {message.provider && <span>{message.provider} {message.model}</span>}
         {message.estimated_cost !== null && message.estimated_cost !== undefined && <span>USD {message.estimated_cost}</span>}
       </div>
-      {message.pending ? <span className="typing" aria-label="Thinking" /> : <RenderedText text={message.content || ""} />}
+      {message.pending ? <WaitingNotice label="Assistant is thinking" compact /> : <RenderedText text={message.content || ""} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
+  );
+}
+
+function messageAuthorLabel(message) {
+  if (message.role === "user") return message.actor_display || displayNameForId(message.actor);
+  if (message.role === "assistant") return "Assistant";
+  if (message.role === "system") return "System";
+  if (message.role === "tool") return message.actor_display ? `Tool · ${message.actor_display}` : "Tool";
+  return message.actor_display || displayNameForId(message.actor) || message.role || "message";
+}
+
+function displayNameForId(id) {
+  const map = {
+    local: "Kwanho Kim",
+    kwanho: "Kwanho Kim",
+    kwanho0096: "Kwanho Kim",
+    benetea: "Chungja Byun",
+    dosadol: "Gunwoo Kim",
+  };
+  return map[id || "local"] || id || "Kwanho Kim";
+}
+
+function formatMessageTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function accountDisplayName(account) {
+  return account?.nickname || account?.display_name || displayNameForId(account?.username);
+}
+
+function WaitingNotice({ label, compact = false }) {
+  return (
+    <div className={`waiting-notice ${compact ? "compact" : ""}`} role="status" aria-live="polite">
+      <span className="orbital-loader" aria-hidden="true"><i /><i /><i /></span>
+      <span>{label}</span>
+    </div>
   );
 }
 
 function RenderedText({ text }) {
   const parts = String(text).split(/```/);
   return (
-    <div className="message-text">
+    <div className="message-text" data-markdown-renderer>
       {parts.map((part, index) =>
-        index % 2 ? <pre className="code-block" key={index}><code>{part.trim()}</code></pre> : <span key={index}>{part}</span>
+        index % 2 ? <pre className="code-block" key={index}><code>{part.trim()}</code></pre> : <MarkdownBlock key={index} text={part} />
       )}
     </div>
   );
+}
+
+function MarkdownBlock({ text }) {
+  const lines = String(text).split(/\n/);
+  const nodes = [];
+  let list = [];
+  function flushList() {
+    if (!list.length) return;
+    nodes.push(<ul key={`ul-${nodes.length}`}>{list.map((item, index) => <li key={index}>{renderInline(item)}</li>)}</ul>);
+    list = [];
+  }
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+    const bullet = trimmed.match(/^[-*]\s+(.+)/);
+    if (bullet) {
+      list.push(bullet[1]);
+      return;
+    }
+    flushList();
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)/);
+    if (heading) {
+      const level = Math.min(heading[1].length + 2, 6);
+      const Tag = `h${level}`;
+      nodes.push(<Tag key={index}>{renderInline(heading[2])}</Tag>);
+    } else if (trimmed.startsWith("> ")) {
+      nodes.push(<blockquote key={index}>{renderInline(trimmed.slice(2))}</blockquote>);
+    } else {
+      nodes.push(<p key={index}>{renderInline(line)}</p>);
+    }
+  });
+  flushList();
+  return nodes;
+}
+
+function renderInline(text) {
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+  return String(text).split(pattern).filter(Boolean).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (link && /^https?:\/\//.test(link[2])) return <a key={index} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>;
+    return <React.Fragment key={index}>{part}</React.Fragment>;
+  });
 }
 
 function AttachmentList({ attachments, onPreview }) {
@@ -497,20 +621,24 @@ function AttachmentList({ attachments, onPreview }) {
   return (
     <div className="attachment-list">
       {attachments.map((item) =>
-        item.is_image ? (
+        item.is_image || item.is_pdf ? (
           <button key={item.url} className="attachment-card image" type="button" onClick={() => onPreview(item)}>
-            <img src={item.url} alt={item.filename} />
+            {item.is_image ? <img src={item.url} alt={item.filename} /> : <span className="pdf-thumb" data-pdf-preview>PDF</span>}
             <span>{item.filename}</span>
+            <small>{item.delivery || "Attached to chat"}</small>
           </button>
         ) : (
-          <a key={item.url} className="attachment-card" href={item.url} target="_blank" rel="noreferrer">{item.filename}</a>
+          <a key={item.url} className="attachment-card" href={item.url} target="_blank" rel="noreferrer">
+            {item.filename}
+            <small>{item.delivery || "Sent as text context"}</small>
+          </a>
         )
       )}
     </div>
   );
 }
 
-function Composer({ activePath, onAsk }) {
+function Composer({ activePath, onAsk, account }) {
   const [content, setContent] = useState("");
   const [provider, setProvider] = useState("ollama");
   const [model, setModel] = useState(DEFAULT_MODEL);
@@ -558,6 +686,7 @@ function Composer({ activePath, onAsk }) {
 
     const optimistic = {
       role: "user",
+      actor_display: accountDisplayName(account),
       content: content || "Attached file",
       attachments: file ? [{ filename: file.name, url: previewUrl || "", is_image: file.type.startsWith("image/") }] : [],
     };
@@ -576,12 +705,13 @@ function Composer({ activePath, onAsk }) {
       });
       onAsk(payload);
     } catch (err) {
-      onAsk({
+      onAsk((current) => ({
+        ...(current || {}),
         messages: [
-          optimistic,
+          ...(current?.messages || []).filter((message) => !message.pending),
           { role: "system", content: err.message, attachments: [] },
         ],
-      });
+      }));
     } finally {
       setSending(false);
       textRef.current?.focus();
@@ -608,6 +738,7 @@ function Composer({ activePath, onAsk }) {
         <div className="selected-file">
           {previewUrl && <img src={previewUrl} alt={file.name} />}
           <span>{file.name}</span>
+          <small>{provider === "kimi" && file.type.startsWith("image/") ? "Sent as vision input" : file.type.startsWith("image/") ? "Attached to chat" : "Sent as text context"}</small>
           <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
         </div>
       )}
@@ -646,13 +777,16 @@ function searchLabel(mode) {
   return SEARCH_OPTIONS.find((item) => item.value === mode)?.label || `Search ${mode}`;
 }
 
-function Workbench({ chat, activePath, runtime, onPreview }) {
+function Workbench({ chat, activePath, runtime, onPreview, onChat }) {
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
       <aside className="workbench">
         <h2>Workbench</h2>
         <RuntimePanel runtime={runtime} />
-        <p>Artifacts, drafts, and generated files will appear here.</p>
+        <section>
+          <h3>Context</h3>
+          <p className="muted">Start or open a chat to inspect project context, files, goal, runtime, and dev commands.</p>
+        </section>
       </aside>
     );
   }
@@ -670,7 +804,11 @@ function Workbench({ chat, activePath, runtime, onPreview }) {
       </section>
       <section>
         <h3>Files</h3>
-        {attachments.length === 0 ? <p className="muted">Drop files here or use Attach file.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
+        {attachments.length === 0 ? <p className="muted">No files attached to this session yet.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
+      </section>
+      <section>
+        <h3>Goal</h3>
+        <GoalPanel chat={chat} activePath={activePath} onChat={onChat} />
       </section>
       <section>
         <h3>Prompt</h3>
@@ -682,6 +820,59 @@ function Workbench({ chat, activePath, runtime, onPreview }) {
         <code>aiws prompt {activePath.projectPath} {activePath.sessionSlug} --root ~/.ai-workspace</code>
       </section>
     </aside>
+  );
+}
+
+function GoalPanel({ chat, activePath, onChat }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const goal = chat?.goal || {};
+  const codexPrompt = chat?.codex_prompt || "";
+
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const form = new FormData(event.currentTarget);
+      const payload = await fetchJson(`/api/goal/${activePath.projectPath}`, { method: "POST", body: form });
+      onChat((current) => ({ ...(current || {}), goal: payload.goal, codex_prompt: payload.codex_prompt }));
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyPrompt() {
+    await navigator.clipboard?.writeText(codexPrompt);
+  }
+
+  if (editing) {
+    return (
+      <form className="goal-form" data-goal-panel onSubmit={save}>
+        <textarea name="objective" defaultValue={goal.objective || ""} placeholder="Objective" />
+        <textarea name="current_status" defaultValue={goal.current_status || ""} placeholder="Current status" />
+        <textarea name="next_actions" defaultValue={(goal.next_actions || []).join("\n")} placeholder="Next actions, one per line" />
+        <textarea name="constraints" defaultValue={(goal.constraints || []).join("\n")} placeholder="Constraints, one per line" />
+        <textarea name="success_criteria" defaultValue={(goal.success_criteria || []).join("\n")} placeholder="Success criteria, one per line" />
+        <textarea name="test_commands" defaultValue={(goal.test_commands || []).join("\n")} placeholder="Test commands, one per line" />
+        <div className="goal-actions">
+          <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Goal"}</button>
+          <button type="button" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="goal-panel" data-goal-panel>
+      <strong>{goal.objective || "No goal set yet."}</strong>
+      {goal.current_status && <p>{goal.current_status}</p>}
+      {(goal.next_actions || []).length > 0 && <ul>{goal.next_actions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>}
+      <div className="goal-actions">
+        <button type="button" data-edit-goal onClick={() => setEditing(true)}>Edit Goal</button>
+        <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy Codex Prompt</button>
+      </div>
+    </div>
   );
 }
 
@@ -707,7 +898,11 @@ function Lightbox({ item, onClose }) {
   return (
     <div className="lightbox" data-lightbox onClick={onClose}>
       <button type="button" onClick={onClose}>Close</button>
-      <img src={item.url} alt={item.filename} data-preview-src={item.url} />
+      {item.is_pdf ? (
+        <iframe title={item.filename} src={item.url} data-preview-src={item.url} />
+      ) : (
+        <img src={item.url} alt={item.filename} data-preview-src={item.url} />
+      )}
     </div>
   );
 }
@@ -728,12 +923,9 @@ function SettingsModal({ account, onClose, onSaved }) {
     }
   }
 
-  function logout() {
-    const form = document.createElement("form");
-    form.method = "post";
-    form.action = "/api/logout";
-    document.body.appendChild(form);
-    form.submit();
+  async function logout() {
+    await fetch("/api/logout", { method: "POST", headers: csrfHeader() });
+    window.location.href = "/login";
   }
 
   return (

@@ -25,6 +25,20 @@ def validate_attachment(filename: str, content: bytes) -> str:
     return ext
 
 
+def is_image_extension(extension: str) -> bool:
+    return extension.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def image_mime_type(extension: str) -> str:
+    return {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }.get(extension.lower(), "application/octet-stream")
+
+
 def attachment_dir(root: str | Path, project_path: str, session_slug: str) -> Path:
     return storage.session_dir(root, project_path, session_slug) / "attachments"
 
@@ -63,7 +77,17 @@ def list_attachments(root: str | Path, project_path: str, session_slug: str) -> 
     path = attachment_dir(root, project_path, session_slug) / "attachments.jsonl"
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    items: list[dict[str, object]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            items.append(value)
+    return items
 
 
 def append_attachment_metadata(

@@ -27,6 +27,16 @@ def build_parser() -> argparse.ArgumentParser:
     init = subcommands.add_parser("init", help="Initialize a workspace.")
     add_root(init)
 
+    backup = subcommands.add_parser("backup", help="Create or restore workspace backups.")
+    backup_sub = backup.add_subparsers(dest="backup_command", required=True)
+    backup_create = backup_sub.add_parser("create", help="Create a compressed workspace backup.")
+    backup_create.add_argument("--output", required=True)
+    add_root(backup_create)
+    backup_restore = backup_sub.add_parser("restore", help="Restore a compressed workspace backup.")
+    backup_restore.add_argument("archive")
+    backup_restore.add_argument("--replace", action="store_true")
+    add_root(backup_restore)
+
     skills = subcommands.add_parser("skills", help="Manage skills.")
     skills_sub = skills.add_subparsers(dest="skills_command", required=True)
     skills_list = skills_sub.add_parser("list", help="List skills.")
@@ -97,6 +107,13 @@ def build_parser() -> argparse.ArgumentParser:
     prompt.add_argument("session_slug")
     add_root(prompt)
 
+    goal = subcommands.add_parser("goal", help="Show or update project goals.")
+    goal.add_argument("project_or_action")
+    goal.add_argument("project_or_session", nargs="?")
+    goal.add_argument("session_slug", nargs="?")
+    goal.add_argument("--file")
+    add_root(goal)
+
     ask = subcommands.add_parser("ask", help="Append a user message, call a provider, and store the response.")
     ask.add_argument("project_path")
     ask.add_argument("session_slug")
@@ -153,6 +170,16 @@ def run(args: argparse.Namespace) -> int:
         storage.init_workspace(args.root)
         for skill in storage.list_skills(args.root):
             print(skill)
+        return 0
+
+    if args.command == "backup" and args.backup_command == "create":
+        path = storage.create_workspace_backup(args.root, args.output)
+        print(path)
+        return 0
+
+    if args.command == "backup" and args.backup_command == "restore":
+        path = storage.restore_workspace_backup(args.archive, args.root, replace=args.replace)
+        print(path)
         return 0
 
     if args.command == "models" and args.models_command == "costs":
@@ -249,6 +276,26 @@ def run(args: argparse.Namespace) -> int:
 
     if args.command == "prompt":
         print(storage.build_prompt_context(args.root, args.project_path, args.session_slug), end="")
+        return 0
+
+    if args.command == "goal":
+        if args.project_or_action == "set":
+            if not args.project_or_session:
+                raise storage.WorkspaceError("goal set requires a project path.")
+            if not args.file:
+                raise storage.WorkspaceError("goal set requires --file.")
+            markdown = Path(args.file).read_text(encoding="utf-8")
+            goal = storage.set_goal_from_markdown(args.root, args.project_or_session, markdown)
+            print(storage.goal_to_markdown(goal), end="")
+            return 0
+        print(
+            storage.codex_goal_prompt(
+                args.root,
+                args.project_or_action,
+                args.project_or_session,
+            ),
+            end="",
+        )
         return 0
 
     if args.command == "ask":

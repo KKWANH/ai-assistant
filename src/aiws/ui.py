@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import base64
+import secrets
+import time
 from functools import partial
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,7 +21,11 @@ from . import runner
 from . import storage
 
 SESSION_COOKIE = "aiws_auth"
+CSRF_COOKIE = "aiws_csrf"
 LEGACY_SESSION_VALUE = "ok"
+LOGIN_FAILURES: dict[tuple[str, str], list[float]] = {}
+LOGIN_WINDOW_SECONDS = 10 * 60
+LOGIN_MAX_FAILURES = 6
 
 
 def validate_ui_options(mode: str, password: str | None) -> tuple[str, bool]:
@@ -37,6 +44,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         self.require_auth = require_auth
         self.password = password
         self._multipart_files: dict[str, tuple[str, bytes]] = {}
+        self._csrf_to_set = ""
         super().__init__(*args, **kwargs)
 
     def log_message(self, format: str, *args) -> None:
@@ -45,6 +53,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+        if self.require_auth:
+            self.csrf_token()
         public_asset = path.startswith("/assets/") or path in {"/vite.svg"}
         if self.require_auth and not self.is_authenticated() and path != "/login" and not public_asset:
             self.redirect("/login")
@@ -57,6 +67,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_account()
         elif path == "/api/runtime":
             self.api_runtime()
+        elif path.startswith("/api/goal/"):
+            project_path = unquote(path.removeprefix("/api/goal/"))
+            self.api_goal(project_path)
         elif path.startswith("/api/chat/"):
             parts = unquote(path.removeprefix("/api/chat/")).split("/")
             if len(parts) < 2:
@@ -117,6 +130,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             project_path = "/".join(parts[:-1])
             try:
                 data = self.form_data()
+                self.require_csrf(data)
                 self.handle_ask(project_path, session_slug, data)
                 self.api_chat(project_path, session_slug)
             except storage.WorkspaceError as exc:
@@ -124,9 +138,14 @@ class AIWSHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/logout":
+            try:
+                self.require_csrf({})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=403)
+                return
             self.send_response(303)
             self.send_header("Location", "/login")
-            self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Max-Age=0")
+            self.send_header("Set-Cookie", self.cookie_header(SESSION_COOKIE, "", http_only=True, max_age=0))
             self.end_headers()
             return
 
@@ -137,6 +156,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             project_path = unquote(parsed.path.removeprefix("/api/sessions/"))
             try:
                 data = self.form_data()
+                self.require_csrf(data)
                 if storage.has_accounts(self.root):
                     storage.ensure_project_access(self.root, project_path, self.current_username())
                 session = storage.create_session(self.root, project_path, data["title"])
@@ -151,6 +171,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 return
             try:
                 data = self.form_data()
+                self.require_csrf(data)
                 project_path, session = storage.create_general_chat_session(
                     self.root,
                     self.current_username(),
@@ -171,6 +192,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 return
             try:
                 data = self.form_data()
+                self.require_csrf(data)
                 account = storage.update_account_profile(
                     self.root,
                     username,
@@ -190,19 +212,58 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, status=400)
             return
 
+        if parsed.path.startswith("/api/goal/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/goal/"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_access(self.root, project_path, self.current_username())
+                goal = storage.save_goal(
+                    self.root,
+                    project_path,
+                    {
+                        "objective": data.get("objective", ""),
+                        "current_status": data.get("current_status", ""),
+                        "next_actions": data.get("next_actions", ""),
+                        "constraints": data.get("constraints", ""),
+                        "success_criteria": data.get("success_criteria", ""),
+                        "test_commands": data.get("test_commands", ""),
+                    },
+                )
+                self.send_json({"goal": goal, "codex_prompt": storage.codex_goal_prompt(self.root, project_path)})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
         if parsed.path == "/login":
             data = self.form_data()
             username = data.get("username", "")
             password = data.get("password", "")
+            try:
+                self.require_csrf(data)
+            except storage.WorkspaceError:
+                self.redirect("/login?error=csrf")
+                return
+            if self.login_is_limited(username):
+                self.send_response(429)
+                self.end_headers()
+                self.wfile.write("Too many login attempts. Please wait and try again.".encode("utf-8"))
+                return
             account = storage.authenticate_account(self.root, username, password)
             legacy_password_ok = not storage.has_accounts(self.root) and password == self.password
             if account or legacy_password_ok:
+                self.clear_login_failures(username)
                 cookie_value = self.signed_cookie_value(account["username"] if account else "admin")
                 self.send_response(303)
                 self.send_header("Location", "/")
-                self.send_header("Set-Cookie", f"{SESSION_COOKIE}={cookie_value}; HttpOnly; SameSite=Lax")
+                self.send_header("Set-Cookie", self.cookie_header(SESSION_COOKIE, cookie_value, http_only=True))
                 self.end_headers()
             else:
+                self.record_login_failure(username)
                 self.redirect("/login?error=1")
             return
 
@@ -211,6 +272,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             return
 
         data = self.form_data()
+        self.require_csrf(data)
         if parsed.path == "/projects":
             skills = [item.strip() for item in data.get("skills", "").split(",") if item.strip()]
             project = storage.create_project(
@@ -369,9 +431,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
         visible_content = data.get("content", "").strip()
         model_content = visible_content
         user_metadata: dict[str, object] = {}
+        provider_attachments: list[dict[str, str]] = []
         upload = self._multipart_files.get("attachment")
         if upload and upload[1]:
             filename, file_content = upload
+            provider_name = data.get("provider", "ollama")
+            extension = attachments.validate_attachment(filename, file_content)
             saved = attachments.save_attachment(
                 self.root,
                 project_path,
@@ -381,8 +446,22 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 actor=self.current_username(),
             )
             attachment = attachment_view(project_path, session_slug, saved)
+            if attachments.is_image_extension(extension) and provider_name == "kimi":
+                data_url = "data:%s;base64,%s" % (
+                    attachments.image_mime_type(extension),
+                    base64.b64encode(file_content).decode("ascii"),
+                )
+                provider_attachments.append({"kind": "image_data_url", "data_url": data_url})
+                saved["delivery"] = "vision"
+                attachment["delivery"] = "Sent as vision input"
+            elif str(saved.get("text", "")).strip() and not attachments.is_image_extension(extension):
+                saved["delivery"] = "text_context"
+                attachment["delivery"] = "Sent as text context"
+            else:
+                saved["delivery"] = "stored_only"
+                attachment["delivery"] = "Attached to chat"
             user_metadata["attachments"] = [attachment]
-            extracted = str(saved.get("text", "")).strip()
+            extracted = "" if provider_attachments else str(saved.get("text", "")).strip()
             attachment_context = f"Attached file: {saved['filename']}"
             if extracted:
                 attachment_context += f"\n\nExtracted attachment text:\n{extracted[:8000]}"
@@ -398,9 +477,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
             content=model_content,
             stored_content=visible_content or "Attached file",
             user_metadata=user_metadata,
+            provider_attachments=provider_attachments,
             actor=self.current_username(),
             search_mode=data.get("search_mode", "off"),
         )
+        if visible_content:
+            storage.maybe_update_default_session_title(self.root, project_path, session_slug, visible_content)
 
     def api_chat(self, project_path: str, session_slug: str) -> None:
         try:
@@ -424,6 +506,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
                         attachment_view(project_path, session_slug, item)
                         for item in attachments.list_attachments(self.root, project_path, session_slug)
                     ],
+                    "goal": storage.load_goal(self.root, project_path),
+                    "codex_prompt": storage.codex_goal_prompt(self.root, project_path, session_slug),
                     "latest": latest_assistant_metadata(messages),
                 }
             )
@@ -446,6 +530,19 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def api_account(self) -> None:
         self.send_json({"account": self.current_account_json()})
+
+    def api_goal(self, project_path: str) -> None:
+        try:
+            if storage.has_accounts(self.root):
+                storage.ensure_project_access(self.root, project_path, self.current_username())
+            self.send_json(
+                {
+                    "goal": storage.load_goal(self.root, project_path),
+                    "codex_prompt": storage.codex_goal_prompt(self.root, project_path),
+                }
+            )
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
 
     def api_runtime(self) -> None:
         workspace = storage.workspace_path(self.root)
@@ -475,7 +572,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 return account
             except storage.WorkspaceError:
                 pass
-        return {"username": username or "local", "display_name": username or "local", "admin": False, "profile": {}}
+        username = username or "local"
+        nickname = storage.display_name_for_username(username)
+        return {"username": username, "nickname": nickname, "display_name": nickname, "admin": False, "profile": {"name": nickname}}
 
     def project_json(self, project: dict[str, object]) -> dict[str, object]:
         project_path = str(project["path"])
@@ -1398,7 +1497,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
         try:
             account = storage.load_account(self.root, username)
             avatar = account.get("profile", {}).get("avatar", "")
-            path = storage.workspace_path(self.root) / avatar
+            workspace = storage.workspace_path(self.root)
+            path = (workspace / avatar).resolve()
+            if not str(path).startswith(str(workspace.resolve())):
+                self.not_found()
+                return
             if not avatar or not path.exists():
                 self.not_found()
                 return
@@ -1415,7 +1518,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def serve_attachment(self, project_path: str, session_slug: str, filename: str) -> None:
         try:
             storage.ensure_project_access(self.root, project_path, self.current_username())
-            path = attachments.attachment_dir(self.root, project_path, session_slug) / attachments.safe_filename(filename)
+            storage.load_session(self.root, project_path, session_slug)
+            root_dir = attachments.attachment_dir(self.root, project_path, session_slug).resolve()
+            path = (root_dir / attachments.safe_filename(filename)).resolve()
+            if not str(path).startswith(str(root_dir)):
+                self.not_found()
+                return
             if not path.exists():
                 self.not_found()
                 return
@@ -1428,6 +1536,61 @@ class AIWSHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def require_csrf(self, data: dict[str, str]) -> None:
+        if not self.require_auth:
+            return
+        expected = self.csrf_token()
+        supplied = self.headers.get("X-CSRF-Token") or data.get("_csrf", "")
+        if not supplied or not hmac.compare_digest(supplied, expected):
+            raise storage.WorkspaceError("Invalid CSRF token.")
+
+    def csrf_token(self) -> str:
+        header = self.headers.get("Cookie", "")
+        jar = cookies.SimpleCookie(header)
+        morsel = jar.get(CSRF_COOKIE)
+        if morsel and morsel.value:
+            return morsel.value
+        if not self._csrf_to_set:
+            self._csrf_to_set = secrets.token_urlsafe(24)
+        return self._csrf_to_set
+
+    def end_headers(self) -> None:
+        if self._csrf_to_set:
+            self.send_header("Set-Cookie", self.cookie_header(CSRF_COOKIE, self._csrf_to_set, http_only=False))
+        super().end_headers()
+
+    def cookie_header(self, name: str, value: str, *, http_only: bool, max_age: int | None = None) -> str:
+        parts = [f"{name}={value}", "Path=/", "SameSite=Lax"]
+        if http_only:
+            parts.append("HttpOnly")
+        if self.is_https_request():
+            parts.append("Secure")
+        if max_age is not None:
+            parts.append(f"Max-Age={max_age}")
+        return "; ".join(parts)
+
+    def is_https_request(self) -> bool:
+        return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+    def login_key(self, username: str) -> tuple[str, str]:
+        forwarded = self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For", "")
+        ip = (forwarded.split(",", 1)[0].strip() or self.client_address[0])
+        return ip, storage.slugify(username or "unknown")
+
+    def login_is_limited(self, username: str) -> bool:
+        now = time.time()
+        key = self.login_key(username)
+        attempts = [item for item in LOGIN_FAILURES.get(key, []) if now - item < LOGIN_WINDOW_SECONDS]
+        LOGIN_FAILURES[key] = attempts
+        return len(attempts) >= LOGIN_MAX_FAILURES
+
+    def record_login_failure(self, username: str) -> None:
+        key = self.login_key(username)
+        LOGIN_FAILURES.setdefault(key, []).append(time.time())
+
+    def clear_login_failures(self, username: str) -> None:
+        LOGIN_FAILURES.pop(self.login_key(username), None)
 
     def language(self) -> str:
         return storage.get_account_language(self.root, self.current_username())
@@ -1464,6 +1627,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
         return {
             "role": message.get("role", "message"),
             "content": message.get("content", ""),
+            "created_at": message.get("created_at"),
+            "actor": message.get("actor"),
+            "actor_display": storage.display_name_for_username(str(message.get("actor") or "")),
             "provider": message.get("provider"),
             "model": message.get("model"),
             "attachments": message_attachments_data(metadata),
@@ -1628,6 +1794,8 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "content_type": content_type,
         "size": metadata.get("size", 0),
         "is_image": content_type in {"png", "jpg", "jpeg", "gif", "webp"},
+        "is_pdf": content_type == "pdf",
+        "delivery": metadata.get("delivery", "Attached to chat"),
     }
 
 
@@ -1647,6 +1815,8 @@ def message_attachments_data(metadata: object) -> list[dict[str, object]]:
                     "content_type": str(item.get("content_type", "")),
                     "size": item.get("size", 0),
                     "is_image": bool(item.get("is_image")),
+                    "is_pdf": bool(item.get("is_pdf")),
+                    "delivery": str(item.get("delivery", "Attached to chat")),
                 }
             )
     return items

@@ -18,6 +18,27 @@ def test_text_attachment_is_saved_and_extracted(tmp_path):
     assert attachments.list_attachments(root, "ai-system", "attachments")[0]["size"] == 11
 
 
+def test_markdown_pdf_and_image_validation(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+
+    md = attachments.save_attachment(root, "ai-system", "attachments", "notes.md", b"# Hello")
+    pdf = attachments.save_attachment(root, "ai-system", "attachments", "paper.pdf", b"%PDF-1.4\n(Hello PDF)")
+    image = attachments.save_attachment(
+        root,
+        "ai-system",
+        "attachments",
+        "photo.png",
+        b"\x89PNG\r\n\x1a\n" + b"x",
+    )
+
+    assert md["text"] == "# Hello"
+    assert "Hello PDF" in pdf["text"]
+    assert image["text"] == "Image attachment: photo.png"
+    assert attachments.is_image_extension(".png") is True
+
+
 def test_docx_attachment_extracts_document_text(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")
@@ -42,3 +63,36 @@ def test_attachment_rejects_unsupported_extension(tmp_path):
 
     with pytest.raises(storage.WorkspaceError):
         attachments.save_attachment(root, "ai-system", "attachments", "../bad.exe", b"x")
+
+
+def test_attachment_rejects_empty_and_large_files(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+
+    with pytest.raises(storage.WorkspaceError, match="empty"):
+        attachments.save_attachment(root, "ai-system", "attachments", "empty.txt", b"")
+    with pytest.raises(storage.WorkspaceError, match="too large"):
+        attachments.save_attachment(
+            root,
+            "ai-system",
+            "attachments",
+            "large.txt",
+            b"x" * (attachments.MAX_ATTACHMENT_BYTES + 1),
+        )
+
+
+def test_corrupt_attachment_metadata_is_ignored(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+    attachment_root = attachments.attachment_dir(root, "ai-system", "attachments")
+    attachment_root.mkdir(parents=True)
+    (attachment_root / "attachments.jsonl").write_text(
+        '{"filename": "ok.txt", "size": 1}\n{"filename": "broken',
+        encoding="utf-8",
+    )
+
+    items = attachments.list_attachments(root, "ai-system", "attachments")
+
+    assert items == [{"filename": "ok.txt", "size": 1}]

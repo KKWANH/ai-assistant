@@ -25,6 +25,14 @@ pip install -e ".[dev]"
 python -m pytest
 ```
 
+For the React web UI bundle:
+
+```bash
+cd web
+npm install
+npm run build
+```
+
 ## CLI Example
 
 ```bash
@@ -124,8 +132,8 @@ For better local quality on a 24GB Mac, try `qwen3:8b` after the smoke test work
 Kimi uses Moonshot's OpenAI-compatible API. Set one of:
 
 ```bash
-export AIWS_KIMI_API_KEY="..."
-export MOONSHOT_API_KEY="..."
+cp .env.example .env
+# then set AIWS_KIMI_API_KEY=... or MOONSHOT_API_KEY=...
 ```
 
 Then run:
@@ -147,11 +155,11 @@ aiws models costs --root ~/.ai-workspace
 
 Search modes:
 
-- `off`: never add search context.
-- `auto`: search only for freshness-sensitive prompts.
-- `always`: always attach search metadata.
+- `off`: local project/session/file context only.
+- `auto`: currently still local-only; reserved for future web search.
+- `always`: currently disabled until a real search provider is configured.
 
-The current search module records search-mode metadata and has a provider interface boundary. A real web-search provider is the next increment.
+AIWS does not pretend to browse the web yet. The current search module records intent and has a provider boundary; a real web-search provider is a future increment.
 
 ## Attachments
 
@@ -226,6 +234,30 @@ Detailed docs:
 
 - [Hosting Runbook](docs/HOSTING_RUNBOOK.md)
 - [Security Test Plan](docs/SECURITY_TEST_PLAN.md)
+- [Safe Home Deployment Checklist](docs/HOME_DEPLOYMENT_CHECKLIST.md)
+
+## Mac Mini Self-Host Checklist
+
+1. Install Python dependencies with `pip install -e ".[dev]"`.
+2. Build the UI once with `cd web && npm install && npm run build`.
+3. Initialize the workspace with `aiws init --root ~/.ai-workspace`.
+4. Create one admin account and one family test account.
+5. Keep projects `private` by default; use `public` only for family-shared material.
+6. Start local use with `aiws run --root ~/.ai-workspace --mode local --port 8765 --models ollama`.
+7. Start browser access with `aiws-cloudflare start`, then open the URL from `aiws-cloudflare status`.
+8. Add Kimi by copying `.env.example` to `.env` and setting `AIWS_KIMI_API_KEY` or `MOONSHOT_API_KEY`.
+9. Create regular backups:
+
+```bash
+aiws backup create --root ~/.ai-workspace --output ~/aiws-workspace-backup
+```
+
+Restore test:
+
+```bash
+aiws backup restore ~/aiws-workspace-backup.tar.gz --root ~/.ai-workspace-restored
+aiws project list --root ~/.ai-workspace-restored
+```
 
 ## Storage Layout
 

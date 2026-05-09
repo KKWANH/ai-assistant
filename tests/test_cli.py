@@ -151,3 +151,37 @@ def test_cli_lists_model_costs(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "ollama" in output
     assert "kimi" in output
+
+
+def test_cli_goal_set_and_prints_codex_prompt(tmp_path, capsys):
+    root = tmp_path / "workspace"
+    goal_file = tmp_path / "GOAL.md"
+    goal_file.write_text(
+        "# Goal\n\n## Objective\nShip P1.\n\n## Test Commands\n- .venv/bin/python -m pytest\n",
+        encoding="utf-8",
+    )
+
+    assert cli.main(["init", "--root", str(root)]) == 0
+    assert cli.main(["project", "create", "AI System", "--root", str(root)]) == 0
+    assert cli.main(["goal", "set", "ai-system", "--file", str(goal_file), "--root", str(root)]) == 0
+    assert "Ship P1." in capsys.readouterr().out
+
+    assert cli.main(["goal", "ai-system", "--root", str(root)]) == 0
+    assert "You are Codex" in capsys.readouterr().out
+
+
+def test_cli_backup_create_and_restore(tmp_path, capsys):
+    root = tmp_path / "workspace"
+    restored = tmp_path / "restored"
+
+    assert cli.main(["init", "--root", str(root)]) == 0
+    assert cli.main(["project", "create", "AI System", "--root", str(root)]) == 0
+    capsys.readouterr()
+    assert cli.main(["backup", "create", "--root", str(root), "--output", str(tmp_path / "aiws-backup")]) == 0
+    backup_path = capsys.readouterr().out.strip()
+    assert backup_path.endswith("aiws-backup.tar.gz")
+
+    assert cli.main(["backup", "restore", backup_path, "--root", str(restored)]) == 0
+    assert "restored" in capsys.readouterr().out
+    assert cli.main(["project", "list", "--root", str(restored)]) == 0
+    assert "ai-system" in capsys.readouterr().out

@@ -19,6 +19,7 @@ MODEL_COSTS: dict[tuple[str, str], ModelCost] = {
     ("ollama", "qwen3:0.6b"): ModelCost("ollama", "qwen3:0.6b", 0.0, 0.0, note="Local model; electricity only."),
     ("ollama", "qwen3:8b"): ModelCost("ollama", "qwen3:8b", 0.0, 0.0, note="Local model; electricity only."),
     ("kimi", "kimi-k2.5"): ModelCost("kimi", "kimi-k2.5", 0.15, 2.50, note="Estimate; verify against provider billing."),
+    ("kimi", "kimi-k2.6"): ModelCost("kimi", "kimi-k2.6", 0.15, 2.50, note="Estimate; verify against provider billing."),
     ("kimi", "kimi-k2-thinking"): ModelCost("kimi", "kimi-k2-thinking", 0.60, 2.50, note="Estimate; verify against provider billing."),
 }
 

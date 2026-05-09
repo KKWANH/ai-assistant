@@ -46,6 +46,7 @@ def ask(
     search_results: list[search.SearchResult] | None = None,
     user_metadata: dict[str, object] | None = None,
     stored_content: str | None = None,
+    provider_attachments: list[dict[str, str]] | None = None,
 ) -> str:
     account_context = storage.account_context(root, actor)
     resolved_results = search_results or []
@@ -67,7 +68,7 @@ def ask(
         metadata=user_metadata,
         actor=actor,
     )
-    response = client.chat(model=model, system=prompt_context, content=content)
+    response = client.chat(model=model, system=prompt_context, content=content, attachments=provider_attachments)
     assistant_metadata = {"cost": cost, "search": search.results_metadata(search_mode, resolved_results)}
     storage.append_message(
         root,

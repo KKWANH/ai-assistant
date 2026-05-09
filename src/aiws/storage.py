@@ -8,6 +8,7 @@ import hmac
 import re
 import secrets
 import shutil
+import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,13 @@ SUPPORTED_SKILL_FILES = ("CLAUDE.md", "SKILL.md", "skills.md", "README.md")
 SUPPORTED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 SUPPORTED_LANGUAGES = {"en", "ko"}
 GENERAL_CHAT_PREFIX = "general-chat"
+KNOWN_NICKNAMES = {
+    "local": "Kwanho Kim",
+    "kwanho": "Kwanho Kim",
+    "kwanho0096": "Kwanho Kim",
+    "benetea": "Chungja Byun",
+    "dosadol": "Gunwoo Kim",
+}
 
 DEFAULT_SKILL_NAME = "andrej-karpathy-skills"
 DEFAULT_SKILL_FILE = "CLAUDE.md"
@@ -101,6 +109,13 @@ def slugify(value: str) -> str:
     return slug
 
 
+def slugify_or_default(value: str, default: str) -> str:
+    try:
+        return slugify(value)
+    except WorkspaceError:
+        return slugify(default)
+
+
 def workspace_path(root: str | Path) -> Path:
     return Path(root).expanduser().resolve()
 
@@ -122,6 +137,42 @@ def init_workspace(root: str | Path) -> Path:
     if not default_skill_path.exists():
         default_skill_path.write_text(DEFAULT_SKILL_CONTENT, encoding="utf-8")
     return root_path
+
+
+def create_workspace_backup(root: str | Path, destination: str | Path) -> Path:
+    source = workspace_path(root)
+    if not source.exists():
+        raise WorkspaceError(f"Workspace does not exist: {source}")
+    destination_path = Path(destination).expanduser()
+    if destination_path.suffixes[-2:] != [".tar", ".gz"]:
+        destination_path = destination_path.with_suffix(destination_path.suffix + ".tar.gz")
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(destination_path, "w:gz") as archive:
+        for child in source.iterdir():
+            if child.name in {"run", "logs"}:
+                continue
+            archive.add(child, arcname=child.name)
+    return destination_path.resolve()
+
+
+def restore_workspace_backup(archive_path: str | Path, destination: str | Path, *, replace: bool = False) -> Path:
+    archive = Path(archive_path).expanduser().resolve()
+    if not archive.exists():
+        raise WorkspaceError(f"Backup archive does not exist: {archive}")
+    destination_path = workspace_path(destination)
+    if destination_path.exists() and any(destination_path.iterdir()):
+        if not replace:
+            raise WorkspaceError("Destination workspace is not empty. Use --replace to restore over it.")
+        shutil.rmtree(destination_path)
+    destination_path.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive, "r:gz") as tar:
+        for member in tar.getmembers():
+            target = (destination_path / member.name).resolve()
+            if not str(target).startswith(str(destination_path) + "/") and target != destination_path:
+                raise WorkspaceError("Backup archive contains an unsafe path.")
+        tar.extractall(destination_path)
+    init_workspace(destination_path)
+    return destination_path
 
 
 def users_json_path(root: str | Path) -> Path:
@@ -185,14 +236,16 @@ def create_account(
     users = load_users(root)
     if username_slug in users["users"]:
         raise WorkspaceError(f"Account already exists: {username_slug}")
+    nickname = display_name or display_name_for_username(username_slug)
     user = {
         "username": username_slug,
-        "display_name": display_name or username_slug,
+        "nickname": nickname,
+        "display_name": nickname,
         "password": hash_password(password),
         "admin": admin,
         "created_at": utc_now(),
         "profile": {
-            "name": display_name or username_slug,
+            "name": nickname,
             "age": "",
             "job": "",
             "situation": "",
@@ -208,9 +261,14 @@ def create_account(
 
 
 def public_account(user: dict[str, Any]) -> dict[str, Any]:
+    username = user["username"]
+    nickname = user.get("nickname") or user.get("display_name") or display_name_for_username(username)
+    if nickname == username:
+        nickname = display_name_for_username(username)
     return {
-        "username": user["username"],
-        "display_name": user.get("display_name", user["username"]),
+        "username": username,
+        "nickname": nickname,
+        "display_name": nickname,
         "admin": bool(user.get("admin", False)),
         "created_at": user.get("created_at"),
         "profile": user.get("profile", {}),
@@ -221,6 +279,13 @@ def public_account(user: dict[str, Any]) -> dict[str, Any]:
 def list_accounts(root: str | Path) -> list[dict[str, Any]]:
     users = load_users(root)
     return [public_account(user) for user in users["users"].values()]
+
+
+def display_name_for_username(username: str | None) -> str:
+    if not username:
+        return KNOWN_NICKNAMES["local"]
+    username_slug = slugify_or_default(username, "local")
+    return KNOWN_NICKNAMES.get(username_slug, username_slug)
 
 
 def load_account(root: str | Path, username: str) -> dict[str, Any]:
@@ -287,8 +352,10 @@ def update_account_profile(
         raise WorkspaceError(f"Account does not exist: {username_slug}")
     profile = user.setdefault("profile", {})
     if name is not None:
-        profile["name"] = name
-        user["display_name"] = name or username_slug
+        nickname = name or display_name_for_username(username_slug)
+        profile["name"] = nickname
+        user["nickname"] = nickname
+        user["display_name"] = nickname
     if age is not None:
         profile["age"] = age
     if job is not None:
@@ -534,12 +601,169 @@ def create_general_chat_session(
     slug: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     project = ensure_general_chat_project(root, username)
-    return project["path"], create_session(root, project["path"], title, slug=slug)
+    session_title = title.strip() or "New chat"
+    session_slug = slug or next_available_session_slug(root, project["path"], slugify_or_default(session_title, "new-chat"))
+    return project["path"], create_session(root, project["path"], session_title, slug=session_slug)
+
+
+def next_available_session_slug(root: str | Path, project_path: str, base_slug: str) -> str:
+    candidate = base_slug
+    index = 2
+    while (project_dir(root, project_path) / "sessions" / candidate).exists():
+        candidate = f"{base_slug}-{index}"
+        index += 1
+    return candidate
 
 
 def load_project(root: str | Path, project_path: str) -> dict[str, Any]:
     ensure_project_exists(root, project_path)
     return read_json(project_json_path(root, project_path))
+
+
+DEFAULT_GOAL = {
+    "objective": "",
+    "current_status": "",
+    "next_actions": [],
+    "constraints": [],
+    "success_criteria": [],
+    "test_commands": [],
+}
+
+
+def goal_json_path(root: str | Path, project_path: str) -> Path:
+    return project_dir(root, project_path) / "goal.json"
+
+
+def goal_markdown_path(root: str | Path, project_path: str) -> Path:
+    return project_dir(root, project_path) / "GOAL.md"
+
+
+def load_goal(root: str | Path, project_path: str) -> dict[str, Any]:
+    ensure_project_exists(root, project_path)
+    path = goal_json_path(root, project_path)
+    if path.exists():
+        data = read_json(path)
+        return normalize_goal(data)
+    markdown_path = goal_markdown_path(root, project_path)
+    if markdown_path.exists():
+        return normalize_goal(parse_goal_markdown(markdown_path.read_text(encoding="utf-8")))
+    return normalize_goal({})
+
+
+def save_goal(root: str | Path, project_path: str, goal: dict[str, Any]) -> dict[str, Any]:
+    ensure_project_exists(root, project_path)
+    normalized = normalize_goal(goal)
+    normalized["updated_at"] = utc_now()
+    write_json(goal_json_path(root, project_path), normalized)
+    goal_markdown_path(root, project_path).write_text(goal_to_markdown(normalized), encoding="utf-8")
+    return normalized
+
+
+def set_goal_from_markdown(root: str | Path, project_path: str, markdown: str) -> dict[str, Any]:
+    return save_goal(root, project_path, parse_goal_markdown(markdown))
+
+
+def normalize_goal(goal: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(DEFAULT_GOAL)
+    for key in ("objective", "current_status"):
+        value = goal.get(key, "")
+        normalized[key] = str(value or "")
+    for key in ("next_actions", "constraints", "success_criteria", "test_commands"):
+        value = goal.get(key, [])
+        if isinstance(value, str):
+            normalized[key] = [line.strip("- ").strip() for line in value.splitlines() if line.strip()]
+        elif isinstance(value, list):
+            normalized[key] = [str(item).strip() for item in value if str(item).strip()]
+    if goal.get("updated_at"):
+        normalized["updated_at"] = str(goal["updated_at"])
+    return normalized
+
+
+def parse_goal_markdown(markdown: str) -> dict[str, Any]:
+    aliases = {
+        "objective": "objective",
+        "goal": "objective",
+        "current status": "current_status",
+        "status": "current_status",
+        "next actions": "next_actions",
+        "actions": "next_actions",
+        "constraints": "constraints",
+        "success criteria": "success_criteria",
+        "tests": "test_commands",
+        "test commands": "test_commands",
+    }
+    goal: dict[str, Any] = {}
+    current_key = "objective"
+    buffers: dict[str, list[str]] = {}
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            heading = line.lstrip("#").strip().lower()
+            current_key = aliases.get(heading, current_key)
+            buffers.setdefault(current_key, [])
+            continue
+        buffers.setdefault(current_key, []).append(line)
+    for key, lines in buffers.items():
+        if key in {"objective", "current_status"}:
+            goal[key] = "\n".join(line.strip("- ").strip() for line in lines).strip()
+        else:
+            goal[key] = [line.strip("- ").strip() for line in lines if line.strip("- ").strip()]
+    return goal
+
+
+def goal_to_markdown(goal: dict[str, Any]) -> str:
+    normalized = normalize_goal(goal)
+    lines = ["# Goal", "", "## Objective", "", normalized["objective"] or "_Not set._", ""]
+    lines.extend(["## Current Status", "", normalized["current_status"] or "_Not set._", ""])
+    for key, heading in (
+        ("next_actions", "Next Actions"),
+        ("constraints", "Constraints"),
+        ("success_criteria", "Success Criteria"),
+        ("test_commands", "Test Commands"),
+    ):
+        lines.extend([f"## {heading}", ""])
+        items = normalized[key]
+        if items:
+            lines.extend(f"- {item}" for item in items)
+        else:
+            lines.append("_Not set._")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def codex_goal_prompt(root: str | Path, project_path: str, session_slug: str | None = None) -> str:
+    project = load_project(root, project_path)
+    goal = load_goal(root, project_path)
+    lines = [
+        "You are Codex working in the local AIWS repository.",
+        "",
+        f"Project: {project.get('title', project_path)}",
+        f"Path: {project_path}",
+    ]
+    if session_slug:
+        lines.append(f"Session: {session_slug}")
+    lines.extend(
+        [
+            "",
+            "## Objective",
+            goal["objective"] or "Not set.",
+            "",
+            "## Current Status",
+            goal["current_status"] or "Not set.",
+            "",
+            "## Next Actions",
+        ]
+    )
+    lines.extend(f"- {item}" for item in goal["next_actions"] or ["Not set."])
+    lines.extend(["", "## Constraints"])
+    lines.extend(f"- {item}" for item in goal["constraints"] or ["Keep changes small and verified."])
+    lines.extend(["", "## Success Criteria"])
+    lines.extend(f"- {item}" for item in goal["success_criteria"] or ["Tests pass."])
+    lines.extend(["", "## Test Commands"])
+    lines.extend(f"- `{item}`" for item in goal["test_commands"] or [".venv/bin/python -m pytest"])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def list_projects(root: str | Path) -> list[dict[str, Any]]:
@@ -664,6 +888,8 @@ def append_message(
         message["provider"] = provider
     if model:
         message["model"] = model
+    if actor:
+        message["actor"] = slugify(actor)
 
     messages_path = session_dir(root, project_path, session_slug) / "messages.jsonl"
     with messages_path.open("a", encoding="utf-8") as file:
@@ -671,6 +897,44 @@ def append_message(
     record_usage(root, actor, messages=1)
     regenerate_session_markdown(root, project_path, session_slug)
     return message
+
+
+def update_session_title(root: str | Path, project_path: str, session_slug: str, title: str) -> dict[str, Any]:
+    session = load_session(root, project_path, session_slug)
+    clean_title = title.strip()
+    if not clean_title:
+        raise WorkspaceError("Session title must not be empty.")
+    session["title"] = clean_title
+    session["updated_at"] = utc_now()
+    write_json(session_dir(root, project_path, session_slug) / "session.json", session)
+    regenerate_session_markdown(root, project_path, session_slug)
+    return session
+
+
+def suggest_session_title(content: str, *, fallback: str = "New chat", max_length: int = 42) -> str:
+    text = re.sub(r"\s+", " ", content).strip()
+    if not text:
+        return fallback
+    for separator in ("?", "!", ".", "。", "?", "!", "\n"):
+        if separator in text:
+            text = text.split(separator, 1)[0].strip()
+            break
+    if len(text) > max_length:
+        text = text[:max_length].rstrip() + "..."
+    return text or fallback
+
+
+def maybe_update_default_session_title(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    content: str,
+) -> dict[str, Any] | None:
+    session = load_session(root, project_path, session_slug)
+    current_title = str(session.get("title", "")).strip().lower()
+    if current_title not in {"", "new chat", "new-chat"}:
+        return None
+    return update_session_title(root, project_path, session_slug, suggest_session_title(content))
 
 
 def create_execution_run(
