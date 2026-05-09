@@ -250,6 +250,7 @@ def create_account(
             "job": "",
             "situation": "",
             "language": "ko",
+            "ui_mode": "power" if admin else "easy",
             "memory": [],
             "avatar": "",
         },
@@ -265,13 +266,15 @@ def public_account(user: dict[str, Any]) -> dict[str, Any]:
     nickname = user.get("nickname") or user.get("display_name") or display_name_for_username(username)
     if nickname == username:
         nickname = display_name_for_username(username)
+    profile = dict(user.get("profile", {}))
+    profile.setdefault("ui_mode", "power" if bool(user.get("admin", False)) else "easy")
     return {
         "username": username,
         "nickname": nickname,
         "display_name": nickname,
         "admin": bool(user.get("admin", False)),
         "created_at": user.get("created_at"),
-        "profile": user.get("profile", {}),
+        "profile": profile,
         "usage": user.get("usage", {"messages": 0, "asks": 0}),
     }
 
@@ -343,6 +346,7 @@ def update_account_profile(
     job: str | None = None,
     situation: str | None = None,
     language: str | None = None,
+    ui_mode: str | None = None,
     memory: str | None = None,
 ) -> dict[str, Any]:
     users = load_users(root)
@@ -366,6 +370,10 @@ def update_account_profile(
         if language not in SUPPORTED_LANGUAGES:
             raise WorkspaceError("Language must be en or ko.")
         profile["language"] = language
+    if ui_mode is not None:
+        if ui_mode not in {"easy", "power"}:
+            raise WorkspaceError("UI mode must be easy or power.")
+        profile["ui_mode"] = ui_mode
     if memory:
         append_account_memory(root, username_slug, memory, source="manual", users=users)
     save_users(root, users)
@@ -526,7 +534,7 @@ def create_project(
     visibility: str = "private",
 ) -> dict[str, Any]:
     init_workspace(root)
-    project_slug = slug or slugify(title)
+    base_slug = slug or slugify(title)
     selected_skills = skills or []
     owner_slug = slugify(owner) if owner else None
     visibility_value = validate_visibility(visibility)
@@ -543,14 +551,14 @@ def create_project(
             owner_slug = parent_project.get("owner")
         if visibility == "private":
             visibility_value = parent_project.get("visibility", "private")
+        project_slug = next_available_project_slug(root, parent, base_slug)
         full_path = f"{parent}/{project_slug}"
     else:
+        project_slug = next_available_project_slug(root, None, base_slug)
         full_path = project_slug
 
     parts = parse_project_path(full_path)
     path = project_dir(root, full_path)
-    if (path / "project.json").exists():
-        raise WorkspaceError(f"Project already exists: {full_path}")
     path.mkdir(parents=True, exist_ok=False)
     (path / "sessions").mkdir(exist_ok=True)
 
@@ -567,6 +575,17 @@ def create_project(
     }
     write_json(path / "project.json", project)
     return project
+
+
+def next_available_project_slug(root: str | Path, parent: str | None, base_slug: str) -> str:
+    candidate = base_slug
+    index = 2
+    while True:
+        project_path = f"{parent}/{candidate}" if parent else candidate
+        if not project_json_path(root, project_path).exists():
+            return candidate
+        candidate = f"{base_slug}-{index}"
+        index += 1
 
 
 def general_chat_project_path(username: str | None) -> str:
@@ -1133,6 +1152,8 @@ def build_prompt_context(root: str | Path, project_path: str, session_slug: str)
     session = load_session(root, project_path, session_slug)
     projects = project_chain(root, project_path)
     messages = read_messages(root, project_path, session_slug)
+    session_files = session_attachment_context(root, project_path, session_slug)
+    project_files = project_attachment_context(root, project_path, exclude_session=session_slug)
     lines = ["# AIWS Prompt Context", ""]
 
     if any(project.get("hidden") for project in projects):
@@ -1173,6 +1194,21 @@ def build_prompt_context(root: str | Path, project_path: str, session_slug: str)
             f"- Title: {session['title']}",
             f"- Slug: `{session['slug']}`",
             "",
+        ]
+    )
+
+    if session_files:
+        lines.extend(["## Session Files", ""])
+        lines.extend(session_files)
+        lines.append("")
+
+    if project_files:
+        lines.extend(["## Project Files", ""])
+        lines.extend(project_files)
+        lines.append("")
+
+    lines.extend(
+        [
             "## Messages",
             "",
         ]
@@ -1183,6 +1219,73 @@ def build_prompt_context(root: str | Path, project_path: str, session_slug: str)
     else:
         lines.extend(["No messages yet.", ""])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def read_attachment_metadata(root: str | Path, project_path: str, session_slug: str) -> list[dict[str, Any]]:
+    path = session_dir(root, project_path, session_slug) / "attachments" / "attachments.jsonl"
+    if not path.exists():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            items.append(item)
+    return items
+
+
+def attachment_context_lines(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    *,
+    include_session_label: bool = False,
+    text_budget: int = 50_000,
+) -> list[str]:
+    lines: list[str] = []
+    used = 0
+    for item in read_attachment_metadata(root, project_path, session_slug):
+        filename = str(item.get("filename", "attachment"))
+        content_type = str(item.get("content_type", "file"))
+        text = str(item.get("text", "")).strip()
+        delivery = str(item.get("delivery", "attached"))
+        heading = f"### {filename}"
+        if include_session_label:
+            heading += f" ({session_slug})"
+        lines.extend([heading, f"- Type: {content_type}", f"- Delivery: {delivery}"])
+        if text:
+            remaining = max(text_budget - used, 0)
+            snippet = text[:remaining]
+            used += len(snippet)
+            lines.extend(["", snippet, ""])
+        else:
+            lines.extend(["", "No extracted text is available for this file.", ""])
+        if used >= text_budget:
+            lines.append("Attachment context truncated.")
+            break
+    return lines
+
+
+def session_attachment_context(root: str | Path, project_path: str, session_slug: str) -> list[str]:
+    return attachment_context_lines(root, project_path, session_slug)
+
+
+def project_attachment_context(root: str | Path, project_path: str, *, exclude_session: str = "") -> list[str]:
+    if any(project.get("hidden") for project in project_chain(root, project_path)):
+        return []
+    lines: list[str] = []
+    for session in list_sessions(root, project_path):
+        slug = str(session["slug"])
+        if slug == exclude_session:
+            continue
+        session_lines = attachment_context_lines(root, project_path, slug, include_session_label=True, text_budget=12_000)
+        if session_lines:
+            lines.extend(session_lines)
+    return lines
 
 
 def copy_default_skill_to_repo(destination: str | Path = "skills") -> Path:

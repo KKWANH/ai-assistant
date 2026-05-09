@@ -159,7 +159,17 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 if storage.has_accounts(self.root):
                     storage.ensure_project_access(self.root, project_path, self.current_username())
-                session = storage.create_session(self.root, project_path, data["title"])
+                title = data.get("title", "").strip() or "New chat"
+                session = storage.create_session(
+                    self.root,
+                    project_path,
+                    title,
+                    slug=storage.next_available_session_slug(
+                        self.root,
+                        project_path,
+                        storage.slugify_or_default(title, "new-chat"),
+                    ),
+                )
                 self.send_json({"session": session})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -178,6 +188,28 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     data.get("title", "").strip() or "New chat",
                 )
                 self.send_json({"project_path": project_path, "session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/projects":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                skills = [item.strip() for item in data.get("skills", "").split(",") if item.strip()]
+                project = storage.create_project(
+                    self.root,
+                    data["title"],
+                    parent=data.get("parent") or None,
+                    notes=data.get("notes", ""),
+                    skills=skills,
+                    owner=data.get("owner") or self.current_username(),
+                    visibility=data.get("visibility", "private"),
+                )
+                self.send_json({"project": project})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -201,6 +233,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     job=data.get("job", ""),
                     situation=data.get("situation", ""),
                     language=data.get("language", "ko"),
+                    ui_mode=data.get("ui_mode", "easy"),
                     memory=data.get("memory", ""),
                 )
                 avatar_upload = self._multipart_files.get("avatar")
@@ -437,6 +470,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             filename, file_content = upload
             provider_name = data.get("provider", "ollama")
             extension = attachments.validate_attachment(filename, file_content)
+            delivery = "vision" if attachments.is_image_extension(extension) and provider_name == "kimi" else None
             saved = attachments.save_attachment(
                 self.root,
                 project_path,
@@ -444,6 +478,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 filename,
                 file_content,
                 actor=self.current_username(),
+                delivery=delivery,
             )
             attachment = attachment_view(project_path, session_slug, saved)
             if attachments.is_image_extension(extension) and provider_name == "kimi":
@@ -452,13 +487,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     base64.b64encode(file_content).decode("ascii"),
                 )
                 provider_attachments.append({"kind": "image_data_url", "data_url": data_url})
-                saved["delivery"] = "vision"
                 attachment["delivery"] = "Sent as vision input"
             elif str(saved.get("text", "")).strip() and not attachments.is_image_extension(extension):
-                saved["delivery"] = "text_context"
                 attachment["delivery"] = "Sent as text context"
             else:
-                saved["delivery"] = "stored_only"
                 attachment["delivery"] = "Attached to chat"
             user_metadata["attachments"] = [attachment]
             extracted = "" if provider_attachments else str(saved.get("text", "")).strip()
@@ -574,7 +606,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 pass
         username = username or "local"
         nickname = storage.display_name_for_username(username)
-        return {"username": username, "nickname": nickname, "display_name": nickname, "admin": False, "profile": {"name": nickname}}
+        return {
+            "username": username,
+            "nickname": nickname,
+            "display_name": nickname,
+            "admin": False,
+            "profile": {"name": nickname, "ui_mode": "power"},
+        }
 
     def project_json(self, project: dict[str, object]) -> dict[str, object]:
         project_path = str(project["path"])
@@ -586,6 +624,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             "created_at": project.get("created_at", ""),
             "parent": project.get("parent", ""),
             "level": 1 if project.get("parent") else 0,
+            "owner": project.get("owner", ""),
+            "owner_display": storage.display_name_for_username(str(project.get("owner", "") or "local")),
             "visibility": project.get("visibility", "private"),
             "hidden": bool(project.get("hidden", False)),
             "firstSessionUrl": first_session_url,
@@ -1788,6 +1828,11 @@ def attachment_content_type(extension: str) -> str:
 def attachment_view(project_path: str, session_slug: str, metadata: dict[str, object]) -> dict[str, object]:
     content_type = str(metadata.get("content_type", ""))
     filename = str(metadata.get("filename", "attachment"))
+    delivery = {
+        "vision": "Sent as vision input",
+        "text_context": "Sent as text context",
+        "stored_only": "Attached to chat",
+    }.get(str(metadata.get("delivery", "")), str(metadata.get("delivery", "Attached to chat")))
     return {
         "filename": filename,
         "url": f"/attachment/{project_path}/{session_slug}/{filename}",
@@ -1795,7 +1840,7 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "size": metadata.get("size", 0),
         "is_image": content_type in {"png", "jpg", "jpeg", "gif", "webp"},
         "is_pdf": content_type == "pdf",
-        "delivery": metadata.get("delivery", "Attached to chat"),
+        "delivery": delivery,
     }
 
 

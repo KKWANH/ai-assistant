@@ -64,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     account_update.add_argument("--job")
     account_update.add_argument("--situation")
     account_update.add_argument("--language", choices=["ko", "en"])
+    account_update.add_argument("--ui-mode", choices=["easy", "power"])
     account_update.add_argument("--memory")
     add_root(account_update)
 
@@ -219,6 +220,7 @@ def run(args: argparse.Namespace) -> int:
             job=args.job,
             situation=args.situation,
             language=args.language,
+            ui_mode=args.ui_mode,
             memory=args.memory,
         )
         print(f"{account['username']}\tlanguage={account.get('profile', {}).get('language', 'ko')}")

@@ -94,8 +94,9 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "로컬 컨텍스트 우선" in bundle_text
         assert "검색 안 함" in bundle_text
         assert "웹 검색 준비 중" in bundle_text
-        assert "Personal chats" in bundle_text
-        assert "웹 검색과 이미지 생성은 아직 꺼져 있습니다." in bundle_text
+        assert "최근 대화" in bundle_text
+        assert "가족 공유" in bundle_text
+        assert "현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다." in bundle_text
         assert "Artifacts, drafts, and generated files will appear here." not in bundle_text
         assert "local, fastest, basic" in bundle_text
         assert "공개 범위" in bundle_text
@@ -114,7 +115,8 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert ".pdf-thumb" in style_text
         assert ".waiting-notice" in style_text
         assert ".tree-heading" in style_text
-        assert ".item-kind" in style_text
+        assert ".mode-badge" in style_text
+        assert ".advanced-controls" in style_text
 
         payload = parse.urlencode(
             {

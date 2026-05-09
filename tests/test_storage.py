@@ -3,6 +3,7 @@ import json
 import pytest
 
 from aiws import storage
+from aiws import attachments
 
 
 def test_workspace_initialization_creates_default_skill(tmp_path):
@@ -27,6 +28,21 @@ def test_root_project_creation(tmp_path):
     loaded = storage.load_project(root, "ai-system")
     assert loaded["title"] == "AI System"
     assert loaded["skills"] == ["andrej-karpathy-skills"]
+
+
+def test_duplicate_project_titles_get_sequence_slugs(tmp_path):
+    root = tmp_path / "workspace"
+
+    first = storage.create_project(root, "Test")
+    second = storage.create_project(root, "Test")
+    storage.create_project(root, "Parent")
+    child_one = storage.create_project(root, "Child", parent="parent")
+    child_two = storage.create_project(root, "Child", parent="parent")
+
+    assert first["path"] == "test"
+    assert second["path"] == "test-2"
+    assert child_one["path"] == "parent/child"
+    assert child_two["path"] == "parent/child-2"
 
 
 def test_subproject_creation_and_third_level_rejection(tmp_path):
@@ -91,6 +107,25 @@ def test_skill_inheritance_from_parent_project(tmp_path):
     assert "Local Runner" in context
 
 
+def test_prompt_context_includes_session_and_project_attachments(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Research")
+    storage.create_session(root, "research", "Source Session")
+    storage.create_session(root, "research", "Current Session")
+
+    attachments.save_attachment(root, "research", "source-session", "shared.txt", b"shared project evidence")
+    attachments.save_attachment(root, "research", "current-session", "paper.pdf", b"%PDF-1.4\n(Current PDF text)")
+
+    context = storage.build_prompt_context(root, "research", "current-session")
+
+    assert "## Session Files" in context
+    assert "paper.pdf" in context
+    assert "Current PDF text" in context
+    assert "## Project Files" in context
+    assert "shared.txt (source-session)" in context
+    assert "shared project evidence" in context
+
+
 def test_invalid_role_is_rejected(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")
@@ -107,6 +142,8 @@ def test_accounts_project_visibility_and_usage(tmp_path):
 
     assert admin["username"] == "kwanho"
     assert admin["nickname"] == "Kwanho Kim"
+    assert admin["profile"]["ui_mode"] == "power"
+    assert parent["profile"]["ui_mode"] == "easy"
     assert storage.create_account(root, "benetea", "secret")["nickname"] == "Chungja Byun"
     assert storage.create_account(root, "dosadol", "secret")["nickname"] == "Gunwoo Kim"
     assert storage.create_account(root, "kwanho0096", "secret")["nickname"] == "Kwanho Kim"
@@ -141,10 +178,12 @@ def test_account_profile_memory_language_and_avatar(tmp_path):
         job="Engineer",
         situation="Building a local AI workspace.",
         language="en",
+        ui_mode="power",
         memory="Prefers concise answers.",
     )
 
     assert account["profile"]["language"] == "en"
+    assert account["profile"]["ui_mode"] == "power"
     context = storage.account_context(root, "kwanho")
     assert "Kwanho Kim" in context
     assert "Prefers concise answers." in context

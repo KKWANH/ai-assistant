@@ -51,6 +51,7 @@ def save_attachment(
     content: bytes,
     *,
     actor: str | None = None,
+    delivery: str | None = None,
 ) -> dict[str, object]:
     ext = validate_attachment(filename, content)
     storage.load_session(root, project_path, session_slug)
@@ -60,12 +61,21 @@ def save_attachment(
     destination = unique_path(path / safe_name)
     destination.write_bytes(content)
     extracted = extract_text(destination, ext)
+    resolved_delivery = delivery
+    if not resolved_delivery:
+        if is_image_extension(ext):
+            resolved_delivery = "stored_only"
+        elif extracted.strip():
+            resolved_delivery = "text_context"
+        else:
+            resolved_delivery = "stored_only"
     metadata = {
         "filename": destination.name,
         "path": str(destination.relative_to(storage.workspace_path(root))),
         "content_type": ext.lstrip("."),
         "size": len(content),
         "text": extracted,
+        "delivery": resolved_delivery,
         "created_at": storage.utc_now(),
         "actor": actor,
     }

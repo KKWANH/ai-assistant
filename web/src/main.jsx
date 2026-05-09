@@ -113,7 +113,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <TopBar runtime={runtime} />
+      <TopBar runtime={runtime} account={workspace?.account} activePath={activePath} chat={chat} />
       <main className="layout">
         <Sidebar workspace={workspace} activePath={activePath} navigate={navigate} onRefresh={refreshWorkspace} />
         <CenterPane
@@ -126,23 +126,37 @@ function App() {
           navigate={navigate}
           refreshWorkspace={refreshWorkspace}
         />
-        <Workbench chat={chat} activePath={activePath} runtime={runtime} onPreview={setLightbox} onChat={setChat} />
+        <ContextPanel chat={chat} activePath={activePath} runtime={runtime} onPreview={setLightbox} onChat={setChat} account={workspace?.account} />
       </main>
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
 
-function TopBar({ runtime }) {
+function TopBar({ runtime, account, activePath, chat }) {
+  const [open, setOpen] = useState(false);
   const url = runtime?.cloudflare_url || "";
-  const label = url ? "Cloudflare" : "Local";
+  const power = isPowerMode(account);
+  const context = activePath?.sessionSlug ? (chat?.project?.hidden ? "General chat" : `${chat?.project?.title || "Project"} / ${chat?.session?.title || activePath.sessionSlug}`) : "Private AI Cockpit";
   return (
     <header className="topbar">
       <a className="brand" href="/">
         <span className="brand-mark" /> Assistant
       </a>
-      {url && <a className="runtime-link" href={url} target="_blank" rel="noreferrer">{url.replace("https://", "")}</a>}
-      <span className="runtime-pill"><span className="status-lamp" />{label}</span>
+      <span className="local-badge">Local-first</span>
+      <span className="top-context">{context}</span>
+      <span className="mode-badge">{power ? "Power" : "Easy"}</span>
+      <button className="runtime-pill" type="button" onClick={() => power && setOpen(!open)} aria-expanded={open}>
+        <span className="status-lamp" />{power ? (runtime?.status || "local") : "안전하게 연결됨"}
+      </button>
+      {power && open && (
+        <div className="runtime-popover">
+          <strong>Runtime</strong>
+          <p>{runtime?.status || "local"}</p>
+          {url ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <span>No public tunnel URL.</span>}
+          <code>aiws-cloudflare status</code>
+        </div>
+      )}
     </header>
   );
 }
@@ -158,8 +172,8 @@ function LoginPage() {
         </a>
         <div>
           <p className="eyebrow">Private workspace</p>
-          <h1 id="login-title">로그인</h1>
-          <p className="login-copy">프로젝트, 대화, 파일 컨텍스트를 안전하게 여는 개인 AI 작업실입니다.</p>
+          <h1 id="login-title">개인 AI 작업실</h1>
+          <p className="login-copy">대화, 프로젝트, 파일을 안전하게 이어가는 로컬 우선 AI 비서입니다.</p>
         </div>
         {hasError && <div className="system-note compact">사용자 이름 또는 비밀번호가 올바르지 않습니다.</div>}
         <form className="login-form" method="post" action="/login">
@@ -179,11 +193,11 @@ function LoginPage() {
         <div className="status-card">
           <span className="status-lamp" />
           <strong>Local-first</strong>
-          <p>대화는 워크스페이스 파일로 보관되고, 외부 접속은 인증 뒤에만 열립니다.</p>
+          <p>Mac mini에서 실행되고 대화와 파일은 내 워크스페이스에 저장됩니다.</p>
         </div>
         <div className="status-card">
-          <strong>Project memory</strong>
-          <p>프로젝트, 세션, 스킬, 첨부파일 컨텍스트를 한 곳에서 이어갑니다.</p>
+          <strong>가족 계정 지원</strong>
+          <p>필요한 사람에게만 접근을 열고 프로젝트 기억을 함께 관리합니다.</p>
         </div>
       </aside>
     </main>
@@ -193,10 +207,17 @@ function LoginPage() {
 function Sidebar({ workspace, activePath, navigate, onRefresh }) {
   const [query, setQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
   const projects = workspace?.projects || [];
   const chats = workspace?.chats || [];
   const account = workspace?.account || { username: "local", nickname: "Kwanho Kim", display_name: "Kwanho Kim", profile: {} };
   const activeIsGeneralChat = chats.some((project) => project.path === activePath.projectPath);
+  const today = new Date().toISOString().slice(0, 10);
+  const allChatSessions = chats.flatMap((project) => project.sessions.map((session) => ({ ...session, projectPath: project.path })));
+  const todayChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) === today);
+  const recentChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) !== today).slice(0, 8);
+  const sharedProjects = projects.filter((project) => project.visibility === "public");
+  const privateProjects = projects.filter((project) => project.visibility !== "public");
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return projects;
@@ -214,46 +235,55 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
         </button>
       </div>
       <section className="sidebar-actions">
-        <NewGeneralChatForm onCreated={(path) => { onRefresh(); navigate(path); }} />
-        <NewProjectForm onCreated={onRefresh} />
+        <NewGeneralChatForm onCreated={(path) => navigate(path)} />
+        <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>새 프로젝트</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>
       <input id="workspace-search" className="search-box" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workspace" />
       <nav className="project-tree" aria-label="Workspace">
         {!workspace && <div className="empty-card">Loading workspace...</div>}
-        {chats.length > 0 && (
-          <section className="tree-section chat-section">
-            <h2><span>Personal chats</span><em>Chat</em></h2>
-            {chats.flatMap((project) =>
-              project.sessions.map((session) => (
-                <button
-                  key={`${project.path}/${session.slug}`}
-                  type="button"
-                  className={`session-slip general ${project.path === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
-                  onClick={() => navigate(`/chat/${project.path}/${session.slug}`)}
-                >
-                  <em className="item-kind">Chat</em>
-                  <span>{session.title}</span>
-                  <small>{session.created_at?.slice(0, 10) || "chat"}</small>
-                </button>
-              ))
-            )}
-          </section>
-        )}
-        {workspace && projects.length > 0 && <div className="tree-heading"><span>Projects</span><em>Project</em></div>}
+        <ChatSection title="오늘" sessions={todayChats} activePath={activePath} navigate={navigate} />
+        <ChatSection title="최근 대화" sessions={recentChats} activePath={activePath} navigate={navigate} />
+        {workspace && privateProjects.length > 0 && <div className="tree-heading"><span>프로젝트</span></div>}
         {workspace && projects.length === 0 && (
           <div className="empty-card">
             <strong>No projects yet.</strong>
             <p>Projects hold sessions, skills, files, and context.</p>
           </div>
         )}
-        {filtered.map((project) => (
+        {filtered.filter((project) => project.visibility !== "public").map((project) => (
           <ProjectNode key={project.path} project={project} activePath={activePath} navigate={navigate} />
         ))}
+        {sharedProjects.length > 0 && <div className="tree-heading"><span>가족 공유</span></div>}
+        {sharedProjects.map((project) => (
+          <ProjectNode key={project.path} project={project} activePath={activePath} navigate={navigate} />
+        ))}
+        <div className="tree-heading archive-heading"><span>보관함</span></div>
       </nav>
       {settingsOpen && <SettingsModal account={account} onClose={() => setSettingsOpen(false)} onSaved={onRefresh} />}
+      {projectOpen && <NewProjectModal onClose={() => setProjectOpen(false)} onCreated={(project) => { setProjectOpen(false); onRefresh(); navigate(`/project/${project.path}`); }} />}
     </aside>
+  );
+}
+
+function ChatSection({ title, sessions, activePath, navigate }) {
+  if (!sessions.length) return null;
+  return (
+    <section className="tree-section compact-section">
+      <h2><span>{title}</span></h2>
+      {sessions.map((session) => (
+        <button
+          key={`${session.projectPath}/${session.slug}`}
+          type="button"
+          className={`session-slip general ${session.projectPath === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
+          onClick={() => navigate(`/chat/${session.projectPath}/${session.slug}`)}
+        >
+          <span>{session.title}</span>
+          <small>{session.created_at?.slice(0, 10) || "chat"}</small>
+        </button>
+      ))}
+    </section>
   );
 }
 
@@ -270,8 +300,7 @@ function ProjectNode({ project, activePath, navigate }) {
         onClick={() => navigate(project.firstSessionUrl || `/project/${project.path}`)}
       >
         <span>{project.title}</span>
-        <em className="item-kind">Project</em>
-        <small>{project.created_at?.slice(0, 10) || "local"}</small>
+        <small>{project.owner_display || project.owner || "Kwanho Kim"} · {project.created_at?.slice(0, 10) || "local"}</small>
       </button>
       <div className="session-list">
         {project.sessions.map((session) => (
@@ -281,7 +310,6 @@ function ProjectNode({ project, activePath, navigate }) {
             className={`session-slip ${project.path === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
             onClick={() => navigate(`/chat/${project.path}/${session.slug}`)}
           >
-            <em className="item-kind">Session</em>
             <span>{session.title}</span>
             <small>{session.created_at?.slice(0, 10) || "session"}</small>
           </button>
@@ -300,7 +328,7 @@ function NewProjectForm({ onCreated }) {
     event.preventDefault();
     if (!canSubmit) return;
     const form = new URLSearchParams({ title, visibility });
-    await fetch("/projects", { method: "POST", body: form, headers: csrfHeader() });
+    await fetchJson("/api/projects", { method: "POST", body: form });
     setTitle("");
     setVisibility("private");
     setOpen(false);
@@ -324,55 +352,85 @@ function NewProjectForm({ onCreated }) {
   );
 }
 
-function NewGeneralChatForm({ onCreated }) {
-  const [creating, setCreating] = useState(false);
-  async function create() {
-    if (creating) return;
-    setCreating(true);
-    const form = new URLSearchParams({ title: "New chat" });
-    const response = await fetch("/api/chats", { method: "POST", body: form, headers: csrfHeader() });
-    const payload = await response.json();
-    setCreating(false);
-    if (!response.ok) throw new Error(payload.error || "Could not create chat.");
-    onCreated(`/chat/${payload.project_path}/${payload.session.slug}`);
+function NewProjectModal({ onClose, onCreated }) {
+  const [title, setTitle] = useState("");
+  const [visibility, setVisibility] = useState("private");
+  const [error, setError] = useState("");
+  const canSubmit = title.trim().length > 0;
+  async function submit(event) {
+    event.preventDefault();
+    if (!canSubmit) return;
+    setError("");
+    try {
+      const form = new URLSearchParams({ title, visibility });
+      const payload = await fetchJson("/api/projects", { method: "POST", body: form });
+      onCreated(payload.project);
+    } catch (err) {
+      setError(err.message || "프로젝트를 만들 수 없습니다.");
+    }
   }
   return (
-    <button className="new-chat-button" type="button" onClick={create} disabled={creating}>
-      <span>＋</span>{creating ? "Creating..." : "New chat"}
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="settings-modal project-modal" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <h2>새 프로젝트</h2>
+          <button type="button" onClick={onClose}>닫기</button>
+        </header>
+        <p className="muted">프로젝트는 대화, 파일, 목표를 함께 기억하는 작업 공간입니다.</p>
+        <form onSubmit={submit}>
+          <label>
+            <span>프로젝트 이름</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+          </label>
+          <label>
+            <span>공개 범위</span>
+            <select value={visibility} onChange={(event) => setVisibility(event.target.value)}>
+              <option value="private">개인용 - 나와 admin만</option>
+              <option value="public">가족 공유</option>
+            </select>
+          </label>
+          {error && <div className="system-note compact">{error}</div>}
+          <button className="primary-button" type="submit" disabled={!canSubmit}>프로젝트 만들기</button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function NewGeneralChatForm({ onCreated }) {
+  function create() {
+    onCreated("/");
+  }
+  return (
+    <button className="new-chat-button" type="button" onClick={create}>
+      <span>＋</span>New chat
     </button>
   );
 }
 
 function NewSessionForm({ projectPath, onCreated }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const canSubmit = title.trim().length > 0;
-  async function submit(event) {
-    event.preventDefault();
-    if (!canSubmit) return;
-    const form = new URLSearchParams({ title });
-    const response = await fetch(`/api/sessions/${projectPath}`, { method: "POST", body: form, headers: csrfHeader() });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not create session.");
-    setTitle("");
-    setOpen(false);
-    onCreated(`/chat/${projectPath}/${payload.session.slug}`);
+  function startBlankProjectChat() {
+    onCreated(`/project/${projectPath}`);
   }
   return (
-    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>New chat in project</summary>
-      <form onSubmit={submit}>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Chat title" aria-label="Chat title" />
-        <button className="primary-button" type="submit" disabled={!canSubmit}>Create</button>
-      </form>
-    </details>
+    <button className="secondary-action project-chat-action" type="button" onClick={startBlankProjectChat}>
+      프로젝트 새 대화
+    </button>
   );
 }
 
 function CenterPane({ chat, activePath, account, onAsk, onPreview, error, navigate, refreshWorkspace }) {
+  const power = isPowerMode(account);
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
-      <StartPane error={error} navigate={navigate} refreshWorkspace={refreshWorkspace} onAsk={onAsk} account={account} />
+      <StartPane
+        error={error}
+        navigate={navigate}
+        refreshWorkspace={refreshWorkspace}
+        onAsk={onAsk}
+        account={account}
+        projectPath={activePath.projectPath}
+      />
     );
   }
 
@@ -384,42 +442,80 @@ function CenterPane({ chat, activePath, account, onAsk, onPreview, error, naviga
           <h1>{chat?.session?.title || activePath.sessionSlug}</h1>
         </div>
         <div className="context-chips">
-          <span>Provider {chat?.latest?.provider || "ollama"}</span>
-          <span>Model {modelLabel(chat?.latest?.model || DEFAULT_MODEL)}</span>
-          <span>{searchLabel(chat?.latest?.search_mode || "off")}</span>
+          <span>{chat?.project?.hidden ? "개인 대화" : "프로젝트 기억"}</span>
+          <span>{(chat?.attachments || []).length} files</span>
+          {chat?.goal?.objective && <span>Goal set</span>}
+          <span>{power ? `${chat?.latest?.provider || "ollama"} · ${modelLabel(chat?.latest?.model || DEFAULT_MODEL)}` : providerFriendlyLabel(chat?.latest?.provider || "ollama")}</span>
         </div>
       </div>
       <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} />
-      <Composer activePath={activePath} onAsk={onAsk} account={account} />
+      <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} />
     </section>
   );
 }
 
-function StartPane({ error, navigate, refreshWorkspace, onAsk, account }) {
+function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "" }) {
   const [content, setContent] = useState("");
   const [provider, setProvider] = useState("ollama");
   const [model, setModel] = useState(DEFAULT_MODEL);
-  const [searchMode, setSearchMode] = useState("off");
+  const [searchMode, setSearchMode] = useState("auto");
+  const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [dragging, setDragging] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
+  const inputRef = useRef(null);
+  const power = isPowerMode(account);
+
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) {
+      setPreviewUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function clearFile() {
+    setFile(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function pickDroppedFile(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragging(false);
+    const dropped = event.dataTransfer?.files?.[0];
+    if (dropped) setFile(dropped);
+  }
 
   async function submit(event) {
     event.preventDefault();
-    if (starting) return;
+    if (starting || (!content.trim() && !file)) return;
     setStarting(true);
     setStartError("");
     try {
       const createForm = new URLSearchParams({ title: content.trim().slice(0, 48) });
-      const created = await fetchJson("/api/chats", { method: "POST", body: createForm });
-      const path = `/chat/${created.project_path}/${created.session.slug}`;
+      const created = projectPath
+        ? await fetchJson(`/api/sessions/${projectPath}`, { method: "POST", body: createForm })
+        : await fetchJson("/api/chats", { method: "POST", body: createForm });
+      const createdProjectPath = projectPath || created.project_path;
+      const createdSession = created.session;
+      const path = `/chat/${createdProjectPath}/${createdSession.slug}`;
       navigate(path);
       refreshWorkspace().catch(() => {});
-      if (content.trim()) {
+      if (content.trim() || file) {
         onAsk({
-          project: { path: created.project_path, title: "General chats", hidden: true },
-          session: created.session,
+          project: { path: createdProjectPath, title: projectPath ? "Project" : "General chats", hidden: !projectPath },
+          session: createdSession,
           messages: [
-            { role: "user", actor_display: accountDisplayName(account), content: content.trim(), attachments: [] },
+            {
+              role: "user",
+              actor_display: accountDisplayName(account),
+              content: content.trim() || "Attached file",
+              attachments: file ? [{ filename: file.name, url: previewUrl || "", is_image: file.type.startsWith("image/"), is_pdf: file.type === "application/pdf" }] : [],
+            },
             { role: "assistant", pending: true, content: "", attachments: [] },
           ],
           skills: [],
@@ -433,13 +529,15 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account }) {
         askForm.set("provider", provider);
         askForm.set("model", model);
         askForm.set("search_mode", searchMode);
-        const payload = await fetchJson(`/api/ask/${created.project_path}/${created.session.slug}`, {
+        if (file) askForm.set("attachment", file);
+        const payload = await fetchJson(`/api/ask/${createdProjectPath}/${createdSession.slug}`, {
           method: "POST",
           body: askForm,
         });
         onAsk(payload);
       }
       setContent("");
+      clearFile();
     } catch (err) {
       setStartError(err.message || "Could not start chat.");
     } finally {
@@ -450,31 +548,69 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account }) {
   return (
     <section className="center-pane start-pane">
       <div className="start-content">
-        <h1>지금 무슨 생각을 하시나요?</h1>
-        <form className="start-composer" onSubmit={submit}>
+        <h1>무엇을 도와드릴까요?</h1>
+        <p className="start-subtitle">
+          {projectPath ? "첫 메시지를 보내면 이 프로젝트 안에 새 대화가 저장됩니다." : "대화, 파일, 프로젝트 기억을 내 Mac 안에서 이어가는 개인 AI 비서입니다."}
+        </p>
+        <form
+          className={`start-composer ${dragging ? "dragging" : ""}`}
+          onSubmit={submit}
+          onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+          }}
+          onDrop={pickDroppedFile}
+        >
+          {dragging && <div className="drop-hint">여기에 파일을 놓으면 첫 메시지에 첨부됩니다.</div>}
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
             placeholder="무엇이든 물어보세요"
             rows={1}
           />
-          <div className="composer-toolbar">
-            <span className="attach-key muted">Attach after chat starts</span>
-            <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-              <option value="ollama">ollama</option>
-              <option value="kimi">kimi</option>
-            </select>
-            <select value={model} onChange={(event) => setModel(event.target.value)}>
-              {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-            <select value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
-              {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+          {file && (
+            <div className="selected-file">
+              {previewUrl && <img src={previewUrl} alt={file.name} />}
+              <span>{file.name}</span>
+              <small>{provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
+              <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
+            </div>
+          )}
+          <div className={`composer-toolbar ${power ? "start-toolbar" : ""}`}>
+            <label className="attach-key" title="Attach file">
+              {power ? "Attach file" : "사진/파일 추가"}
+              <input
+                ref={inputRef}
+                data-attachment-input
+                type="file"
+                onChange={(event) => setFile(event.target.files?.[0] || null)}
+                accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp"
+              />
+            </label>
+            {power && (
+              <>
+                <select value={provider} onChange={(event) => setProvider(event.target.value)}>
+                  <option value="ollama">ollama</option>
+                  <option value="kimi">kimi</option>
+                </select>
+                <select value={model} onChange={(event) => setModel(event.target.value)}>
+                  {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+                <select value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
+                  {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </>
+            )}
+            {!power && <span className="composer-scope">빠른 로컬 AI로 시작합니다</span>}
             <button className="send-key" type="submit" disabled={starting}>{starting ? <span className="typing" /> : "Send"}</button>
           </div>
         </form>
         {starting && <WaitingNotice label="Assistant is preparing your answer" />}
-        <p className="honest-note">웹 검색과 이미지 생성은 아직 꺼져 있습니다. 현재는 저장된 프로젝트/세션/파일 컨텍스트만 사용합니다.</p>
+        <div className="quick-actions">
+          {["사진 설명하기", "문서 요약하기", "할 일 정리하기", "글쓰기 도와줘"].map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}
+        </div>
+        <p className="honest-note">현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다. 웹 검색은 아직 준비 중입니다.</p>
         {startError && <div className="system-note">{startError}</div>}
         {error && <div className="system-note">{error}</div>}
       </div>
@@ -638,7 +774,7 @@ function AttachmentList({ attachments, onPreview }) {
   );
 }
 
-function Composer({ activePath, onAsk, account }) {
+function Composer({ activePath, onAsk, account, power }) {
   const [content, setContent] = useState("");
   const [provider, setProvider] = useState("ollama");
   const [model, setModel] = useState(DEFAULT_MODEL);
@@ -646,6 +782,7 @@ function Composer({ activePath, onAsk, account }) {
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [sending, setSending] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
   const textRef = useRef(null);
 
@@ -672,6 +809,14 @@ function Composer({ activePath, onAsk, account }) {
   function clearFile() {
     setFile(null);
     if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function pickDroppedFile(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragging(false);
+    const dropped = event.dataTransfer?.files?.[0];
+    if (dropped) setFile(dropped);
   }
 
   async function submit(event) {
@@ -726,7 +871,19 @@ function Composer({ activePath, onAsk, account }) {
   }
 
   return (
-    <form className="composer" data-api-action={`/api/ask/${activePath.projectPath}/${activePath.sessionSlug}`} encType="multipart/form-data" onSubmit={submit}>
+    <form
+      className={`composer ${dragging ? "dragging" : ""}`}
+      data-api-action={`/api/ask/${activePath.projectPath}/${activePath.sessionSlug}`}
+      encType="multipart/form-data"
+      onSubmit={submit}
+      onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+      onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+      }}
+      onDrop={pickDroppedFile}
+    >
+      {dragging && <div className="drop-hint">여기에 파일을 놓으면 이번 대화에 첨부됩니다.</div>}
       <textarea
         ref={textRef}
         value={content}
@@ -738,13 +895,13 @@ function Composer({ activePath, onAsk, account }) {
         <div className="selected-file">
           {previewUrl && <img src={previewUrl} alt={file.name} />}
           <span>{file.name}</span>
-          <small>{provider === "kimi" && file.type.startsWith("image/") ? "Sent as vision input" : file.type.startsWith("image/") ? "Attached to chat" : "Sent as text context"}</small>
+          <small>{provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
           <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
         </div>
       )}
       <div className="composer-toolbar">
         <label className="attach-key" title="Attach file">
-          Attach file
+          {power ? "Attach file" : "사진/파일 추가"}
           <input
             ref={inputRef}
             data-attachment-input
@@ -753,18 +910,23 @@ function Composer({ activePath, onAsk, account }) {
             accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp"
           />
         </label>
-        <select name="provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
-          <option value="ollama">ollama</option>
-          <option value="kimi">kimi</option>
-        </select>
-        <select name="model" value={model} onChange={(event) => setModel(event.target.value)}>
-          {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
-        <select name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
-          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
+        <span className="composer-scope">{file ? "이번 대화에만 사용" : "필요하면 파일을 추가하세요"}</span>
         <button className="send-key" type="submit" disabled={sending}>{sending ? <span className="typing" /> : "Send"}</button>
       </div>
+      {power && (
+        <div className="advanced-controls">
+          <label><span>Provider</span><select name="provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+            <option value="ollama">ollama</option>
+            <option value="kimi">kimi</option>
+          </select></label>
+          <label><span>Model</span><select name="model" value={model} onChange={(event) => setModel(event.target.value)}>
+            {MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select></label>
+          <label><span>Search</span><select name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
+            {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select></label>
+        </div>
+      )}
     </form>
   );
 }
@@ -777,50 +939,77 @@ function searchLabel(mode) {
   return SEARCH_OPTIONS.find((item) => item.value === mode)?.label || `Search ${mode}`;
 }
 
-function Workbench({ chat, activePath, runtime, onPreview, onChat }) {
+function providerFriendlyLabel(provider) {
+  return provider === "kimi" ? "고성능 AI" : "빠른 로컬 AI";
+}
+
+function isPowerMode(account) {
+  return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
+}
+
+function ContextPanel({ chat, activePath, runtime, onPreview, onChat, account }) {
+  const power = isPowerMode(account);
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
-      <aside className="workbench">
-        <h2>Workbench</h2>
-        <RuntimePanel runtime={runtime} />
+      <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
+        <h2>Context</h2>
         <section>
-          <h3>Context</h3>
-          <p className="muted">Start or open a chat to inspect project context, files, goal, runtime, and dev commands.</p>
+          <h3>현재 대화 목적</h3>
+          <p className="muted">대화를 시작하면 이 비서가 참고하는 파일, 기억, 목표가 여기에 정리됩니다.</p>
         </section>
+        {power && <RuntimePanel runtime={runtime} />}
       </aside>
     );
   }
-  const attachments = chat?.attachments || [];
+  const attachments = collectVisibleAttachments(chat);
   return (
-    <aside className="workbench">
-      <h2>Workbench</h2>
+    <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
+      <h2>{power ? "Context / Workbench" : "Context"}</h2>
       <section>
-        <h3>Context</h3>
+        <h3>현재 대화 목적</h3>
         <p><strong>{chat?.project?.hidden ? "General chat" : chat?.project?.title || activePath.projectPath}</strong></p>
-        <p className="muted">{activePath.projectPath} / {activePath.sessionSlug}</p>
+        {power && <p className="muted">{activePath.projectPath} / {activePath.sessionSlug}</p>}
         <div className="skill-stack">
           {(chat?.skills || []).map((skill) => <span key={skill}>{skill}</span>)}
         </div>
       </section>
       <section>
-        <h3>Files</h3>
-        {attachments.length === 0 ? <p className="muted">No files attached to this session yet.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
+        <h3>사용 중인 파일</h3>
+        {attachments.length === 0 ? <p className="muted">아직 이 대화에 사용 중인 파일이 없습니다.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
       </section>
       <section>
-        <h3>Goal</h3>
+        <h3>다음 행동</h3>
         <GoalPanel chat={chat} activePath={activePath} onChat={onChat} />
       </section>
       <section>
-        <h3>Prompt</h3>
-        <a href={`/prompt/${activePath.projectPath}/${activePath.sessionSlug}`}>Open prompt context</a>
+        <h3>기억된 정보</h3>
+        <p className="muted">프로필 기억과 프로젝트 노트는 답변 컨텍스트에 함께 사용됩니다.</p>
       </section>
-      <section>
-        <h3>Dev</h3>
-        <RuntimePanel runtime={runtime} />
-        <code>aiws prompt {activePath.projectPath} {activePath.sessionSlug} --root ~/.ai-workspace</code>
-      </section>
+      {power && (
+        <section>
+          <h3>개발자 도구</h3>
+          <RuntimePanel runtime={runtime} />
+          <a href={`/prompt/${activePath.projectPath}/${activePath.sessionSlug}`}>Open prompt context</a>
+          <code>aiws prompt {activePath.projectPath} {activePath.sessionSlug} --root ~/.ai-workspace</code>
+        </section>
+      )}
     </aside>
   );
+}
+
+function collectVisibleAttachments(chat) {
+  const seen = new Set();
+  const items = [];
+  function add(item) {
+    if (!item || !item.filename) return;
+    const key = item.url || item.filename;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  }
+  (chat?.attachments || []).forEach(add);
+  (chat?.messages || []).forEach((message) => (message.attachments || []).forEach(add));
+  return items;
 }
 
 function GoalPanel({ chat, activePath, onChat }) {
@@ -846,6 +1035,17 @@ function GoalPanel({ chat, activePath, onChat }) {
     await navigator.clipboard?.writeText(codexPrompt);
   }
 
+  async function copyVariant(kind) {
+    const prefix = {
+      full: "Use the full project context and goal below.",
+      task: "Focus only on the next concrete implementation task.",
+      ui: "Focus on UI/UX refinement while preserving backend behavior.",
+      bugfix: "Find and fix the most likely bug with minimal changes.",
+      test: "Strengthen or repair tests first, then implement only what is needed.",
+    }[kind];
+    await navigator.clipboard?.writeText(`${prefix}\n\n${codexPrompt}`);
+  }
+
   if (editing) {
     return (
       <form className="goal-form" data-goal-panel onSubmit={save}>
@@ -869,8 +1069,12 @@ function GoalPanel({ chat, activePath, onChat }) {
       {goal.current_status && <p>{goal.current_status}</p>}
       {(goal.next_actions || []).length > 0 && <ul>{goal.next_actions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>}
       <div className="goal-actions">
-        <button type="button" data-edit-goal onClick={() => setEditing(true)}>Edit Goal</button>
-        <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy Codex Prompt</button>
+        <button type="button" data-edit-goal onClick={() => setEditing(true)}>{goal.objective ? "목표 수정" : "목표 설정"}</button>
+        <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy full project prompt</button>
+        <button type="button" onClick={() => copyVariant("task")} disabled={!codexPrompt}>Copy task prompt</button>
+        <button type="button" onClick={() => copyVariant("ui")} disabled={!codexPrompt}>Copy UI refinement prompt</button>
+        <button type="button" onClick={() => copyVariant("bugfix")} disabled={!codexPrompt}>Copy bugfix prompt</button>
+        <button type="button" onClick={() => copyVariant("test")} disabled={!codexPrompt}>Copy test prompt</button>
       </div>
     </div>
   );
@@ -932,37 +1136,27 @@ function SettingsModal({ account, onClose, onSaved }) {
     <div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
         <header>
-          <h2>Settings</h2>
-          <button type="button" onClick={onClose}>Close</button>
+          <h2>내 비서 설정</h2>
+          <button type="button" onClick={onClose}>닫기</button>
         </header>
         <form onSubmit={submit}>
-          <label>
-            <span>프로필 사진</span>
-            <input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
-          </label>
-          <label>
-            <span>이름</span>
-            <input name="name" defaultValue={profile.name || account.display_name || ""} />
-          </label>
-          <label>
-            <span>나이</span>
-            <input name="age" defaultValue={profile.age || ""} />
-          </label>
-          <label>
-            <span>직업</span>
-            <input name="job" defaultValue={profile.job || ""} />
-          </label>
-          <label>
-            <span>상황 / 대화 컨텍스트</span>
-            <textarea name="situation" defaultValue={profile.situation || ""} />
-          </label>
-          <label>
-            <span>언어</span>
-            <select name="language" defaultValue={profile.language || "ko"}>
-              <option value="ko">한국어</option>
-              <option value="en">English</option>
-            </select>
-          </label>
+          <fieldset>
+            <legend>Profile</legend>
+            <label><span>프로필 사진</span><input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+            <label><span>이름</span><input name="name" defaultValue={profile.name || account.display_name || ""} /></label>
+            <label><span>나이</span><input name="age" defaultValue={profile.age || ""} /></label>
+            <label><span>직업 / 역할</span><input name="job" defaultValue={profile.job || ""} /></label>
+            <label><span>언어</span><select name="language" defaultValue={profile.language || "ko"}><option value="ko">한국어</option><option value="en">English</option></select></label>
+          </fieldset>
+          <fieldset>
+            <legend>Personal Context</legend>
+            <label><span>상황 / 대화 컨텍스트</span><textarea name="situation" defaultValue={profile.situation || ""} /></label>
+            <label><span>기억에 추가</span><textarea name="memory" placeholder="비서가 앞으로 기억하면 좋은 내용을 적어주세요." /></label>
+          </fieldset>
+          <fieldset>
+            <legend>Interface</legend>
+            <label><span>사용 모드</span><select name="ui_mode" defaultValue={profile.ui_mode || (account.admin ? "power" : "easy")}><option value="easy">Easy Mode - 쉬운 화면</option><option value="power">Power Mode - 개발자 도구 표시</option></select></label>
+          </fieldset>
           <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button>
         </form>
         <button className="danger-button" type="button" onClick={logout}>Logout</button>
