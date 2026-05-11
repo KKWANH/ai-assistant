@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 from . import storage
 
 SUPPORTED_ATTACHMENT_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
-MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 
 
 def validate_attachment(filename: str, content: bytes) -> str:
@@ -60,7 +60,10 @@ def save_attachment(
     path.mkdir(parents=True, exist_ok=True)
     destination = unique_path(path / safe_name)
     destination.write_bytes(content)
-    extracted = extract_text(destination, ext)
+    try:
+        extracted = extract_text(destination, ext)
+    except Exception:
+        extracted = ""
     resolved_delivery = delivery
     if not resolved_delivery:
         if is_image_extension(ext):

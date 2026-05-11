@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 
 from . import costs, search, storage
 from .env import load_env
@@ -70,7 +71,8 @@ def ask(
     if search.should_search(search_mode, content) and not resolved_results:
         resolved_results = []
     prompt_context = (
-        account_context
+        server_time_context()
+        + account_context
         + search.format_search_context(resolved_results)
         + storage.build_prompt_context(root, project_path, session_slug)
     )
@@ -133,6 +135,18 @@ def default_model_for_provider(provider: str) -> str:
     if provider == "openai":
         return os.environ.get("AIWS_OPENAI_DEFAULT_MODEL", "gpt-5.1-codex")
     return ""
+
+
+def server_time_context() -> str:
+    now = datetime.now().astimezone()
+    timezone = now.tzname() or str(now.astimezone().tzinfo)
+    locale = os.environ.get("AIWS_LOCALE", "ko-KR")
+    return (
+        "## Current Server Time\n"
+        f"Current server time: {now:%Y-%m-%d %H:%M}\n"
+        f"Timezone: {timezone}\n"
+        f"Locale: {locale}\n\n"
+    )
 
 
 def enforce_remote_guardrails(

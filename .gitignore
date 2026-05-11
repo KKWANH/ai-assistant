@@ -8,3 +8,6 @@ __pycache__/
 .env.*
 !.env.template
 !.env.example
+
+web/dist/
+web/node_modules/

@@ -931,6 +931,89 @@ def list_sessions(root: str | Path, project_path: str) -> list[dict[str, Any]]:
     return [read_json(path) for path in sorted(sessions_root.glob("*/session.json"))]
 
 
+def ensure_project_owner(root: str | Path, project_path: str, username: str | None) -> None:
+    if not has_accounts(root):
+        return
+    project = load_project(root, project_path)
+    owner = project.get("owner")
+    if not username or owner != slugify(username):
+        raise WorkspaceError("Only the project owner can move chats into this project.")
+
+
+def move_session_to_project(
+    root: str | Path,
+    source_project_path: str,
+    session_slug: str,
+    target_project_path: str,
+) -> dict[str, Any]:
+    ensure_project_exists(root, source_project_path)
+    ensure_project_exists(root, target_project_path)
+    session = load_session(root, source_project_path, session_slug)
+    source = session_dir(root, source_project_path, session_slug)
+    base_slug = slugify_or_default(str(session.get("slug") or session.get("title") or session_slug), "new-chat")
+    target_slug = next_available_session_slug(root, target_project_path, base_slug)
+    target = session_dir(root, target_project_path, target_slug)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(target))
+    session["slug"] = target_slug
+    session["project_path"] = target_project_path
+    session["moved_at"] = utc_now()
+    write_json(target / "session.json", session)
+    update_moved_attachment_paths(root, target_project_path, target_slug)
+    regenerate_session_markdown(root, target_project_path, target_slug)
+    return session
+
+
+def move_session_to_general_chat(
+    root: str | Path,
+    source_project_path: str,
+    session_slug: str,
+    username: str | None,
+) -> tuple[str, dict[str, Any]]:
+    project = ensure_general_chat_project(root, username)
+    session = move_session_to_project(root, source_project_path, session_slug, str(project["path"]))
+    return str(project["path"]), session
+
+
+def delete_session(root: str | Path, project_path: str, session_slug: str) -> None:
+    ensure_project_exists(root, project_path)
+    target = session_dir(root, project_path, session_slug)
+    if not target.exists():
+        raise WorkspaceError(f"Session does not exist: {session_slug}")
+    shutil.rmtree(target)
+
+
+def update_project_title(root: str | Path, project_path: str, title: str) -> dict[str, Any]:
+    project = load_project(root, project_path)
+    clean_title = title.strip()
+    if not clean_title:
+        raise WorkspaceError("Project title must not be empty.")
+    project["title"] = clean_title
+    project["updated_at"] = utc_now()
+    write_json(project_json_path(root, project_path), project)
+    return project
+
+
+def delete_project(root: str | Path, project_path: str) -> None:
+    ensure_project_exists(root, project_path)
+    shutil.rmtree(project_dir(root, project_path))
+
+
+def update_moved_attachment_paths(root: str | Path, project_path: str, session_slug: str) -> None:
+    metadata_path = session_dir(root, project_path, session_slug) / "attachments" / "attachments.jsonl"
+    if not metadata_path.exists():
+        return
+    updated = []
+    for item in read_attachment_metadata(root, project_path, session_slug):
+        filename = str(item.get("filename", ""))
+        if filename:
+            item["path"] = str(
+                (session_dir(root, project_path, session_slug) / "attachments" / filename).relative_to(workspace_path(root))
+            )
+        updated.append(json.dumps(item, ensure_ascii=False))
+    metadata_path.write_text("\n".join(updated) + ("\n" if updated else ""), encoding="utf-8")
+
+
 def append_message(
     root: str | Path,
     project_path: str,

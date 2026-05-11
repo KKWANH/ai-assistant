@@ -233,6 +233,25 @@ def test_projectless_general_chat_accepts_blank_and_duplicate_titles(tmp_path):
     assert updated["title"] == "첨부한 pdf 파일을 분석해줘"
 
 
+def test_owner_can_move_general_chat_into_project(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret", admin=True)
+    storage.create_account(root, "Other", "secret")
+    project = storage.create_project(root, "Research", owner="kwanho")
+    source_project_path, session = storage.create_general_chat_session(root, "kwanho", "Move this chat")
+    storage.append_message(root, source_project_path, session["slug"], role="user", content="Keep this", actor="kwanho")
+
+    with pytest.raises(storage.WorkspaceError, match="Only the project owner"):
+        storage.ensure_project_owner(root, project["path"], "other")
+
+    moved = storage.move_session_to_project(root, source_project_path, session["slug"], project["path"])
+
+    assert moved["project_path"] == "research"
+    assert storage.read_messages(root, "research", moved["slug"])[0]["content"] == "Keep this"
+    assert not storage.session_dir(root, source_project_path, session["slug"]).exists()
+    assert storage.session_dir(root, "research", moved["slug"]).exists()
+
+
 def test_execution_run_events_are_structured_and_mirrored_to_session(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")

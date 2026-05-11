@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from aiws import runner, storage
+from aiws import automations, runner, storage
 from aiws.ui import AIWSHandler, validate_ui_options
 
 
@@ -173,6 +173,8 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         runtime = request.urlopen(f"{base_url}/api/runtime", timeout=5).read().decode("utf-8")
         assert '"runtime"' in runtime
         assert '"port"' in runtime
+        openclaw_status = request.urlopen(f"{base_url}/api/openclaw", timeout=10).read().decode("utf-8")
+        assert '"openclaw"' in openclaw_status
         goal = request.urlopen(f"{base_url}/api/goal/ai-system/local-runner", timeout=5).read().decode("utf-8")
         assert '"goal"' in goal
     finally:
@@ -407,6 +409,37 @@ def test_login_sets_secure_cookie_behind_https_and_rate_limits_failures(tmp_path
         limited_payload = parse.urlencode({"username": "parent", "password": "wrong", "_csrf": bad_csrf}).encode("utf-8")
         with pytest.raises(Exception):
             bad_opener.open(request.Request(f"{base_url}/login", data=limited_payload, method="POST"), timeout=5)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_automation_api_requires_admin_and_returns_projects(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "kwanho", "secret", admin=True)
+    monkeypatch.setattr(
+        automations,
+        "list_projects",
+        lambda root_arg: [{"slug": "aiws-ui-self-check", "title": "AIWS UI Self Check"}],
+    )
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=True, password="server-secret")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    jar = CookieJar()
+    opener = request.build_opener(request.HTTPCookieProcessor(jar))
+    try:
+        opener.open(f"{base_url}/login", timeout=5).read()
+        csrf = next(cookie.value for cookie in jar if cookie.name == "aiws_csrf")
+        payload = parse.urlencode({"username": "kwanho", "password": "secret", "_csrf": csrf}).encode("utf-8")
+        opener.open(request.Request(f"{base_url}/login", data=payload, method="POST"), timeout=5)
+
+        payload = opener.open(f"{base_url}/api/automations", timeout=5).read().decode("utf-8")
+
+        assert "AIWS UI Self Check" in payload
     finally:
         server.shutdown()
         server.server_close()

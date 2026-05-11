@@ -8,6 +8,7 @@ import os
 import base64
 import secrets
 import time
+import traceback
 from functools import partial
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +16,7 @@ import hmac
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import attachments, costs
+from . import attachments, automations, costs, openclaw
 from .i18n import t
 from . import runner
 from . import storage
@@ -67,6 +68,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_account()
         elif path == "/api/runtime":
             self.api_runtime()
+        elif path == "/api/openclaw":
+            self.api_openclaw()
+        elif path == "/api/automations":
+            self.api_automations()
         elif path.startswith("/api/goal/"):
             project_path = unquote(path.removeprefix("/api/goal/"))
             self.api_goal(project_path)
@@ -135,6 +140,17 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.api_chat(project_path, session_slug)
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
+            except Exception as exc:
+                self.log_internal_error("api_ask", exc)
+                self.send_json(
+                    {
+                        "error": (
+                            "PDF를 읽는 중 문제가 생겼습니다. 파일이 너무 크거나 스캔본이라 텍스트를 읽지 못했을 수 있습니다. "
+                            "다시 시도하거나 다른 PDF를 올려주세요."
+                        )
+                    },
+                    status=500,
+                )
             return
 
         if parsed.path == "/api/logout":
@@ -147,6 +163,21 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_header("Location", "/login")
             self.send_header("Set-Cookie", self.cookie_header(SESSION_COOKIE, "", http_only=True, max_age=0))
             self.end_headers()
+            return
+
+        if parsed.path.startswith("/api/automations/") and parsed.path.endswith("/run"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            slug = unquote(parsed.path.removeprefix("/api/automations/").removesuffix("/run"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.require_admin()
+                run = automations.run_project(self.root, slug, actor=self.current_username())
+                self.send_json({"run": run, "projects": automations.list_projects(self.root)})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
             return
 
         if parsed.path.startswith("/api/sessions/"):
@@ -188,6 +219,128 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     data.get("title", "").strip() or "New chat",
                 )
                 self.send_json({"project_path": project_path, "session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/session-title/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/session-title/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_access(self.root, project_path, self.current_username())
+                session = storage.update_session_title(self.root, project_path, session_slug, data.get("title", ""))
+                self.send_json({"session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/move-chat/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/move-chat/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            source_project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                target_project_path = data.get("target_project", "").strip()
+                if not target_project_path:
+                    raise storage.WorkspaceError("Target project is required.")
+                username = self.current_username()
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_access(self.root, source_project_path, username)
+                    storage.ensure_project_owner(self.root, target_project_path, username)
+                session = storage.move_session_to_project(self.root, source_project_path, session_slug, target_project_path)
+                self.send_json({"project_path": target_project_path, "session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/move-chat-out/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/move-chat-out/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            source_project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                username = self.current_username()
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_owner(self.root, source_project_path, username)
+                project_path, session = storage.move_session_to_general_chat(self.root, source_project_path, session_slug, username)
+                self.send_json({"project_path": project_path, "session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/delete-session/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/delete-session/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                storage.delete_session(self.root, project_path, session_slug)
+                self.send_json({"ok": True})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-title/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/project-title/"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                project = storage.update_project_title(self.root, project_path, data.get("title", ""))
+                self.send_json({"project": project})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/delete-project/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/delete-project/"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                storage.delete_project(self.root, project_path)
+                self.send_json({"ok": True})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -412,7 +565,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             raise storage.WorkspaceError("Expected multipart form upload.")
         boundary = content_type.split("boundary=", 1)[1].encode("utf-8")
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 18 * 1024 * 1024:
+        if length > 36 * 1024 * 1024:
             raise storage.WorkspaceError("Upload is too large.")
         body = self.rfile.read(length)
         fields: dict[str, str] = {}
@@ -595,6 +748,24 @@ class AIWSHandler(BaseHTTPRequestHandler):
             status["cloudflare_url"] = url_path.read_text(encoding="utf-8").strip()
         self.send_json({"runtime": status})
 
+    def api_openclaw(self) -> None:
+        self.send_json({"openclaw": openclaw.status()})
+
+    def api_automations(self) -> None:
+        try:
+            self.require_admin()
+            self.send_json({"projects": automations.list_projects(self.root)})
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=403)
+
+    def log_internal_error(self, area: str, exc: Exception) -> None:
+        log_dir = storage.workspace_path(self.root) / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with (log_dir / "ui-errors.log").open("a", encoding="utf-8") as file:
+            file.write(f"[{storage.utc_now()}] {area}: {type(exc).__name__}: {exc}\n")
+            file.write(traceback.format_exc())
+            file.write("\n")
+
     def current_account_json(self) -> dict[str, object]:
         username = self.current_username()
         if username and storage.has_accounts(self.root):
@@ -615,6 +786,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
             "admin": False,
             "profile": {"name": nickname, "ui_mode": "power"},
         }
+
+    def require_admin(self) -> None:
+        if not storage.has_accounts(self.root):
+            return
+        if not storage.is_admin(self.root, self.current_username()):
+            raise storage.WorkspaceError("Admin access is required.")
 
     def project_json(self, project: dict[str, object]) -> dict[str, object]:
         project_path = str(project["path"])

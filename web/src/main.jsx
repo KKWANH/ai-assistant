@@ -1,19 +1,103 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 const DEFAULT_MODEL = "qwen3:4b";
 const MODEL_MODES = [
-  { value: "local", label: "Local only", short: "빠른 로컬 AI", provider: "ollama", model: "qwen3:4b", cloud: false, cost: "$0 local" },
-  { value: "cheap", label: "Cheap cloud", short: "저렴한 클라우드", provider: "gemini", model: "gemini-2.5-flash-lite", cloud: true, cost: "~$0.10/M in · ~$0.40/M out" },
-  { value: "gemini-pro", label: "Gemini Pro", short: "Gemini 고성능", provider: "gemini", model: "gemini-2.5-pro", cloud: true, cost: "~$1.25/M in · ~$10/M out" },
-  { value: "smart", label: "Smart cloud", short: "Kimi 고성능", provider: "kimi", model: "kimi-k2.6", cloud: true, cost: "est. ~$0.75/M in · ~$3.50/M out" },
-  { value: "kimi-thinking", label: "Kimi thinking", short: "Kimi 추론 강화", provider: "kimi", model: "kimi-k2-thinking", cloud: true, cost: "est. ~$0.60/M in · ~$2.50/M out" },
-  { value: "coding", label: "Coding expensive", short: "코딩 고성능", provider: "openai", model: "gpt-5.1-codex", cloud: true, cost: "est. ~$1.25/M in · ~$10/M out" },
+  {
+    value: "local",
+    label: "빠른 로컬 AI",
+    legacyLabel: "Local only",
+    short: "빠른 로컬 AI",
+    provider: "ollama",
+    model: "qwen3:4b",
+    cloud: false,
+    inputPrice: 0,
+    outputPrice: 0,
+    cost: "무료 · 내 Mac에서 처리",
+    easyPrice: "무료 · 내 Mac에서 처리",
+    privacy: "내 Mac에서 처리",
+    bestFor: "짧은 질문, 메모, 일상 대화",
+  },
+  {
+    value: "cheap",
+    label: "Gemini Flash-Lite",
+    legacyLabel: "Cheap cloud",
+    short: "Gemini Flash-Lite",
+    provider: "gemini",
+    model: "gemini-2.5-flash-lite",
+    cloud: true,
+    inputPrice: 0.10,
+    outputPrice: 0.40,
+    cost: "~$0.10/M in · ~$0.40/M out",
+    easyPrice: "매우 저렴 · 빠른 클라우드",
+    privacy: "클라우드 AI",
+    bestFor: "일반 질문, 빠른 요약, 저비용 작업",
+  },
+  {
+    value: "gemini-pro",
+    label: "Gemini Pro",
+    short: "Gemini Pro",
+    provider: "gemini",
+    model: "gemini-2.5-pro",
+    cloud: true,
+    inputPrice: 1.25,
+    outputPrice: 10.0,
+    cost: "~$1.25/M in · ~$10/M out",
+    easyPrice: "정확도 높음 · 비용 있음",
+    privacy: "클라우드 AI",
+    bestFor: "복잡한 질문, 긴 글, 정확도가 필요한 작업",
+  },
+  {
+    value: "smart",
+    label: "Kimi",
+    legacyLabel: "Smart cloud",
+    short: "Kimi",
+    provider: "kimi",
+    model: "kimi-k2.6",
+    cloud: true,
+    inputPrice: 0.75,
+    outputPrice: 3.50,
+    cost: "~$0.75/M in · ~$3.50/M out",
+    easyPrice: "긴 문서 특화 · 비용 있음",
+    privacy: "클라우드 AI",
+    bestFor: "긴 문서, 긴 컨텍스트, 분석",
+  },
+  {
+    value: "kimi-thinking",
+    label: "Kimi Thinking",
+    legacyLabel: "Kimi thinking",
+    short: "Kimi Thinking",
+    provider: "kimi",
+    model: "kimi-k2-thinking",
+    cloud: true,
+    inputPrice: 0.60,
+    outputPrice: 2.50,
+    cost: "~$0.60/M in · ~$2.50/M out",
+    easyPrice: "깊은 추론 · 조금 느림",
+    privacy: "클라우드 AI",
+    bestFor: "깊은 추론, 긴 분석",
+  },
+  {
+    value: "coding",
+    label: "OpenAI Codex",
+    legacyLabel: "Coding expensive",
+    short: "OpenAI Codex",
+    provider: "openai",
+    model: "gpt-5.1-codex",
+    cloud: true,
+    inputPrice: 1.25,
+    outputPrice: 10.0,
+    cost: "~$1.25/M in · ~$10/M out",
+    easyPrice: "코딩 특화 · 비용 있음",
+    privacy: "클라우드 AI",
+    bestFor: "코드 수정, 리팩토링, 개발 작업",
+  },
 ];
 const SEARCH_OPTIONS = [
   { value: "off", label: "Search off" },
-  { value: "auto", label: "Local context only" },
+  { value: "auto", label: "로컬 컨텍스트 우선", legacyLabel: "Local context only" },
   { value: "always", label: "Search web (준비 중)" },
 ];
 
@@ -69,9 +153,13 @@ function App() {
   const [workspace, setWorkspace] = useState(null);
   const [chat, setChat] = useState(null);
   const [runtime, setRuntime] = useState(null);
+  const [openclaw, setOpenclaw] = useState(null);
+  const [automations, setAutomations] = useState([]);
   const [activePath, setActivePath] = useState(parseRoute());
   const [lightbox, setLightbox] = useState(null);
   const [error, setError] = useState("");
+  const [contextOpen, setContextOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => getCookie("aiws_sidebar_open") !== "0");
   const isLogin = activePath.view === "login";
 
   async function refreshWorkspace() {
@@ -91,12 +179,30 @@ function App() {
     setRuntime(payload.runtime);
   }
 
+  async function refreshOpenclaw() {
+    const payload = await fetchJson("/api/openclaw");
+    setOpenclaw(payload.openclaw);
+  }
+
+  async function refreshAutomations() {
+    const payload = await fetchJson("/api/automations");
+    setAutomations(payload.projects || []);
+  }
+
   useEffect(() => {
     if (isLogin) return;
     refreshWorkspace().catch((err) => setError(err.message));
     refreshRuntime().catch(() => {});
+    refreshOpenclaw().catch(() => {});
+    refreshAutomations().catch(() => {});
     const id = window.setInterval(() => refreshRuntime().catch(() => {}), 15000);
-    return () => window.clearInterval(id);
+    const clawId = window.setInterval(() => refreshOpenclaw().catch(() => {}), 12000);
+    const automationId = window.setInterval(() => refreshAutomations().catch(() => {}), 20000);
+    return () => {
+      window.clearInterval(id);
+      window.clearInterval(clawId);
+      window.clearInterval(automationId);
+    };
   }, [isLogin]);
 
   useEffect(() => {
@@ -122,6 +228,18 @@ function App() {
     refreshWorkspace().catch(() => {});
   }
 
+  function toggleContext() {
+    setContextOpen((value) => !value);
+  }
+
+  function toggleSidebar() {
+    setSidebarOpen((value) => {
+      const next = !value;
+      setCookie("aiws_sidebar_open", next ? "1" : "0");
+      return next;
+    });
+  }
+
   if (isLogin) {
     return (
       <div className="app-shell auth-shell">
@@ -132,41 +250,87 @@ function App() {
 
   return (
     <div className="app-shell">
-      <TopBar runtime={runtime} account={workspace?.account} activePath={activePath} chat={chat} />
-      <main className="layout">
-        <Sidebar workspace={workspace} activePath={activePath} navigate={navigate} onRefresh={refreshWorkspace} />
+      <TopBar
+        runtime={runtime}
+        account={workspace?.account}
+        activePath={activePath}
+        chat={chat}
+        contextOpen={contextOpen}
+        onToggleContext={toggleContext}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={toggleSidebar}
+      />
+      <main className={`layout ${contextOpen ? "with-workbench" : "no-workbench"} ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+        <Sidebar
+          workspace={workspace}
+          activePath={activePath}
+          navigate={navigate}
+          onRefresh={refreshWorkspace}
+          automations={automations}
+          onAutomations={setAutomations}
+        />
         <CenterPane
           chat={chat}
           activePath={activePath}
           account={workspace?.account}
+          projects={workspace?.projects || []}
           onAsk={afterAsk}
           onPreview={setLightbox}
           error={error}
           navigate={navigate}
           refreshWorkspace={refreshWorkspace}
+          contextOpen={contextOpen}
+          onToggleContext={toggleContext}
         />
-        <ContextPanel chat={chat} activePath={activePath} runtime={runtime} onPreview={setLightbox} onChat={setChat} account={workspace?.account} />
+        <ContextPanel
+          chat={chat}
+          activePath={activePath}
+          runtime={runtime}
+          openclaw={openclaw}
+          automations={automations}
+          onAutomations={setAutomations}
+          onPreview={setLightbox}
+          onChat={setChat}
+          account={workspace?.account}
+        />
       </main>
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
 
-function TopBar({ runtime, account, activePath, chat }) {
+function TopBar({ runtime, account, activePath, chat, contextOpen, onToggleContext, sidebarOpen, onToggleSidebar }) {
   const [open, setOpen] = useState(false);
   const url = runtime?.cloudflare_url || "";
   const power = isPowerMode(account);
   const context = activePath?.sessionSlug ? (chat?.project?.hidden ? "General chat" : `${chat?.project?.title || "Project"} / ${chat?.session?.title || activePath.sessionSlug}`) : "Private AI Cockpit";
   return (
     <header className="topbar">
+      <button className="sidebar-toggle" type="button" onClick={onToggleSidebar} aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"} aria-pressed={sidebarOpen}>
+        <span />
+        <span />
+        <span />
+      </button>
       <a className="brand" href="/">
         <span className="brand-mark" /> Assistant
       </a>
       <span className="local-badge">Local-first</span>
       <span className="top-context">{context}</span>
-      <span className="mode-badge">{power ? "Power" : "Easy"}</span>
-      <button className="runtime-pill" type="button" onClick={() => power && setOpen(!open)} aria-expanded={open}>
-        <span className="status-lamp" />{power ? (runtime?.status || "local") : "안전하게 연결됨"}
+      <span className={`mode-icon ${power ? "power" : "easy"}`} title={power ? "Power mode" : "Easy mode"} aria-label={power ? "Power mode" : "Easy mode"}>
+        <span />
+      </span>
+      <button className={`context-toggle icon-only ${contextOpen ? "active" : ""}`} type="button" onClick={onToggleContext} aria-label={contextOpen ? "파일과 기억 닫기" : "파일과 기억 열기"} aria-pressed={contextOpen}>
+        <span />
+        <i />
+      </button>
+      <button
+        className={`runtime-pill ${power ? "" : "dot-only"}`}
+        type="button"
+        onClick={() => power && setOpen(!open)}
+        aria-label={power ? `Runtime ${runtime?.status || "local"}` : "연결됨"}
+        aria-expanded={open}
+      >
+        <span className="status-lamp" />{power ? (runtime?.status || "local") : ""}
       </button>
       {power && open && (
         <div className="runtime-popover">
@@ -223,7 +387,7 @@ function LoginPage() {
   );
 }
 
-function Sidebar({ workspace, activePath, navigate, onRefresh }) {
+function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [], onAutomations }) {
   const [query, setQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -233,17 +397,47 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
   const activeIsGeneralChat = chats.some((project) => project.path === activePath.projectPath);
   const today = new Date().toISOString().slice(0, 10);
   const allChatSessions = chats.flatMap((project) => project.sessions.map((session) => ({ ...session, projectPath: project.path })));
-  const todayChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) === today);
-  const recentChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) !== today).slice(0, 8);
+  const needle = query.trim().toLowerCase();
+  const matchesChat = (session) => !needle || `${session.title} ${session.projectPath}`.toLowerCase().includes(needle);
+  const todayChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) === today && matchesChat(session));
+  const recentChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) !== today && matchesChat(session)).slice(0, 8);
   const sharedProjects = projects.filter((project) => project.visibility === "public");
   const privateProjects = projects.filter((project) => project.visibility !== "public");
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
     if (!needle) return projects;
     return projects.filter((project) =>
       `${project.title} ${project.path} ${project.sessions.map((s) => s.title).join(" ")}`.toLowerCase().includes(needle)
     );
   }, [projects, query]);
+  const hasSearchResults = !needle || todayChats.length > 0 || recentChats.length > 0 || filtered.length > 0;
+  const ownedProjects = ownerProjects(projects, account);
+
+  async function refreshAndStay() {
+    await onRefresh?.();
+  }
+
+  async function moveSession(projectPath, sessionSlug, targetProjectPath) {
+    const payload = await fetchJson(`/api/move-chat/${projectPath}/${sessionSlug}`, {
+      method: "POST",
+      body: new URLSearchParams({ target_project: targetProjectPath }),
+    });
+    await refreshAndStay();
+    navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
+  }
+
+  function dragSession(event, projectPath, sessionSlug) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-aiws-session", JSON.stringify({ projectPath, sessionSlug }));
+  }
+
+  async function dropOnProject(event, projectPath) {
+    const raw = event.dataTransfer.getData("application/x-aiws-session");
+    if (!raw) return;
+    event.preventDefault();
+    const source = JSON.parse(raw);
+    if (source.projectPath === projectPath) return;
+    await moveSession(source.projectPath, source.sessionSlug, projectPath);
+  }
 
   return (
     <aside className="sidebar">
@@ -259,11 +453,35 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>
-      <input id="workspace-search" className="search-box" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workspace" />
+      <div className="search-row">
+        <input id="workspace-search" className="search-box" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="대화 제목 검색" />
+        {query && <button type="button" onClick={() => setQuery("")} aria-label="검색어 지우기">×</button>}
+      </div>
       <nav className="project-tree" aria-label="Workspace">
         {!workspace && <div className="empty-card">Loading workspace...</div>}
-        <ChatSection title="오늘" sessions={todayChats} activePath={activePath} navigate={navigate} />
-        <ChatSection title="최근 대화" sessions={recentChats} activePath={activePath} navigate={navigate} />
+        {!hasSearchResults && <div className="empty-card compact-empty">검색 결과가 없습니다.</div>}
+        <ChatSection
+          title={needle ? "검색 결과 - 오늘" : "오늘"}
+          sessions={todayChats}
+          activePath={activePath}
+          navigate={navigate}
+          query={query}
+          projects={ownedProjects}
+          onRefresh={refreshAndStay}
+          onDragSession={dragSession}
+          onMoveSession={moveSession}
+        />
+        <ChatSection
+          title={needle ? "검색 결과 - 최근" : "최근 대화"}
+          sessions={recentChats}
+          activePath={activePath}
+          navigate={navigate}
+          query={query}
+          projects={ownedProjects}
+          onRefresh={refreshAndStay}
+          onDragSession={dragSession}
+          onMoveSession={moveSession}
+        />
         {workspace && privateProjects.length > 0 && <div className="tree-heading"><span>프로젝트</span></div>}
         {workspace && projects.length === 0 && (
           <div className="empty-card">
@@ -272,12 +490,40 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
           </div>
         )}
         {filtered.filter((project) => project.visibility !== "public").map((project) => (
-          <ProjectNode key={project.path} project={project} activePath={activePath} navigate={navigate} />
+          <ProjectNode
+            key={project.path}
+            project={project}
+            activePath={activePath}
+            navigate={navigate}
+            projects={ownedProjects}
+            onRefresh={refreshAndStay}
+            onDragSession={dragSession}
+            onMoveSession={moveSession}
+            onDropOnProject={dropOnProject}
+          />
         ))}
         {sharedProjects.length > 0 && <div className="tree-heading"><span>가족 공유</span></div>}
         {sharedProjects.map((project) => (
-          <ProjectNode key={project.path} project={project} activePath={activePath} navigate={navigate} />
+          <ProjectNode
+            key={project.path}
+            project={project}
+            activePath={activePath}
+            navigate={navigate}
+            projects={ownedProjects}
+            onRefresh={refreshAndStay}
+            onDragSession={dragSession}
+            onMoveSession={moveSession}
+            onDropOnProject={dropOnProject}
+          />
         ))}
+        {account?.admin && automations.length > 0 && (
+          <section className="tree-section local-jobs-section">
+            <h2><span>로컬 작업실</span></h2>
+            {automations.map((project) => (
+              <LocalJobItem key={project.slug} project={project} onAutomations={onAutomations} />
+            ))}
+          </section>
+        )}
         <div className="tree-heading archive-heading"><span>보관함</span></div>
       </nav>
       {settingsOpen && <SettingsModal account={account} onClose={() => setSettingsOpen(false)} onSaved={onRefresh} />}
@@ -286,23 +532,84 @@ function Sidebar({ workspace, activePath, navigate, onRefresh }) {
   );
 }
 
-function ChatSection({ title, sessions, activePath, navigate }) {
+function LocalJobItem({ project, onAutomations }) {
+  const [running, setRunning] = useState(false);
+  const latest = project.latest_run;
+  async function run() {
+    if (running) return;
+    setRunning(true);
+    try {
+      const payload = await fetchJson(`/api/automations/${project.slug}/run`, { method: "POST", body: new URLSearchParams() });
+      onAutomations?.(payload.projects || []);
+    } finally {
+      setRunning(false);
+    }
+  }
+  return (
+    <div className="local-job-row">
+      <div>
+        <strong>{project.title}</strong>
+        <small>{latest ? `${latest.status} · ${formatDate(latest.created_at)}` : "아직 실행 전"}</small>
+      </div>
+      <button type="button" onClick={run} disabled={running}>{running ? "..." : "실행"}</button>
+    </div>
+  );
+}
+
+function ownerProjects(projects, account) {
+  const username = account?.username || "local";
+  return (projects || []).filter((project) => !project.hidden && (project.owner ? project.owner === username : username === "local"));
+}
+
+function ChatSection({ title, sessions, activePath, navigate, query = "", projects, onRefresh, onDragSession, onMoveSession }) {
   if (!sessions.length) return null;
   return (
     <section className="tree-section compact-section">
       <h2><span>{title}</span></h2>
       {sessions.map((session) => (
-        <button
+        <div
           key={`${session.projectPath}/${session.slug}`}
-          type="button"
-          className={`session-slip general ${session.projectPath === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
-          onClick={() => navigate(`/chat/${session.projectPath}/${session.slug}`)}
+          className="tree-item-row"
+          draggable
+          onDragStart={(event) => onDragSession(event, session.projectPath, session.slug)}
         >
-          <span>{session.title}</span>
-          <small>{session.created_at?.slice(0, 10) || "chat"}</small>
-        </button>
+          <button
+            type="button"
+            className={`session-slip general ${session.projectPath === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
+            onClick={() => navigate(`/chat/${session.projectPath}/${session.slug}`)}
+          >
+            <span>{highlightText(session.title, query)}</span>
+            <small>{session.created_at?.slice(0, 10) || "chat"}</small>
+          </button>
+          <ItemOptions
+            kind="session"
+            projectPath={session.projectPath}
+            sessionSlug={session.slug}
+            title={session.title}
+            isGeneral
+            projects={projects}
+            navigate={navigate}
+            onRefresh={onRefresh}
+            onMoveSession={onMoveSession}
+          />
+        </div>
       ))}
     </section>
+  );
+}
+
+function highlightText(value, query) {
+  const text = String(value || "");
+  const needle = query.trim();
+  if (!needle) return text;
+  const index = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (index === -1) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <mark>{text.slice(index, index + needle.length)}</mark>
+      {text.slice(index + needle.length)}
+    </>
   );
 }
 
@@ -310,31 +617,161 @@ function initials(value) {
   return String(value || "A").trim().slice(0, 1).toUpperCase();
 }
 
-function ProjectNode({ project, activePath, navigate }) {
+function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDragSession, onMoveSession, onDropOnProject }) {
+  const owned = projects.some((item) => item.path === project.path);
   return (
     <div className={`project-node level-${project.level}`}>
-      <button
-        type="button"
-        className={`folder-card ${project.path === activePath.projectPath ? "active" : ""}`}
-        onClick={() => navigate(project.firstSessionUrl || `/project/${project.path}`)}
+      <div
+        className="tree-item-row project-row"
+        onDragOver={(event) => owned && event.preventDefault()}
+        onDrop={(event) => owned && onDropOnProject(event, project.path)}
       >
-        <span>{project.title}</span>
-        <small>{project.owner_display || project.owner || "Kwanho Kim"} · {project.created_at?.slice(0, 10) || "local"}</small>
-      </button>
+        <button
+          type="button"
+          className={`folder-card ${project.path === activePath.projectPath ? "active" : ""}`}
+          onClick={() => navigate(project.firstSessionUrl || `/project/${project.path}`)}
+        >
+          <span>{project.title}</span>
+          <small>{project.owner_display || project.owner || "Kwanho Kim"} · {project.created_at?.slice(0, 10) || "local"}</small>
+        </button>
+        {owned && <ItemOptions kind="project" projectPath={project.path} title={project.title} navigate={navigate} onRefresh={onRefresh} />}
+      </div>
       <div className="session-list">
         {project.sessions.map((session) => (
-          <button
+          <div
             key={session.slug}
-            type="button"
-            className={`session-slip ${project.path === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
-            onClick={() => navigate(`/chat/${project.path}/${session.slug}`)}
+            className="tree-item-row"
+            draggable
+            onDragStart={(event) => onDragSession(event, project.path, session.slug)}
           >
-            <span>{session.title}</span>
-            <small>{session.created_at?.slice(0, 10) || "session"}</small>
-          </button>
+            <button
+              type="button"
+              className={`session-slip ${project.path === activePath.projectPath && session.slug === activePath.sessionSlug ? "active" : ""}`}
+              onClick={() => navigate(`/chat/${project.path}/${session.slug}`)}
+            >
+              <span>{session.title}</span>
+              <small>{session.created_at?.slice(0, 10) || "session"}</small>
+            </button>
+            {owned && (
+              <ItemOptions
+                kind="session"
+                projectPath={project.path}
+                sessionSlug={session.slug}
+                title={session.title}
+                projects={projects}
+                navigate={navigate}
+                onRefresh={onRefresh}
+                onMoveSession={onMoveSession}
+              />
+            )}
+          </div>
         ))}
       </div>
     </div>
+  );
+}
+
+function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false, projects = [], navigate, onRefresh, onMoveSession }) {
+  const [open, setOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(title || "");
+  const menuRef = useRef(null);
+  const targetProjects = projects.filter((project) => project.path !== projectPath);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function close(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false);
+    }
+    function key(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  async function rename() {
+    const next = draftTitle.trim();
+    if (!next) return;
+    if (kind === "project") {
+      await fetchJson(`/api/project-title/${projectPath}`, { method: "POST", body: new URLSearchParams({ title: next }) });
+    } else {
+      await fetchJson(`/api/session-title/${projectPath}/${sessionSlug}`, { method: "POST", body: new URLSearchParams({ title: next }) });
+    }
+    setRenaming(false);
+    setOpen(false);
+    await onRefresh?.();
+  }
+
+  async function remove() {
+    setOpen(false);
+    if (!globalThis.confirm(kind === "project" ? "이 프로젝트를 삭제할까요?" : "이 대화를 삭제할까요?")) return;
+    if (kind === "project") {
+      await fetchJson(`/api/delete-project/${projectPath}`, { method: "POST", body: new URLSearchParams() });
+    } else {
+      await fetchJson(`/api/delete-session/${projectPath}/${sessionSlug}`, { method: "POST", body: new URLSearchParams() });
+    }
+    await onRefresh?.();
+    navigate("/");
+  }
+
+  async function moveToProject(target) {
+    setOpen(false);
+    if (!target) return;
+    await onMoveSession?.(projectPath, sessionSlug, target);
+  }
+
+  async function moveOut() {
+    setOpen(false);
+    const payload = await fetchJson(`/api/move-chat-out/${projectPath}/${sessionSlug}`, { method: "POST", body: new URLSearchParams() });
+    await onRefresh?.();
+    navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
+  }
+
+  return (
+    <span className="item-options" ref={menuRef}>
+      <button className="item-options-button" type="button" onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }} aria-label="옵션" aria-expanded={open}>
+        <span />
+        <span />
+        <span />
+      </button>
+      {open && (
+        <span className="item-menu" role="menu">
+          {renaming ? (
+            <form className="mini-menu-form" onSubmit={(event) => { event.preventDefault(); rename(); }}>
+              <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} autoFocus aria-label={kind === "project" ? "프로젝트 이름" : "대화 제목"} />
+              <div>
+                <button type="submit">저장</button>
+                <button type="button" onClick={() => { setDraftTitle(title || ""); setRenaming(false); }}>취소</button>
+              </div>
+            </form>
+          ) : moving ? (
+            <div className="move-menu">
+              <strong>옮길 프로젝트</strong>
+              {targetProjects.map((project) => (
+                <button key={project.path} type="button" onClick={() => moveToProject(project.path)}>
+                  <span>{project.title}</span>
+                  <small>{project.owner_display || project.owner || project.path}</small>
+                </button>
+              ))}
+              <button type="button" onClick={() => setMoving(false)}>취소</button>
+            </div>
+          ) : (
+            <>
+              <button type="button" onClick={() => setRenaming(true)}>이름 변경</button>
+              {kind === "session" && targetProjects.length > 0 && <button type="button" onClick={() => setMoving(true)}>프로젝트로 이동</button>}
+              {kind === "session" && !isGeneral && <button type="button" onClick={moveOut}>밖으로 빼기</button>}
+              <button type="button" className="danger-option" onClick={remove}>삭제</button>
+            </>
+          )}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -389,7 +826,7 @@ function NewProjectModal({ onClose, onCreated }) {
     }
   }
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    createPortal(<div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal project-modal" onClick={(event) => event.stopPropagation()}>
         <header>
           <h2>새 프로젝트</h2>
@@ -412,7 +849,7 @@ function NewProjectModal({ onClose, onCreated }) {
           <button className="primary-button" type="submit" disabled={!canSubmit}>프로젝트 만들기</button>
         </form>
       </section>
-    </div>
+    </div>, document.body)
   );
 }
 
@@ -438,7 +875,7 @@ function NewSessionForm({ projectPath, onCreated }) {
   );
 }
 
-function CenterPane({ chat, activePath, account, onAsk, onPreview, error, navigate, refreshWorkspace }) {
+function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext }) {
   const power = isPowerMode(account);
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
@@ -458,18 +895,77 @@ function CenterPane({ chat, activePath, account, onAsk, onPreview, error, naviga
       <div className="chat-header">
         <div>
           <p className="breadcrumb">{chat?.project?.hidden ? "Chats" : "Workspace"} / {chat?.project?.title || activePath.projectPath}</p>
-          <h1>{chat?.session?.title || activePath.sessionSlug}</h1>
+          <EditableTitle chat={chat} activePath={activePath} onAsk={onAsk} refreshWorkspace={refreshWorkspace} />
         </div>
         <div className="context-chips">
           <span>{chat?.project?.hidden ? "개인 대화" : "프로젝트 기억"}</span>
           <span>{(chat?.attachments || []).length} files</span>
           {chat?.goal?.objective && <span>Goal set</span>}
           <span>{power ? `${chat?.latest?.provider || "ollama"} · ${modelLabel(chat?.latest?.model || DEFAULT_MODEL)}` : providerFriendlyLabel(chat?.latest?.provider || "ollama")}</span>
+          <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? "닫기" : "파일/기억 보기"}</button>
         </div>
       </div>
       <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} />
       <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} />
     </section>
+  );
+}
+
+function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(chat?.session?.title || activePath.sessionSlug);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setTitle(chat?.session?.title || activePath.sessionSlug), [chat?.session?.title, activePath.sessionSlug]);
+
+  async function submit(event) {
+    event.preventDefault();
+    const clean = title.trim();
+    if (!clean) return;
+    setError("");
+    try {
+      const payload = await fetchJson(`/api/session-title/${activePath.projectPath}/${activePath.sessionSlug}`, {
+        method: "POST",
+        body: new URLSearchParams({ title: clean }),
+      });
+      onAsk((current) => ({ ...(current || {}), session: payload.session }));
+      refreshWorkspace?.();
+      setEditing(false);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1800);
+    } catch (err) {
+      setError(err.message || "제목을 바꿀 수 없습니다.");
+    }
+  }
+
+  if (editing) {
+    return (
+      <form className="title-edit-form" onSubmit={submit}>
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setTitle(chat?.session?.title || activePath.sessionSlug);
+              setEditing(false);
+            }
+          }}
+          autoFocus
+          aria-label="채팅 제목"
+        />
+        <button type="submit">저장</button>
+        <button type="button" onClick={() => setEditing(false)}>취소</button>
+        {error && <small>{error}</small>}
+      </form>
+    );
+  }
+  return (
+    <h1 className="editable-title">
+      <span>{chat?.session?.title || activePath.sessionSlug}</span>
+      <button type="button" onClick={() => setEditing(true)} aria-label="채팅 제목 변경">✎</button>
+      {saved && <small className="title-toast">대화 제목을 변경했습니다.</small>}
+    </h1>
   );
 }
 
@@ -482,7 +978,10 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   const [dragging, setDragging] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [cloudPrompt, setCloudPrompt] = useState(false);
   const inputRef = useRef(null);
+  const formRef = useRef(null);
   const power = isPowerMode(account);
   const selectedMode = modelMode(mode);
 
@@ -520,6 +1019,10 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   async function submit(event) {
     event.preventDefault();
     if (starting || (!content.trim() && !file)) return;
+    if (selectedMode.cloud && !cloudConfirmed(mode)) {
+      setCloudPrompt(true);
+      return;
+    }
     setStarting(true);
     setStartError("");
     try {
@@ -584,6 +1087,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
           {projectPath ? "첫 메시지를 보내면 이 프로젝트 안에 새 대화가 저장됩니다." : "대화, 파일, 프로젝트 기억을 내 Mac 안에서 이어가는 개인 AI 비서입니다."}
         </p>
         <form
+          ref={formRef}
           className={`start-composer ${dragging ? "dragging" : ""}`}
           onSubmit={submit}
           onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
@@ -619,20 +1123,37 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
                 accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp"
               />
             </label>
-            {power && (
-              <>
-                <select value={mode} onChange={(event) => setMode(event.target.value)} aria-label="Model mode">
-                  {MODEL_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-                <select value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
-                  {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-                <ModePrice mode={selectedMode} />
-              </>
-            )}
-            {!power && <span className="composer-scope">빠른 로컬 AI로 시작합니다</span>}
+            <ModelPickerButton
+              open={pickerOpen}
+              setOpen={setPickerOpen}
+              selectedKey={mode}
+              onSelect={setMode}
+              content={content}
+              hasFile={Boolean(file)}
+              power={power}
+            />
+            <select className="search-select" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
+              {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
             <button className="send-key" type="submit" disabled={starting}>{starting ? <span className="typing" /> : "Send"}</button>
           </div>
+          {cloudPrompt && (
+            <CloudConfirm
+              mode={selectedMode}
+              hasFile={Boolean(file)}
+              onCancel={() => setCloudPrompt(false)}
+              onUseOnce={() => {
+                confirmCloudOnce(mode);
+                setCloudPrompt(false);
+                formRef.current?.requestSubmit();
+              }}
+              onUseAlways={() => {
+                confirmCloudAlways(mode);
+                setCloudPrompt(false);
+                formRef.current?.requestSubmit();
+              }}
+            />
+          )}
         </form>
         {starting && <WaitingNotice label="Assistant is preparing your answer" />}
         <div className="quick-actions">
@@ -707,6 +1228,12 @@ function formatMessageTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
 function accountDisplayName(account) {
@@ -810,8 +1337,11 @@ function Composer({ activePath, onAsk, account, power }) {
   const [previewUrl, setPreviewUrl] = useState("");
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [cloudPrompt, setCloudPrompt] = useState(false);
   const inputRef = useRef(null);
   const textRef = useRef(null);
+  const formRef = useRef(null);
   const selectedMode = modelMode(mode);
 
   useEffect(() => {
@@ -839,7 +1369,7 @@ function Composer({ activePath, onAsk, account, power }) {
   useEffect(() => {
     if (!textRef.current) return;
     textRef.current.style.height = "auto";
-    textRef.current.style.height = `${Math.min(textRef.current.scrollHeight, 220)}px`;
+    textRef.current.style.height = `${Math.min(textRef.current.scrollHeight, 120)}px`;
   }, [content]);
 
   function clearFile() {
@@ -858,6 +1388,10 @@ function Composer({ activePath, onAsk, account, power }) {
   async function submit(event) {
     event.preventDefault();
     if (sending || (!content.trim() && !file)) return;
+    if (selectedMode.cloud && !cloudConfirmed(mode)) {
+      setCloudPrompt(true);
+      return;
+    }
     const form = new FormData();
     form.set("content", content);
     form.set("provider", selectedMode.provider);
@@ -912,6 +1446,7 @@ function Composer({ activePath, onAsk, account, power }) {
 
   return (
     <form
+      ref={formRef}
       className={`composer ${dragging ? "dragging" : ""}`}
       data-api-action={`/api/ask/${activePath.projectPath}/${activePath.sessionSlug}`}
       encType="multipart/form-data"
@@ -950,30 +1485,152 @@ function Composer({ activePath, onAsk, account, power }) {
             accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp"
           />
         </label>
-        <span className="composer-scope">{file ? "이번 대화에만 사용" : "필요하면 파일을 추가하세요"}</span>
+        <ModelPickerButton
+          open={pickerOpen}
+          setOpen={setPickerOpen}
+          selectedKey={mode}
+          onSelect={setMode}
+          content={content}
+          hasFile={Boolean(file)}
+          power={power}
+        />
+        <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
+          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
         <button className="send-key" type="submit" disabled={sending}>{sending ? <span className="typing" /> : "Send"}</button>
       </div>
+      {cloudPrompt && (
+        <CloudConfirm
+          mode={selectedMode}
+          hasFile={Boolean(file)}
+          onCancel={() => setCloudPrompt(false)}
+          onUseOnce={() => {
+            confirmCloudOnce(mode);
+            setCloudPrompt(false);
+            formRef.current?.requestSubmit();
+          }}
+          onUseAlways={() => {
+            confirmCloudAlways(mode);
+            setCloudPrompt(false);
+            formRef.current?.requestSubmit();
+          }}
+        />
+      )}
       {power && (
-        <div className="advanced-controls">
-          <label><span>Mode</span><select name="model_mode" value={mode} onChange={(event) => setMode(event.target.value)}>
-            {MODEL_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select></label>
-          <label><span>Selected</span><ModePrice mode={selectedMode} field /></label>
-          <label><span>Search</span><select name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)}>
-            {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select></label>
+        <div className="advanced-controls always-open">
+          <ModePrice mode={selectedMode} field power />
         </div>
       )}
     </form>
   );
 }
 
-function ModePrice({ mode, field = false }) {
+function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasFile, power }) {
+  const mode = modelMode(selectedKey);
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    function onKey(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    function onPointer(event) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open, setOpen]);
+  return (
+    <div className="model-picker-wrap" ref={wrapRef}>
+      <button className="model-select-button" type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <strong>{mode.label}</strong>
+        <span>{compactModelCost(mode)}</span>
+      </button>
+      {open && (
+        <div className="model-picker" role="dialog" aria-label="AI model picker">
+          <header>
+            <strong>AI 모델 선택</strong>
+            <button type="button" onClick={() => setOpen(false)}>닫기</button>
+          </header>
+          <div className="model-grid">
+            {MODEL_MODES.map((item) => {
+              const selected = item.value === selectedKey;
+              const estimate = estimateCurrentCost(item, content, hasFile);
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  className={`model-card ${selected ? "selected" : ""} ${item.cloud ? "cloud" : "local"}`}
+                  onClick={() => {
+                    onSelect(item.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="model-card-title">{item.label}</span>
+                  <span className="model-card-privacy">{item.cloud ? "클라우드 AI" : "내 Mac에서 처리"}</span>
+                  <span>{item.bestFor}</span>
+                  <span className="model-card-price">{power && item.cloud ? `입력 ~$${item.inputPrice.toFixed(2)} / 1M · 출력 ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
+                  <span className="model-card-estimate">이번 요청 예상 비용: {estimate}</span>
+                  {power && <code>{item.provider} · {item.model}</code>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CloudConfirm({ mode, hasFile, onUseOnce, onUseAlways, onCancel }) {
+  return (
+    <div className="cloud-confirm" role="alert">
+      <strong>{mode.label}는 클라우드 AI입니다.</strong>
+      <p>선택한 대화 내용{hasFile ? "과 첨부파일 내용" : ""}이 외부 API로 전송될 수 있습니다. 예상 비용: {estimateCurrentCost(mode, "", hasFile)}</p>
+      <div>
+        <button type="button" onClick={onUseOnce}>이번만 사용</button>
+        <button type="button" onClick={onUseAlways}>이 모델 계속 사용</button>
+        <button type="button" onClick={onCancel}>취소</button>
+      </div>
+    </div>
+  );
+}
+
+function cloudConfirmed(key) {
+  return getCookie(`aiws_cloud_ok_${key}`) === "1" || sessionStorage.getItem(`aiws_cloud_once_${key}`) === "1";
+}
+
+function confirmCloudOnce(key) {
+  sessionStorage.setItem(`aiws_cloud_once_${key}`, "1");
+}
+
+function confirmCloudAlways(key) {
+  setCookie(`aiws_cloud_ok_${key}`, "1");
+}
+
+function compactModelCost(mode) {
+  if (!mode.cloud) return "무료 · 내 Mac";
+  return mode.easyPrice || "비용 있음";
+}
+
+function estimateCurrentCost(mode, content, hasFile) {
+  if (!mode.cloud) return "$0";
+  const inputTokens = Math.max(120, Math.ceil(String(content || "").length / 3) + (hasFile ? 3000 : 0));
+  const outputTokens = 1024;
+  const estimated = (inputTokens / 1_000_000) * mode.inputPrice + (outputTokens / 1_000_000) * mode.outputPrice;
+  return `~$${estimated.toFixed(5)}`;
+}
+
+function ModePrice({ mode, field = false, power = false }) {
   return (
     <div className={`mode-detail mode-price ${field ? "field-like" : ""}`}>
       <strong>{mode.label}</strong>
       <span>{mode.provider} · {mode.model}</span>
       <small>{mode.cost}</small>
+      {power && <small>{mode.privacy} · {mode.bestFor}</small>}
     </div>
   );
 }
@@ -998,25 +1655,30 @@ function isPowerMode(account) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-function ContextPanel({ chat, activePath, runtime, onPreview, onChat, account }) {
+function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], onAutomations, onPreview, onChat, account }) {
   const power = isPowerMode(account);
+  const tabs = power ? ["files", "memory", "goal", "debug"] : ["files", "memory", "goal"];
+  const [tab, setTab] = useState("files");
+  const currentTab = tabs.includes(tab) ? tab : "files";
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
       <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
-        <h2>Context</h2>
+        <h2>{power ? "Context / Workbench" : "파일과 기억"}</h2>
         <section>
           <h3>현재 대화 목적</h3>
           <p className="muted">대화를 시작하면 이 비서가 참고하는 파일, 기억, 목표가 여기에 정리됩니다.</p>
         </section>
         {power && <RuntimePanel runtime={runtime} />}
+        {power && <OpenClawPanel openclaw={openclaw} />}
+        {power && <AutomationPanel projects={automations} onAutomations={onAutomations} />}
       </aside>
     );
   }
   const attachments = collectVisibleAttachments(chat);
   return (
     <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
-      <h2>{power ? "Context / Workbench" : "Context"}</h2>
-      <section>
+      <h2>{power ? "Context / Workbench" : "파일과 기억"}</h2>
+      <section className="context-summary">
         <h3>현재 대화 목적</h3>
         <p><strong>{chat?.project?.hidden ? "General chat" : chat?.project?.title || activePath.projectPath}</strong></p>
         {power && <p className="muted">{activePath.projectPath} / {activePath.sessionSlug}</p>}
@@ -1024,27 +1686,96 @@ function ContextPanel({ chat, activePath, runtime, onPreview, onChat, account })
           {(chat?.skills || []).map((skill) => <span key={skill}>{skill}</span>)}
         </div>
       </section>
-      <section>
-        <h3>사용 중인 파일</h3>
-        {attachments.length === 0 ? <p className="muted">아직 이 대화에 사용 중인 파일이 없습니다.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
-      </section>
-      <section>
-        <h3>다음 행동</h3>
-        <GoalPanel chat={chat} activePath={activePath} onChat={onChat} />
-      </section>
-      <section>
-        <h3>기억된 정보</h3>
-        <p className="muted">프로필 기억과 프로젝트 노트는 답변 컨텍스트에 함께 사용됩니다.</p>
-      </section>
-      {power && (
+      <div className="context-tabs" role="tablist">
+        {tabs.map((item) => (
+          <button key={item} type="button" className={currentTab === item ? "active" : ""} onClick={() => setTab(item)}>
+            {{ files: "Files", memory: "Memory", goal: "Goal", debug: "Debug" }[item]}
+          </button>
+        ))}
+      </div>
+      {currentTab === "files" && (
+        <section>
+          <h3>사용 중인 파일</h3>
+          {attachments.length === 0 ? <p className="muted">아직 이 대화에 사용 중인 파일이 없습니다.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
+        </section>
+      )}
+      {currentTab === "goal" && (
+        <section>
+          <h3>다음에 할 일</h3>
+          <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
+        </section>
+      )}
+      {currentTab === "memory" && (
+        <section>
+          <h3>기억된 정보</h3>
+          <p className="muted">프로필 기억과 프로젝트 노트는 답변 컨텍스트에 함께 사용됩니다.</p>
+        </section>
+      )}
+      {power && currentTab === "debug" && (
         <section>
           <h3>개발자 도구</h3>
           <RuntimePanel runtime={runtime} />
+          <OpenClawPanel openclaw={openclaw} />
+          <AutomationPanel projects={automations} onAutomations={onAutomations} />
           <a href={`/prompt/${activePath.projectPath}/${activePath.sessionSlug}`}>Open prompt context</a>
           <code>aiws prompt {activePath.projectPath} {activePath.sessionSlug} --root ~/.ai-workspace</code>
         </section>
       )}
     </aside>
+  );
+}
+
+function OpenClawPanel({ openclaw }) {
+  const gateway = openclaw?.gateway?.summary || {};
+  const sessionCount = openclaw?.sessions?.count ?? openclaw?.sessions?.totalCount ?? 0;
+  return (
+    <div className="runtime-card openclaw-card">
+      <strong>OpenClaw</strong>
+      <p>{openclaw?.installed ? openclaw.version || "installed" : "not installed"}</p>
+      <p>gateway: {gateway.connectivity_probe || gateway.runtime || "unknown"}</p>
+      <p>sessions: {sessionCount}</p>
+      {gateway.dashboard && <a href={gateway.dashboard} target="_blank" rel="noreferrer">{gateway.dashboard}</a>}
+      <code>openclaw gateway status</code>
+    </div>
+  );
+}
+
+function AutomationPanel({ projects = [], onAutomations }) {
+  const [running, setRunning] = useState("");
+  const [error, setError] = useState("");
+
+  async function run(slug) {
+    setRunning(slug);
+    setError("");
+    try {
+      const payload = await fetchJson(`/api/automations/${slug}/run`, { method: "POST", body: new FormData() });
+      onAutomations?.(payload.projects || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRunning("");
+    }
+  }
+
+  return (
+    <div className="runtime-card automation-card">
+      <strong>Automation Projects</strong>
+      <p>반복 가능한 UI 진단과 로컬 작업 실행 기록입니다.</p>
+      {projects.length === 0 && <p className="muted">등록된 자동화 프로젝트가 없습니다.</p>}
+      {projects.map((project) => (
+        <div className="automation-run" key={project.slug}>
+          <div>
+            <b>{project.title}</b>
+            <span>{project.kind}</span>
+            {project.latest_run && <small>latest: {project.latest_run.status} · {formatDate(project.latest_run.created_at)}</small>}
+          </div>
+          <button type="button" onClick={() => run(project.slug)} disabled={running === project.slug}>
+            {running === project.slug ? "Running..." : "Run now"}
+          </button>
+        </div>
+      ))}
+      {error && <small className="error-text">{error}</small>}
+    </div>
   );
 }
 
@@ -1063,7 +1794,7 @@ function collectVisibleAttachments(chat) {
   return items;
 }
 
-function GoalPanel({ chat, activePath, onChat }) {
+function GoalPanel({ chat, activePath, onChat, power = false }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const goal = chat?.goal || {};
@@ -1121,11 +1852,11 @@ function GoalPanel({ chat, activePath, onChat }) {
       {(goal.next_actions || []).length > 0 && <ul>{goal.next_actions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>}
       <div className="goal-actions">
         <button type="button" data-edit-goal onClick={() => setEditing(true)}>{goal.objective ? "목표 수정" : "목표 설정"}</button>
-        <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy full project prompt</button>
-        <button type="button" onClick={() => copyVariant("task")} disabled={!codexPrompt}>Copy task prompt</button>
-        <button type="button" onClick={() => copyVariant("ui")} disabled={!codexPrompt}>Copy UI refinement prompt</button>
-        <button type="button" onClick={() => copyVariant("bugfix")} disabled={!codexPrompt}>Copy bugfix prompt</button>
-        <button type="button" onClick={() => copyVariant("test")} disabled={!codexPrompt}>Copy test prompt</button>
+        {power && <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy full project prompt</button>}
+        {power && <button type="button" onClick={() => copyVariant("task")} disabled={!codexPrompt}>Copy task prompt</button>}
+        {power && <button type="button" onClick={() => copyVariant("ui")} disabled={!codexPrompt}>Copy UI refinement prompt</button>}
+        {power && <button type="button" onClick={() => copyVariant("bugfix")} disabled={!codexPrompt}>Copy bugfix prompt</button>}
+        {power && <button type="button" onClick={() => copyVariant("test")} disabled={!codexPrompt}>Copy test prompt</button>}
       </div>
     </div>
   );
@@ -1184,11 +1915,14 @@ function SettingsModal({ account, onClose, onSaved }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    createPortal(<div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
         <header>
           <h2>내 비서 설정</h2>
-          <button type="button" onClick={onClose}>닫기</button>
+          <div className="settings-header-actions">
+            <button className="danger-button compact" type="button" onClick={logout}>Logout</button>
+            <button type="button" onClick={onClose}>닫기</button>
+          </div>
         </header>
         <form onSubmit={submit}>
           <fieldset>
@@ -1210,9 +1944,8 @@ function SettingsModal({ account, onClose, onSaved }) {
           </fieldset>
           <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button>
         </form>
-        <button className="danger-button" type="button" onClick={logout}>Logout</button>
       </section>
-    </div>
+    </div>, document.body)
   );
 }
 
