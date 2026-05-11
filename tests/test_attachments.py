@@ -15,6 +15,8 @@ def test_text_attachment_is_saved_and_extracted(tmp_path):
 
     assert result["filename"] == "notes.txt"
     assert result["text"] == "hello world"
+    assert result["text_available"] is True
+    assert result["extraction_status"] == "success"
     assert attachments.list_attachments(root, "ai-system", "attachments")[0]["size"] == 11
 
 
@@ -36,7 +38,25 @@ def test_markdown_pdf_and_image_validation(tmp_path):
     assert md["text"] == "# Hello"
     assert "Hello PDF" in pdf["text"]
     assert image["text"] == "Image attachment: photo.png"
+    assert pdf["extraction_status"] == "success"
+    assert image["extraction_status"] == "stored"
+    assert image["text_available"] is False
     assert attachments.is_image_extension(".png") is True
+
+
+def test_pdf_without_extractable_text_is_kept_with_failed_status(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+
+    result = attachments.save_attachment(root, "ai-system", "attachments", "scan.pdf", b"%PDF-1.7\nstream image only")
+
+    assert result["filename"] == "scan.pdf"
+    assert result["text"] == ""
+    assert result["delivery"] == "stored_only"
+    assert result["text_available"] is False
+    assert result["extraction_status"] == "failed"
+    assert "PDF text extraction failed" in result["extraction_error"]
 
 
 def test_docx_attachment_extracts_document_text(tmp_path):

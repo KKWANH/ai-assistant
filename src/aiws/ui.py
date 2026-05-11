@@ -2007,6 +2007,8 @@ def attachment_content_type(extension: str) -> str:
 def attachment_view(project_path: str, session_slug: str, metadata: dict[str, object]) -> dict[str, object]:
     content_type = str(metadata.get("content_type", ""))
     filename = str(metadata.get("filename", "attachment"))
+    extraction_status = str(metadata.get("extraction_status", "stored"))
+    extraction_error = str(metadata.get("extraction_error", ""))
     delivery = {
         "vision": "Sent as vision input",
         "text_context": "Sent as text context",
@@ -2020,6 +2022,9 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "is_image": content_type in {"png", "jpg", "jpeg", "gif", "webp"},
         "is_pdf": content_type == "pdf",
         "delivery": delivery,
+        "text_available": bool(metadata.get("text_available", False)),
+        "extraction_status": extraction_status,
+        "extraction_error": extraction_error,
     }
 
 
@@ -2041,6 +2046,9 @@ def message_attachments_data(metadata: object) -> list[dict[str, object]]:
                     "is_image": bool(item.get("is_image")),
                     "is_pdf": bool(item.get("is_pdf")),
                     "delivery": str(item.get("delivery", "Attached to chat")),
+                    "text_available": bool(item.get("text_available", False)),
+                    "extraction_status": str(item.get("extraction_status", "stored")),
+                    "extraction_error": str(item.get("extraction_error", "")),
                 }
             )
     return items

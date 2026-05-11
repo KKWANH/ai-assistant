@@ -71,7 +71,19 @@ openclaw models status --json
 openclaw models auth list
 ```
 
-If OpenClaw needs an OpenAI key, use an interactive terminal flow and confirm the prompt masks input before pasting any real key. If a key is ever echoed to terminal output, rotate that key immediately.
+If OpenClaw needs an OpenAI key, prefer the interactive helper:
+
+```bash
+openclaw models auth add
+```
+
+Other available auth flows can be inspected with:
+
+```bash
+openclaw models auth --help
+```
+
+Use an interactive terminal flow and confirm the prompt masks input before pasting any real key. If a key is ever echoed to terminal output, rotate that key immediately.
 
 Observed requirement:
 

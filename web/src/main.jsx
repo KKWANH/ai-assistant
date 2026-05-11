@@ -549,6 +549,7 @@ function LocalJobItem({ project, onAutomations }) {
     <div className="local-job-row">
       <div>
         <strong>{project.title}</strong>
+        <small>{project.category || project.kind}</small>
         <small>{latest ? `${latest.status} · ${formatDate(latest.created_at)}` : "아직 실행 전"}</small>
       </div>
       <button type="button" onClick={run} disabled={running}>{running ? "..." : "실행"}</button>
@@ -1309,6 +1310,13 @@ function renderInline(text) {
 
 function AttachmentList({ attachments, onPreview }) {
   if (!attachments.length) return null;
+  function statusLabel(item) {
+    if (item.extraction_status === "failed") return "읽기 실패";
+    if (item.extraction_status === "success") return "텍스트 읽음";
+    if (item.delivery === "Sent as vision input") return "이미지로 전달";
+    if (item.delivery === "Sent as text context") return "텍스트로 사용";
+    return item.delivery || "대화에 첨부";
+  }
   return (
     <div className="attachment-list">
       {attachments.map((item) =>
@@ -1316,12 +1324,14 @@ function AttachmentList({ attachments, onPreview }) {
           <button key={item.url} className="attachment-card image" type="button" onClick={() => onPreview(item)}>
             {item.is_image ? <img src={item.url} alt={item.filename} /> : <span className="pdf-thumb" data-pdf-preview>PDF</span>}
             <span>{item.filename}</span>
-            <small>{item.delivery || "Attached to chat"}</small>
+            <small className={item.extraction_status === "failed" ? "status-failed" : ""}>{statusLabel(item)}</small>
+            {item.extraction_status === "failed" && item.extraction_error && <em>{item.extraction_error}</em>}
           </button>
         ) : (
           <a key={item.url} className="attachment-card" href={item.url} target="_blank" rel="noreferrer">
             {item.filename}
-            <small>{item.delivery || "Sent as text context"}</small>
+            <small className={item.extraction_status === "failed" ? "status-failed" : ""}>{statusLabel(item)}</small>
+            {item.extraction_status === "failed" && item.extraction_error && <em>{item.extraction_error}</em>}
           </a>
         )
       )}

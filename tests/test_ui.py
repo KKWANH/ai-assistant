@@ -202,6 +202,9 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
                         "is_image": False,
                         "is_pdf": False,
                         "delivery": "Sent as text context",
+                        "text_available": True,
+                        "extraction_status": "success",
+                        "extraction_error": "",
                     }
                 ]
             },

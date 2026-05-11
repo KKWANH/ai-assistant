@@ -60,10 +60,13 @@ def save_attachment(
     path.mkdir(parents=True, exist_ok=True)
     destination = unique_path(path / safe_name)
     destination.write_bytes(content)
+    extraction_error = ""
     try:
         extracted = extract_text(destination, ext)
-    except Exception:
+    except Exception as exc:
         extracted = ""
+        extraction_error = friendly_extraction_error(ext, exc)
+    extraction_status = extraction_status_for(ext, extracted, extraction_error)
     resolved_delivery = delivery
     if not resolved_delivery:
         if is_image_extension(ext):
@@ -78,6 +81,9 @@ def save_attachment(
         "content_type": ext.lstrip("."),
         "size": len(content),
         "text": extracted,
+        "text_available": bool(extracted.strip()) and not is_image_extension(ext),
+        "extraction_status": extraction_status,
+        "extraction_error": extraction_error or default_extraction_error(ext, extraction_status),
         "delivery": resolved_delivery,
         "created_at": storage.utc_now(),
         "actor": actor,
@@ -126,6 +132,38 @@ def unique_path(path: Path) -> Path:
         if not candidate.exists():
             return candidate
     raise storage.WorkspaceError("Could not allocate attachment filename.")
+
+
+def extraction_status_for(extension: str, extracted: str, extraction_error: str = "") -> str:
+    ext = extension.lower()
+    if is_image_extension(ext):
+        return "stored"
+    if extraction_error:
+        return "failed"
+    if extracted.strip():
+        return "success"
+    if ext in {".txt", ".md", ".pdf", ".docx"}:
+        return "failed"
+    return "stored"
+
+
+def default_extraction_error(extension: str, status: str) -> str:
+    if status != "failed":
+        return ""
+    ext = extension.lower()
+    if ext == ".pdf":
+        return "PDF text extraction failed. The file may be scanned, encrypted, or image-only."
+    if ext == ".docx":
+        return "DOCX text extraction failed. The document may be malformed or unsupported."
+    return "Text extraction failed."
+
+
+def friendly_extraction_error(extension: str, exc: Exception) -> str:
+    base = default_extraction_error(extension, "failed")
+    detail = str(exc).strip()
+    if not detail:
+        return base
+    return f"{base} ({type(exc).__name__}: {detail[:160]})"
 
 
 def extract_text(path: Path, extension: str) -> str:

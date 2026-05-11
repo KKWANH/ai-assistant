@@ -42,8 +42,49 @@ def ensure_default_projects(root: str | Path) -> None:
             kind="openclaw-ui-check",
             slug=DEFAULT_OPENCLAW_SLUG,
             description="OpenClaw-backed self-check project for UI diagnosis and local runtime health.",
+            category="diagnostics",
+            panels=["runs", "browser", "reports"],
+            commands={
+                "self_check": {
+                    "label": "UI self-check",
+                    "description": "Check AIWS runtime, Cloudflare URL, OpenClaw gateway, and recent sessions.",
+                    "permission": "read-only",
+                }
+            },
             interval_minutes=0,
         )
+    else:
+        project = storage.read_json(project_json_path(root, DEFAULT_OPENCLAW_SLUG))
+        changed = apply_defaults(
+            project,
+            category="diagnostics",
+            permissions={
+                "file_read": True,
+                "file_write": "confirm",
+                "shell": "blocked",
+                "network": False,
+            },
+            panels=["runs", "browser", "reports"],
+            commands={
+                "self_check": {
+                    "label": "UI self-check",
+                    "description": "Check AIWS runtime, Cloudflare URL, OpenClaw gateway, and recent sessions.",
+                    "permission": "read-only",
+                }
+            },
+        )
+        if changed:
+            project["updated_at"] = storage.utc_now()
+            storage.write_json(project_json_path(root, DEFAULT_OPENCLAW_SLUG), project)
+
+
+def apply_defaults(project: dict[str, Any], **defaults: Any) -> bool:
+    changed = False
+    for key, value in defaults.items():
+        if key not in project or project[key] is None or project[key] == "" or project[key] == []:
+            project[key] = value
+            changed = True
+    return changed
 
 
 def create_project(
@@ -54,6 +95,10 @@ def create_project(
     slug: str | None = None,
     description: str = "",
     target_url: str = "",
+    category: str = "local-task",
+    panels: list[str] | None = None,
+    commands: dict[str, Any] | None = None,
+    permissions: dict[str, Any] | None = None,
     interval_minutes: int = 0,
 ) -> dict[str, Any]:
     storage.init_workspace(root)
@@ -67,8 +112,18 @@ def create_project(
         "slug": slug_value,
         "title": title.strip() or slug_value,
         "kind": kind,
+        "category": category,
         "description": description,
         "target_url": target_url,
+        "permissions": permissions
+        or {
+            "file_read": True,
+            "file_write": "confirm",
+            "shell": "blocked",
+            "network": False,
+        },
+        "panels": panels or ["runs", "reports"],
+        "commands": commands or {},
         "interval_minutes": max(0, int(interval_minutes or 0)),
         "created_at": storage.utc_now(),
         "updated_at": storage.utc_now(),
@@ -142,6 +197,7 @@ def run_project(root: str | Path, slug: str, *, actor: str | None = None) -> dic
         "project_slug": project["slug"],
         "project_title": project["title"],
         "kind": project["kind"],
+        "category": project.get("category", "local-task"),
         "status": status,
         "actor": actor or "local",
         "created_at": storage.utc_now(),

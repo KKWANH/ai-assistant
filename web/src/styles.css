@@ -1141,6 +1141,20 @@ mark {
   font-size: 12px;
 }
 
+.attachment-card em {
+  display: block;
+  max-width: 180px;
+  margin-top: 4px;
+  color: #f7b2b2;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.attachment-card .status-failed {
+  color: #ffb4b4;
+}
+
 .pdf-thumb {
   display: grid;
   place-items: center;
