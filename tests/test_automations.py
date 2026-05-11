@@ -1,7 +1,7 @@
 from aiws import automations, storage
 
 
-def test_default_openclaw_automation_project_runs(tmp_path, monkeypatch):
+def test_automation_projects_do_not_create_openclaw_default(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     storage.init_workspace(root)
 
@@ -16,16 +16,20 @@ def test_default_openclaw_automation_project_runs(tmp_path, monkeypatch):
         },
     )
 
-    projects = automations.list_projects(root)
-    assert projects[0]["slug"] == automations.DEFAULT_OPENCLAW_SLUG
-    assert projects[0]["category"] == "diagnostics"
-    assert projects[0]["permissions"]["shell"] == "blocked"
-    assert projects[0]["commands"]["self_check"]["permission"] == "read-only"
+    assert automations.list_projects(root) == []
 
-    run = automations.run_project(root, automations.DEFAULT_OPENCLAW_SLUG, actor="kwanho0096")
+    project = automations.create_project(
+        root,
+        title="OpenClaw Status",
+        kind="openclaw_status",
+        slug="openclaw-status",
+        commands={"status": {"kind": "openclaw_status", "permission": "read-only"}},
+    )
+    assert project["slug"] == "openclaw-status"
+
+    run = automations.run_project(root, "openclaw-status", actor="kwanho0096")
 
     assert run["status"] == "completed"
-    assert run["category"] == "diagnostics"
     assert run["actor"] == "kwanho0096"
     assert "OpenClaw installed: yes" in run["observations"]
-    assert automations.latest_run(root, automations.DEFAULT_OPENCLAW_SLUG)["run_id"] == run["run_id"]
+    assert automations.latest_run(root, "openclaw-status")["run_id"] == run["run_id"]

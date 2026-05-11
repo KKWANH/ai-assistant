@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import attachments, automations, costs, openclaw
+from .core import action_registry
 from .i18n import t
 from . import runner
 from . import storage
@@ -72,6 +73,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_openclaw()
         elif path == "/api/automations":
             self.api_automations()
+        elif path.startswith("/api/project-config/"):
+            project_path = unquote(path.removeprefix("/api/project-config/"))
+            self.api_project_config(project_path)
         elif path.startswith("/api/goal/"):
             project_path = unquote(path.removeprefix("/api/goal/"))
             self.api_goal(project_path)
@@ -176,6 +180,63 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_admin()
                 run = automations.run_project(self.root, slug, actor=self.current_username())
                 self.send_json({"run": run, "projects": automations.list_projects(self.root)})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-config/") and parsed.path.endswith("/import"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/project-config/").removesuffix("/import"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                template = data.get("template", "investment-rebalancer")
+                config = action_registry.import_template(self.root, project_path, template)
+                self.send_json({"config": config})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-actions/") and parsed.path.endswith("/preview"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            route = unquote(parsed.path.removeprefix("/api/project-actions/").removesuffix("/preview"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                project_path, command = split_project_action_route(route)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_access(self.root, project_path, self.current_username())
+                preview = action_registry.preview_action(self.root, project_path, command)
+                self.send_json({"preview": preview})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-actions/") and parsed.path.endswith("/run"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            route = unquote(parsed.path.removeprefix("/api/project-actions/").removesuffix("/run"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                project_path, command = split_project_action_route(route)
+                if storage.has_accounts(self.root):
+                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                run = action_registry.run_action(
+                    self.root,
+                    project_path,
+                    command,
+                    actor=self.current_username(),
+                    confirmed=data.get("confirm") in {"1", "true", "yes"},
+                )
+                self.send_json({"run": run, "config": action_registry.load_config(self.root, project_path)})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -757,6 +818,15 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json({"projects": automations.list_projects(self.root)})
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=403)
+
+    def api_project_config(self, project_path: str) -> None:
+        try:
+            if storage.has_accounts(self.root):
+                storage.ensure_project_access(self.root, project_path, self.current_username())
+            config = action_registry.load_config(self.root, project_path)
+            self.send_json({"config": config, "runs": action_registry.latest_runs(self.root, project_path)})
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
 
     def log_internal_error(self, area: str, exc: Exception) -> None:
         log_dir = storage.workspace_path(self.root) / "logs"
@@ -2026,6 +2096,18 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "extraction_status": extraction_status,
         "extraction_error": extraction_error,
     }
+
+
+def split_project_action_route(route: str) -> tuple[str, str]:
+    parts = [part for part in route.split("/") if part]
+    if len(parts) < 2:
+        raise storage.WorkspaceError("Invalid project action route.")
+    command = parts[-1]
+    project_path = "/".join(parts[:-1])
+    storage.parse_project_path(project_path)
+    if not command or not all(ch.isalnum() or ch in "_-" for ch in command):
+        raise storage.WorkspaceError("Project action command must be a slug ID.")
+    return project_path, command
 
 
 def message_attachments_data(metadata: object) -> list[dict[str, object]]:

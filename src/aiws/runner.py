@@ -76,6 +76,7 @@ def ask(
         + search.format_search_context(resolved_results)
         + storage.build_prompt_context(root, project_path, session_slug)
     )
+    write_used_context(root, project_path, session_slug, prompt_context, actor, provider, model, search_mode)
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
     estimated = costs.estimate_cost(provider, model, input_tokens, max_output_tokens)
@@ -123,6 +124,31 @@ def ask(
     storage.record_usage(root, actor, asks=1)
     maybe_update_account_memory(root, actor, stored_content if stored_content is not None else content, project_path, session_slug)
     return response
+
+
+def write_used_context(
+    root: str,
+    project_path: str,
+    session_slug: str,
+    prompt_context: str,
+    actor: str | None,
+    provider: str,
+    model: str,
+    search_mode: str,
+) -> None:
+    path = storage.session_dir(root, project_path, session_slug) / "used_context.json"
+    storage.write_json(
+        path,
+        {
+            "created_at": storage.utc_now(),
+            "actor": storage.slugify(actor) if actor else "local",
+            "provider": provider,
+            "model": model,
+            "search_mode": search_mode,
+            "context_chars": len(prompt_context),
+            "context_preview": prompt_context[:8000],
+        },
+    )
 
 
 def default_model_for_provider(provider: str) -> str:

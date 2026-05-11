@@ -118,6 +118,9 @@ def test_ask_includes_account_context(tmp_path, monkeypatch):
     system = captured["payload"]["messages"][0]["content"]
     assert "## Account Context" in system
     assert "Likes Korean UI." in system
+    used_context = storage.read_json(storage.session_dir(root, "ai-system", "ollama-mvp") / "used_context.json")
+    assert used_context["provider"] == "ollama"
+    assert "Likes Korean UI." in used_context["context_preview"]
 
 
 def test_ask_updates_account_memory_for_future_context(tmp_path, monkeypatch):

@@ -835,6 +835,76 @@ mark {
   background: rgba(255, 255, 255, .055);
 }
 
+.project-actions-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.action-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(143, 192, 255, .16);
+  border-radius: 16px;
+  background: rgba(4, 10, 19, .52);
+}
+
+.action-card strong {
+  display: block;
+  font-weight: 560;
+}
+
+.action-card p {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.action-card button,
+.empty-actions button {
+  border: 1px solid rgba(143, 192, 255, .22);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--text);
+  background: rgba(79, 140, 255, .18);
+}
+
+.action-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-badges span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255,255,255,.06);
+  font-size: 11px;
+}
+
+.run-result {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(94, 226, 160, .22);
+  border-radius: 16px;
+  background: rgba(94, 226, 160, .08);
+}
+
+.run-result pre {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .28);
+  white-space: pre-wrap;
+}
+
 .empty-card, .desk-note, .system-note {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

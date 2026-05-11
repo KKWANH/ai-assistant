@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { AutomationPanel, ProjectActionsPanel } from "./components/actions/ActionPanels.jsx";
 import "./styles.css";
 
 const DEFAULT_MODEL = "qwen3:4b";
@@ -155,6 +156,7 @@ function App() {
   const [runtime, setRuntime] = useState(null);
   const [openclaw, setOpenclaw] = useState(null);
   const [automations, setAutomations] = useState([]);
+  const [projectConfig, setProjectConfig] = useState(null);
   const [activePath, setActivePath] = useState(parseRoute());
   const [lightbox, setLightbox] = useState(null);
   const [error, setError] = useState("");
@@ -189,6 +191,15 @@ function App() {
     setAutomations(payload.projects || []);
   }
 
+  async function refreshProjectConfig(target = activePath) {
+    if (!target.projectPath) {
+      setProjectConfig(null);
+      return;
+    }
+    const payload = await fetchJson(`/api/project-config/${target.projectPath}`);
+    setProjectConfig(payload);
+  }
+
   useEffect(() => {
     if (isLogin) return;
     refreshWorkspace().catch((err) => setError(err.message));
@@ -208,6 +219,7 @@ function App() {
   useEffect(() => {
     if (isLogin) return;
     refreshChat(activePath).catch((err) => setError(err.message));
+    refreshProjectConfig(activePath).catch(() => setProjectConfig(null));
   }, [isLogin, activePath.projectPath, activePath.sessionSlug]);
 
   useEffect(() => {
@@ -288,6 +300,8 @@ function App() {
           runtime={runtime}
           openclaw={openclaw}
           automations={automations}
+          projectConfig={projectConfig}
+          onProjectConfig={setProjectConfig}
           onAutomations={setAutomations}
           onPreview={setLightbox}
           onChat={setChat}
@@ -518,7 +532,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
         ))}
         {account?.admin && automations.length > 0 && (
           <section className="tree-section local-jobs-section">
-            <h2><span>로컬 작업실</span></h2>
+            <h2><span>작업 레시피</span></h2>
             {automations.map((project) => (
               <LocalJobItem key={project.slug} project={project} onAutomations={onAutomations} />
             ))}
@@ -1665,9 +1679,9 @@ function isPowerMode(account) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], onAutomations, onPreview, onChat, account }) {
+function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account }) {
   const power = isPowerMode(account);
-  const tabs = power ? ["files", "memory", "goal", "debug"] : ["files", "memory", "goal"];
+  const tabs = power ? ["files", "commands", "memory", "goal", "debug"] : ["files", "commands", "memory", "goal"];
   const [tab, setTab] = useState("files");
   const currentTab = tabs.includes(tab) ? tab : "files";
   if (!activePath.projectPath || !activePath.sessionSlug) {
@@ -1678,9 +1692,10 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], o
           <h3>현재 대화 목적</h3>
           <p className="muted">대화를 시작하면 이 비서가 참고하는 파일, 기억, 목표가 여기에 정리됩니다.</p>
         </section>
+        <ProjectActionsPanel activePath={activePath} projectConfig={projectConfig} onProjectConfig={onProjectConfig} power={power} fetchJson={fetchJson} />
         {power && <RuntimePanel runtime={runtime} />}
         {power && <OpenClawPanel openclaw={openclaw} />}
-        {power && <AutomationPanel projects={automations} onAutomations={onAutomations} />}
+        {power && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
       </aside>
     );
   }
@@ -1699,7 +1714,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], o
       <div className="context-tabs" role="tablist">
         {tabs.map((item) => (
           <button key={item} type="button" className={currentTab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {{ files: "Files", memory: "Memory", goal: "Goal", debug: "Debug" }[item]}
+            {{ files: "Files", commands: "Commands", memory: "Memory", goal: "Goal", debug: "Debug" }[item]}
           </button>
         ))}
       </div>
@@ -1715,6 +1730,12 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], o
           <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
         </section>
       )}
+      {currentTab === "commands" && (
+        <section>
+          <h3>프로젝트 명령</h3>
+          <ProjectActionsPanel activePath={activePath} projectConfig={projectConfig} onProjectConfig={onProjectConfig} power={power} fetchJson={fetchJson} />
+        </section>
+      )}
       {currentTab === "memory" && (
         <section>
           <h3>기억된 정보</h3>
@@ -1726,7 +1747,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], o
           <h3>개발자 도구</h3>
           <RuntimePanel runtime={runtime} />
           <OpenClawPanel openclaw={openclaw} />
-          <AutomationPanel projects={automations} onAutomations={onAutomations} />
+          <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />
           <a href={`/prompt/${activePath.projectPath}/${activePath.sessionSlug}`}>Open prompt context</a>
           <code>aiws prompt {activePath.projectPath} {activePath.sessionSlug} --root ~/.ai-workspace</code>
         </section>
@@ -1746,45 +1767,6 @@ function OpenClawPanel({ openclaw }) {
       <p>sessions: {sessionCount}</p>
       {gateway.dashboard && <a href={gateway.dashboard} target="_blank" rel="noreferrer">{gateway.dashboard}</a>}
       <code>openclaw gateway status</code>
-    </div>
-  );
-}
-
-function AutomationPanel({ projects = [], onAutomations }) {
-  const [running, setRunning] = useState("");
-  const [error, setError] = useState("");
-
-  async function run(slug) {
-    setRunning(slug);
-    setError("");
-    try {
-      const payload = await fetchJson(`/api/automations/${slug}/run`, { method: "POST", body: new FormData() });
-      onAutomations?.(payload.projects || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRunning("");
-    }
-  }
-
-  return (
-    <div className="runtime-card automation-card">
-      <strong>Automation Projects</strong>
-      <p>반복 가능한 UI 진단과 로컬 작업 실행 기록입니다.</p>
-      {projects.length === 0 && <p className="muted">등록된 자동화 프로젝트가 없습니다.</p>}
-      {projects.map((project) => (
-        <div className="automation-run" key={project.slug}>
-          <div>
-            <b>{project.title}</b>
-            <span>{project.kind}</span>
-            {project.latest_run && <small>latest: {project.latest_run.status} · {formatDate(project.latest_run.created_at)}</small>}
-          </div>
-          <button type="button" onClick={() => run(project.slug)} disabled={running === project.slug}>
-            {running === project.slug ? "Running..." : "Run now"}
-          </button>
-        </div>
-      ))}
-      {error && <small className="error-text">{error}</small>}
     </div>
   );
 }

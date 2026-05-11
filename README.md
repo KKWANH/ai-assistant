@@ -1,6 +1,8 @@
 # Local AI Workspace (AIWS)
 
-AIWS is a local-first personal AI workspace for organizing conversations and writing threads by project, optional subproject, and session.
+Not another ChatGPT clone. AIWS is a local-first AI cockpit that turns folders into customizable AI workspaces.
+
+AIWS organizes conversations, project files, goals, prompt recipes, and local command runs around your own folders. It is designed for a Mac mini or similar personal machine first, with optional family access through a private tunnel.
 
 This MVP focuses on a reliable file-based foundation:
 
@@ -10,6 +12,38 @@ This MVP focuses on a reliable file-based foundation:
 - Two-level project hierarchy: `project` or `project/subproject`.
 - JSONL and Markdown archives for every session.
 - Reusable project skills with parent-to-subproject inheritance.
+- `aiws.yaml` project commands for prompt recipes, shell scripts, Python scripts, file indexing, Codex prompts, and optional OpenClaw status checks.
+
+## Core Idea
+
+```text
+local folder + aiws.yaml + files + scripts + chat = customizable AI workspace
+```
+
+Examples:
+
+- Investment rebalancing workspace with CSV/YAML inputs and Python reports.
+- Paper review workspace with PDF files, review criteria, and prompt recipes.
+- Development workspace with goals, files, test commands, and Codex-ready prompts.
+- Family document workspace for receipts, schedules, travel docs, and explanations.
+
+## Architecture
+
+```text
+React UI
+  -> Python HTTP server
+    -> file-based workspace storage
+    -> provider registry: Ollama, Kimi, Gemini, OpenAI
+    -> action registry: prompt_recipe, shell, python, file_index, codex_prompt, openclaw_status
+    -> local run artifacts under project/runs/{run_id}/
+```
+
+Screenshots:
+
+- `docs/screenshots/login.png` placeholder
+- `docs/screenshots/chat.png` placeholder
+- `docs/screenshots/model-picker.png` placeholder
+- `docs/screenshots/project-commands.png` placeholder
 
 ## Install For Local Development
 
@@ -171,6 +205,55 @@ The web UI can upload session attachments:
 
 Text extraction is lightweight and intentionally conservative. Full OCR and rich PDF parsing are future modules.
 
+## Custom Project Commands
+
+Projects can include an `aiws.yaml` file:
+
+```yaml
+name: Investment Rebalancer
+description: Local portfolio rebalancing workspace
+root: .
+permissions:
+  file_read: true
+  file_write: confirm
+  shell: confirm
+  network: false
+context:
+  include:
+    - files/*.csv
+    - files/*.yaml
+    - files/*.md
+  exclude:
+    - .env
+    - secrets/*
+commands:
+  summarize_portfolio:
+    kind: prompt_recipe
+    label: 현재 포트폴리오 요약
+    prompt: |
+      files/portfolio.csv와 목표 비중을 읽고 현재 포트폴리오를 요약해줘.
+  rebalance_plan:
+    kind: python
+    label: 리밸런싱 계산
+    script: scripts/calculate_rebalance.py
+    args:
+      - files/portfolio.csv
+      - files/target_allocation.yaml
+      - artifacts/rebalance-table.csv
+```
+
+Every command run writes:
+
+```text
+projects/<project>/runs/<run_id>/
+  run.md
+  stdout.txt
+  stderr.txt
+  result.json
+```
+
+The bundled example is in `templates/investment-rebalancer/`.
+
 ## Runtime Launcher
 
 Run AIWS and local model services together:
@@ -280,6 +363,16 @@ workspace_root/
       CLAUDE.md
 ```
 
-## Not Implemented Yet
+## Roadmap
 
-This MVP includes initial Ollama and Kimi providers, account login, file attachments, cost estimates, and a Tailscale-oriented hosting runbook. OpenAI, Claude, Gemini, live web search, OCR, RAG, family permissions, and Cloudflare Tunnel automation remain future extension points.
+Implemented foundations include Ollama, Kimi, Gemini, OpenAI-compatible providers, account login, project visibility, file attachments, cost estimates, Cloudflare launcher support, goals, and project command recipes.
+
+Still planned:
+
+- richer PDF parsing with `pypdf` and optional OCR
+- real web search provider integration
+- vector/RAG indexing over selected project files
+- stronger project memory summarization
+- richer artifacts panel
+- Playwright E2E coverage
+- component-level frontend refactor beyond the action panel split

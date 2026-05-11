@@ -112,6 +112,8 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "data-copy-codex-prompt" in bundle_text
         assert "data-pdf-preview" in bundle_text
         assert "data-markdown-renderer" in bundle_text
+        assert "프로젝트 명령" in bundle_text
+        assert "Investment Rebalancer" in bundle_text
         assert "Kwanho Kim" in bundle_text
         assert "Chungja Byun" in bundle_text
         assert "Gunwoo Kim" in bundle_text
@@ -421,11 +423,7 @@ def test_login_sets_secure_cookie_behind_https_and_rate_limits_failures(tmp_path
 def test_automation_api_requires_admin_and_returns_projects(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     storage.create_account(root, "kwanho", "secret", admin=True)
-    monkeypatch.setattr(
-        automations,
-        "list_projects",
-        lambda root_arg: [{"slug": "aiws-ui-self-check", "title": "AIWS UI Self Check"}],
-    )
+    monkeypatch.setattr(automations, "list_projects", lambda root_arg: [])
 
     handler = partial(AIWSHandler, root=str(root), require_auth=True, password="server-secret")
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -442,7 +440,59 @@ def test_automation_api_requires_admin_and_returns_projects(tmp_path, monkeypatc
 
         payload = opener.open(f"{base_url}/api/automations", timeout=5).read().decode("utf-8")
 
-        assert "AIWS UI Self Check" in payload
+        assert '"projects": []' in payload
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_project_action_preview_and_run_api(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Admin", "secret", admin=True)
+    storage.create_project(root, "Tools", owner="admin")
+    (storage.project_dir(root, "tools") / "aiws.yaml").write_text(
+        """
+name: Tools
+root: .
+commands:
+  hello:
+    kind: shell
+    label: Hello
+    command: printf hello
+""",
+        encoding="utf-8",
+    )
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=True, password="server-secret")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    jar = CookieJar()
+    opener = request.build_opener(request.HTTPCookieProcessor(jar))
+    try:
+        opener.open(f"{base_url}/login", timeout=5).read()
+        csrf = next(cookie.value for cookie in jar if cookie.name == "aiws_csrf")
+        login = parse.urlencode({"username": "admin", "password": "secret", "_csrf": csrf}).encode("utf-8")
+        opener.open(request.Request(f"{base_url}/login", data=login, method="POST"), timeout=5)
+
+        config = opener.open(f"{base_url}/api/project-config/tools", timeout=5).read().decode("utf-8")
+        assert '"hello"' in config
+
+        preview_body = parse.urlencode({"_csrf": csrf}).encode("utf-8")
+        preview = opener.open(
+            request.Request(f"{base_url}/api/project-actions/tools/hello/preview", data=preview_body, method="POST"),
+            timeout=5,
+        ).read().decode("utf-8")
+        assert '"requires_confirmation": true' in preview
+
+        run_body = parse.urlencode({"_csrf": csrf, "confirm": "1"}).encode("utf-8")
+        run = opener.open(
+            request.Request(f"{base_url}/api/project-actions/tools/hello/run", data=run_body, method="POST"),
+            timeout=5,
+        ).read().decode("utf-8")
+        assert '"stdout": "hello"' in run
     finally:
         server.shutdown()
         server.server_close()

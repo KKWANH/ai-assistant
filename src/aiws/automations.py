@@ -1,4 +1,9 @@
-"""File-based automation project registry for repeatable local checks."""
+"""File-based recipe registry for repeatable local project commands.
+
+The product identity is project commands and local workflows. OpenClaw is only
+one optional integration, so this registry no longer creates a visible
+OpenClaw self-check by default.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import openclaw, storage
+from .core import action_registry
 
 
 DEFAULT_OPENCLAW_SLUG = "aiws-ui-self-check"
@@ -35,47 +41,7 @@ def runs_dir(root: str | Path, slug: str) -> Path:
 
 
 def ensure_default_projects(root: str | Path) -> None:
-    if not project_json_path(root, DEFAULT_OPENCLAW_SLUG).exists():
-        create_project(
-            root,
-            title="AIWS UI Self Check",
-            kind="openclaw-ui-check",
-            slug=DEFAULT_OPENCLAW_SLUG,
-            description="OpenClaw-backed self-check project for UI diagnosis and local runtime health.",
-            category="diagnostics",
-            panels=["runs", "browser", "reports"],
-            commands={
-                "self_check": {
-                    "label": "UI self-check",
-                    "description": "Check AIWS runtime, Cloudflare URL, OpenClaw gateway, and recent sessions.",
-                    "permission": "read-only",
-                }
-            },
-            interval_minutes=0,
-        )
-    else:
-        project = storage.read_json(project_json_path(root, DEFAULT_OPENCLAW_SLUG))
-        changed = apply_defaults(
-            project,
-            category="diagnostics",
-            permissions={
-                "file_read": True,
-                "file_write": "confirm",
-                "shell": "blocked",
-                "network": False,
-            },
-            panels=["runs", "browser", "reports"],
-            commands={
-                "self_check": {
-                    "label": "UI self-check",
-                    "description": "Check AIWS runtime, Cloudflare URL, OpenClaw gateway, and recent sessions.",
-                    "permission": "read-only",
-                }
-            },
-        )
-        if changed:
-            project["updated_at"] = storage.utc_now()
-            storage.write_json(project_json_path(root, DEFAULT_OPENCLAW_SLUG), project)
+    storage.init_workspace(root)
 
 
 def apply_defaults(project: dict[str, Any], **defaults: Any) -> bool:
@@ -134,7 +100,6 @@ def create_project(
 
 
 def load_project(root: str | Path, slug: str) -> dict[str, Any]:
-    ensure_default_projects(root)
     path = project_json_path(root, slug)
     if not path.exists():
         raise storage.WorkspaceError(f"Automation project does not exist: {slug}")
@@ -183,14 +148,17 @@ def run_project(root: str | Path, slug: str, *, actor: str | None = None) -> dic
     observations: list[str] = []
     result: dict[str, Any] = {}
 
-    if project.get("kind") == "openclaw-ui-check":
+    if project.get("kind") == "openclaw-ui-check" or project.get("kind") == "openclaw_status":
         result = run_openclaw_ui_check(root, project)
         observations = list(result.get("observations", []))
         if not result.get("ok", False):
             status = "attention"
+    elif project.get("kind") in action_registry.ACTION_KINDS:
+        result = {"ok": True, "kind": project.get("kind"), "message": "Use project action endpoints for configured aiws.yaml commands."}
+        observations.append("Recipe kind is supported. Run it through /api/project-actions/{project}/{command}/run.")
     else:
-        status = "unsupported"
-        observations.append(f"Unsupported automation kind: {project.get('kind')}")
+        status = "attention"
+        observations.append(f"Unknown recipe kind: {project.get('kind')}")
 
     run = {
         "run_id": run_id,

@@ -1286,6 +1286,12 @@ def build_prompt_context(root: str | Path, project_path: str, session_slug: str)
     messages = read_messages(root, project_path, session_slug)
     session_files = session_attachment_context(root, project_path, session_slug)
     project_files = project_attachment_context(root, project_path, exclude_session=session_slug)
+    try:
+        from .core import action_registry
+
+        run_context = action_registry.latest_run_context(root, project_path)
+    except Exception:
+        run_context = ""
     lines = ["# AIWS Prompt Context", ""]
 
     if any(project.get("hidden") for project in projects):
@@ -1338,6 +1344,9 @@ def build_prompt_context(root: str | Path, project_path: str, session_slug: str)
         lines.extend(["## Project Files", ""])
         lines.extend(project_files)
         lines.append("")
+
+    if run_context:
+        lines.extend([run_context, ""])
 
     lines.extend(
         [
