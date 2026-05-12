@@ -213,10 +213,35 @@ def run_action(
         "stdout_path": "stdout.txt",
         "stderr_path": "stderr.txt",
         "result_path": "result.json",
+        "artifacts": collect_artifacts(project_root, preview),
     }
     result["run"] = run
     write_run_artifacts(run_path, run, stdout, stderr, result)
     return run | {"stdout": stdout, "stderr": stderr, "result": result}
+
+
+def run_chat_summary(run: dict[str, Any]) -> str:
+    """Return a concise tool-message summary for a completed project action."""
+    lines = [
+        f"Project action completed: {run.get('label', run.get('command', 'run'))}",
+        f"- Status: {run.get('status', 'unknown')}",
+        f"- Kind: {run.get('kind', '')}",
+        f"- Run ID: {run.get('run_id', '')}",
+    ]
+    stdout = str(run.get("stdout", "")).strip()
+    stderr = str(run.get("stderr", "")).strip()
+    artifacts = run.get("artifacts", [])
+    if stdout:
+        lines.extend(["", "Stdout:", stdout[:2000]])
+    if stderr:
+        lines.extend(["", "Stderr:", stderr[:2000]])
+    if isinstance(artifacts, list) and artifacts:
+        lines.append("")
+        lines.append("Artifacts:")
+        for item in artifacts:
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('path', '')} ({'exists' if item.get('exists') else 'missing'})")
+    return "\n".join(lines)
 
 
 def write_run_artifacts(run_path: Path, run: dict[str, Any], stdout: str, stderr: str, result: dict[str, Any]) -> None:
@@ -245,6 +270,20 @@ def write_run_artifacts(run_path: Path, run: dict[str, Any], stdout: str, stderr
         "",
     ]
     (run_path / "run.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def collect_artifacts(project_root: Path, preview: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    for value in preview.get("expected_output_files", []) or []:
+        path = safe_child_path(project_root, str(value))
+        artifacts.append(
+            {
+                "path": str(value),
+                "exists": path.exists(),
+                "size": path.stat().st_size if path.exists() and path.is_file() else 0,
+            }
+        )
+    return artifacts
 
 
 def latest_runs(root: str | Path, project_path: str, *, limit: int = 10) -> list[dict[str, Any]]:
@@ -279,6 +318,77 @@ def latest_run_context(root: str | Path, project_path: str, *, limit: int = 3) -
             ]
         )
     return "\n".join(lines)
+
+
+def suggest_actions(
+    root: str | Path,
+    project_path: str,
+    *,
+    messages: list[dict[str, Any]] | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Suggest configured project commands from recent chat text."""
+    config = load_config(root, project_path)
+    commands = config.get("commands", {})
+    if not commands:
+        return []
+    text = "\n".join(str(message.get("content", "")) for message in (messages or [])[-6:]).lower()
+    suggestions: list[dict[str, Any]] = []
+    for name, command in commands.items():
+        score = action_score(str(name), command, text)
+        if score <= 0:
+            continue
+        suggestions.append(
+            {
+                "command": name,
+                "label": command.get("label", name),
+                "description": command.get("description", ""),
+                "kind": command.get("kind", "prompt_recipe"),
+                "permission": command.get("permission", permission_for_kind(command.get("kind", "prompt_recipe"))),
+                "score": score,
+            }
+        )
+    return sorted(suggestions, key=lambda item: (-int(item["score"]), str(item["command"])))[:limit]
+
+
+def action_score(name: str, command: dict[str, Any], text: str) -> int:
+    haystack = " ".join(
+        [
+            name,
+            str(command.get("label", "")),
+            str(command.get("description", "")),
+            str(command.get("prompt", "")),
+        ]
+    ).lower()
+    if not text.strip():
+        return 1 if command.get("kind") in {"prompt_recipe", "file_index"} else 0
+    score = 0
+    for token in meaningful_tokens(text):
+        if token in haystack:
+            score += 3
+    keyword_map = {
+        "pdf": {"summarize", "summary", "요약", "문서", "document", "file_index"},
+        "파일": {"file", "index", "문서", "요약"},
+        "문서": {"summarize", "summary", "document", "파일"},
+        "코드": {"codex", "python", "shell", "test", "bugfix"},
+        "실행": {"shell", "python", "run", "export"},
+        "리밸런": {"rebalance", "portfolio", "risk"},
+        "포트폴리오": {"portfolio", "rebalance", "risk"},
+        "위험": {"risk", "check"},
+    }
+    for token, hints in keyword_map.items():
+        if token in text and any(hint in haystack for hint in hints):
+            score += 5
+    return score
+
+
+def meaningful_tokens(text: str) -> list[str]:
+    tokens = []
+    for raw in text.replace("/", " ").replace("_", " ").replace("-", " ").split():
+        token = raw.strip(".,:;!?()[]{}\"'`").lower()
+        if len(token) >= 3:
+            tokens.append(token)
+    return tokens[:80]
 
 
 def command_by_name(config: dict[str, Any], command_name: str) -> dict[str, Any]:
@@ -454,4 +564,3 @@ def parse_scalar(value: str) -> Any:
     if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         return value[1:-1]
     return value
-

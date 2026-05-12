@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import attachments, automations, costs, openclaw
-from .core import action_registry
+from .core import action_registry, context_manifest
 from .i18n import t
 from . import runner
 from . import storage
@@ -236,7 +236,35 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     actor=self.current_username(),
                     confirmed=data.get("confirm") in {"1", "true", "yes"},
                 )
-                self.send_json({"run": run, "config": action_registry.load_config(self.root, project_path)})
+                message_json = None
+                session_slug = str(data.get("session_slug", "")).strip()
+                if session_slug:
+                    storage.load_session(self.root, project_path, session_slug)
+                    message = storage.append_message(
+                        self.root,
+                        project_path,
+                        session_slug,
+                        role="tool",
+                        content=action_registry.run_chat_summary(run),
+                        metadata={
+                            "project_action": {
+                                "run_id": run.get("run_id"),
+                                "command": command,
+                                "kind": run.get("kind"),
+                                "status": run.get("status"),
+                                "artifacts": run.get("artifacts", []),
+                            }
+                        },
+                        actor=self.current_username(),
+                    )
+                    message_json = self.message_json(message)
+                self.send_json(
+                    {
+                        "run": run,
+                        "config": action_registry.load_config(self.root, project_path),
+                        "message": message_json,
+                    }
+                )
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -757,6 +785,20 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     "goal": storage.load_goal(self.root, project_path),
                     "codex_prompt": storage.codex_goal_prompt(self.root, project_path, session_slug),
                     "latest": latest_assistant_metadata(messages),
+                    "task_suggestions": action_registry.suggest_actions(
+                        self.root,
+                        project_path,
+                        messages=messages,
+                    ),
+                    "context_manifest": context_manifest.build_context_manifest(
+                        self.root,
+                        project_path,
+                        session_slug,
+                        actor=self.current_username(),
+                        provider=str(latest_assistant_metadata(messages).get("provider", "")),
+                        model=str(latest_assistant_metadata(messages).get("model", "")),
+                        search_mode=str(latest_assistant_metadata(messages).get("search_mode", "")),
+                    ),
                 }
             )
         except storage.WorkspaceError as exc:
@@ -844,6 +886,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 avatar = account.get("profile", {}).get("avatar") if isinstance(account.get("profile"), dict) else ""
                 if avatar:
                     account["avatar_url"] = f"/avatar/{username}"
+                account["cost_usage"] = {
+                    "day_usd": storage.model_usage_total_usd(self.root, username, period="day"),
+                    "month_usd": storage.model_usage_total_usd(self.root, username, period="month"),
+                }
                 return account
             except storage.WorkspaceError:
                 pass

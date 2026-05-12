@@ -17,6 +17,8 @@ from .core import action_registry
 
 
 DEFAULT_OPENCLAW_SLUG = "aiws-ui-self-check"
+HIDDEN_LEGACY_SLUGS = {DEFAULT_OPENCLAW_SLUG}
+HIDDEN_LEGACY_KINDS = {"openclaw-ui-check"}
 
 
 def automation_root(root: str | Path) -> Path:
@@ -113,6 +115,8 @@ def list_projects(root: str | Path) -> list[dict[str, Any]]:
         try:
             project = storage.read_json(path)
         except (OSError, json.JSONDecodeError):
+            continue
+        if project.get("slug") in HIDDEN_LEGACY_SLUGS or project.get("kind") in HIDDEN_LEGACY_KINDS:
             continue
         project["latest_run"] = latest_run(root, str(project.get("slug", "")))
         projects.append(project)

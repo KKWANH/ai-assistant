@@ -1,5 +1,6 @@
 from functools import partial
 from http.server import ThreadingHTTPServer
+import json
 import re
 from threading import Thread
 from urllib import parse, request
@@ -113,6 +114,8 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "data-pdf-preview" in bundle_text
         assert "data-markdown-renderer" in bundle_text
         assert "프로젝트 명령" in bundle_text
+        assert "다음 작업 후보" in bundle_text
+        assert "사용자가 승인해야 실행됩니다" in bundle_text
         assert "Investment Rebalancer" in bundle_text
         assert "Kwanho Kim" in bundle_text
         assert "Chungja Byun" in bundle_text
@@ -451,6 +454,7 @@ def test_project_action_preview_and_run_api(tmp_path):
     root = tmp_path / "workspace"
     storage.create_account(root, "Admin", "secret", admin=True)
     storage.create_project(root, "Tools", owner="admin")
+    storage.create_session(root, "tools", "Action Chat", slug="action-chat")
     (storage.project_dir(root, "tools") / "aiws.yaml").write_text(
         """
 name: Tools
@@ -487,12 +491,18 @@ commands:
         ).read().decode("utf-8")
         assert '"requires_confirmation": true' in preview
 
-        run_body = parse.urlencode({"_csrf": csrf, "confirm": "1"}).encode("utf-8")
+        run_body = parse.urlencode({"_csrf": csrf, "confirm": "1", "session_slug": "action-chat"}).encode("utf-8")
         run = opener.open(
             request.Request(f"{base_url}/api/project-actions/tools/hello/run", data=run_body, method="POST"),
             timeout=5,
         ).read().decode("utf-8")
         assert '"stdout": "hello"' in run
+        run_payload = json.loads(run)
+        assert run_payload["message"]["role"] == "tool"
+        assert "Project action completed: Hello" in run_payload["message"]["content"]
+        messages = storage.read_messages(root, "tools", "action-chat")
+        assert messages[-1]["role"] == "tool"
+        assert messages[-1]["metadata"]["project_action"]["command"] == "hello"
     finally:
         server.shutdown()
         server.server_close()

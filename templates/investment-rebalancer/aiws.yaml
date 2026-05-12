@@ -29,6 +29,8 @@ panels:
 commands:
   summarize_portfolio:
     kind: prompt_recipe
+    status: partial
+    output: chat_prompt
     label: 현재 포트폴리오 요약
     description: 보유 종목, 계좌별 비중, 목표 비중을 요약한다.
     prompt: |
@@ -37,6 +39,8 @@ commands:
 
   rebalance_plan:
     kind: python
+    status: ready
+    output: artifact
     label: 리밸런싱 계산
     description: 현재 비중과 목표 비중 차이를 계산해 CSV 리포트를 만든다.
     cwd: .
@@ -50,6 +54,8 @@ commands:
 
   risk_check:
     kind: prompt_recipe
+    status: partial
+    output: chat_prompt
     label: 과집중 리스크 점검
     description: 종목, 자산군, 계좌별 쏠림 위험을 점검한다.
     prompt: |
@@ -58,6 +64,8 @@ commands:
 
   export_report:
     kind: shell
+    status: partial
+    output: artifact
     label: 리밸런싱 리포트 생성
     description: 계산 결과와 전략 메모를 Markdown 리포트로 묶는다.
     cwd: .

@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 
 from . import costs, search, storage
+from .core import context_manifest
 from .env import load_env
 from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
@@ -147,6 +148,16 @@ def write_used_context(
             "search_mode": search_mode,
             "context_chars": len(prompt_context),
             "context_preview": prompt_context[:8000],
+            "manifest": context_manifest.build_context_manifest(
+                root,
+                project_path,
+                session_slug,
+                actor=actor,
+                provider=provider,
+                model=model,
+                search_mode=search_mode,
+                prompt_context=prompt_context,
+            ),
         },
     )
 

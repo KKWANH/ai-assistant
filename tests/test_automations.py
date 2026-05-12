@@ -33,3 +33,16 @@ def test_automation_projects_do_not_create_openclaw_default(tmp_path, monkeypatc
     assert run["actor"] == "kwanho0096"
     assert "OpenClaw installed: yes" in run["observations"]
     assert automations.latest_run(root, "openclaw-status")["run_id"] == run["run_id"]
+
+
+def test_legacy_openclaw_self_check_is_hidden(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+    automations.create_project(
+        root,
+        title="AIWS UI Self Check",
+        kind="openclaw-ui-check",
+        slug="aiws-ui-self-check",
+    )
+
+    assert automations.list_projects(root) == []

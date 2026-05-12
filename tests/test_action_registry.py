@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from aiws import storage
-from aiws.core import action_registry
+from aiws.core import action_registry, context_manifest
 
 
 def write_project_config(root: Path, project_path: str, body: str) -> None:
@@ -118,3 +118,46 @@ def test_recent_run_context_is_available_for_prompt_context(tmp_path):
 
     assert "## Recent Project Action Runs" in context
     assert "리밸런싱 계산" in context
+
+
+def test_context_manifest_summarizes_files_runs_and_cost(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Investment")
+    storage.create_session(root, "investment", "May Review")
+    action_registry.import_template(root, "investment", "investment-rebalancer")
+    action_registry.run_action(root, "investment", "rebalance_plan", confirmed=True)
+
+    manifest = context_manifest.build_context_manifest(
+        root,
+        "investment",
+        "may-review",
+        actor="kwanho",
+        provider="gemini",
+        model="gemini-2.5-flash-lite",
+        search_mode="auto",
+        prompt_context="x" * 4000,
+    )
+
+    assert manifest["actor"] == "kwanho"
+    assert manifest["project"]["path"] == "investment"
+    assert manifest["runs"][0]["command"] == "rebalance_plan"
+    assert manifest["estimates"]["input_tokens"] >= 1000
+    assert manifest["estimates"]["estimated_cost"] is not None
+    assert any(item["type"] == "recent_runs" for item in manifest["included"])
+    assert any(item["reason"] == "blocked secret path" for item in manifest["excluded"])
+
+
+def test_suggest_actions_matches_recent_chat_text(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Investment")
+    action_registry.import_template(root, "investment", "investment-rebalancer")
+
+    suggestions = action_registry.suggest_actions(
+        root,
+        "investment",
+        messages=[{"role": "user", "content": "포트폴리오 리밸런싱 계산을 실행하고 싶어"}],
+    )
+
+    assert suggestions
+    assert suggestions[0]["command"] == "rebalance_plan"
+    assert suggestions[0]["kind"] == "python"

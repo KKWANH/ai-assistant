@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { AutomationPanel, ProjectActionsPanel } from "./components/actions/ActionPanels.jsx";
+import { ActionInspector, AutomationPanel, TaskSuggestionsPanel } from "./components/actions/ActionPanels.jsx";
+import { ProjectDashboard } from "./components/project/ProjectDashboard.jsx";
 import "./styles.css";
 
 const DEFAULT_MODEL = "qwen3:4b";
@@ -293,6 +294,8 @@ function App() {
           refreshWorkspace={refreshWorkspace}
           contextOpen={contextOpen}
           onToggleContext={toggleContext}
+          projectConfig={projectConfig}
+          onProjectConfig={setProjectConfig}
         />
         <ContextPanel
           chat={chat}
@@ -890,8 +893,32 @@ function NewSessionForm({ projectPath, onCreated }) {
   );
 }
 
-function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext }) {
+function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig }) {
   const power = isPowerMode(account);
+  if (activePath.projectPath && !activePath.sessionSlug) {
+    const project = projects.find((item) => item.path === activePath.projectPath);
+    return (
+      <section className="center-pane project-workbench-page">
+        <ProjectDashboard
+          activePath={activePath}
+          projectConfig={projectConfig}
+          project={project}
+          power={power}
+          fetchJson={fetchJson}
+          onProjectConfig={onProjectConfig}
+        />
+        <StartPane
+          error={error}
+          navigate={navigate}
+          refreshWorkspace={refreshWorkspace}
+          onAsk={onAsk}
+          account={account}
+          projectPath={activePath.projectPath}
+          embedded
+        />
+      </section>
+    );
+  }
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
       <StartPane
@@ -921,6 +948,14 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
         </div>
       </div>
       <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} />
+      <TaskSuggestionsPanel
+        activePath={activePath}
+        suggestions={chat?.task_suggestions || []}
+        onProjectConfig={onProjectConfig}
+        onChat={onAsk}
+        power={power}
+        fetchJson={fetchJson}
+      />
       <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} />
     </section>
   );
@@ -984,7 +1019,7 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
   );
 }
 
-function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "" }) {
+function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "", embedded = false }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -1094,8 +1129,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
     }
   }
 
-  return (
-    <section className="center-pane start-pane">
+  const contentNode = (
       <div className="start-content">
         <h1>무엇을 도와드릴까요?</h1>
         <p className="start-subtitle">
@@ -1178,8 +1212,11 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
         {startError && <div className="system-note">{startError}</div>}
         {error && <div className="system-note">{error}</div>}
       </div>
-    </section>
   );
+  if (embedded) {
+    return <div className="start-pane embedded-start-pane">{contentNode}</div>;
+  }
+  return <section className="center-pane start-pane">{contentNode}</section>;
 }
 
 function MessageTimeline({ messages, onPreview }) {
@@ -1540,11 +1577,6 @@ function Composer({ activePath, onAsk, account, power }) {
           }}
         />
       )}
-      {power && (
-        <div className="advanced-controls always-open">
-          <ModePrice mode={selectedMode} field power />
-        </div>
-      )}
     </form>
   );
 }
@@ -1681,7 +1713,7 @@ function isPowerMode(account) {
 
 function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account }) {
   const power = isPowerMode(account);
-  const tabs = power ? ["files", "commands", "memory", "goal", "debug"] : ["files", "commands", "memory", "goal"];
+  const tabs = power ? ["files", "inspector", "memory", "goal", "debug"] : ["files", "inspector", "memory", "goal"];
   const [tab, setTab] = useState("files");
   const currentTab = tabs.includes(tab) ? tab : "files";
   if (!activePath.projectPath || !activePath.sessionSlug) {
@@ -1692,7 +1724,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           <h3>현재 대화 목적</h3>
           <p className="muted">대화를 시작하면 이 비서가 참고하는 파일, 기억, 목표가 여기에 정리됩니다.</p>
         </section>
-        <ProjectActionsPanel activePath={activePath} projectConfig={projectConfig} onProjectConfig={onProjectConfig} power={power} fetchJson={fetchJson} />
+        <ActionInspector projectConfig={projectConfig} power={power} />
         {power && <RuntimePanel runtime={runtime} />}
         {power && <OpenClawPanel openclaw={openclaw} />}
         {power && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
@@ -1711,10 +1743,11 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           {(chat?.skills || []).map((skill) => <span key={skill}>{skill}</span>)}
         </div>
       </section>
+      <ContextManifestCard manifest={chat?.context_manifest} power={power} />
       <div className="context-tabs" role="tablist">
         {tabs.map((item) => (
           <button key={item} type="button" className={currentTab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {{ files: "Files", commands: "Commands", memory: "Memory", goal: "Goal", debug: "Debug" }[item]}
+            {{ files: "Files", inspector: "Inspector", memory: "Memory", goal: "Goal", debug: "Debug" }[item]}
           </button>
         ))}
       </div>
@@ -1730,10 +1763,10 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
         </section>
       )}
-      {currentTab === "commands" && (
+      {currentTab === "inspector" && (
         <section>
-          <h3>프로젝트 명령</h3>
-          <ProjectActionsPanel activePath={activePath} projectConfig={projectConfig} onProjectConfig={onProjectConfig} power={power} fetchJson={fetchJson} />
+          <h3>작업 Inspector</h3>
+          <ActionInspector projectConfig={projectConfig} power={power} />
         </section>
       )}
       {currentTab === "memory" && (
@@ -1754,6 +1787,46 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       )}
     </aside>
   );
+}
+
+function ContextManifestCard({ manifest, power }) {
+  if (!manifest) return null;
+  const included = manifest.included || [];
+  const excluded = manifest.excluded || [];
+  const estimates = manifest.estimates || {};
+  return (
+    <section className="manifest-card">
+      <h3>AI가 참고하는 것</h3>
+      {included.length === 0 ? (
+        <p className="muted">이번 대화에는 추가 컨텍스트가 거의 없습니다.</p>
+      ) : (
+        <div className="manifest-list">
+          {included.map((item, index) => (
+            <span key={`${item.type}-${index}`}>
+              {manifestLabel(item)}
+            </span>
+          ))}
+        </div>
+      )}
+      {power && (
+        <div className="manifest-details">
+          <small>{estimates.input_tokens || 0} estimated tokens</small>
+          {estimates.estimated_cost !== null && estimates.estimated_cost !== undefined && <small>~USD {estimates.estimated_cost}</small>}
+          <small>{manifest.privacy_mode === "local" ? "local-only" : "cloud allowed"}</small>
+        </div>
+      )}
+      {power && excluded.length > 0 && <p className="muted">보안 제외 패턴 {excluded.length}개가 적용됩니다.</p>}
+    </section>
+  );
+}
+
+function manifestLabel(item) {
+  if (item.type === "goal") return `목표: ${item.label}`;
+  if (item.type === "skills") return `스킬 ${item.count}개`;
+  if (item.type === "chat_files") return `대화 파일 ${item.count}개`;
+  if (item.type === "project_files") return `프로젝트 파일 ${item.count}개`;
+  if (item.type === "recent_runs") return `최근 실행 ${item.count}개`;
+  return item.label || item.type;
 }
 
 function OpenClawPanel({ openclaw }) {
@@ -1888,6 +1961,8 @@ function Lightbox({ item, onClose }) {
 function SettingsModal({ account, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const profile = account.profile || {};
+  const usage = account.usage || {};
+  const costUsage = account.cost_usage || {};
   async function submit(event) {
     event.preventDefault();
     setSaving(true);
@@ -1916,6 +1991,20 @@ function SettingsModal({ account, onClose, onSaved }) {
             <button type="button" onClick={onClose}>닫기</button>
           </div>
         </header>
+        <section className="settings-stats" aria-label="Account usage history">
+          <div>
+            <strong>{usage.messages || 0}</strong>
+            <span>저장 메시지</span>
+          </div>
+          <div>
+            <strong>{usage.asks || 0}</strong>
+            <span>AI 요청</span>
+          </div>
+          <div>
+            <strong>${Number(costUsage.month_usd || 0).toFixed(4)}</strong>
+            <span>이번 달 API 비용</span>
+          </div>
+        </section>
         <form onSubmit={submit}>
           <fieldset>
             <legend>Profile</legend>
@@ -1933,6 +2022,7 @@ function SettingsModal({ account, onClose, onSaved }) {
           <fieldset>
             <legend>Interface</legend>
             <label><span>사용 모드</span><select name="ui_mode" defaultValue={profile.ui_mode || (account.admin ? "power" : "easy")}><option value="easy">Easy Mode - 쉬운 화면</option><option value="power">Power Mode - 개발자 도구 표시</option></select></label>
+            <p className="settings-help">Easy는 모델 선택과 파일 첨부는 그대로 두고 개발자 로그를 숨깁니다. Power는 실행 경로, 비용, prompt, runtime을 확인하는 운영자 화면입니다.</p>
           </fieldset>
           <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button>
         </form>
