@@ -39,7 +39,7 @@ export function AutomationPanel({ projects = [], onAutomations, fetchJson, forma
   );
 }
 
-export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson }) {
+export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact }) {
   const [running, setRunning] = useState("");
   const [result, setResult] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -154,20 +154,44 @@ export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig
             <div className="artifact-list">
               <strong>생성/확인된 파일</strong>
               {result.artifacts.map((item) => (
-                <span key={item.path}>{item.path} · {item.exists ? `${item.size} bytes` : "not found"}</span>
+                <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)} disabled={!item.exists}>
+                  {item.path} · {item.exists ? `${item.size} bytes` : "not found"}
+                </button>
               ))}
             </div>
           )}
           {result.stdout && <pre>{result.stdout.slice(0, 2400)}</pre>}
           {result.stderr && <pre className="error-text">{result.stderr.slice(0, 2400)}</pre>}
-          <div className="next-actions">
-            {nextActions(result).map((item) => <span key={item}>{item}</span>)}
-          </div>
+          <ResultActions result={result} onOpenArtifact={onOpenArtifact} />
         </div>
       )}
       {error && <small className="error-text">{error}</small>}
     </div>
   );
+}
+
+function ResultActions({ result, onOpenArtifact }) {
+  if (result.status !== "completed") return null;
+  const artifacts = (result.artifacts || []).filter((item) => item.exists);
+  if (result.kind === "prompt_recipe") {
+    return (
+      <div className="next-actions">
+        <button type="button" onClick={() => navigator.clipboard?.writeText(result.stdout || "")}>프롬프트 복사</button>
+      </div>
+    );
+  }
+  if (artifacts.length > 0) {
+    return (
+      <div className="next-actions">
+        {artifacts.slice(0, 3).map((item) => (
+          <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>
+            파일 열기: {item.path.split("/").pop()}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return null;
 }
 
 export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectConfig, onChat, power, fetchJson }) {
@@ -377,12 +401,4 @@ function resultDescription(result = {}) {
   }
   if (result.artifacts?.length > 0) return "생성 또는 확인된 파일이 아래에 표시됩니다. 결과는 프로젝트 runs 폴더에도 저장되었습니다.";
   return "실행 로그와 결과 JSON이 프로젝트 runs 폴더에 저장되었습니다.";
-}
-
-function nextActions(result = {}) {
-  if (result.status !== "completed") return ["다시 실행", "stderr 확인"];
-  if (result.kind === "prompt_recipe") return ["프롬프트 보기", "대화에서 이어 질문", "리포트로 저장"];
-  if (result.kind === "python") return ["생성 파일 열기", "AI에게 해석시키기", "리포트 생성"];
-  if (result.kind === "shell") return ["결과 열기", "로그 확인", "다음 명령 실행"];
-  return ["결과 보기", "대화에 이어서 질문"];
 }

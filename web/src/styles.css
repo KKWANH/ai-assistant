@@ -626,6 +626,10 @@ mark {
   letter-spacing: .09em;
 }
 
+.tree-heading.primary-heading {
+  color: var(--text-soft);
+}
+
 .archive-heading { opacity: .72; }
 
 .project-node.level-1 { margin-left: 18px; }
@@ -962,7 +966,7 @@ mark {
   gap: 6px;
 }
 
-.next-actions span {
+.next-actions button {
   border: 1px solid rgba(143, 192, 255, .14);
   border-radius: 999px;
   padding: 5px 9px;
@@ -1007,10 +1011,20 @@ mark {
   background: rgba(255, 255, 255, .035);
 }
 
-.artifact-list span {
+.artifact-list span,
+.artifact-list button {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.artifact-list button {
+  width: 100%;
+  border: 1px solid rgba(143, 192, 255, .14);
+  border-radius: 10px;
+  padding: 7px 9px;
+  text-align: left;
+  background: rgba(255,255,255,.035);
 }
 
 .task-suggestions-panel {
@@ -1269,6 +1283,18 @@ mark {
   background: rgba(255, 255, 255, .035);
 }
 
+.clickable-row {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  border-color: rgba(99, 215, 255, .36);
+  background: rgba(79, 140, 255, .08);
+}
+
 .run-row strong {
   font-weight: 540;
 }
@@ -1276,6 +1302,96 @@ mark {
 .run-row small {
   grid-column: 1 / -1;
   color: var(--muted);
+}
+
+.viewer-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .58);
+  backdrop-filter: blur(14px);
+}
+
+.viewer-card {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  border: 1px solid rgba(143, 192, 255, .2);
+  border-radius: 22px;
+  padding: 22px;
+  background: linear-gradient(180deg, rgba(13, 27, 48, .98), rgba(5, 12, 23, .98));
+  box-shadow: var(--shadow-high), var(--inset);
+}
+
+.viewer-card.wide {
+  width: min(980px, 100%);
+}
+
+.viewer-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: 1px solid rgba(143, 192, 255, .16);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: rgba(255,255,255,.06);
+}
+
+.viewer-card pre {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid rgba(143, 192, 255, .12);
+  border-radius: 14px;
+  padding: 12px;
+  white-space: pre-wrap;
+  background: rgba(0,0,0,.28);
+}
+
+.run-meta-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.run-meta-grid span {
+  border: 1px solid rgba(143, 192, 255, .13);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--text-soft);
+  background: rgba(255,255,255,.04);
+}
+
+.artifact-table-wrap {
+  max-height: 440px;
+  overflow: auto;
+  margin-top: 14px;
+  border: 1px solid rgba(143, 192, 255, .12);
+  border-radius: 14px;
+}
+
+.artifact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.artifact-table th,
+.artifact-table td {
+  border-bottom: 1px solid rgba(143, 192, 255, .1);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.artifact-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(13, 27, 48, .98);
 }
 
 .manifest-card {

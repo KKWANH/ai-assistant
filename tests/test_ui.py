@@ -503,6 +503,13 @@ commands:
         messages = storage.read_messages(root, "tools", "action-chat")
         assert messages[-1]["role"] == "tool"
         assert messages[-1]["metadata"]["project_action"]["command"] == "hello"
+
+        run_id = run_payload["run"]["run_id"]
+        detail = opener.open(
+            f"{base_url}/api/project-run?project=tools&run_id={parse.quote(run_id)}",
+            timeout=5,
+        ).read().decode("utf-8")
+        assert '"stdout": "hello"' in detail
     finally:
         server.shutdown()
         server.server_close()

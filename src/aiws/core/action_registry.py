@@ -86,6 +86,8 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
         normalized.setdefault("label", str(name).replace("_", " ").title())
         normalized.setdefault("description", "")
         normalized.setdefault("permission", permission_for_kind(kind))
+        normalized["output_type"] = normalize_output_type(normalized)
+        normalized["outputs"] = normalize_outputs(normalized)
         assert_no_secret_references(workspace_root, normalized)
         normalized_commands[str(name)] = normalized
     context = config.get("context") if isinstance(config.get("context"), dict) else {}
@@ -129,11 +131,12 @@ def preview_action(root: str | Path, project_path: str, command_name: str) -> di
     project_root = Path(config["resolved_root"])
     cwd = resolve_cwd(project_root, command)
     expected_inputs = expected_input_files(project_root, config, command)
-    expected_outputs = [str(item) for item in command.get("output", []) or command.get("outputs", []) or []]
+    expected_outputs = normalize_outputs(command)
     return {
         "project_path": project_path,
         "command": command_name,
         "kind": command["kind"],
+        "output_type": command.get("output_type", normalize_output_type(command)),
         "label": command["label"],
         "description": command.get("description", ""),
         "cwd": str(cwd),
@@ -286,6 +289,56 @@ def collect_artifacts(project_root: Path, preview: dict[str, Any]) -> list[dict[
     return artifacts
 
 
+def read_run_detail(root: str | Path, project_path: str, run_id: str) -> dict[str, Any]:
+    safe_run_id = run_id.strip()
+    if not safe_run_id or "/" in safe_run_id or "\\" in safe_run_id:
+        raise storage.WorkspaceError("Invalid run id.")
+    run_path = storage.project_dir(root, project_path) / "runs" / safe_run_id
+    result_path = run_path / "result.json"
+    if not result_path.exists():
+        raise storage.WorkspaceError("Run does not exist.")
+    result = storage.read_json(result_path)
+    return {
+        "run": result.get("run", {}),
+        "result": result,
+        "stdout": read_text_if_exists(run_path / "stdout.txt"),
+        "stderr": read_text_if_exists(run_path / "stderr.txt"),
+        "markdown": read_text_if_exists(run_path / "run.md"),
+    }
+
+
+def read_project_artifact(root: str | Path, project_path: str, artifact_path: str) -> dict[str, Any]:
+    config = load_config(root, project_path)
+    project_root = Path(config["resolved_root"])
+    rel = artifact_path.strip().lstrip("/")
+    if not rel:
+        raise storage.WorkspaceError("Artifact path is required.")
+    if is_secret_reference(rel):
+        raise storage.WorkspaceError("Artifact path is blocked.")
+    resolved = (project_root / rel).resolve()
+    if not resolved.is_relative_to(project_root):
+        raise storage.WorkspaceError("Artifact path escapes the project root.")
+    first = Path(rel).parts[0] if Path(rel).parts else ""
+    if first not in {"artifacts", "files", "runs"}:
+        raise storage.WorkspaceError("Only project files, artifacts, and runs can be opened.")
+    if not resolved.exists() or not resolved.is_file():
+        raise storage.WorkspaceError("Artifact file does not exist.")
+    if resolved.stat().st_size > 1_000_000:
+        raise storage.WorkspaceError("Artifact is too large to preview.")
+    text = resolved.read_text(encoding="utf-8", errors="replace")
+    suffix = resolved.suffix.lower().lstrip(".") or "text"
+    return {
+        "path": rel,
+        "kind": suffix,
+        "size": resolved.stat().st_size,
+        "content": text,
+    }
+
+
+def read_text_if_exists(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace") if path.exists() and path.is_file() else ""
+
+
 def latest_runs(root: str | Path, project_path: str, *, limit: int = 10) -> list[dict[str, Any]]:
     runs_root = storage.project_dir(root, project_path) / "runs"
     if not runs_root.exists():
@@ -416,11 +469,13 @@ def assert_no_secret_references(project_root: Path, command: dict[str, Any]) -> 
     for key in ("cwd", "script", "command"):
         if command.get(key):
             values.append(str(command[key]))
-    for key in ("args", "input", "inputs", "output", "outputs"):
-        for item in command.get(key, []) or []:
-            values.append(str(item))
+    for key in ("args", "input", "inputs", "outputs"):
+        values.extend(normalize_string_list(command.get(key)))
+    raw_output = command.get("output")
+    if isinstance(raw_output, list):
+        values.extend(str(item) for item in raw_output)
     for value in values:
-        if any(fnmatch.fnmatch(value, pattern) or pattern in value for pattern in SECRET_PATTERNS):
+        if is_secret_reference(value):
             raise storage.WorkspaceError("Action references a blocked secret path.")
         candidate = (project_root / value).resolve() if not Path(value).expanduser().is_absolute() else Path(value).expanduser().resolve()
         if is_secret_path(candidate):
@@ -450,6 +505,47 @@ def expected_input_files(project_root: Path, config: dict[str, Any], command: di
                 if not any(fnmatch.fnmatch(rel, item) for item in excludes) and not is_secret_path(path):
                     found.append(rel)
     return sorted(dict.fromkeys(found))
+
+
+def normalize_output_type(command: dict[str, Any]) -> str:
+    explicit = command.get("output_type")
+    if explicit:
+        return str(explicit)
+    output = command.get("output")
+    if isinstance(output, str) and output in {"chat_prompt", "artifact", "chat_reply", "file_view", "codex_prompt"}:
+        return output
+    if command.get("kind") == "prompt_recipe":
+        return "chat_prompt"
+    if command.get("kind") in {"python", "shell"}:
+        return "artifact"
+    if command.get("kind") == "file_index":
+        return "file_view"
+    if command.get("kind") == "codex_prompt":
+        return "codex_prompt"
+    return "run_log"
+
+
+def normalize_outputs(command: dict[str, Any]) -> list[str]:
+    if "outputs" in command:
+        return normalize_string_list(command.get("outputs"))
+    output = command.get("output")
+    if isinstance(output, list):
+        return [str(item) for item in output]
+    return []
+
+
+def normalize_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
+def is_secret_reference(value: str) -> bool:
+    return any(fnmatch.fnmatch(value, pattern) or pattern in value for pattern in SECRET_PATTERNS)
 
 
 def build_codex_prompt(config: dict[str, Any], command: dict[str, Any]) -> str:

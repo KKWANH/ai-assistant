@@ -36,7 +36,35 @@ commands:
 
     assert config["name"] == "Investment"
     assert preview["kind"] == "prompt_recipe"
+    assert preview["output_type"] == "chat_prompt"
+    assert preview["expected_output_files"] == []
     assert "Summarize them." in preview["prompt"]
+
+
+def test_legacy_output_string_is_not_split_into_artifacts(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Investment")
+    write_project_config(
+        root,
+        "investment",
+        """
+name: Investment
+root: .
+commands:
+  summarize:
+    kind: prompt_recipe
+    output: chat_prompt
+    label: Summarize
+    prompt: Summarize files.
+""",
+    )
+
+    preview = action_registry.preview_action(root, "investment", "summarize")
+    run = action_registry.run_action(root, "investment", "summarize")
+
+    assert preview["output_type"] == "chat_prompt"
+    assert preview["expected_output_files"] == []
+    assert run["artifacts"] == []
 
 
 def test_shell_action_requires_confirmation_and_creates_run_folder(tmp_path):
@@ -105,6 +133,21 @@ def test_investment_rebalancer_template_python_action(tmp_path):
     assert run["status"] == "completed"
     assert "Wrote" in run["stdout"]
     assert (storage.project_dir(root, "investment") / "artifacts" / "rebalance-table.csv").exists()
+
+
+def test_project_artifact_and_run_detail_readers(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Investment")
+    action_registry.import_template(root, "investment", "investment-rebalancer")
+    run = action_registry.run_action(root, "investment", "rebalance_plan", confirmed=True)
+
+    detail = action_registry.read_run_detail(root, "investment", run["run_id"])
+    artifact = action_registry.read_project_artifact(root, "investment", "artifacts/rebalance-table.csv")
+
+    assert detail["run"]["run_id"] == run["run_id"]
+    assert "Wrote" in detail["stdout"]
+    assert artifact["kind"] == "csv"
+    assert "asset_class,current_value" in artifact["content"]
 
 
 def test_recent_run_context_is_available_for_prompt_context(tmp_path):

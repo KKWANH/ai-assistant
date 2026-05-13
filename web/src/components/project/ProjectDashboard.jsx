@@ -1,14 +1,37 @@
-import React from "react";
+import React, { useState } from "react";
 import { actionStatus, ProjectActionsPanel } from "../actions/ActionPanels.jsx";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
 
 export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig }) {
+  const [runDetail, setRunDetail] = useState(null);
+  const [artifact, setArtifact] = useState(null);
+  const [modalError, setModalError] = useState("");
   const config = projectConfig?.config || {};
   const runs = projectConfig?.runs || [];
   const commands = Object.entries(config.commands || {});
   const panels = config.panels || [];
   const context = config.context || {};
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
+
+  async function openRun(run) {
+    setModalError("");
+    try {
+      const payload = await fetchJson(`/api/project-run?project=${encodeURIComponent(activePath.projectPath)}&run_id=${encodeURIComponent(run.run_id)}`);
+      setRunDetail(payload);
+    } catch (err) {
+      setModalError(err.message);
+    }
+  }
+
+  async function openArtifact(item) {
+    setModalError("");
+    try {
+      const payload = await fetchJson(`/api/project-artifact?project=${encodeURIComponent(activePath.projectPath)}&path=${encodeURIComponent(item.path)}`);
+      setArtifact(payload.artifact);
+    } catch (err) {
+      setModalError(err.message);
+    }
+  }
 
   return (
     <div className="project-dashboard">
@@ -54,6 +77,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
           onProjectConfig={onProjectConfig}
           power={power}
           fetchJson={fetchJson}
+          onOpenArtifact={openArtifact}
         />
       </section>
 
@@ -105,11 +129,11 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
         ) : (
           <div className="run-list">
             {runs.slice(0, 5).map((run) => (
-              <div className="run-row" key={run.run_id || `${run.command}-${run.created_at}`}>
+              <button className="run-row clickable-row" type="button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => openRun(run)}>
                 <strong>{run.label || run.command}</strong>
                 <span>{run.status}</span>
                 <small>{run.created_at}</small>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -128,15 +152,110 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
         ) : (
           <div className="artifact-grid">
             {artifacts.slice(0, 8).map((artifact) => (
-              <div className="artifact-tile" key={`${artifact.run.run_id}-${artifact.path}`}>
+              <button className="artifact-tile clickable-row" type="button" key={`${artifact.run.run_id}-${artifact.path}`} onClick={() => openArtifact(artifact)}>
                 <strong>{artifact.path}</strong>
                 <span>{artifact.exists ? `${artifact.size} bytes` : "not found"}</span>
                 <small>{artifact.run.label || artifact.run.command}</small>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </section>
+
+      {modalError && (
+        <div className="viewer-modal" role="dialog" aria-modal="true">
+          <div className="viewer-card">
+            <button type="button" className="viewer-close" onClick={() => setModalError("")}>닫기</button>
+            <h2>열 수 없습니다</h2>
+            <p className="error-text">{modalError}</p>
+          </div>
+        </div>
+      )}
+      {runDetail && <RunDetailModal detail={runDetail} power={power} onClose={() => setRunDetail(null)} onOpenArtifact={openArtifact} />}
+      {artifact && <ArtifactViewer artifact={artifact} onClose={() => setArtifact(null)} />}
     </div>
   );
+}
+
+function RunDetailModal({ detail, power, onClose, onOpenArtifact }) {
+  const run = detail.run || {};
+  return (
+    <div className="viewer-modal" role="dialog" aria-modal="true">
+      <div className="viewer-card wide">
+        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <p className="eyebrow">Run Detail</p>
+        <h2>{run.label || run.command || "실행 기록"}</h2>
+        <div className="run-meta-grid">
+          <span>Status: {run.status}</span>
+          <span>Kind: {run.kind}</span>
+          <span>{run.created_at}</span>
+        </div>
+        {run.artifacts?.length > 0 && (
+          <div className="artifact-list">
+            <strong>Artifacts</strong>
+            {run.artifacts.map((item) => (
+              <button type="button" key={item.path} onClick={() => onOpenArtifact(item)}>
+                {item.path} · {item.exists ? `${item.size} bytes` : "not found"}
+              </button>
+            ))}
+          </div>
+        )}
+        {power && (
+          <>
+            <h3>stdout</h3>
+            <pre>{detail.stdout || "(empty)"}</pre>
+            <h3>stderr</h3>
+            <pre className={detail.stderr ? "error-text" : ""}>{detail.stderr || "(empty)"}</pre>
+            <h3>result.json</h3>
+            <pre>{JSON.stringify(detail.result || {}, null, 2)}</pre>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ArtifactViewer({ artifact, onClose }) {
+  return (
+    <div className="viewer-modal" role="dialog" aria-modal="true">
+      <div className="viewer-card wide">
+        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <p className="eyebrow">Artifact Viewer</p>
+        <h2>{artifact.path}</h2>
+        <span className="soft-pill">{artifact.kind} · {artifact.size} bytes</span>
+        <ArtifactContent artifact={artifact} />
+      </div>
+    </div>
+  );
+}
+
+function ArtifactContent({ artifact }) {
+  const kind = artifact.kind;
+  const content = artifact.content || "";
+  if (kind === "csv") {
+    const rows = content.trim().split(/\r?\n/).slice(0, 60).map((line) => line.split(","));
+    return (
+      <div className="artifact-table-wrap">
+        <table className="artifact-table">
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${rowIndex}-${row.join("|")}`}>
+                {row.map((cell, cellIndex) => rowIndex === 0
+                  ? <th key={cellIndex}>{cell}</th>
+                  : <td key={cellIndex}>{cell}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (kind === "json") {
+    try {
+      return <pre>{JSON.stringify(JSON.parse(content), null, 2)}</pre>;
+    } catch {
+      return <pre>{content}</pre>;
+    }
+  }
+  return <pre>{content}</pre>;
 }

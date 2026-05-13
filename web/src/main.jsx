@@ -477,6 +477,41 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
       <nav className="project-tree" aria-label="Workspace">
         {!workspace && <div className="empty-card">Loading workspace...</div>}
         {!hasSearchResults && <div className="empty-card compact-empty">검색 결과가 없습니다.</div>}
+        {workspace && privateProjects.length > 0 && <div className="tree-heading primary-heading"><span>작업실</span></div>}
+        {workspace && projects.length === 0 && (
+          <div className="empty-card">
+            <strong>No projects yet.</strong>
+            <p>Projects hold sessions, skills, files, and context.</p>
+          </div>
+        )}
+        {filtered.filter((project) => project.visibility !== "public").map((project) => (
+          <ProjectNode
+            key={project.path}
+            project={project}
+            activePath={activePath}
+            navigate={navigate}
+            projects={ownedProjects}
+            onRefresh={refreshAndStay}
+            onDragSession={dragSession}
+            onMoveSession={moveSession}
+            onDropOnProject={dropOnProject}
+          />
+        ))}
+        {sharedProjects.length > 0 && <div className="tree-heading"><span>공유 작업실</span></div>}
+        {sharedProjects.map((project) => (
+          <ProjectNode
+            key={project.path}
+            project={project}
+            activePath={activePath}
+            navigate={navigate}
+            projects={ownedProjects}
+            onRefresh={refreshAndStay}
+            onDragSession={dragSession}
+            onMoveSession={moveSession}
+            onDropOnProject={dropOnProject}
+          />
+        ))}
+        <div className="tree-heading"><span>대화</span></div>
         <ChatSection
           title={needle ? "검색 결과 - 오늘" : "오늘"}
           sessions={todayChats}
@@ -499,40 +534,6 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
           onDragSession={dragSession}
           onMoveSession={moveSession}
         />
-        {workspace && privateProjects.length > 0 && <div className="tree-heading"><span>프로젝트</span></div>}
-        {workspace && projects.length === 0 && (
-          <div className="empty-card">
-            <strong>No projects yet.</strong>
-            <p>Projects hold sessions, skills, files, and context.</p>
-          </div>
-        )}
-        {filtered.filter((project) => project.visibility !== "public").map((project) => (
-          <ProjectNode
-            key={project.path}
-            project={project}
-            activePath={activePath}
-            navigate={navigate}
-            projects={ownedProjects}
-            onRefresh={refreshAndStay}
-            onDragSession={dragSession}
-            onMoveSession={moveSession}
-            onDropOnProject={dropOnProject}
-          />
-        ))}
-        {sharedProjects.length > 0 && <div className="tree-heading"><span>가족 공유</span></div>}
-        {sharedProjects.map((project) => (
-          <ProjectNode
-            key={project.path}
-            project={project}
-            activePath={activePath}
-            navigate={navigate}
-            projects={ownedProjects}
-            onRefresh={refreshAndStay}
-            onDragSession={dragSession}
-            onMoveSession={moveSession}
-            onDropOnProject={dropOnProject}
-          />
-        ))}
         {account?.admin && automations.length > 0 && (
           <section className="tree-section local-jobs-section">
             <h2><span>작업 레시피</span></h2>
@@ -647,7 +648,7 @@ function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDra
         <button
           type="button"
           className={`folder-card ${project.path === activePath.projectPath ? "active" : ""}`}
-          onClick={() => navigate(project.firstSessionUrl || `/project/${project.path}`)}
+          onClick={() => navigate(`/project/${project.path}`)}
         >
           <span>{project.title}</span>
           <small>{project.owner_display || project.owner || "Kwanho Kim"} · {project.created_at?.slice(0, 10) || "local"}</small>

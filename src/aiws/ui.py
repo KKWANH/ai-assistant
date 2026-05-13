@@ -73,6 +73,16 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_openclaw()
         elif path == "/api/automations":
             self.api_automations()
+        elif path == "/api/project-run":
+            query = parse_qs(parsed.query)
+            project_path = unquote((query.get("project") or [""])[0])
+            run_id = unquote((query.get("run_id") or [""])[0])
+            self.api_project_run(project_path, run_id)
+        elif path == "/api/project-artifact":
+            query = parse_qs(parsed.query)
+            project_path = unquote((query.get("project") or [""])[0])
+            artifact_path = unquote((query.get("path") or [""])[0])
+            self.api_project_artifact(project_path, artifact_path)
         elif path.startswith("/api/project-config/"):
             project_path = unquote(path.removeprefix("/api/project-config/"))
             self.api_project_config(project_path)
@@ -867,6 +877,22 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 storage.ensure_project_access(self.root, project_path, self.current_username())
             config = action_registry.load_config(self.root, project_path)
             self.send_json({"config": config, "runs": action_registry.latest_runs(self.root, project_path)})
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_project_run(self, project_path: str, run_id: str) -> None:
+        try:
+            if storage.has_accounts(self.root):
+                storage.ensure_project_access(self.root, project_path, self.current_username())
+            self.send_json(action_registry.read_run_detail(self.root, project_path, run_id))
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_project_artifact(self, project_path: str, artifact_path: str) -> None:
+        try:
+            if storage.has_accounts(self.root):
+                storage.ensure_project_access(self.root, project_path, self.current_username())
+            self.send_json({"artifact": action_registry.read_project_artifact(self.root, project_path, artifact_path)})
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
