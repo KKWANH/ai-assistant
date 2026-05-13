@@ -103,6 +103,74 @@ const SEARCH_OPTIONS = [
   { value: "always", label: "Search web (준비 중)" },
 ];
 
+const STARTER_ACTIONS = [
+  {
+    id: "document_summary",
+    label: "문서 요약하기",
+    category: "문서",
+    status: "Ready",
+    description: "PDF, DOCX, TXT, MD 파일을 읽고 구조적 요약을 시작합니다.",
+    inputs: ".pdf · .docx · .txt · .md",
+    output: "Chat answer + Markdown",
+    prompt: "첨부한 문서를 구조적으로 요약해줘. 핵심 주장, 중요한 근거, 후속 질문을 분리해서 정리해줘.",
+    wantsFile: true,
+  },
+  {
+    id: "image_explain",
+    label: "이미지 설명하기",
+    category: "이미지",
+    status: "Ready",
+    description: "이미지를 첨부하고 무엇인지 설명하거나 비교 분석합니다.",
+    inputs: ".png · .jpg · .webp",
+    output: "Chat answer",
+    prompt: "첨부한 이미지를 설명해줘. 보이는 요소, 중요한 맥락, 확인해야 할 점을 나눠서 알려줘.",
+    wantsFile: true,
+  },
+  {
+    id: "csv_analysis",
+    label: "CSV 분석하기",
+    category: "데이터",
+    status: "Partial",
+    description: "CSV 구조를 파악하고 주요 숫자와 이상치를 요약합니다.",
+    inputs: ".csv",
+    output: "Table preview + Summary",
+    prompt: "첨부한 CSV를 읽고 컬럼 구조, 주요 수치, 이상치 후보, 다음 분석 방향을 정리해줘.",
+    wantsFile: true,
+  },
+  {
+    id: "codex_task_prompt",
+    label: "Codex 작업지시 만들기",
+    category: "코드",
+    status: "Ready",
+    description: "목표와 제약조건을 Codex용 실행 프롬프트로 정리합니다.",
+    inputs: "goal · files",
+    output: "Codex prompt",
+    prompt: "아래 목표를 Codex에게 줄 작업 지시서로 바꿔줘. repo context, 제약조건, 테스트 명령, acceptance criteria를 포함해줘.",
+  },
+  {
+    id: "investment_rebalancer",
+    label: "투자 포트폴리오 리밸런싱",
+    category: "투자",
+    status: "Ready",
+    description: "CSV/YAML 입력을 기반으로 리밸런싱 작업실 템플릿을 시작합니다.",
+    inputs: ".csv · .yaml",
+    output: "CSV artifact + Report",
+    prompt: "포트폴리오 CSV와 목표 비중 YAML을 기준으로 현재 비중, 목표 대비 차이, 리밸런싱 후보를 정리해줘.",
+    wantsFile: true,
+  },
+  {
+    id: "folder_index",
+    label: "폴더 구조 읽기",
+    category: "파일",
+    status: "Planned",
+    description: "로컬 폴더를 작업실로 바꾸기 위한 파일 구조 요약을 준비합니다.",
+    inputs: "folder",
+    output: "File index",
+    prompt: "이 폴더 구조를 AIWS 프로젝트로 만들기 위한 파일 분류와 작업 계획을 제안해줘.",
+    disabled: true,
+  },
+];
+
 function apiPath(path) {
   return path;
 }
@@ -296,6 +364,7 @@ function App() {
           onToggleContext={toggleContext}
           projectConfig={projectConfig}
           onProjectConfig={setProjectConfig}
+          workspace={workspace}
         />
         <ContextPanel
           chat={chat}
@@ -465,6 +534,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
         </button>
       </div>
       <section className="sidebar-actions">
+        <button className={`secondary-action home-action ${(!activePath.view || activePath.view === "home") && !activePath.projectPath && !activePath.sessionSlug ? "active" : ""}`} type="button" onClick={() => navigate("/")}>Home</button>
         <NewGeneralChatForm onCreated={(path) => navigate(path)} />
         <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>새 프로젝트</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
@@ -542,6 +612,11 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
             ))}
           </section>
         )}
+        <section className="tree-section action-library-section">
+          <h2><span>Action Library</span></h2>
+          <button className="library-link" type="button" onClick={() => navigate("/actions")}>Starter Actions 보기</button>
+          <button className="library-link planned" type="button" disabled>Action Builder · Planned</button>
+        </section>
         <div className="tree-heading archive-heading"><span>보관함</span></div>
       </nav>
       {settingsOpen && <SettingsModal account={account} onClose={() => setSettingsOpen(false)} onSaved={onRefresh} />}
@@ -894,8 +969,11 @@ function NewSessionForm({ projectPath, onCreated }) {
   );
 }
 
-function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig }) {
+function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace }) {
   const power = isPowerMode(account);
+  if (activePath.view === "actions") {
+    return <ActionLibraryPage navigate={navigate} />;
+  }
   if (activePath.projectPath && !activePath.sessionSlug) {
     const project = projects.find((item) => item.path === activePath.projectPath);
     return (
@@ -929,6 +1007,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
         onAsk={onAsk}
         account={account}
         projectPath={activePath.projectPath}
+        workspace={workspace}
       />
     );
   }
@@ -958,6 +1037,81 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
         fetchJson={fetchJson}
       />
       <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} />
+    </section>
+  );
+}
+
+function ActionLibraryPage({ navigate }) {
+  return (
+    <section className="center-pane action-library-page">
+      <div className="home-workbench">
+        <div className="home-hero">
+          <p className="eyebrow">Action Library</p>
+          <h1>작업 레시피를 먼저 고르세요</h1>
+          <p>프로젝트를 만들기 전에도 문서, 이미지, CSV, 코드 작업을 시작할 수 있습니다. 반복할 가치가 생기면 나중에 프로젝트나 내 액션으로 저장합니다.</p>
+        </div>
+        <StarterActionsGrid onStart={(action) => navigate(`/?starter=${encodeURIComponent(action.id)}`)} />
+      </div>
+    </section>
+  );
+}
+
+function StarterActionsGrid({ onStart }) {
+  return (
+    <section className="starter-actions" aria-label="Starter Actions">
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">Starter Actions</p>
+          <h2>프로젝트 없이 바로 시작</h2>
+        </div>
+        <span className="soft-pill">Home runs</span>
+      </div>
+      <div className="starter-grid">
+        {STARTER_ACTIONS.map((action) => (
+          <article className={`starter-card ${action.disabled ? "is-disabled" : ""}`} key={action.id}>
+            <div className="starter-card-head">
+              <span className="starter-category">{action.category}</span>
+              <span className={`status-badge ${String(action.status).toLowerCase()}`}>{action.status}</span>
+            </div>
+            <h3>{action.label}</h3>
+            <p>{action.description}</p>
+            <div className="starter-meta">
+              <span>입력: {action.inputs}</span>
+              <span>출력: {action.output}</span>
+            </div>
+            <div className="starter-actions-row">
+              <button type="button" onClick={() => onStart?.(action)} disabled={action.disabled}>
+                {action.disabled ? "준비 중" : "바로 시작"}
+              </button>
+              <button type="button" disabled title="Action Builder is planned">
+                수정해서 사용 · Planned
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HomeWorkbenchHints() {
+  return (
+    <section className="home-hints" aria-label="Home Workbench next steps">
+      <article className="home-hint-card">
+        <span>1</span>
+        <strong>Starter Action 실행</strong>
+        <p>문서 요약, 이미지 설명, CSV 분석처럼 프로젝트 없이 한 번 실행합니다.</p>
+      </article>
+      <article className="home-hint-card">
+        <span>2</span>
+        <strong>Run과 Artifact 확인</strong>
+        <p>결과는 Home Workbench의 실행 기록과 산출물로 남는 구조로 확장됩니다.</p>
+      </article>
+      <article className="home-hint-card">
+        <span>3</span>
+        <strong>반복 작업은 저장</strong>
+        <p>반복할 가치가 있으면 프로젝트, 내 액션, 패널로 승격합니다.</p>
+      </article>
     </section>
   );
 }
@@ -1035,6 +1189,19 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   const formRef = useRef(null);
   const power = isPowerMode(account);
   const selectedMode = modelMode(mode);
+  const isHomeWorkbench = !embedded && !projectPath;
+
+  useEffect(() => {
+    if (!isHomeWorkbench) return;
+    const starterId = new URLSearchParams(window.location.search).get("starter");
+    if (!starterId) return;
+    const action = STARTER_ACTIONS.find((item) => item.id === starterId);
+    if (action && !action.disabled) {
+      setContent(action.prompt || action.label);
+      if (action.wantsFile) window.setTimeout(() => inputRef.current?.click(), 50);
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [isHomeWorkbench]);
 
   useEffect(() => {
     setCookie("aiws_model_mode", mode);
@@ -1065,6 +1232,14 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
     setDragging(false);
     const dropped = event.dataTransfer?.files?.[0];
     if (dropped) setFile(dropped);
+  }
+
+  function startAction(action) {
+    if (action.disabled) return;
+    setContent(action.prompt || action.label);
+    if (action.wantsFile) {
+      window.setTimeout(() => inputRef.current?.click(), 30);
+    }
   }
 
   async function submit(event) {
@@ -1131,11 +1306,16 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   }
 
   const contentNode = (
-      <div className="start-content">
-        <h1>무엇을 도와드릴까요?</h1>
+      <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
+        <div className={isHomeWorkbench ? "home-hero" : ""}>
+        {isHomeWorkbench && <p className="eyebrow">Home Workbench</p>}
+        <h1>{isHomeWorkbench ? "개인 AI 작업실" : "무엇을 도와드릴까요?"}</h1>
         <p className="start-subtitle">
-          {projectPath ? "첫 메시지를 보내면 이 프로젝트 안에 새 대화가 저장됩니다." : "대화, 파일, 프로젝트 기억을 내 Mac 안에서 이어가는 개인 AI 비서입니다."}
+          {projectPath
+            ? "첫 메시지를 보내면 이 프로젝트 안에 새 대화가 저장됩니다."
+            : "프로젝트를 만들기 전에도 파일, 액션, 실행 기록을 바로 사용할 수 있습니다."}
         </p>
+        </div>
         <form
           ref={formRef}
           className={`start-composer ${dragging ? "dragging" : ""}`}
@@ -1206,9 +1386,16 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
           )}
         </form>
         {starting && <WaitingNotice label="Assistant is preparing your answer" />}
-        <div className="quick-actions">
-          {["사진 설명하기", "문서 요약하기", "할 일 정리하기", "글쓰기 도와줘"].map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}
-        </div>
+        {isHomeWorkbench ? (
+          <>
+            <StarterActionsGrid onStart={startAction} />
+            <HomeWorkbenchHints />
+          </>
+        ) : (
+          <div className="quick-actions">
+            {["사진 설명하기", "문서 요약하기", "할 일 정리하기", "글쓰기 도와줘"].map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}
+          </div>
+        )}
         <p className="honest-note">현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다. 웹 검색은 아직 준비 중입니다.</p>
         {startError && <div className="system-note">{startError}</div>}
         {error && <div className="system-note">{error}</div>}
@@ -2035,6 +2222,15 @@ function SettingsModal({ account, onClose, onSaved }) {
 function parseRoute(path = window.location.pathname) {
   if (path === "/login") {
     return { view: "login", projectPath: "", sessionSlug: "" };
+  }
+  if (path === "/actions") {
+    return { view: "actions", projectPath: "", sessionSlug: "" };
+  }
+  if (path === "/actions/new") {
+    return { view: "actions", projectPath: "", sessionSlug: "" };
+  }
+  if (path === "/home") {
+    return { view: "home", projectPath: "", sessionSlug: "" };
   }
   if (path.startsWith("/chat/")) {
     const parts = path.replace("/chat/", "").split("/");

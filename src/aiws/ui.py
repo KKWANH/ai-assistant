@@ -73,6 +73,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_openclaw()
         elif path == "/api/automations":
             self.api_automations()
+        elif path == "/api/home":
+            self.api_home()
+        elif path == "/api/action-library":
+            self.api_action_library()
         elif path == "/api/project-run":
             query = parse_qs(parsed.query)
             project_path = unquote((query.get("project") or [""])[0])
@@ -102,6 +106,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
         elif path == "/projects":
             self.serve_spa()
         elif path == "/projects/new":
+            self.serve_spa()
+        elif path in {"/home", "/actions", "/actions/new"}:
             self.serve_spa()
         elif path == "/profile":
             self.serve_spa()
@@ -870,6 +876,26 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json({"projects": automations.list_projects(self.root)})
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=403)
+
+    def api_home(self) -> None:
+        username = self.current_username() or "local"
+        home = storage.workspace_path(self.root) / "users" / storage.slugify(username) / "home"
+        for name in ("files", "runs", "artifacts"):
+            (home / name).mkdir(parents=True, exist_ok=True)
+        self.send_json(
+            {
+                "home": {
+                    "path": str(home),
+                    "files": [],
+                    "runs": [],
+                    "artifacts": [],
+                    "message": "Home Workbench is ready for projectless starter actions.",
+                }
+            }
+        )
+
+    def api_action_library(self) -> None:
+        self.send_json({"actions": starter_actions()})
 
     def api_project_config(self, project_path: str) -> None:
         try:
@@ -2213,6 +2239,65 @@ def model_cost_table() -> str:
     for item in costs.list_model_costs():
         lines.append(f"{item.provider}\t{item.model}\t{item.input_per_million}\t{item.output_per_million}\t{item.note}")
     return "\n".join(lines)
+
+
+def starter_actions() -> list[dict[str, object]]:
+    return [
+        {
+            "id": "document_summary",
+            "label": "문서 요약하기",
+            "category": "문서",
+            "description": "PDF, DOCX, TXT, MD 파일을 읽고 구조적 요약을 시작합니다.",
+            "inputs": [".pdf", ".docx", ".txt", ".md"],
+            "output": "Chat answer + Markdown artifact",
+            "status": "Ready",
+        },
+        {
+            "id": "image_explain",
+            "label": "이미지 설명하기",
+            "category": "이미지",
+            "description": "이미지를 첨부하고 무엇인지 설명하거나 비교 분석합니다.",
+            "inputs": [".png", ".jpg", ".jpeg", ".webp"],
+            "output": "Chat answer",
+            "status": "Ready",
+        },
+        {
+            "id": "csv_analysis",
+            "label": "CSV 분석하기",
+            "category": "데이터",
+            "description": "CSV 구조를 파악하고 주요 숫자와 이상치를 요약합니다.",
+            "inputs": [".csv"],
+            "output": "Table preview + Summary",
+            "status": "Partial",
+        },
+        {
+            "id": "folder_index",
+            "label": "폴더 구조 읽기",
+            "category": "파일",
+            "description": "로컬 폴더를 작업실로 바꾸기 위한 파일 구조 요약을 준비합니다.",
+            "inputs": ["folder"],
+            "output": "File index",
+            "status": "Planned",
+        },
+        {
+            "id": "codex_task_prompt",
+            "label": "Codex 작업지시 만들기",
+            "category": "코드",
+            "description": "목표와 제약조건을 Codex용 실행 프롬프트로 정리합니다.",
+            "inputs": ["goal", "files"],
+            "output": "Codex prompt",
+            "status": "Ready",
+        },
+        {
+            "id": "investment_rebalancer",
+            "label": "투자 포트폴리오 리밸런싱",
+            "category": "투자",
+            "description": "CSV/YAML 입력을 기반으로 리밸런싱 작업실 템플릿을 시작합니다.",
+            "inputs": [".csv", ".yaml"],
+            "output": "CSV artifact + Markdown report",
+            "status": "Ready",
+        },
+    ]
 
 
 def re_search_filename(headers: bytes) -> str | None:

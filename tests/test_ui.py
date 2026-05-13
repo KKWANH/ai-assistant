@@ -117,6 +117,11 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "다음 작업 후보" in bundle_text
         assert "사용자가 승인해야 실행됩니다" in bundle_text
         assert "Investment Rebalancer" in bundle_text
+        assert "개인 AI 작업실" in bundle_text
+        assert "Starter Actions" in bundle_text
+        assert "프로젝트 없이 바로 시작" in bundle_text
+        assert "Action Library" in bundle_text
+        assert "문서 요약하기" in bundle_text
         assert "Kwanho Kim" in bundle_text
         assert "Chungja Byun" in bundle_text
         assert "Gunwoo Kim" in bundle_text
@@ -249,8 +254,16 @@ def test_home_renders_workspace_shell_and_empty_state(tmp_path):
     try:
         page = request.urlopen(f"{base_url}/", timeout=5).read().decode("utf-8")
         assert '<div id="root"></div>' in page
+        actions_page = request.urlopen(f"{base_url}/actions", timeout=5).read().decode("utf-8")
+        assert '<div id="root"></div>' in actions_page
         workspace = request.urlopen(f"{base_url}/api/workspace", timeout=5).read().decode("utf-8")
         assert '"projects": []' in workspace
+        home = json.loads(request.urlopen(f"{base_url}/api/home", timeout=5).read().decode("utf-8"))
+        assert "home" in home
+        assert home["home"]["message"] == "Home Workbench is ready for projectless starter actions."
+        actions = json.loads(request.urlopen(f"{base_url}/api/action-library", timeout=5).read().decode("utf-8"))
+        assert actions["actions"][0]["id"] == "document_summary"
+        assert any(item["id"] == "investment_rebalancer" for item in actions["actions"])
     finally:
         server.shutdown()
         server.server_close()
