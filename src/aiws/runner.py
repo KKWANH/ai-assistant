@@ -12,9 +12,10 @@ from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
 from .providers.ollama import OllamaProvider
 from .providers.openai import OpenAIProvider
+from .providers.ernie import ErnieProvider
 
 
-REMOTE_PROVIDERS = {"kimi", "gemini", "openai"}
+REMOTE_PROVIDERS = {"kimi", "gemini", "openai", "ernie"}
 
 
 MEMORY_MARKERS = (
@@ -44,6 +45,8 @@ def get_provider(provider: str):
         return GeminiProvider()
     if provider == "openai":
         return OpenAIProvider()
+    if provider == "ernie":
+        return ErnieProvider()
     raise storage.WorkspaceError(f"Unsupported provider: {provider}")
 
 
@@ -63,6 +66,7 @@ def ask(
     provider_attachments: list[dict[str, str]] | None = None,
     allow_remote: bool = False,
     confirm_cost: bool = False,
+    execution_plan: dict[str, object] | None = None,
 ) -> str:
     load_env()
     provider = provider or os.environ.get("AIWS_DEFAULT_PROVIDER", "ollama")
@@ -92,10 +96,33 @@ def ask(
         metadata=user_metadata,
         actor=actor,
     )
-    response = client.chat(model=model, system=prompt_context, content=content, attachments=provider_attachments)
+    try:
+        response = client.chat(model=model, system=prompt_context, content=content, attachments=provider_attachments)
+    except Exception as exc:
+        if provider in REMOTE_PROVIDERS:
+            storage.append_model_usage(
+                root,
+                {
+                    "user_id": storage.slugify(actor) if actor else "local",
+                    "chat_id": f"{project_path}/{session_slug}",
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "estimated_usd": estimated.get("estimated_cost"),
+                    "actual_usd": None,
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {str(exc)[:500]}",
+                },
+            )
+        storage.record_usage(root, actor, asks=1)
+        raise
     output_tokens = costs.rough_token_count(response)
     actual = costs.estimate_cost(provider, model, input_tokens, output_tokens)
     assistant_metadata = {"cost": actual, "search": search.results_metadata(search_mode, resolved_results)}
+    if execution_plan:
+        assistant_metadata["execution_plan"] = execution_plan
     storage.append_message(
         root,
         project_path,
@@ -120,6 +147,7 @@ def ask(
                 "cached_input_tokens": 0,
                 "estimated_usd": estimated.get("estimated_cost"),
                 "actual_usd": actual.get("estimated_cost"),
+                "status": "completed",
             },
         )
     storage.record_usage(root, actor, asks=1)
@@ -171,6 +199,8 @@ def default_model_for_provider(provider: str) -> str:
         return os.environ.get("AIWS_GEMINI_DEFAULT_MODEL", "gemini-2.5-flash-lite")
     if provider == "openai":
         return os.environ.get("AIWS_OPENAI_DEFAULT_MODEL", "gpt-5.1-codex")
+    if provider == "ernie":
+        return os.environ.get("AIWS_ERNIE_DEFAULT_MODEL", "ernie-5.1")
     return ""
 
 

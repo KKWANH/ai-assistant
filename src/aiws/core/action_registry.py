@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from aiws import openclaw, storage
+from aiws.core import contracts
 from aiws.tools import python_script, shell
 
 ACTION_KINDS = {"prompt_recipe", "shell", "python", "file_index", "codex_prompt", "openclaw_status"}
@@ -108,8 +109,69 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
             "exclude": list(context.get("exclude") or sorted(SECRET_PATTERNS)),
         },
         "panels": list(config.get("panels") or ["files", "memory", "commands", "runs", "artifacts"]),
+        "views": normalize_views(config),
         "commands": normalized_commands,
     }
+
+
+def normalize_views(config: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_views = config.get("views")
+    if isinstance(raw_views, list):
+        views: list[dict[str, Any]] = []
+        for index, item in enumerate(raw_views):
+            if not isinstance(item, dict):
+                continue
+            panels = []
+            for panel_index, panel in enumerate(item.get("panels") or []):
+                if isinstance(panel, dict):
+                    panel_type = str(panel.get("type") or "webPreview")
+                    panels.append(
+                        contracts.panel_contract(
+                            panel_id=str(panel.get("id") or f"{item.get('id', 'view')}-{panel_type}-{panel_index}"),
+                            panel_type=panel_type,
+                            title=str(panel.get("title") or panel_type),
+                            source=str(panel.get("source") or ""),
+                            layout=str(panel.get("layout") or "main"),
+                            actions=normalize_string_list(panel.get("actions")),
+                            visibility=str(panel.get("visibility") or "private"),
+                            props={key: value for key, value in panel.items() if key not in {"id", "type", "title", "source", "layout", "actions", "visibility"}},
+                        )
+                    )
+            views.append(
+                {
+                    "id": str(item.get("id") or f"view-{index + 1}"),
+                    "title": str(item.get("title") or item.get("id") or f"View {index + 1}"),
+                    "layout": str(item.get("layout") or "sidebar"),
+                    "panels": panels,
+                }
+            )
+        if views:
+            return views
+    panels = [
+        contracts.panel_contract(panel_id=str(panel), panel_type=legacy_panel_type(str(panel)), title=legacy_panel_title(str(panel)))
+        for panel in (config.get("panels") or ["files", "memory", "commands", "runs", "artifacts"])
+    ]
+    return [{"id": "project", "title": str(config.get("name") or "Project Workbench"), "layout": "sidebar", "panels": panels}]
+
+
+def legacy_panel_type(panel: str) -> str:
+    return {
+        "files": "fileExplorer",
+        "commands": "actionLauncher",
+        "runs": "runTimeline",
+        "artifacts": "artifactGallery",
+        "memory": "markdownViewer",
+    }.get(panel, "webPreview")
+
+
+def legacy_panel_title(panel: str) -> str:
+    return {
+        "files": "Files",
+        "commands": "Actions",
+        "runs": "Recent Runs",
+        "artifacts": "Artifacts",
+        "memory": "Memory",
+    }.get(panel, panel.replace("_", " ").title())
 
 
 def resolve_project_root(project_root: Path, configured: str) -> Path:
@@ -608,8 +670,15 @@ def parse_block(lines: list[str], index: int, indent: int) -> tuple[Any, int]:
             item = stripped[2:]
             if ":" in item and not item.endswith(":"):
                 key, value = item.split(":", 1)
-                sequence.append({key.strip(): parse_scalar(value.strip())})
+                entry = {key.strip(): parse_scalar(value.strip())}
                 index += 1
+                if index < len(lines):
+                    child_indent = len(lines[index]) - len(lines[index].lstrip(" "))
+                    if lines[index].strip() and child_indent > current_indent:
+                        child, index = parse_block(lines, index, child_indent)
+                        if isinstance(child, dict):
+                            entry.update(child)
+                sequence.append(entry)
             elif item.endswith(":"):
                 key = item[:-1].strip()
                 child, index = parse_block(lines, index + 1, indent + 2)

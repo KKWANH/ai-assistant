@@ -97,13 +97,14 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "Local context only" in bundle_text
         assert "Search off" in bundle_text
         assert "Search web (준비 중)" in bundle_text
-        assert "최근 대화" in bundle_text
+        assert "Recent" in bundle_text
+        assert "Projects" in bundle_text
         assert "가족 공유" in bundle_text
         assert "현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다." in bundle_text
         assert "Artifacts, drafts, and generated files will appear here." not in bundle_text
         assert "Local only" in bundle_text
         assert "Cheap cloud" in bundle_text
-        assert "Gemini Pro" in bundle_text
+        assert "Gemini 2.5 Pro" in bundle_text
         assert "Kimi thinking" in bundle_text
         assert "aiws_model_mode" in bundle_text
         assert "window.confirm" not in bundle_text
@@ -204,11 +205,12 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
             "stored_content": "Read this file",
             "user_metadata": {
                 "attachments": [
-                    {
-                        "filename": "note.txt",
-                        "url": "/attachment/ai-system/local-runner/ollama-mvp/note.txt",
-                        "content_type": "txt",
-                        "size": 9,
+                        {
+                            "filename": "note.txt",
+                            "url": "/attachment/ai-system/local-runner/ollama-mvp/note.txt",
+                            "content_type": "txt",
+                            "mime": "text/plain",
+                            "size": 9,
                         "is_image": False,
                         "is_pdf": False,
                         "delivery": "Sent as text context",
@@ -261,9 +263,58 @@ def test_home_renders_workspace_shell_and_empty_state(tmp_path):
         home = json.loads(request.urlopen(f"{base_url}/api/home", timeout=5).read().decode("utf-8"))
         assert "home" in home
         assert home["home"]["message"] == "Home Workbench is ready for projectless starter actions."
+        assert home["home"]["runs"] == []
+        assert home["home"]["views"][0]["title"] == "Home Workbench"
         actions = json.loads(request.urlopen(f"{base_url}/api/action-library", timeout=5).read().decode("utf-8"))
         assert actions["actions"][0]["id"] == "document_summary"
         assert any(item["id"] == "investment_rebalancer" for item in actions["actions"])
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_home_starter_action_creates_run_and_artifact(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=False, password=None)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        boundary = "----aiws-home-boundary"
+        multipart_body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="content"\r\n\r\n'
+            "Summarize this document\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="attachment"; filename="note.md"\r\n'
+            "Content-Type: text/markdown\r\n\r\n"
+            "# Note\r\n\r\nImportant local workspace idea.\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("utf-8")
+        req = request.Request(
+            f"{base_url}/api/home-actions/document_summary/run",
+            data=multipart_body,
+            method="POST",
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Accept": "application/json"},
+        )
+        payload = json.loads(request.urlopen(req, timeout=5).read().decode("utf-8"))
+        run_id = payload["run"]["run_id"]
+        artifact_path = payload["run"]["artifacts"][0]["path"]
+
+        assert payload["run"]["status"] == "completed"
+        assert payload["run"]["execution_plan"]["intent"] == "document_summary"
+        assert artifact_path.endswith("summary.md")
+
+        detail = json.loads(request.urlopen(f"{base_url}/api/home-run?run_id={parse.quote(run_id)}", timeout=5).read().decode("utf-8"))
+        artifact = json.loads(request.urlopen(f"{base_url}/api/home-artifact?path={parse.quote(artifact_path)}", timeout=5).read().decode("utf-8"))
+
+        assert detail["run"]["run_id"] == run_id
+        assert artifact["artifact"]["viewer_type"] == "markdownViewer"
+        assert "Important local workspace idea" in artifact["artifact"]["content"]
     finally:
         server.shutdown()
         server.server_close()
@@ -389,6 +440,125 @@ def test_kimi_image_upload_is_passed_as_vision_attachment(tmp_path, monkeypatch)
     assert calls["provider_attachments"][0]["kind"] == "image_data_url"
     assert calls["provider_attachments"][0]["data_url"].startswith("data:image/png;base64,")
     assert calls["user_metadata"]["attachments"][0]["delivery"] == "Sent as vision input"
+
+
+def test_gemini_pdf_upload_is_passed_as_inline_file(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Docs")
+    calls = {}
+
+    def fake_ask(
+        root_arg,
+        project_path,
+        session_slug,
+        *,
+        provider,
+        model,
+        content,
+        actor=None,
+        search_mode="off",
+        user_metadata=None,
+        stored_content=None,
+        provider_attachments=None,
+        allow_remote=False,
+        confirm_cost=False,
+    ):
+        calls["provider"] = provider
+        calls["content"] = content
+        calls["provider_attachments"] = provider_attachments
+        calls["user_metadata"] = user_metadata
+        return "ok"
+
+    monkeypatch.setattr(runner, "ask", fake_ask)
+    handler = partial(AIWSHandler, root=str(root), require_auth=False, password=None)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        boundary = "----aiws-gemini-pdf-boundary"
+        multipart_body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="provider"\r\n\r\n'
+            "gemini\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="model"\r\n\r\n'
+            "gemini-2.5-flash-lite\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="content"\r\n\r\n'
+            "Read this PDF\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="attachment"; filename="paper.pdf"\r\n'
+            "Content-Type: application/pdf\r\n\r\n"
+            "%PDF-1.4\n(Hello PDF)\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("utf-8")
+        req = request.Request(
+            f"{base_url}/api/ask/ai-system/docs",
+            data=multipart_body,
+            method="POST",
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Accept": "application/json"},
+        )
+        response = request.urlopen(req, timeout=5)
+        assert response.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert calls["provider"] == "gemini"
+    assert calls["provider_attachments"][0]["kind"] == "inline_data"
+    assert calls["provider_attachments"][0]["mime_type"] == "application/pdf"
+    assert "Extracted attachment text" not in calls["content"]
+    assert calls["user_metadata"]["attachments"][0]["delivery"] == "Sent as file input"
+
+
+def test_local_image_upload_returns_clear_vision_error(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Vision")
+
+    def fake_ask(*args, **kwargs):
+        raise AssertionError("local text model should not receive image bytes")
+
+    monkeypatch.setattr(runner, "ask", fake_ask)
+    handler = partial(AIWSHandler, root=str(root), require_auth=False, password=None)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        boundary = "----aiws-local-image-boundary"
+        multipart_body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="provider"\r\n\r\n'
+            "ollama\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="model"\r\n\r\n'
+            "qwen3:4b\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="content"\r\n\r\n'
+            "What is in this image?\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="attachment"; filename="photo.png"\r\n'
+            "Content-Type: image/png\r\n\r\n"
+        ).encode("utf-8") + b"\x89PNG\r\n\x1a\nx\r\n" + f"--{boundary}--\r\n".encode("utf-8")
+        req = request.Request(
+            f"{base_url}/api/ask/ai-system/vision",
+            data=multipart_body,
+            method="POST",
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Accept": "application/json"},
+        )
+        with pytest.raises(request.HTTPError) as exc:
+            request.urlopen(req, timeout=5)
+        body = exc.value.read().decode("utf-8")
+        assert exc.value.code == 400
+        assert "Gemini" in body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_login_sets_secure_cookie_behind_https_and_rate_limits_failures(tmp_path):

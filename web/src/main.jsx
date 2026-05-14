@@ -9,9 +9,10 @@ const DEFAULT_MODEL = "qwen3:4b";
 const MODEL_MODES = [
   {
     value: "local",
-    label: "빠른 로컬 AI",
+    group: "local",
+    label: "Qwen3 4B Local",
     legacyLabel: "Local only",
-    short: "빠른 로컬 AI",
+    short: "Qwen3 4B",
     provider: "ollama",
     model: "qwen3:4b",
     cloud: false,
@@ -21,53 +22,80 @@ const MODEL_MODES = [
     easyPrice: "무료 · 내 Mac에서 처리",
     privacy: "내 Mac에서 처리",
     bestFor: "짧은 질문, 메모, 일상 대화",
+    version: "qwen3:4b · Ollama local",
+  },
+  {
+    value: "local-pro",
+    group: "local",
+    label: "Qwen3 8B Local",
+    short: "Qwen3 8B",
+    provider: "ollama",
+    model: "qwen3:8b",
+    cloud: false,
+    inputPrice: 0,
+    outputPrice: 0,
+    cost: "무료 · 내 Mac에서 처리",
+    easyPrice: "무료 · 더 똑똑한 로컬",
+    privacy: "내 Mac에서 처리",
+    bestFor: "24GB Mac mini용 상위 로컬 추론 · 없으면 ollama pull 필요",
+    version: "qwen3:8b · Ollama local",
   },
   {
     value: "cheap",
-    label: "Gemini Flash-Lite",
+    group: "fast",
+    label: "Gemini 2.5 Flash-Lite",
     legacyLabel: "Cheap cloud",
-    short: "Gemini Flash-Lite",
+    short: "Gemini 2.5 Flash-Lite",
     provider: "gemini",
     model: "gemini-2.5-flash-lite",
     cloud: true,
     inputPrice: 0.10,
     outputPrice: 0.40,
+    agentCalls: 2,
     cost: "~$0.10/M in · ~$0.40/M out",
     easyPrice: "매우 저렴 · 빠른 클라우드",
     privacy: "클라우드 AI",
     bestFor: "일반 질문, 빠른 요약, 저비용 작업",
+    version: "gemini-2.5-flash-lite",
   },
   {
     value: "gemini-pro",
-    label: "Gemini Pro",
-    short: "Gemini Pro",
+    group: "reasoning",
+    label: "Gemini 2.5 Pro",
+    short: "Gemini 2.5 Pro",
     provider: "gemini",
     model: "gemini-2.5-pro",
     cloud: true,
     inputPrice: 1.25,
     outputPrice: 10.0,
+    agentCalls: 3,
     cost: "~$1.25/M in · ~$10/M out",
     easyPrice: "정확도 높음 · 비용 있음",
     privacy: "클라우드 AI",
     bestFor: "복잡한 질문, 긴 글, 정확도가 필요한 작업",
+    version: "gemini-2.5-pro",
   },
   {
     value: "smart",
-    label: "Kimi",
+    group: "long",
+    label: "Kimi K2.6",
     legacyLabel: "Smart cloud",
-    short: "Kimi",
+    short: "Kimi K2.6",
     provider: "kimi",
     model: "kimi-k2.6",
     cloud: true,
-    inputPrice: 0.75,
-    outputPrice: 3.50,
-    cost: "~$0.75/M in · ~$3.50/M out",
+    inputPrice: 0.95,
+    outputPrice: 4.00,
+    agentCalls: 3,
+    cost: "~$0.95/M in · ~$4.00/M out",
     easyPrice: "긴 문서 특화 · 비용 있음",
     privacy: "클라우드 AI",
     bestFor: "긴 문서, 긴 컨텍스트, 분석",
+    version: "kimi-k2.6",
   },
   {
     value: "kimi-thinking",
+    group: "reasoning",
     label: "Kimi Thinking",
     legacyLabel: "Kimi thinking",
     short: "Kimi Thinking",
@@ -76,32 +104,63 @@ const MODEL_MODES = [
     cloud: true,
     inputPrice: 0.60,
     outputPrice: 2.50,
+    agentCalls: 4,
     cost: "~$0.60/M in · ~$2.50/M out",
     easyPrice: "깊은 추론 · 조금 느림",
     privacy: "클라우드 AI",
     bestFor: "깊은 추론, 긴 분석",
+    version: "kimi-k2-thinking",
   },
   {
     value: "coding",
-    label: "OpenAI Codex",
+    group: "coding",
+    label: "OpenAI GPT-5.1 Codex",
     legacyLabel: "Coding expensive",
-    short: "OpenAI Codex",
+    short: "GPT-5.1 Codex",
     provider: "openai",
     model: "gpt-5.1-codex",
     cloud: true,
     inputPrice: 1.25,
     outputPrice: 10.0,
+    agentCalls: 4,
     cost: "~$1.25/M in · ~$10/M out",
     easyPrice: "코딩 특화 · 비용 있음",
     privacy: "클라우드 AI",
     bestFor: "코드 수정, 리팩토링, 개발 작업",
+    version: "gpt-5.1-codex",
   },
+  {
+    value: "ernie",
+    group: "cloud",
+    label: "ERNIE 5.1",
+    short: "ERNIE 5.1",
+    provider: "ernie",
+    model: "ernie-5.1",
+    cloud: true,
+    inputPrice: 0,
+    outputPrice: 0,
+    cost: "Baidu Qianfan API · 가격은 콘솔 확인 필요",
+    easyPrice: "Qianfan 클라우드 · 가격 확인 필요",
+    privacy: "클라우드 AI",
+    bestFor: "중국어/다국어, 긴 컨텍스트, 검색형 분석",
+    version: "ernie-5.1 · Baidu Qianfan API",
+  },
+];
+const MODEL_GROUPS = [
+  { value: "recommended", label: "추천", match: (model) => ["local", "cheap", "gemini-pro"].includes(model.value) },
+  { value: "local", label: "로컬", match: (model) => model.group === "local" },
+  { value: "fast", label: "빠른 작업", match: (model) => model.group === "fast" },
+  { value: "long", label: "긴 문서", match: (model) => model.group === "long" },
+  { value: "reasoning", label: "추론", match: (model) => model.group === "reasoning" },
+  { value: "coding", label: "코딩", match: (model) => model.group === "coding" },
+  { value: "all", label: "전체", match: () => true },
 ];
 const SEARCH_OPTIONS = [
   { value: "off", label: "Search off" },
   { value: "auto", label: "로컬 컨텍스트 우선", legacyLabel: "Local context only" },
   { value: "always", label: "Search web (준비 중)" },
 ];
+const ATTACHMENT_ACCEPT = ".txt,.md,.csv,.json,.yaml,.yml,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp";
 
 const STARTER_ACTIONS = [
   {
@@ -219,10 +278,15 @@ function savedSearchMode() {
   return SEARCH_OPTIONS.some((item) => item.value === value) ? value : "auto";
 }
 
+function fileNeedsVisionModel(file, mode) {
+  return Boolean(file?.type?.startsWith("image/") && !["kimi", "gemini"].includes(modelMode(mode).provider));
+}
+
 function App() {
   const [workspace, setWorkspace] = useState(null);
   const [chat, setChat] = useState(null);
   const [runtime, setRuntime] = useState(null);
+  const [home, setHome] = useState(null);
   const [openclaw, setOpenclaw] = useState(null);
   const [automations, setAutomations] = useState([]);
   const [projectConfig, setProjectConfig] = useState(null);
@@ -237,12 +301,25 @@ function App() {
     setWorkspace(await fetchJson("/api/workspace"));
   }
 
+  async function refreshHome() {
+    const payload = await fetchJson("/api/home");
+    setHome(payload.home);
+  }
+
   async function refreshChat(target = activePath) {
     if (!target.projectPath || !target.sessionSlug) {
       setChat(null);
       return;
     }
-    setChat(await fetchJson(`/api/chat/${target.projectPath}/${target.sessionSlug}`));
+    const payload = await fetchJson(`/api/chat/${target.projectPath}/${target.sessionSlug}`);
+    setChat((current) => {
+      const sameThread = current?.project?.path === target.projectPath && current?.session?.slug === target.sessionSlug;
+      const hasPending = (current?.messages || []).some((message) => message.pending);
+      if (sameThread && hasPending && (payload.messages || []).length === 0) {
+        return current;
+      }
+      return payload;
+    });
   }
 
   async function refreshRuntime() {
@@ -272,6 +349,7 @@ function App() {
   useEffect(() => {
     if (isLogin) return;
     refreshWorkspace().catch((err) => setError(err.message));
+    refreshHome().catch(() => {});
     refreshRuntime().catch(() => {});
     refreshOpenclaw().catch(() => {});
     refreshAutomations().catch(() => {});
@@ -307,6 +385,7 @@ function App() {
   async function afterAsk(payload) {
     setChat((current) => (typeof payload === "function" ? payload(current) : payload));
     refreshWorkspace().catch(() => {});
+    refreshHome().catch(() => {});
   }
 
   function toggleContext() {
@@ -365,6 +444,9 @@ function App() {
           projectConfig={projectConfig}
           onProjectConfig={setProjectConfig}
           workspace={workspace}
+          home={home}
+          onHome={setHome}
+          refreshHome={refreshHome}
         />
         <ContextPanel
           chat={chat}
@@ -481,21 +563,20 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
   const chats = workspace?.chats || [];
   const account = workspace?.account || { username: "local", nickname: "Kwanho Kim", display_name: "Kwanho Kim", profile: {} };
   const activeIsGeneralChat = chats.some((project) => project.path === activePath.projectPath);
-  const today = new Date().toISOString().slice(0, 10);
   const allChatSessions = chats.flatMap((project) => project.sessions.map((session) => ({ ...session, projectPath: project.path })));
   const needle = query.trim().toLowerCase();
   const matchesChat = (session) => !needle || `${session.title} ${session.projectPath}`.toLowerCase().includes(needle);
-  const todayChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) === today && matchesChat(session));
-  const recentChats = allChatSessions.filter((session) => session.created_at?.slice(0, 10) !== today && matchesChat(session)).slice(0, 8);
-  const sharedProjects = projects.filter((project) => project.visibility === "public");
-  const privateProjects = projects.filter((project) => project.visibility !== "public");
+  const visibleChats = allChatSessions
+    .filter(matchesChat)
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    .slice(0, needle ? 40 : 18);
   const filtered = useMemo(() => {
     if (!needle) return projects;
     return projects.filter((project) =>
       `${project.title} ${project.path} ${project.sessions.map((s) => s.title).join(" ")}`.toLowerCase().includes(needle)
     );
   }, [projects, query]);
-  const hasSearchResults = !needle || todayChats.length > 0 || recentChats.length > 0 || filtered.length > 0;
+  const hasSearchResults = !needle || visibleChats.length > 0 || filtered.length > 0;
   const ownedProjects = ownerProjects(projects, account);
 
   async function refreshAndStay() {
@@ -537,6 +618,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
         <button className={`secondary-action home-action ${(!activePath.view || activePath.view === "home") && !activePath.projectPath && !activePath.sessionSlug ? "active" : ""}`} type="button" onClick={() => navigate("/")}>Home</button>
         <NewGeneralChatForm onCreated={(path) => navigate(path)} />
         <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>새 프로젝트</button>
+        <button className={`secondary-action ${activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/actions")}>Actions</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>
@@ -547,14 +629,14 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
       <nav className="project-tree" aria-label="Workspace">
         {!workspace && <div className="empty-card">Loading workspace...</div>}
         {!hasSearchResults && <div className="empty-card compact-empty">검색 결과가 없습니다.</div>}
-        {workspace && privateProjects.length > 0 && <div className="tree-heading primary-heading"><span>작업실</span></div>}
+        {workspace && projects.length > 0 && <div className="tree-heading primary-heading"><span>Projects</span><small>작업실</small></div>}
         {workspace && projects.length === 0 && (
           <div className="empty-card">
             <strong>No projects yet.</strong>
-            <p>Projects hold sessions, skills, files, and context.</p>
+            <p>Projects are repeatable workspaces for files, actions, and context.</p>
           </div>
         )}
-        {filtered.filter((project) => project.visibility !== "public").map((project) => (
+        {filtered.map((project) => (
           <ProjectNode
             key={project.path}
             project={project}
@@ -567,35 +649,10 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
             onDropOnProject={dropOnProject}
           />
         ))}
-        {sharedProjects.length > 0 && <div className="tree-heading"><span>공유 작업실</span></div>}
-        {sharedProjects.map((project) => (
-          <ProjectNode
-            key={project.path}
-            project={project}
-            activePath={activePath}
-            navigate={navigate}
-            projects={ownedProjects}
-            onRefresh={refreshAndStay}
-            onDragSession={dragSession}
-            onMoveSession={moveSession}
-            onDropOnProject={dropOnProject}
-          />
-        ))}
-        <div className="tree-heading"><span>대화</span></div>
+        <div className="tree-heading"><span>Chats</span><small>일회성 대화</small></div>
         <ChatSection
-          title={needle ? "검색 결과 - 오늘" : "오늘"}
-          sessions={todayChats}
-          activePath={activePath}
-          navigate={navigate}
-          query={query}
-          projects={ownedProjects}
-          onRefresh={refreshAndStay}
-          onDragSession={dragSession}
-          onMoveSession={moveSession}
-        />
-        <ChatSection
-          title={needle ? "검색 결과 - 최근" : "최근 대화"}
-          sessions={recentChats}
+          title={needle ? "검색 결과" : "Recent"}
+          sessions={visibleChats}
           activePath={activePath}
           navigate={navigate}
           query={query}
@@ -612,12 +669,6 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
             ))}
           </section>
         )}
-        <section className="tree-section action-library-section">
-          <h2><span>Action Library</span></h2>
-          <button className="library-link" type="button" onClick={() => navigate("/actions")}>Starter Actions 보기</button>
-          <button className="library-link planned" type="button" disabled>Action Builder · Planned</button>
-        </section>
-        <div className="tree-heading archive-heading"><span>보관함</span></div>
       </nav>
       {settingsOpen && <SettingsModal account={account} onClose={() => setSettingsOpen(false)} onSaved={onRefresh} />}
       {projectOpen && <NewProjectModal onClose={() => setProjectOpen(false)} onCreated={(project) => { setProjectOpen(false); onRefresh(); navigate(`/project/${project.path}`); }} />}
@@ -713,8 +764,14 @@ function initials(value) {
 
 function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDragSession, onMoveSession, onDropOnProject }) {
   const owned = projects.some((item) => item.path === project.path);
+  const activeInProject = project.path === activePath.projectPath;
+  const [collapsed, setCollapsed] = useState(() => !activeInProject);
+  useEffect(() => {
+    if (activeInProject) setCollapsed(false);
+  }, [activeInProject]);
+  const showSessions = !collapsed && project.sessions.length > 0;
   return (
-    <div className={`project-node level-${project.level}`}>
+    <div className={`project-node level-${project.level} ${collapsed ? "collapsed" : "expanded"}`}>
       <div
         className="tree-item-row project-row"
         onDragOver={(event) => owned && event.preventDefault()}
@@ -723,14 +780,33 @@ function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDra
         <button
           type="button"
           className={`folder-card ${project.path === activePath.projectPath ? "active" : ""}`}
-          onClick={() => navigate(`/project/${project.path}`)}
+          onClick={() => {
+            if (activeInProject) {
+              setCollapsed((value) => !value);
+            } else {
+              navigate(`/project/${project.path}`);
+            }
+          }}
         >
+          <span
+            className="folder-icon"
+            aria-hidden="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              setCollapsed((value) => !value);
+            }}
+          />
           <span>{project.title}</span>
-          <small>{project.owner_display || project.owner || "Kwanho Kim"} · {project.created_at?.slice(0, 10) || "local"}</small>
+          <small>
+            <b>{project.visibility === "public" ? "Shared Project" : "Project"}</b>
+            {project.level > 0 ? " · Subproject" : ""}
+            {" · "}
+            {project.owner_display || project.owner || "Kwanho Kim"}
+          </small>
         </button>
         {owned && <ItemOptions kind="project" projectPath={project.path} title={project.title} navigate={navigate} onRefresh={onRefresh} />}
       </div>
-      <div className="session-list">
+      {showSessions && <div className="session-list">
         {project.sessions.map((session) => (
           <div
             key={session.slug}
@@ -760,7 +836,7 @@ function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDra
             )}
           </div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -969,7 +1045,7 @@ function NewSessionForm({ projectPath, onCreated }) {
   );
 }
 
-function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace }) {
+function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }) {
   const power = isPowerMode(account);
   if (activePath.view === "actions") {
     return <ActionLibraryPage navigate={navigate} />;
@@ -985,6 +1061,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
           power={power}
           fetchJson={fetchJson}
           onProjectConfig={onProjectConfig}
+          navigate={navigate}
         />
         <StartPane
           error={error}
@@ -1008,6 +1085,9 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
         account={account}
         projectPath={activePath.projectPath}
         workspace={workspace}
+        home={home}
+        onHome={onHome}
+        refreshHome={refreshHome}
       />
     );
   }
@@ -1056,7 +1136,15 @@ function ActionLibraryPage({ navigate }) {
   );
 }
 
-function StarterActionsGrid({ onStart }) {
+function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false }) {
+  const items = actions?.length ? actions.map((action) => ({
+    ...action,
+    label: action.label || action.title,
+    inputs: Array.isArray(action.inputs) ? action.inputs.join(" · ") : action.inputs,
+    output: Array.isArray(action.expected_output_artifacts) ? action.expected_output_artifacts.join(" · ") : action.output,
+    disabled: String(action.status).toLowerCase() === "planned",
+    wantsFile: Array.isArray(action.inputs) && action.inputs.some((item) => String(item).startsWith(".")),
+  })) : STARTER_ACTIONS;
   return (
     <section className="starter-actions" aria-label="Starter Actions">
       <div className="section-row">
@@ -1067,7 +1155,7 @@ function StarterActionsGrid({ onStart }) {
         <span className="soft-pill">Home runs</span>
       </div>
       <div className="starter-grid">
-        {STARTER_ACTIONS.map((action) => (
+        {items.map((action) => (
           <article className={`starter-card ${action.disabled ? "is-disabled" : ""}`} key={action.id}>
             <div className="starter-card-head">
               <span className="starter-category">{action.category}</span>
@@ -1081,10 +1169,10 @@ function StarterActionsGrid({ onStart }) {
             </div>
             <div className="starter-actions-row">
               <button type="button" onClick={() => onStart?.(action)} disabled={action.disabled}>
-                {action.disabled ? "준비 중" : "바로 시작"}
+                {action.disabled ? "준비 중" : hasFile ? "입력 채우기" : "준비"}
               </button>
-              <button type="button" disabled title="Action Builder is planned">
-                수정해서 사용 · Planned
+              <button type="button" onClick={() => onRun?.(action)} disabled={action.disabled || running === action.id} title={action.disabled ? "Planned" : "Run starter action"}>
+                {running === action.id ? "실행 중" : "Run"}
               </button>
             </div>
           </article>
@@ -1113,6 +1201,169 @@ function HomeWorkbenchHints() {
         <p>반복할 가치가 있으면 프로젝트, 내 액션, 패널로 승격합니다.</p>
       </article>
     </section>
+  );
+}
+
+function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact }) {
+  const runs = home?.runs || [];
+  const artifacts = home?.artifacts || [];
+  return (
+    <section className="home-object-panels" aria-label="Home runs and artifacts">
+      <div className="dashboard-card">
+        <div className="section-row">
+          <div>
+            <p className="eyebrow">Recent Runs</p>
+            <h2>실행 기록</h2>
+          </div>
+          <span className="soft-pill">{runs.length}</span>
+        </div>
+        {runs.length === 0 ? (
+          <p className="muted">Starter Action을 실행하면 Plan, Log, Artifact가 여기에 남습니다.</p>
+        ) : (
+          <div className="run-list">
+            {runs.slice(0, 6).map((run) => (
+              <button className="run-row clickable-row" type="button" key={run.run_id || run.id} onClick={() => onOpenRun?.(run)}>
+                <strong>{run.label}</strong>
+                <span>{run.status}</span>
+                <small>{power ? run.action_id : run.created_at}</small>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="dashboard-card">
+        <div className="section-row">
+          <div>
+            <p className="eyebrow">Recent Artifacts</p>
+            <h2>산출물</h2>
+          </div>
+          <span className="soft-pill">{artifacts.length}</span>
+        </div>
+        {artifacts.length === 0 ? (
+          <p className="muted">Markdown, CSV, JSON 같은 결과물이 클릭 가능한 객체로 표시됩니다.</p>
+        ) : (
+          <div className="artifact-grid">
+            {artifacts.slice(0, 8).map((artifact) => (
+              <button className="artifact-tile clickable-row" type="button" key={artifact.id || artifact.path} onClick={() => onOpenArtifact?.(artifact)}>
+                <strong>{artifact.path.split("/").pop()}</strong>
+                <span>{artifact.viewer_type || artifact.type}</span>
+                <small>{artifact.summary || artifact.run?.label}</small>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
+  const run = detail.run || {};
+  const plan = run.execution_plan || {};
+  return (
+    <div className="viewer-modal" role="dialog" aria-modal="true">
+      <div className="viewer-card wide">
+        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <p className="eyebrow">Run Detail</p>
+        <h2>{run.label || run.action_id || "실행 기록"}</h2>
+        <div className="run-meta-grid">
+          <span>Status: {run.status}</span>
+          <span>Action: {run.action_id}</span>
+          <span>{run.created_at}</span>
+        </div>
+        {run.artifacts?.length > 0 && (
+          <div className="artifact-list">
+            <strong>Artifacts</strong>
+            {run.artifacts.map((item) => (
+              <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>
+                {item.path} · {item.viewer_type}
+              </button>
+            ))}
+          </div>
+        )}
+        {power && (
+          <>
+            <h3>Planner Trace</h3>
+            <pre>{JSON.stringify(plan, null, 2)}</pre>
+            <h3>Logs</h3>
+            <pre>{(run.logs || []).map((item) => `[${item.kind}] ${item.content}`).join("\n") || "(empty)"}</pre>
+            {run.errors?.length > 0 && <pre className="error-text">{run.errors.join("\n")}</pre>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
+  return (
+    <div className="viewer-modal" role="dialog" aria-modal="true">
+      <div className="viewer-card wide">
+        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <p className="eyebrow">Artifact Viewer</p>
+        <h2>{artifact.path}</h2>
+        <div className="next-actions">
+          <button type="button" onClick={() => onAsk?.(artifact)}>AI에게 해석시키기</button>
+          <button type="button" onClick={() => onReport?.(artifact)}>리포트 생성</button>
+          <a className="button-link" href={`/api/home-artifact?path=${encodeURIComponent(artifact.path)}`} target="_blank" rel="noreferrer">Open</a>
+        </div>
+        <span className="soft-pill">{artifact.viewer_type} · {artifact.size} bytes</span>
+        <HomeArtifactContent artifact={artifact} />
+      </div>
+    </div>
+  );
+}
+
+function HomeArtifactContent({ artifact }) {
+  const kind = artifact.type || artifact.kind;
+  const content = artifact.content || "";
+  if (kind === "csv") {
+    const rows = content.trim().split(/\r?\n/).slice(0, 80).map((line) => line.split(","));
+    return (
+      <div className="artifact-table-wrap">
+        <table className="artifact-table">
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${rowIndex}-${row.join("|")}`}>
+                {row.map((cell, cellIndex) => rowIndex === 0
+                  ? <th key={cellIndex}>{cell}</th>
+                  : <td key={cellIndex}>{cell}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (kind === "json") {
+    try {
+      return <pre>{JSON.stringify(JSON.parse(content), null, 2)}</pre>;
+    } catch {
+      return <pre>{content}</pre>;
+    }
+  }
+  if (kind === "md" || kind === "markdown") {
+    return <MarkdownPreview content={content} />;
+  }
+  return <pre>{content}</pre>;
+}
+
+function MarkdownPreview({ content }) {
+  return (
+    <div className="markdown-preview" data-markdown-renderer>
+      {content.split(/\n{2,}/).map((block, index) => {
+        if (block.startsWith("# ")) return <h1 key={index}>{block.slice(2)}</h1>;
+        if (block.startsWith("## ")) return <h2 key={index}>{block.slice(3)}</h2>;
+        if (block.startsWith("- ")) {
+          return (
+            <ul key={index}>
+              {block.split(/\n/).filter(Boolean).map((line) => <li key={line}>{line.replace(/^- /, "")}</li>)}
+            </ul>
+          );
+        }
+        return <p key={index}>{block}</p>;
+      })}
+    </div>
   );
 }
 
@@ -1174,7 +1425,7 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
   );
 }
 
-function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "", embedded = false }) {
+function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "", embedded = false, home, onHome, refreshHome }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -1185,6 +1436,10 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   const [startError, setStartError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cloudPrompt, setCloudPrompt] = useState(false);
+  const [homeRunning, setHomeRunning] = useState("");
+  const [homeRunDetail, setHomeRunDetail] = useState(null);
+  const [homeArtifact, setHomeArtifact] = useState(null);
+  const [homeError, setHomeError] = useState("");
   const inputRef = useRef(null);
   const formRef = useRef(null);
   const power = isPowerMode(account);
@@ -1242,17 +1497,79 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
     }
   }
 
+  async function runHomeAction(action) {
+    if (!isHomeWorkbench || homeRunning || action.disabled || String(action.status).toLowerCase() === "planned") return;
+    setHomeRunning(action.id);
+    setHomeError("");
+    try {
+      const form = new FormData();
+      form.set("content", content.trim() || action.prompt || action.label || action.title || "");
+      if (file) form.set("attachment", file);
+      const payload = await fetchJson(`/api/home-actions/${action.id}/run`, { method: "POST", body: form });
+      onHome?.(payload.home);
+      setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
+      clearFile();
+    } catch (err) {
+      setHomeError(err.message || "Starter Action을 실행할 수 없습니다.");
+    } finally {
+      setHomeRunning("");
+    }
+  }
+
+  async function openHomeRun(run) {
+    setHomeError("");
+    try {
+      setHomeRunDetail(await fetchJson(`/api/home-run?run_id=${encodeURIComponent(run.run_id || run.id)}`));
+    } catch (err) {
+      setHomeError(err.message);
+    }
+  }
+
+  async function openHomeArtifact(item) {
+    setHomeError("");
+    try {
+      const payload = await fetchJson(`/api/home-artifact?path=${encodeURIComponent(item.path)}`);
+      setHomeArtifact(payload.artifact);
+    } catch (err) {
+      setHomeError(err.message);
+    }
+  }
+
+  async function askAboutHomeArtifact(artifact) {
+    const payload = await fetchJson("/api/home-artifact/ask", {
+      method: "POST",
+      body: new URLSearchParams({ path: artifact.path }),
+    });
+    refreshWorkspace?.();
+    navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
+  }
+
+  async function reportFromHomeArtifact(artifact) {
+    setHomeError("");
+    try {
+      const payload = await fetchJson("/api/home-artifact/report", {
+        method: "POST",
+        body: new URLSearchParams({ path: artifact.path }),
+      });
+      onHome?.(payload.home);
+      setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
+    } catch (err) {
+      setHomeError(err.message);
+    }
+  }
+
   async function submit(event) {
     event.preventDefault();
     if (starting || (!content.trim() && !file)) return;
-    if (selectedMode.cloud && !cloudConfirmed(mode)) {
-      setCloudPrompt(true);
-      return;
+    let submitMode = selectedMode;
+    if (fileNeedsVisionModel(file, mode)) {
+      setMode("cheap");
+      submitMode = modelMode("cheap");
     }
     setStarting(true);
     setStartError("");
     try {
-      const createForm = new URLSearchParams({ title: content.trim().slice(0, 48) });
+      const createForm = new URLSearchParams({ title: "" });
       const created = projectPath
         ? await fetchJson(`/api/sessions/${projectPath}`, { method: "POST", body: createForm })
         : await fetchJson("/api/chats", { method: "POST", body: createForm });
@@ -1282,10 +1599,10 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
         });
         const askForm = new FormData();
         askForm.set("content", content.trim());
-        askForm.set("provider", selectedMode.provider);
-        askForm.set("model", selectedMode.model);
+        askForm.set("provider", submitMode.provider);
+        askForm.set("model", submitMode.model);
         askForm.set("search_mode", searchMode);
-        if (selectedMode.cloud) {
+        if (submitMode.cloud) {
           askForm.set("allow_remote", "1");
           askForm.set("confirm_cost", "1");
         }
@@ -1338,7 +1655,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
             <div className="selected-file">
               {previewUrl && <img src={previewUrl} alt={file.name} />}
               <span>{file.name}</span>
-              <small>{selectedMode.provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
+              <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "Gemini vision 필요" : "텍스트로 읽힘"}</small>
               <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
             </div>
           )}
@@ -1350,7 +1667,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
                 data-attachment-input
                 type="file"
                 onChange={(event) => setFile(event.target.files?.[0] || null)}
-                accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp"
+                accept={ATTACHMENT_ACCEPT}
               />
             </label>
             <ModelPickerButton
@@ -1361,6 +1678,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
               content={content}
               hasFile={Boolean(file)}
               power={power}
+              modelCatalog={account?.model_catalog}
             />
             <select className="search-select" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
               {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -1388,7 +1706,19 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
         {starting && <WaitingNotice label="Assistant is preparing your answer" />}
         {isHomeWorkbench ? (
           <>
-            <StarterActionsGrid onStart={startAction} />
+            <StarterActionsGrid
+              actions={home?.actions}
+              onStart={startAction}
+              onRun={runHomeAction}
+              running={homeRunning}
+              hasFile={Boolean(file)}
+            />
+            <HomeWorkbenchPanels
+              home={home}
+              power={power}
+              onOpenRun={openHomeRun}
+              onOpenArtifact={openHomeArtifact}
+            />
             <HomeWorkbenchHints />
           </>
         ) : (
@@ -1398,7 +1728,24 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
         )}
         <p className="honest-note">현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다. 웹 검색은 아직 준비 중입니다.</p>
         {startError && <div className="system-note">{startError}</div>}
+        {homeError && <div className="system-note">{homeError}</div>}
         {error && <div className="system-note">{error}</div>}
+        {homeRunDetail && (
+          <HomeRunDetailModal
+            detail={homeRunDetail}
+            power={power}
+            onClose={() => setHomeRunDetail(null)}
+            onOpenArtifact={openHomeArtifact}
+          />
+        )}
+        {homeArtifact && (
+          <HomeArtifactViewer
+            artifact={homeArtifact}
+            onClose={() => setHomeArtifact(null)}
+            onAsk={askAboutHomeArtifact}
+            onReport={reportFromHomeArtifact}
+          />
+        )}
       </div>
   );
   if (embedded) {
@@ -1440,8 +1787,27 @@ function MessageCard({ message, onPreview }) {
         {message.estimated_cost !== null && message.estimated_cost !== undefined && <span>USD {message.estimated_cost}</span>}
       </div>
       {message.pending ? <WaitingNotice label="Assistant is thinking" compact /> : <RenderedText text={message.content || ""} />}
+      {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
+  );
+}
+
+function PlannerTraceSummary({ plan }) {
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  if (!steps.length) return null;
+  return (
+    <details className="planner-trace-summary">
+      <summary>Agent plan · {steps.length} steps · {plan.estimated_model_calls || 1} model call budget</summary>
+      <div>
+        {steps.map((step) => (
+          <span key={step.id || step.title}>
+            <b>{step.status}</b> {step.title || step.type}
+          </span>
+        ))}
+      </div>
+      {plan.requires_confirmation && <small>검색/샌드박스 실행은 명시적 확인 또는 Action으로 승격한 뒤 실행됩니다.</small>}
+    </details>
   );
 }
 
@@ -1637,16 +2003,17 @@ function Composer({ activePath, onAsk, account, power }) {
   async function submit(event) {
     event.preventDefault();
     if (sending || (!content.trim() && !file)) return;
-    if (selectedMode.cloud && !cloudConfirmed(mode)) {
-      setCloudPrompt(true);
-      return;
+    let submitMode = selectedMode;
+    if (fileNeedsVisionModel(file, mode)) {
+      setMode("cheap");
+      submitMode = modelMode("cheap");
     }
     const form = new FormData();
     form.set("content", content);
-    form.set("provider", selectedMode.provider);
-    form.set("model", selectedMode.model);
+    form.set("provider", submitMode.provider);
+    form.set("model", submitMode.model);
     form.set("search_mode", searchMode);
-    if (selectedMode.cloud) {
+    if (submitMode.cloud) {
       form.set("allow_remote", "1");
       form.set("confirm_cost", "1");
     }
@@ -1719,7 +2086,7 @@ function Composer({ activePath, onAsk, account, power }) {
         <div className="selected-file">
           {previewUrl && <img src={previewUrl} alt={file.name} />}
           <span>{file.name}</span>
-          <small>{selectedMode.provider === "kimi" && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "이번 대화에 첨부됨" : "텍스트로 읽힘"}</small>
+          <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "Gemini vision 필요" : "텍스트로 읽힘"}</small>
           <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
         </div>
       )}
@@ -1731,7 +2098,7 @@ function Composer({ activePath, onAsk, account, power }) {
             data-attachment-input
             type="file"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
-            accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp"
+            accept={ATTACHMENT_ACCEPT}
           />
         </label>
         <ModelPickerButton
@@ -1742,6 +2109,7 @@ function Composer({ activePath, onAsk, account, power }) {
           content={content}
           hasFile={Boolean(file)}
           power={power}
+          modelCatalog={account?.model_catalog}
         />
         <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
           {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -1769,9 +2137,11 @@ function Composer({ activePath, onAsk, account, power }) {
   );
 }
 
-function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasFile, power }) {
+function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasFile, power, modelCatalog = [] }) {
   const mode = modelMode(selectedKey);
+  const [group, setGroup] = useState("recommended");
   const wrapRef = useRef(null);
+  const visibleModels = MODEL_MODES.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
   useEffect(() => {
     if (!open) return undefined;
     function onKey(event) {
@@ -1796,13 +2166,32 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
       {open && (
         <div className="model-picker" role="dialog" aria-label="AI model picker">
           <header>
-            <strong>AI 모델 선택</strong>
+            <div>
+              <strong>AI 모델 선택</strong>
+              <small>{mode.label} 사용 중</small>
+            </div>
             <button type="button" onClick={() => setOpen(false)}>닫기</button>
           </header>
+          <div className="model-quick-row">
+            {MODEL_GROUPS.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={group === item.value ? "active" : ""}
+                onClick={() => setGroup(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           <div className="model-grid">
-            {MODEL_MODES.map((item) => {
+            {visibleModels.map((item) => {
               const selected = item.value === selectedKey;
-              const estimate = estimateCurrentCost(item, content, hasFile);
+              const singleEstimate = estimateCurrentCost(item, content, hasFile);
+              const agentCalls = item.agentCalls || (item.cloud ? 2 : 1);
+              const agentEstimate = estimateCurrentCost(item, content, hasFile, agentCalls);
+              const catalog = modelCatalog.find((entry) => entry.provider === item.provider && entry.model === item.model);
+              const keyStatus = item.cloud ? (catalog?.api_key_configured ? "API key 연결됨" : "API key 없음") : "로컬";
               return (
                 <button
                   key={item.value}
@@ -1814,10 +2203,14 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
                   }}
                 >
                   <span className="model-card-title">{item.label}</span>
+                  <span className="model-card-version">{item.version || item.model}</span>
                   <span className="model-card-privacy">{item.cloud ? "클라우드 AI" : "내 Mac에서 처리"}</span>
                   <span>{item.bestFor}</span>
-                  <span className="model-card-price">{power && item.cloud ? `입력 ~$${item.inputPrice.toFixed(2)} / 1M · 출력 ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
-                  <span className="model-card-estimate">이번 요청 예상 비용: {estimate}</span>
+                  <span className="model-card-price">{power && item.cloud && item.inputPrice > 0 ? `입력 ~$${item.inputPrice.toFixed(2)} / 1M · 출력 ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
+                  <span className="model-card-estimate">단일 호출 예상: {singleEstimate}</span>
+                  {item.cloud && <span className="model-card-estimate">에이전트 {agentCalls}스텝 예산: {agentEstimate}</span>}
+                  {item.cloud && <span className="model-card-estimate">실제 비용은 실행된 모델 호출 수만큼 누적</span>}
+                  <span className={`model-key-status ${item.cloud && !catalog?.api_key_configured ? "missing" : ""}`}>{keyStatus}</span>
                   {power && <code>{item.provider} · {item.model}</code>}
                 </button>
               );
@@ -1860,11 +2253,12 @@ function compactModelCost(mode) {
   return mode.easyPrice || "비용 있음";
 }
 
-function estimateCurrentCost(mode, content, hasFile) {
+function estimateCurrentCost(mode, content, hasFile, calls = 1) {
   if (!mode.cloud) return "$0";
+  if (!(mode.inputPrice > 0) && !(mode.outputPrice > 0)) return "가격 확인 필요";
   const inputTokens = Math.max(120, Math.ceil(String(content || "").length / 3) + (hasFile ? 3000 : 0));
   const outputTokens = 1024;
-  const estimated = (inputTokens / 1_000_000) * mode.inputPrice + (outputTokens / 1_000_000) * mode.outputPrice;
+  const estimated = ((inputTokens / 1_000_000) * mode.inputPrice + (outputTokens / 1_000_000) * mode.outputPrice) * calls;
   return `~$${estimated.toFixed(5)}`;
 }
 

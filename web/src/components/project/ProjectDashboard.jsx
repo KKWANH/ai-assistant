@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { actionStatus, ProjectActionsPanel } from "../actions/ActionPanels.jsx";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
 
-export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig }) {
+export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig, navigate }) {
   const [runDetail, setRunDetail] = useState(null);
   const [artifact, setArtifact] = useState(null);
   const [modalError, setModalError] = useState("");
@@ -12,6 +12,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   const panels = config.panels || [];
   const context = config.context || {};
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
+  const chatInsights = useMemo(() => summarizeProjectChats(project), [project]);
 
   async function openRun(run) {
     setModalError("");
@@ -62,6 +63,39 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
           </p>
         </section>
       </div>
+
+      <section className="dashboard-card project-chat-overview">
+        <div className="section-row">
+          <div>
+            <p className="eyebrow">Project Memory</p>
+            <h2>이 프로젝트에서 오간 대화</h2>
+          </div>
+          <span className="soft-pill">{project?.sessions?.length || 0} chats</span>
+        </div>
+        <p className="project-chat-summary">{chatInsights.summary}</p>
+        {chatInsights.topics.length > 0 && (
+          <div className="topic-strip">
+            {chatInsights.topics.map((topic) => <span key={topic}>{topic}</span>)}
+          </div>
+        )}
+        {project?.sessions?.length > 0 ? (
+          <div className="project-chat-list">
+            {project.sessions.map((session) => (
+              <button
+                type="button"
+                key={session.slug}
+                className="project-chat-row"
+                onClick={() => navigate?.(`/chat/${project.path}/${session.slug}`)}
+              >
+                <span>{session.title || session.slug}</span>
+                <small>{session.created_at?.slice(0, 10) || "date unknown"}</small>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">아직 이 프로젝트 안에 대화가 없습니다. 아래 입력창에서 프로젝트 대화를 시작하면 여기에 쌓입니다.</p>
+        )}
+      </section>
 
       <section className="dashboard-card dashboard-actions">
         <div className="section-row">
@@ -175,6 +209,63 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
       {artifact && <ArtifactViewer artifact={artifact} onClose={() => setArtifact(null)} />}
     </div>
   );
+}
+
+function summarizeProjectChats(project) {
+  const sessions = project?.sessions || [];
+  if (sessions.length === 0) {
+    return {
+      summary: "아직 대화 기록이 없어 프로젝트 성격을 분석할 수 없습니다.",
+      topics: [],
+    };
+  }
+  const titles = sessions.map((session) => cleanSessionTitle(session.title || session.slug || "")).filter(Boolean);
+  const topics = extractTopics(titles);
+  const latest = sessions
+    .map((session) => session.created_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  const representative = titles.find((title) => title.length >= 4) || project?.title || "이 프로젝트";
+  const topicText = topics.length > 0
+    ? `주요 흐름은 ${topics.slice(0, 4).join(", ")} 쪽으로 보입니다.`
+    : `대표 대화는 "${representative}"입니다.`;
+  return {
+    summary: `${sessions.length}개의 대화가 연결되어 있습니다. ${topicText}${latest ? ` 마지막 업데이트는 ${latest.slice(0, 10)}입니다.` : ""}`,
+    topics,
+  };
+}
+
+function cleanSessionTitle(value) {
+  return String(value || "")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\b\d{1,4}[./:-]\d{1,2}(?:[./:-]\d{1,4})?\b/g, " ")
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, " ")
+    .replace(/\b(Kwanho Kim|Chungja Byun|Assistant|User)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTopics(titles) {
+  const stop = new Set([
+    "new", "chat", "test", "title", "project", "pdf", "file", "user", "assistant",
+    "kwanho", "kim", "chungja", "byun", "이거", "저거", "그건", "오늘", "내일", "파일", "대화",
+    "프로젝트", "작업실", "테스트", "오전", "오후",
+  ]);
+  const counts = new Map();
+  for (const title of titles) {
+    for (const token of String(title).toLowerCase().match(/[a-z0-9가-힣]{2,}/g) || []) {
+      if (/^\d+$/.test(token)) continue;
+      if (/^\d{4}$/.test(token)) continue;
+      if (/^\d{2,}$/.test(token)) continue;
+      if (stop.has(token)) continue;
+      counts.set(token, (counts.get(token) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 8)
+    .map(([token]) => token);
 }
 
 function RunDetailModal({ detail, power, onClose, onOpenArtifact }) {

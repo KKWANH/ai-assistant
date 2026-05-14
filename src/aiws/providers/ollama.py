@@ -47,6 +47,8 @@ class OllamaProvider:
         try:
             with request.urlopen(req, timeout=120) as response:
                 response_data = json.loads(response.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            raise storage.WorkspaceError(ollama_http_error_message(exc, model)) from exc
         except error.URLError as exc:
             fallback = localhost_ipv4_fallback(self.endpoint)
             if fallback and fallback != self.endpoint:
@@ -59,6 +61,8 @@ class OllamaProvider:
                     )
                     with request.urlopen(fallback_req, timeout=120) as response:
                         response_data = json.loads(response.read().decode("utf-8"))
+                except error.HTTPError as fallback_exc:
+                    raise storage.WorkspaceError(ollama_http_error_message(fallback_exc, model)) from fallback_exc
                 except error.URLError as fallback_exc:
                     raise storage.WorkspaceError(
                         f"Could not reach Ollama at {self.endpoint} or {fallback}: {fallback_exc}"
@@ -85,3 +89,22 @@ def localhost_ipv4_fallback(endpoint: str) -> str | None:
     if parsed.port:
         netloc = f"{netloc}:{parsed.port}"
     return urlunparse(parsed._replace(netloc=netloc))
+
+
+def ollama_http_error_message(exc: error.HTTPError, model: str) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="replace")
+        payload = json.loads(body) if body else {}
+    except (json.JSONDecodeError, OSError):
+        payload = {}
+    detail = ""
+    if isinstance(payload, dict):
+        detail = str(payload.get("error") or payload.get("message") or "")
+    if exc.code in {400, 404} and ("not found" in detail.lower() or "model" in detail.lower()):
+        return (
+            f"Ollama model '{model}' is not available locally. "
+            f"Run `ollama pull {model}` or choose an installed local model. {detail}"
+        ).strip()
+    if exc.code == 400:
+        return f"Ollama rejected the request for model '{model}'. {detail}".strip()
+    return f"Ollama API error ({exc.code}) for model '{model}'. {detail}".strip()

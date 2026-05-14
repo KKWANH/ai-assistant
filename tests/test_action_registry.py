@@ -41,6 +41,41 @@ commands:
     assert "Summarize them." in preview["prompt"]
 
 
+def test_aiws_yaml_views_and_panels_are_normalized(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Investment")
+    write_project_config(
+        root,
+        "investment",
+        """
+name: Investment
+views:
+  - id: investment
+    title: Investment Rebalancer
+    layout: sidebar
+    panels:
+      - type: fileExplorer
+        title: Portfolio Files
+        source: files/
+      - type: actionLauncher
+        title: Rebalance Actions
+        actions:
+          - rebalance_plan
+commands:
+  rebalance_plan:
+    kind: prompt_recipe
+    label: Rebalance Plan
+    prompt: Summarize files.
+""",
+    )
+
+    config = action_registry.load_config(root, "investment")
+
+    assert config["views"][0]["id"] == "investment"
+    assert config["views"][0]["panels"][0]["type"] == "fileExplorer"
+    assert config["views"][0]["panels"][1]["actions"] == ["rebalance_plan"]
+
+
 def test_legacy_output_string_is_not_split_into_artifacts(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "Investment")

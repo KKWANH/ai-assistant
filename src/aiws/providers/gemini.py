@@ -32,12 +32,14 @@ class GeminiProvider:
     ) -> str:
         if not self.api_key:
             raise storage.WorkspaceError("Gemini requires AIWS_GEMINI_API_KEY.")
-        if attachments:
-            raise storage.WorkspaceError("Gemini file/vision input is not enabled in AIWS yet.")
+        parts: list[dict[str, object]] = [{"text": content}]
+        for item in attachments or []:
+            if item.get("kind") == "inline_data" and item.get("mime_type") and item.get("data"):
+                parts.append({"inlineData": {"mimeType": item["mime_type"], "data": item["data"]}})
         url = f"{self.base_url}/models/{parse.quote(model, safe='')}:generateContent?key={parse.quote(self.api_key)}"
         payload = {
             "systemInstruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": content}]}],
+            "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"maxOutputTokens": 512},
         }
         req = request.Request(

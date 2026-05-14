@@ -1050,29 +1050,83 @@ def append_message(
     return message
 
 
-def update_session_title(root: str | Path, project_path: str, session_slug: str, title: str) -> dict[str, Any]:
+def update_session_title(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    title: str,
+    *,
+    auto: bool = False,
+) -> dict[str, Any]:
     session = load_session(root, project_path, session_slug)
     clean_title = title.strip()
     if not clean_title:
         raise WorkspaceError("Session title must not be empty.")
     session["title"] = clean_title
+    session["title_auto"] = bool(auto)
     session["updated_at"] = utc_now()
     write_json(session_dir(root, project_path, session_slug) / "session.json", session)
     regenerate_session_markdown(root, project_path, session_slug)
     return session
 
 
-def suggest_session_title(content: str, *, fallback: str = "New chat", max_length: int = 42) -> str:
-    text = re.sub(r"\s+", " ", content).strip()
-    if not text:
+def suggest_session_title(content: str, *, fallback: str = "New chat", max_length: int = 28) -> str:
+    text = clean_title_source(content)
+    if not text.strip():
         return fallback
-    for separator in ("?", "!", ".", "。", "?", "!", "\n"):
-        if separator in text:
-            text = text.split(separator, 1)[0].strip()
-            break
+    candidates = title_candidates(text)
+    if candidates:
+        text = sorted(candidates, key=title_score, reverse=True)[0]
+    else:
+        for separator in ("?", "!", ".", "。", "\n"):
+            if separator in text:
+                text = text.split(separator, 1)[0].strip()
+                break
+    text = polish_title(text)
     if len(text) > max_length:
         text = text[:max_length].rstrip() + "..."
     return text or fallback
+
+
+def clean_title_source(content: str) -> str:
+    text = re.sub(r"```.*?```", " ", content, flags=re.DOTALL)
+    text = text.split("Attached file:", 1)[0]
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def title_candidates(text: str) -> list[str]:
+    pieces = re.split(r"[\n.!?。]+", text)
+    candidates: list[str] = []
+    for piece in pieces:
+        value = polish_title(piece)
+        if not value:
+            continue
+        lowered = value.lower()
+        if lowered.startswith("lorem ipsum") or "dummy text of the printing" in lowered:
+            continue
+        if 2 <= len(value) <= 80:
+            candidates.append(value)
+    return candidates
+
+
+def title_score(value: str) -> tuple[int, int]:
+    score = 0
+    if re.search(r"[가-힣]", value):
+        score += 8
+    if re.search(r"(요약|분석|정리|읽|설명|작성|만들|검색|비교|해석)", value):
+        score += 10
+    if len(value) <= 32:
+        score += 3
+    return score, -len(value)
+
+
+def polish_title(value: str) -> str:
+    text = re.sub(r"\s+", " ", value).strip(" \t\r\n:-")
+    text = re.sub(r"^(이|그|저)\s+", "", text)
+    text = re.sub(r"(해줘|해주세요|해봐|해줘요|부탁해)$", "", text).strip()
+    text = text.strip(".,!?。")
+    return text
 
 
 def maybe_update_default_session_title(
@@ -1083,9 +1137,11 @@ def maybe_update_default_session_title(
 ) -> dict[str, Any] | None:
     session = load_session(root, project_path, session_slug)
     current_title = str(session.get("title", "")).strip().lower()
-    if current_title not in {"", "new chat", "new-chat"}:
+    title_auto = bool(session.get("title_auto", False))
+    looks_like_old_auto_title = current_title.endswith("...") and len(current_title) >= 24
+    if current_title not in {"", "new chat", "new-chat"} and not title_auto and not looks_like_old_auto_title:
         return None
-    return update_session_title(root, project_path, session_slug, suggest_session_title(content))
+    return update_session_title(root, project_path, session_slug, suggest_session_title(content), auto=True)
 
 
 def create_execution_run(
@@ -1392,7 +1448,7 @@ def attachment_context_lines(
     for item in read_attachment_metadata(root, project_path, session_slug):
         filename = str(item.get("filename", "attachment"))
         content_type = str(item.get("content_type", "file"))
-        text = str(item.get("text", "")).strip()
+        text = str(item.get("text", "")).strip() if item.get("text_available") else ""
         delivery = str(item.get("delivery", "attached"))
         heading = f"### {filename}"
         if include_session_label:

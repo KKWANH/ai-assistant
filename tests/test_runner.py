@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 from urllib import error
 
 import pytest
@@ -89,6 +90,21 @@ def test_ollama_provider_falls_back_to_ipv4_localhost(monkeypatch):
 
     assert response == "Use a small provider interface."
     assert calls == ["http://localhost:11434/api/chat", "http://127.0.0.1:11434/api/chat"]
+
+
+def test_ollama_model_missing_error_mentions_pull(monkeypatch):
+    def fake_urlopen(req, timeout):
+        body = BytesIO(json.dumps({"error": "model 'qwen3:8b' not found"}).encode("utf-8"))
+        raise error.HTTPError(req.full_url, 400, "Bad Request", {}, body)
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(storage.WorkspaceError, match=r"ollama pull qwen3:8b"):
+        ollama.OllamaProvider(endpoint="http://127.0.0.1:11434/api/chat").chat(
+            model="qwen3:8b",
+            system="sys",
+            content="hello",
+        )
 
 
 def test_ask_includes_account_context(tmp_path, monkeypatch):
@@ -219,6 +235,38 @@ def test_remote_provider_logs_model_usage(tmp_path, monkeypatch):
     assert usage[0]["provider"] == "gemini"
     assert usage[0]["model"] == "gemini-2.5-flash-lite"
     assert usage[0]["actual_usd"] >= 0
+
+
+def test_remote_provider_logs_failed_usage_attempt(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret")
+    storage.create_project(root, "AI System", owner="kwanho")
+    storage.create_session(root, "ai-system", "Cloud")
+    monkeypatch.setenv("AIWS_DISABLE_REMOTE_BY_DEFAULT", "false")
+
+    class FailingCloudProvider:
+        def chat(self, *, model, system, content, attachments=None):
+            raise storage.WorkspaceError("token limit exceeded")
+
+    monkeypatch.setattr(runner, "get_provider", lambda provider: FailingCloudProvider())
+
+    with pytest.raises(storage.WorkspaceError, match="token limit"):
+        runner.ask(
+            str(root),
+            "ai-system",
+            "cloud",
+            provider="gemini",
+            model="gemini-2.5-flash-lite",
+            content="Hello",
+            actor="kwanho",
+            allow_remote=True,
+            confirm_cost=True,
+        )
+
+    usage = storage.list_model_usage(root, "kwanho")
+    assert usage[0]["status"] == "failed"
+    assert usage[0]["estimated_usd"] is not None
+    assert storage.load_account(root, "kwanho")["usage"]["asks"] == 1
 
 
 def test_remote_provider_respects_daily_budget(tmp_path, monkeypatch):

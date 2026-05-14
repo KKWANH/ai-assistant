@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import attachments, automations, costs, openclaw
-from .core import action_registry, context_manifest
+from .core import action_registry, chat_orchestrator, context_manifest, home_workbench
 from .i18n import t
 from . import runner
 from . import storage
@@ -77,6 +77,14 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_home()
         elif path == "/api/action-library":
             self.api_action_library()
+        elif path == "/api/home-run":
+            query = parse_qs(parsed.query)
+            run_id = unquote((query.get("run_id") or [""])[0])
+            self.api_home_run(run_id)
+        elif path == "/api/home-artifact":
+            query = parse_qs(parsed.query)
+            artifact_path = unquote((query.get("path") or [""])[0])
+            self.api_home_artifact(artifact_path)
         elif path == "/api/project-run":
             query = parse_qs(parsed.query)
             project_path = unquote((query.get("project") or [""])[0])
@@ -162,15 +170,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, status=400)
             except Exception as exc:
                 self.log_internal_error("api_ask", exc)
-                self.send_json(
-                    {
-                        "error": (
-                            "PDF를 읽는 중 문제가 생겼습니다. 파일이 너무 크거나 스캔본이라 텍스트를 읽지 못했을 수 있습니다. "
-                            "다시 시도하거나 다른 PDF를 올려주세요."
-                        )
-                    },
-                    status=500,
-                )
+                self.send_json({"error": "요청 처리 중 문제가 생겼습니다. 로그를 확인한 뒤 다시 시도해주세요."}, status=500)
             return
 
         if parsed.path == "/api/logout":
@@ -196,6 +196,91 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_admin()
                 run = automations.run_project(self.root, slug, actor=self.current_username())
                 self.send_json({"run": run, "projects": automations.list_projects(self.root)})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/home-actions/") and parsed.path.endswith("/preview"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            action_id = unquote(parsed.path.removeprefix("/api/home-actions/").removesuffix("/preview"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.send_json({"preview": home_workbench.preview_action(action_id)})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/home-actions/") and parsed.path.endswith("/run"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            action_id = unquote(parsed.path.removeprefix("/api/home-actions/").removesuffix("/run"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                run = home_workbench.run_action(
+                    self.root,
+                    self.current_username() or "local",
+                    action_id,
+                    actor=self.current_username(),
+                    content=data.get("content", ""),
+                    upload=self._multipart_files.get("attachment"),
+                )
+                self.send_json(
+                    {
+                        "run": run,
+                        "home": home_payload(self.root, self.current_username() or "local"),
+                    }
+                )
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/home-artifact/report":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                run = home_workbench.create_report_from_artifact(
+                    self.root,
+                    self.current_username() or "local",
+                    data.get("path", ""),
+                    actor=self.current_username(),
+                )
+                self.send_json({"run": run, "home": home_payload(self.root, self.current_username() or "local")})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/home-artifact/ask":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                artifact = home_workbench.read_artifact(self.root, self.current_username() or "local", data.get("path", ""))
+                title = f"Artifact: {Path(str(artifact.get('path', 'artifact'))).name}"
+                project_path, session = storage.create_general_chat_session(self.root, self.current_username(), title)
+                content = (
+                    data.get("content", "").strip()
+                    or f"이 artifact를 해석해줘: {artifact['path']}\n\n{str(artifact.get('content', ''))[:8000]}"
+                )
+                storage.append_message(
+                    self.root,
+                    project_path,
+                    session["slug"],
+                    role="user",
+                    content=content,
+                    metadata={"artifact_context": {"path": artifact["path"], "viewer_type": artifact["viewer_type"]}},
+                    actor=self.current_username(),
+                )
+                self.send_json({"project_path": project_path, "session": session})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -343,7 +428,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 if storage.has_accounts(self.root):
                     storage.ensure_project_access(self.root, project_path, self.current_username())
-                session = storage.update_session_title(self.root, project_path, session_slug, data.get("title", ""))
+                session = storage.update_session_title(self.root, project_path, session_slug, data.get("title", ""), auto=False)
                 self.send_json({"session": session})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -724,11 +809,22 @@ class AIWSHandler(BaseHTTPRequestHandler):
         user_metadata: dict[str, object] = {}
         provider_attachments: list[dict[str, str]] = []
         upload = self._multipart_files.get("attachment")
+        title_source = visible_content
+        provider_name = data.get("provider", "ollama")
+        attachment_type = ""
         if upload and upload[1]:
             filename, file_content = upload
-            provider_name = data.get("provider", "ollama")
+            title_source = title_source or filename
             extension = attachments.validate_attachment(filename, file_content)
-            delivery = "vision" if attachments.is_image_extension(extension) and provider_name == "kimi" else None
+            attachment_type = extension
+            image_upload = attachments.is_image_extension(extension)
+            provider_file_enabled = provider_supports_file_input(provider_name, extension)
+            if image_upload and not provider_file_enabled:
+                raise storage.WorkspaceError(
+                    "이미지 파일은 현재 Gemini 또는 Kimi vision 모델로만 실제 분석할 수 있습니다. "
+                    "모델을 Gemini Flash-Lite로 바꾸고 클라우드 사용을 확인한 뒤 다시 보내주세요."
+                )
+            delivery = "vision" if image_upload and provider_file_enabled else None
             saved = attachments.save_attachment(
                 self.root,
                 project_path,
@@ -739,42 +835,64 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 delivery=delivery,
             )
             attachment = attachment_view(project_path, session_slug, saved)
-            if attachments.is_image_extension(extension) and provider_name == "kimi":
+            if provider_name == "gemini" and provider_file_enabled:
+                provider_attachments.append(
+                    {
+                        "kind": "inline_data",
+                        "mime_type": attachments.image_mime_type(extension) if image_upload else gemini_mime_type(extension),
+                        "data": base64.b64encode(file_content).decode("ascii"),
+                    }
+                )
+                attachment["delivery"] = "Sent as file input"
+            elif provider_name == "kimi" and image_upload and provider_file_enabled:
                 data_url = "data:%s;base64,%s" % (
                     attachments.image_mime_type(extension),
                     base64.b64encode(file_content).decode("ascii"),
                 )
                 provider_attachments.append({"kind": "image_data_url", "data_url": data_url})
                 attachment["delivery"] = "Sent as vision input"
-            elif str(saved.get("text", "")).strip() and not attachments.is_image_extension(extension):
+            elif str(saved.get("text", "")).strip() and not image_upload:
                 attachment["delivery"] = "Sent as text context"
             else:
                 attachment["delivery"] = "Attached to chat"
             user_metadata["attachments"] = [attachment]
-            extracted = "" if provider_attachments else str(saved.get("text", "")).strip()
+            extracted = "" if provider_attachments or image_upload else str(saved.get("text", "")).strip()
             attachment_context = f"Attached file: {saved['filename']}"
             if extracted:
                 attachment_context += f"\n\nExtracted attachment text:\n{extracted[:8000]}"
             model_content = f"{visible_content}\n\n{attachment_context}".strip()
         if not model_content:
             raise storage.WorkspaceError("Message or attachment is required.")
-        runner.ask(
-            self.root,
-            project_path,
-            session_slug,
-            provider=data.get("provider", "ollama"),
+        execution_plan = chat_orchestrator.plan_request(
+            content=visible_content,
+            provider=provider_name,
             model=data.get("model", "qwen3:0.6b"),
-            content=model_content,
-            stored_content=visible_content or "Attached file",
-            user_metadata=user_metadata,
-            provider_attachments=provider_attachments,
-            actor=self.current_username(),
             search_mode=data.get("search_mode", "off"),
-            allow_remote=data.get("allow_remote") in {"1", "true", "yes"},
-            confirm_cost=data.get("confirm_cost") in {"1", "true", "yes"},
+            has_attachment=bool(upload and upload[1]),
+            attachment_type=attachment_type,
         )
-        if visible_content:
-            storage.maybe_update_default_session_title(self.root, project_path, session_slug, visible_content)
+        ask_kwargs = {
+            "provider": data.get("provider", "ollama"),
+            "model": data.get("model", "qwen3:0.6b"),
+            "content": model_content,
+            "stored_content": visible_content or "Attached file",
+            "user_metadata": user_metadata,
+            "provider_attachments": provider_attachments,
+            "actor": self.current_username(),
+            "search_mode": data.get("search_mode", "off"),
+            "allow_remote": data.get("allow_remote") in {"1", "true", "yes"},
+            "confirm_cost": data.get("confirm_cost") in {"1", "true", "yes"},
+            "execution_plan": execution_plan,
+        }
+        try:
+            runner.ask(self.root, project_path, session_slug, **ask_kwargs)
+        except TypeError as exc:
+            if "execution_plan" not in str(exc):
+                raise
+            ask_kwargs.pop("execution_plan", None)
+            runner.ask(self.root, project_path, session_slug, **ask_kwargs)
+        if title_source:
+            storage.maybe_update_default_session_title(self.root, project_path, session_slug, title_source)
 
     def api_chat(self, project_path: str, session_slug: str) -> None:
         try:
@@ -878,24 +996,22 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json({"error": str(exc)}, status=403)
 
     def api_home(self) -> None:
-        username = self.current_username() or "local"
-        home = storage.workspace_path(self.root) / "users" / storage.slugify(username) / "home"
-        for name in ("files", "runs", "artifacts"):
-            (home / name).mkdir(parents=True, exist_ok=True)
-        self.send_json(
-            {
-                "home": {
-                    "path": str(home),
-                    "files": [],
-                    "runs": [],
-                    "artifacts": [],
-                    "message": "Home Workbench is ready for projectless starter actions.",
-                }
-            }
-        )
+        self.send_json({"home": home_payload(self.root, self.current_username() or "local")})
 
     def api_action_library(self) -> None:
-        self.send_json({"actions": starter_actions()})
+        self.send_json({"actions": home_workbench.list_actions()})
+
+    def api_home_run(self, run_id: str) -> None:
+        try:
+            self.send_json(home_workbench.read_run_detail(self.root, self.current_username() or "local", run_id))
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_home_artifact(self, artifact_path: str) -> None:
+        try:
+            self.send_json({"artifact": home_workbench.read_artifact(self.root, self.current_username() or "local", artifact_path)})
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
 
     def api_project_config(self, project_path: str) -> None:
         try:
@@ -942,6 +1058,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     "day_usd": storage.model_usage_total_usd(self.root, username, period="day"),
                     "month_usd": storage.model_usage_total_usd(self.root, username, period="month"),
                 }
+                account["model_catalog"] = model_catalog()
                 return account
             except storage.WorkspaceError:
                 pass
@@ -953,6 +1070,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             "display_name": nickname,
             "admin": False,
             "profile": {"name": nickname, "ui_mode": "power"},
+            "model_catalog": model_catalog(),
         }
 
     def require_admin(self) -> None:
@@ -1669,7 +1787,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         <div class="file-chip">{self.attachment_chips(project_path, session_slug)}<span data-file-chip></span></div>
         <div class="composer-actions">
           <label class="attach-button" title="Attach file">+
-            <input class="file-input" data-attachment-input type="file" name="attachment" accept=".txt,.md,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp">
+            <input class="file-input" data-attachment-input type="file" name="attachment" accept=".txt,.md,.csv,.json,.yaml,.yml,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp">
           </label>
           {self.model_select()}
           <select name="provider"><option>ollama</option><option>kimi</option></select>
@@ -1906,14 +2024,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         try:
             storage.ensure_project_access(self.root, project_path, self.current_username())
             storage.load_session(self.root, project_path, session_slug)
-            root_dir = attachments.attachment_dir(self.root, project_path, session_slug).resolve()
-            path = (root_dir / attachments.safe_filename(filename)).resolve()
-            if not str(path).startswith(str(root_dir)):
-                self.not_found()
-                return
-            if not path.exists():
-                self.not_found()
-                return
+            path, _metadata = attachments.read_attachment_file(self.root, project_path, session_slug, filename)
             content = path.read_bytes()
         except storage.WorkspaceError:
             self.not_found()
@@ -2021,6 +2132,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             "model": message.get("model"),
             "attachments": message_attachments_data(metadata),
             "estimated_cost": cost.get("estimated_cost") if isinstance(cost, dict) else None,
+            "execution_plan": metadata.get("execution_plan") if isinstance(metadata, dict) else None,
         }
 
     def message_attachments(self, message: dict[str, object]) -> str:
@@ -2163,7 +2275,7 @@ def image_content_type(extension: str) -> str:
 
 
 def attachment_content_type(extension: str) -> str:
-    if extension.lower() in {".txt", ".md"}:
+    if extension.lower() in {".txt", ".md", ".csv", ".json", ".yaml", ".yml"}:
         return "text/plain; charset=utf-8"
     if extension.lower() == ".pdf":
         return "application/pdf"
@@ -2186,6 +2298,7 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "filename": filename,
         "url": f"/attachment/{project_path}/{session_slug}/{filename}",
         "content_type": content_type,
+        "mime": str(metadata.get("mime", "")),
         "size": metadata.get("size", 0),
         "is_image": content_type in {"png", "jpg", "jpeg", "gif", "webp"},
         "is_pdf": content_type == "pdf",
@@ -2194,6 +2307,20 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "extraction_status": extraction_status,
         "extraction_error": extraction_error,
     }
+
+
+def provider_supports_file_input(provider: str, extension: str) -> bool:
+    if provider == "kimi":
+        return attachments.is_image_extension(extension)
+    if provider == "gemini":
+        return attachments.is_image_extension(extension) or extension.lower() == ".pdf"
+    return False
+
+
+def gemini_mime_type(extension: str) -> str:
+    if extension.lower() == ".pdf":
+        return "application/pdf"
+    return "application/octet-stream"
 
 
 def split_project_action_route(route: str) -> tuple[str, str]:
@@ -2239,6 +2366,52 @@ def model_cost_table() -> str:
     for item in costs.list_model_costs():
         lines.append(f"{item.provider}\t{item.model}\t{item.input_per_million}\t{item.output_per_million}\t{item.note}")
     return "\n".join(lines)
+
+
+def model_catalog() -> list[dict[str, object]]:
+    api_keys = {
+        "ollama": True,
+        "kimi": bool(os.environ.get("AIWS_KIMI_API_KEY") or os.environ.get("MOONSHOT_API_KEY")),
+        "gemini": bool(os.environ.get("AIWS_GEMINI_API_KEY")),
+        "openai": bool(os.environ.get("AIWS_OPENAI_API_KEY")),
+        "ernie": bool(os.environ.get("AIWS_ERNIE_API_KEY") or os.environ.get("AIWS_QIANFAN_API_KEY")),
+    }
+    return [
+        {
+            "provider": item.provider,
+            "model": item.model,
+            "input_per_million": item.input_per_million,
+            "output_per_million": item.output_per_million,
+            "currency": item.currency,
+            "note": item.note,
+            "api_key_configured": bool(api_keys.get(item.provider)),
+        }
+        for item in costs.list_model_costs()
+    ]
+
+
+def home_payload(root: str | Path, username: str | None) -> dict[str, object]:
+    home = home_workbench.home_dir(root, username)
+    return {
+        "path": str(home),
+        "actions": home_workbench.list_actions(),
+        "runs": home_workbench.list_runs(root, username),
+        "artifacts": home_workbench.list_artifacts(root, username),
+        "views": [
+            {
+                "id": "home",
+                "title": "Home Workbench",
+                "layout": "sidebar",
+                "panels": [
+                    {"id": "starter-actions", "type": "actionLauncher", "title": "Starter Actions", "source": "actions"},
+                    {"id": "recent-runs", "type": "runTimeline", "title": "Recent Runs", "source": "runs"},
+                    {"id": "recent-artifacts", "type": "artifactGallery", "title": "Recent Artifacts", "source": "artifacts"},
+                    {"id": "cost-meter", "type": "costMeter", "title": "Cost / Model", "source": "runtime"},
+                ],
+            }
+        ],
+        "message": "Home Workbench is ready for projectless starter actions.",
+    }
 
 
 def starter_actions() -> list[dict[str, object]]:

@@ -44,6 +44,21 @@ def test_markdown_pdf_and_image_validation(tmp_path):
     assert attachments.is_image_extension(".png") is True
 
 
+def test_structured_text_attachments_are_saved_and_extracted(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+
+    csv = attachments.save_attachment(root, "ai-system", "attachments", "table.csv", b"name,value\nAIWS,1")
+    data = attachments.save_attachment(root, "ai-system", "attachments", "data.json", b'{"ok": true}')
+    yaml = attachments.save_attachment(root, "ai-system", "attachments", "config.yaml", b"name: aiws")
+
+    assert csv["text"] == "name,value\nAIWS,1"
+    assert data["text"] == '{"ok": true}'
+    assert yaml["text"] == "name: aiws"
+    assert csv["text_available"] is True
+
+
 def test_pdf_without_extractable_text_is_kept_with_failed_status(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")

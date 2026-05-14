@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import re
 import zipfile
 from pathlib import Path
@@ -10,7 +11,17 @@ from xml.etree import ElementTree
 
 from . import storage
 
-SUPPORTED_ATTACHMENT_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
+SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".yaml", ".yml"}
+SUPPORTED_ATTACHMENT_EXTENSIONS = {
+    *SUPPORTED_TEXT_EXTENSIONS,
+    ".pdf",
+    ".docx",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+}
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 
 
@@ -76,9 +87,12 @@ def save_attachment(
         else:
             resolved_delivery = "stored_only"
     metadata = {
+        "id": destination.stem,
         "filename": destination.name,
+        "original_filename": Path(filename).name,
         "path": str(destination.relative_to(storage.workspace_path(root))),
         "content_type": ext.lstrip("."),
+        "mime": mimetypes.guess_type(destination.name)[0] or image_mime_type(ext),
         "size": len(content),
         "text": extracted,
         "text_available": bool(extracted.strip()) and not is_image_extension(ext),
@@ -167,7 +181,7 @@ def friendly_extraction_error(extension: str, exc: Exception) -> str:
 
 
 def extract_text(path: Path, extension: str) -> str:
-    if extension in {".txt", ".md"}:
+    if extension in SUPPORTED_TEXT_EXTENSIONS:
         return path.read_text(encoding="utf-8", errors="replace")[:50_000]
     if extension == ".docx":
         return extract_docx_text(path)[:50_000]
@@ -176,6 +190,22 @@ def extract_text(path: Path, extension: str) -> str:
     if extension in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
         return f"Image attachment: {path.name}"
     return ""
+
+
+def read_attachment_file(root: str | Path, project_path: str, session_slug: str, filename: str) -> tuple[Path, dict[str, object]]:
+    safe_name = safe_filename(filename)
+    root_dir = attachment_dir(root, project_path, session_slug).resolve()
+    path = (root_dir / safe_name).resolve()
+    if not str(path).startswith(str(root_dir)):
+        raise storage.WorkspaceError("Attachment path is invalid.")
+    if not path.exists() or not path.is_file():
+        raise storage.WorkspaceError("Attachment does not exist.")
+    metadata = {}
+    for item in list_attachments(root, project_path, session_slug):
+        if item.get("filename") == path.name:
+            metadata = item
+            break
+    return path, metadata
 
 
 def extract_docx_text(path: Path) -> str:

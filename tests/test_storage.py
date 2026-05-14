@@ -205,7 +205,9 @@ def test_projectless_general_chat_is_hidden_from_project_list(tmp_path):
 
     assert project_path == "general-chat-kwanho"
     assert session["slug"] == "quick-thought"
-    assert storage.load_project(root, project_path)["hidden"] is True
+    project = storage.load_project(root, project_path)
+    assert project["hidden"] is True
+    assert project["visibility"] == "private"
     assert storage.list_visible_projects(root, "kwanho") == []
     assert [project["path"] for project in storage.list_visible_general_chat_projects(root, "kwanho")] == [
         "general-chat-kwanho"
@@ -230,7 +232,33 @@ def test_projectless_general_chat_accepts_blank_and_duplicate_titles(tmp_path):
     storage.append_message(root, project_path, first["slug"], role="user", content="Hello", actor="kwanho")
     assert storage.read_messages(root, project_path, first["slug"])[0]["actor"] == "kwanho"
     updated = storage.maybe_update_default_session_title(root, project_path, first["slug"], "첨부한 pdf 파일을 분석해줘")
-    assert updated["title"] == "첨부한 pdf 파일을 분석해줘"
+    assert updated["title"] == "첨부한 pdf 파일을 분석"
+    assert updated["title_auto"] is True
+
+
+def test_auto_title_prefers_short_instruction_over_long_body(tmp_path):
+    root = tmp_path / "workspace"
+    project_path, session = storage.create_general_chat_session(root, None, "")
+    content = (
+        "Lorem Ipsum is simply dummy text of the printing and typesetting industry. "
+        "Lorem Ipsum has been the industry's standard dummy text ever since the 1500s.\n\n"
+        "이 글 요약해줘!\n\n"
+        "이 글을 요약하고 뒤에 더 창작해봐!"
+    )
+
+    updated = storage.maybe_update_default_session_title(root, project_path, session["slug"], content)
+
+    assert updated["title"] == "글 요약"
+    assert len(updated["title"]) <= 28
+
+
+def test_old_ellipsis_auto_title_can_be_repaired(tmp_path):
+    root = tmp_path / "workspace"
+    project_path, session = storage.create_general_chat_session(root, None, "Lorem Ipsum is simply dummy text of the pr...")
+
+    updated = storage.maybe_update_default_session_title(root, project_path, session["slug"], "이 글 요약해줘!")
+
+    assert updated["title"] == "글 요약"
 
 
 def test_owner_can_move_general_chat_into_project(tmp_path):
