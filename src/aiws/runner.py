@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from typing import Literal
 
 from . import costs, search, storage
 from .core import context_manifest, context_receipts
@@ -18,21 +19,18 @@ from .providers.ernie import ErnieProvider
 REMOTE_PROVIDERS = {"kimi", "gemini", "openai", "ernie"}
 
 
-MEMORY_MARKERS = (
-    "나는",
-    "내 ",
-    "제가",
-    "저는",
-    "우리",
-    "원해",
-    "좋아",
-    "싫어",
-    "기억",
-    "prefer",
-    "i like",
-    "i want",
-    "my ",
+MemoryPolicy = Literal["off", "explicit_only", "suggest", "auto"]
+
+
+EXPLICIT_MEMORY_MARKERS = (
+    "기억해줘",
+    "기억해 줘",
+    "기억해",
+    "앞으로",
     "remember",
+    "remember this",
+    "please remember",
+    "from now on",
 )
 
 
@@ -65,6 +63,7 @@ def ask(
     stored_content: str | None = None,
     provider_attachments: list[dict[str, str]] | None = None,
     allow_remote: bool = False,
+    allow_network: bool = False,
     confirm_cost: bool = False,
     execution_plan: dict[str, object] | None = None,
 ) -> str:
@@ -74,6 +73,8 @@ def ask(
     account_context = storage.account_context(root, actor)
     resolved_results = search_results or []
     if search.should_search(search_mode, content) and not resolved_results:
+        if not allow_network:
+            raise storage.WorkspaceError("Web search requires explicit network approval.")
         resolved_results = search.web_search(content)
     active_files = context_receipts.current_attachment_filenames(user_metadata)
     include_prior_files = context_receipts.should_include_prior_files(content, has_current_file=bool(active_files))
@@ -89,7 +90,19 @@ def ask(
             include_project_files=include_prior_files,
         )
     )
-    manifest = write_used_context(root, project_path, session_slug, prompt_context, actor, provider, model, search_mode)
+    network_used = bool(resolved_results)
+    manifest = write_used_context(
+        root,
+        project_path,
+        session_slug,
+        prompt_context,
+        actor,
+        provider,
+        model,
+        search_mode,
+        network_used=network_used,
+        search_queries=[content] if network_used else [],
+    )
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
     estimated = costs.estimate_cost(provider, model, input_tokens, max_output_tokens)
@@ -182,6 +195,8 @@ def write_used_context(
     provider: str,
     model: str,
     search_mode: str,
+    network_used: bool = False,
+    search_queries: list[str] | None = None,
 ) -> dict[str, object]:
     path = storage.session_dir(root, project_path, session_slug) / "used_context.json"
     manifest = context_manifest.build_context_manifest(
@@ -193,6 +208,8 @@ def write_used_context(
         model=model,
         search_mode=search_mode,
         prompt_context=prompt_context,
+        network_used=network_used,
+        search_queries=search_queries or [],
     )
     storage.write_json(
         path,
@@ -272,6 +289,9 @@ def maybe_update_account_memory(
 ) -> None:
     if not actor:
         return
+    policy = memory_policy()
+    if not should_store_memory(content, policy):
+        return
     summary = summarize_for_memory(content)
     if not summary:
         return
@@ -280,18 +300,37 @@ def maybe_update_account_memory(
             root,
             actor,
             f"Recent chat in {project_path}/{session_slug}: {summary}",
-            source="auto",
+            source="explicit" if policy in {"explicit_only", "suggest"} else "auto",
             metadata={"project_path": project_path, "session_slug": session_slug},
         )
     except storage.WorkspaceError:
         return
 
 
+def memory_policy() -> MemoryPolicy:
+    value = os.environ.get("AIWS_MEMORY_POLICY", "explicit_only").strip().lower()
+    if value in {"off", "explicit_only", "suggest", "auto"}:
+        return value  # type: ignore[return-value]
+    return "explicit_only"
+
+
+def should_store_memory(content: str, policy: MemoryPolicy = "explicit_only") -> bool:
+    if policy == "off":
+        return False
+    text = " ".join(content.replace("\n", " ").split())
+    if not text:
+        return False
+    lowered = text.lower()
+    explicit = any(marker in lowered or marker in text for marker in EXPLICIT_MEMORY_MARKERS)
+    if policy in {"explicit_only", "suggest"}:
+        return explicit
+    if policy == "auto":
+        return explicit or len(text) >= 20
+    return False
+
+
 def summarize_for_memory(content: str) -> str:
     text = " ".join(content.replace("\n", " ").split())
     if not text:
         return ""
-    lowered = text.lower()
-    if not any(marker in lowered or marker in text for marker in MEMORY_MARKERS):
-        return text[:140] if len(text) >= 20 else ""
     return text[:220]

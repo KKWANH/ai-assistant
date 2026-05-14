@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ from .env import load_env
 from . import storage
 from .runtime import LocalRuntime
 from .supervisor import StatusSupervisor
+from .tools import shell
 from .ui import start_ui
 
 
@@ -124,6 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--actor")
     ask.add_argument("--search-mode", choices=["off", "auto", "always"], default="off")
     ask.add_argument("--allow-remote", action="store_true")
+    ask.add_argument("--allow-network", action="store_true")
     ask.add_argument("--confirm-cost", action="store_true")
     add_root(ask)
 
@@ -313,6 +314,7 @@ def run(args: argparse.Namespace) -> int:
             actor=args.actor,
             search_mode=args.search_mode,
             allow_remote=args.allow_remote,
+            allow_network=args.allow_network,
             confirm_cost=args.confirm_cost,
         )
         print(response)
@@ -336,14 +338,7 @@ def run(args: argparse.Namespace) -> int:
             metadata={"cwd": str(Path(args.cwd).resolve())},
             actor=args.actor,
         )
-        result = subprocess.run(
-            args.shell_command,
-            cwd=args.cwd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        result = shell.run(args.shell_command, cwd=Path(args.cwd))
         output = result.stdout
         if result.stderr:
             output += ("\n" if output else "") + result.stderr

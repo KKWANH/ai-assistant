@@ -41,6 +41,74 @@ commands:
     assert "Summarize them." in preview["prompt"]
 
 
+def test_versioned_aiws_yaml_actions_alias_and_permissions(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Tools")
+    write_project_config(
+        root,
+        "tools",
+        """
+version: 1
+name: Tools
+project:
+  root: .
+actions:
+  summarize:
+    kind: prompt_recipe
+    label: Summarize
+    prompt: Summarize local files.
+  run_tool:
+    kind: shell
+    label: Run tool
+    command: printf hi
+""",
+    )
+
+    config = action_registry.load_config(root, "tools")
+
+    assert config["version"] == 1
+    assert config["root"] == "."
+    assert "summarize" in config["actions"]
+    assert config["actions"] == config["commands"]
+    assert config["actions"]["summarize"]["permissions"]["file_read"] is True
+    assert config["actions"]["summarize"]["permissions"]["network"] is False
+    assert config["actions"]["run_tool"]["permissions"]["shell"] is True
+    assert config["actions"]["run_tool"]["permissions"]["file_write"] is False
+
+
+def test_aiws_yaml_rejects_unknown_version(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Tools")
+    write_project_config(
+        root,
+        "tools",
+        """
+version: 99
+commands: {}
+""",
+    )
+
+    with pytest.raises(storage.WorkspaceError, match="Unsupported aiws.yaml version"):
+        action_registry.load_config(root, "tools")
+
+
+def test_aiws_yaml_root_must_stay_inside_project(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Tools")
+    write_project_config(
+        root,
+        "tools",
+        """
+version: 1
+root: ..
+commands: {}
+""",
+    )
+
+    with pytest.raises(storage.WorkspaceError, match="root must stay inside"):
+        action_registry.load_config(root, "tools")
+
+
 def test_aiws_yaml_views_and_panels_are_normalized(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "Investment")

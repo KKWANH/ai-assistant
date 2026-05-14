@@ -19,6 +19,8 @@ def build_context_manifest(
     model: str = "",
     search_mode: str = "",
     prompt_context: str = "",
+    network_used: bool = False,
+    search_queries: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a compact record of what AIWS intends to use as context."""
     project = storage.load_project(root, project_path)
@@ -42,6 +44,7 @@ def build_context_manifest(
     if recent_runs:
         included.append({"type": "recent_runs", "count": len(recent_runs)})
 
+    model_delivery = "local" if provider == "ollama" else "cloud"
     return {
         "created_at": storage.utc_now(),
         "actor": storage.slugify(actor) if actor else "local",
@@ -52,7 +55,13 @@ def build_context_manifest(
             "hidden": bool(project.get("hidden", False)),
         },
         "session": {"slug": session_slug, "title": session.get("title", session_slug)},
-        "privacy_mode": "local" if provider == "ollama" else "cloud_allowed",
+        "privacy_mode": "network" if network_used and model_delivery == "local" else model_delivery,
+        "privacy": {
+            "model_delivery": model_delivery,
+            "network_used": bool(network_used),
+            "search_queries_sent": list(search_queries or []),
+            "remote_providers": (["duckduckgo"] if network_used else []) + ([] if model_delivery == "local" else [provider]),
+        },
         "provider": provider,
         "model": model,
         "search_mode": search_mode,

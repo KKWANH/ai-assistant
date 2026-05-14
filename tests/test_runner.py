@@ -206,7 +206,7 @@ def test_ask_can_include_previous_files_when_requested(tmp_path, monkeypatch):
     assert {item["filename"] for item in receipt["used_files"]} == {"current.txt", "old.txt"}
 
 
-def test_ask_updates_account_memory_for_future_context(tmp_path, monkeypatch):
+def test_ask_does_not_store_memory_without_explicit_request(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     storage.create_account(root, "Kwanho", "secret")
     storage.create_project(root, "AI System", owner="kwanho")
@@ -228,7 +228,32 @@ def test_ask_updates_account_memory_for_future_context(tmp_path, monkeypatch):
     )
 
     memories = storage.load_account(root, "kwanho")["profile"]["memory"]
-    assert memories[-1]["source"] == "auto"
+    assert memories == []
+
+
+def test_ask_updates_account_memory_for_explicit_request(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret")
+    storage.create_project(root, "AI System", owner="kwanho")
+    storage.create_session(root, "ai-system", "Planning")
+
+    def fake_urlopen(req, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    runner.ask(
+        str(root),
+        "ai-system",
+        "planning",
+        provider="ollama",
+        model="qwen3:0.6b",
+        content="기억해줘. 나는 로컬 AI 작업실을 가족도 쉽게 쓰길 원해.",
+        actor="kwanho",
+    )
+
+    memories = storage.load_account(root, "kwanho")["profile"]["memory"]
+    assert memories[-1]["source"] == "explicit"
     assert "가족도 쉽게" in memories[-1]["content"]
 
 
@@ -251,6 +276,67 @@ def test_unknown_provider_is_rejected(tmp_path):
     else:
         raise AssertionError("Expected WorkspaceError")
     assert storage.read_messages(root, "ai-system", "ollama-mvp") == []
+
+
+def test_web_search_requires_explicit_network_approval(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Search")
+    called = {"search": False}
+
+    def fake_search(query):
+        called["search"] = True
+        return []
+
+    monkeypatch.setattr(runner.search, "web_search", fake_search)
+
+    with pytest.raises(storage.WorkspaceError, match="network approval"):
+        runner.ask(
+            str(root),
+            "ai-system",
+            "search",
+            provider="ollama",
+            model="qwen3:4b",
+            content="오늘 최신 뉴스 알려줘",
+            search_mode="auto",
+        )
+
+    assert called["search"] is False
+    assert storage.read_messages(root, "ai-system", "search") == []
+
+
+def test_web_search_approval_is_recorded_in_manifest(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Search")
+
+    class FakeProvider:
+        def chat(self, *, model, system, content, attachments=None):
+            return "Search response"
+
+    monkeypatch.setattr(runner, "get_provider", lambda provider: FakeProvider())
+    monkeypatch.setattr(
+        runner.search,
+        "web_search",
+        lambda query: [runner.search.SearchResult("Result", "https://example.com", "snippet")],
+    )
+
+    runner.ask(
+        str(root),
+        "ai-system",
+        "search",
+        provider="ollama",
+        model="qwen3:4b",
+        content="오늘 최신 뉴스 알려줘",
+        search_mode="auto",
+        allow_network=True,
+    )
+
+    manifest = storage.read_json(storage.session_dir(root, "ai-system", "search") / "used_context.json")["manifest"]
+    assert manifest["privacy"]["model_delivery"] == "local"
+    assert manifest["privacy"]["network_used"] is True
+    assert manifest["privacy"]["remote_providers"] == ["duckduckgo"]
+    assert manifest["privacy"]["search_queries_sent"] == ["오늘 최신 뉴스 알려줘"]
 
 
 def test_remote_provider_requires_explicit_confirmation(tmp_path, monkeypatch):

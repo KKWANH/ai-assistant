@@ -70,10 +70,17 @@ def default_config(root: str | Path, project_path: str) -> dict[str, Any]:
 
 def validate_config(root: str | Path, project_path: str, config: dict[str, Any]) -> dict[str, Any]:
     project_root = storage.project_dir(root, project_path)
-    workspace_root = resolve_project_root(project_root, str(config.get("root", ".")))
-    commands = config.get("commands") or {}
+    version = int(config.get("version", 1))
+    if version != 1:
+        raise storage.WorkspaceError(f"Unsupported aiws.yaml version: {version}")
+    project_config = config.get("project") if isinstance(config.get("project"), dict) else {}
+    configured_root = str(config.get("root") or project_config.get("root") or ".")
+    workspace_root = resolve_project_root(project_root, configured_root)
+    if not workspace_root.is_relative_to(project_root.resolve()) and not bool(config.get("allow_external_root", False)):
+        raise storage.WorkspaceError("aiws.yaml root must stay inside the project unless allow_external_root is true.")
+    commands = config.get("actions") if isinstance(config.get("actions"), dict) else config.get("commands") or {}
     if not isinstance(commands, dict):
-        raise storage.WorkspaceError("aiws.yaml commands must be a mapping.")
+        raise storage.WorkspaceError("aiws.yaml actions/commands must be a mapping.")
     normalized_commands: dict[str, Any] = {}
     for name, command in commands.items():
         if not isinstance(command, dict):
@@ -87,6 +94,7 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
         normalized.setdefault("label", str(name).replace("_", " ").title())
         normalized.setdefault("description", "")
         normalized.setdefault("permission", permission_for_kind(kind))
+        normalized["permissions"] = normalize_action_permissions(kind, normalized.get("permissions"))
         normalized["output_type"] = normalize_output_type(normalized)
         normalized["outputs"] = normalize_outputs(normalized)
         assert_no_secret_references(workspace_root, normalized)
@@ -94,9 +102,10 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
     context = config.get("context") if isinstance(config.get("context"), dict) else {}
     permissions = config.get("permissions") if isinstance(config.get("permissions"), dict) else {}
     return {
+        "version": version,
         "name": str(config.get("name") or storage.load_project(root, project_path).get("title", project_path)),
         "description": str(config.get("description", "")),
-        "root": str(config.get("root", ".")),
+        "root": configured_root,
         "resolved_root": str(workspace_root),
         "permissions": {
             "file_read": permissions.get("file_read", True),
@@ -110,8 +119,30 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
         },
         "panels": list(config.get("panels") or ["files", "memory", "commands", "runs", "artifacts"]),
         "views": normalize_views(config),
+        "actions": normalized_commands,
         "commands": normalized_commands,
     }
+
+
+def normalize_action_permissions(kind: str, value: object) -> dict[str, bool]:
+    base = {
+        "file_read": False,
+        "file_write": False,
+        "network": False,
+        "shell": False,
+        "python": False,
+    }
+    if kind in {"prompt_recipe", "file_index", "codex_prompt", "openclaw_status"}:
+        base["file_read"] = True
+    if kind == "shell":
+        base["shell"] = True
+    if kind == "python":
+        base["python"] = True
+    if isinstance(value, dict):
+        for key in base:
+            if key in value:
+                base[key] = bool(value[key])
+    return base
 
 
 def normalize_views(config: dict[str, Any]) -> list[dict[str, Any]]:

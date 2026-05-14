@@ -320,8 +320,8 @@ function savedSearchMode() {
   return SEARCH_OPTIONS.some((item) => item.value === value) ? value : "auto";
 }
 
-function fileNeedsVisionModel(file, mode) {
-  return Boolean(file?.type?.startsWith("image/") && !["kimi", "gemini"].includes(modelMode(mode).provider));
+function fileNeedsVisionModel(file, mode, models = MODEL_MODES) {
+  return Boolean(file?.type?.startsWith("image/") && !["kimi", "gemini"].includes(modelMode(mode, models).provider));
 }
 
 function App() {
@@ -1104,6 +1104,7 @@ function NewSessionForm({ projectPath, onCreated }) {
 function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }) {
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
+  const models = normalizeModelCatalog(account?.model_catalog);
   if (activePath.view === "actions") {
     return <ActionLibraryPage navigate={navigate} copy={copy} />;
   }
@@ -1126,6 +1127,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
           refreshWorkspace={refreshWorkspace}
           onAsk={onAsk}
           account={account}
+          models={models}
           projectPath={activePath.projectPath}
           embedded
         />
@@ -1140,6 +1142,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
         refreshWorkspace={refreshWorkspace}
         onAsk={onAsk}
         account={account}
+        models={models}
         projectPath={activePath.projectPath}
         workspace={workspace}
         home={home}
@@ -1160,7 +1163,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
           <span>{chat?.project?.hidden ? "Private chat" : "Project memory"}</span>
           <span>{(chat?.attachments || []).length} files</span>
           {chat?.goal?.objective && <span>Goal set</span>}
-          <span>{power ? `${chat?.latest?.provider || "ollama"} · ${modelLabel(chat?.latest?.model || DEFAULT_MODEL)}` : providerFriendlyLabel(chat?.latest?.provider || "ollama")}</span>
+          <span>{power ? `${chat?.latest?.provider || "ollama"} · ${modelLabel(chat?.latest?.model || DEFAULT_MODEL, models)}` : providerFriendlyLabel(chat?.latest?.provider || "ollama")}</span>
           <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? "Close" : copy.inspector.title}</button>
         </div>
       </div>
@@ -1173,7 +1176,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
         power={power}
         fetchJson={fetchJson}
       />
-      <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} />
+      <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} models={models} />
     </section>
   );
 }
@@ -1514,7 +1517,7 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
   );
 }
 
-function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectPath = "", embedded = false, home, onHome, refreshHome }) {
+function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome, refreshHome }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -1533,7 +1536,8 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   const formRef = useRef(null);
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
-  const selectedMode = modelMode(mode);
+  const modelModes = normalizeModelCatalog(models);
+  const selectedMode = modelMode(mode, modelModes);
   const isHomeWorkbench = !embedded && !projectPath;
 
   useEffect(() => {
@@ -1669,9 +1673,9 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
     event.preventDefault();
     if (starting || (!content.trim() && !file)) return;
     let submitMode = selectedMode;
-    if (fileNeedsVisionModel(file, mode)) {
+    if (fileNeedsVisionModel(file, mode, modelModes)) {
       setMode("cheap");
-      submitMode = modelMode("cheap");
+      submitMode = modelMode("cheap", modelModes);
     }
     setStarting(true);
     setStartError("");
@@ -1709,6 +1713,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
         askForm.set("provider", submitMode.provider);
         askForm.set("model", submitMode.model);
         askForm.set("search_mode", searchMode);
+        if (searchMode === "always") askForm.set("allow_network", "1");
         if (submitMode.cloud) {
           askForm.set("allow_remote", "1");
           askForm.set("confirm_cost", "1");
@@ -1796,7 +1801,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
               content={content}
               hasFile={Boolean(file)}
               power={power}
-              modelCatalog={account?.model_catalog}
+              modelCatalog={modelModes}
             />
             <select className="search-select" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
               {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
@@ -2086,7 +2091,7 @@ function AttachmentList({ attachments, onPreview }) {
   );
 }
 
-function Composer({ activePath, onAsk, account, power }) {
+function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -2099,7 +2104,8 @@ function Composer({ activePath, onAsk, account, power }) {
   const inputRef = useRef(null);
   const textRef = useRef(null);
   const formRef = useRef(null);
-  const selectedMode = modelMode(mode);
+  const modelModes = normalizeModelCatalog(models);
+  const selectedMode = modelMode(mode, modelModes);
   const copy = copyForAccount(account);
 
   useEffect(() => {
@@ -2147,15 +2153,16 @@ function Composer({ activePath, onAsk, account, power }) {
     event.preventDefault();
     if (sending || (!content.trim() && !file)) return;
     let submitMode = selectedMode;
-    if (fileNeedsVisionModel(file, mode)) {
+    if (fileNeedsVisionModel(file, mode, modelModes)) {
       setMode("cheap");
-      submitMode = modelMode("cheap");
+      submitMode = modelMode("cheap", modelModes);
     }
     const form = new FormData();
     form.set("content", content);
     form.set("provider", submitMode.provider);
     form.set("model", submitMode.model);
     form.set("search_mode", searchMode);
+    if (searchMode === "always") form.set("allow_network", "1");
     if (submitMode.cloud) {
       form.set("allow_remote", "1");
       form.set("confirm_cost", "1");
@@ -2251,12 +2258,12 @@ function Composer({ activePath, onAsk, account, power }) {
           open={pickerOpen}
           setOpen={setPickerOpen}
           selectedKey={mode}
-          onSelect={setMode}
-          content={content}
-          hasFile={Boolean(file)}
-          power={power}
-          modelCatalog={account?.model_catalog}
-        />
+            onSelect={setMode}
+            content={content}
+            hasFile={Boolean(file)}
+            power={power}
+            modelCatalog={modelModes}
+          />
         <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
           {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
         </select>
@@ -2284,11 +2291,12 @@ function Composer({ activePath, onAsk, account, power }) {
 }
 
 function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasFile, power, modelCatalog = [] }) {
-  const mode = modelMode(selectedKey);
+  const models = normalizeModelCatalog(modelCatalog);
+  const mode = modelMode(selectedKey, models);
   const [group, setGroup] = useState("recommended");
   const wrapRef = useRef(null);
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
-  const visibleModels = MODEL_MODES.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
+  const visibleModels = models.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
   useEffect(() => {
     if (!open) return undefined;
     function onKey(event) {
@@ -2337,7 +2345,7 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
               const singleEstimate = estimateCurrentCost(item, content, hasFile);
               const agentCalls = item.agentCalls || (item.cloud ? 2 : 1);
               const agentEstimate = estimateCurrentCost(item, content, hasFile, agentCalls);
-              const catalog = modelCatalog.find((entry) => entry.provider === item.provider && entry.model === item.model);
+              const catalog = models.find((entry) => entry.provider === item.provider && entry.model === item.model);
               const keyStatus = item.cloud ? (catalog?.api_key_configured ? "API key connected" : "API key missing") : "Local";
               return (
                 <button
@@ -2426,12 +2434,41 @@ function ModePrice({ mode, field = false, power = false }) {
   );
 }
 
-function modelLabel(model) {
-  return MODEL_MODES.find((item) => item.model === model)?.label || model;
+function modelLabel(model, models = MODEL_MODES) {
+  return normalizeModelCatalog(models).find((item) => item.model === model)?.label || model;
 }
 
-function modelMode(value) {
-  return MODEL_MODES.find((item) => item.value === value) || MODEL_MODES[0];
+function modelMode(value, models = MODEL_MODES) {
+  const normalized = normalizeModelCatalog(models);
+  return normalized.find((item) => item.value === value) || normalized.find((item) => item.value === "local") || normalized[0] || MODEL_MODES[0];
+}
+
+function normalizeModelCatalog(models = []) {
+  if (!Array.isArray(models) || models.length === 0) return MODEL_MODES;
+  return models.map((item) => ({
+    value: item.value,
+    group: item.group || (item.privacy === "local" ? "local" : "cloud"),
+    label: item.label || item.model,
+    legacyLabel: item.legacyLabel || item.legacy_label || "",
+    short: item.short || item.model,
+    provider: item.provider,
+    model: item.model,
+    cloud: Boolean(item.cloud ?? item.privacy === "cloud"),
+    inputPrice: Number(item.inputPrice ?? item.input_per_million ?? 0),
+    outputPrice: Number(item.outputPrice ?? item.output_per_million ?? 0),
+    agentCalls: Number(item.agentCalls || 0),
+    cost: item.cost || item.note || "",
+    easyPrice: item.easyPrice || item.cost || "",
+    privacy: item.privacy === "local" ? "Local Mac" : item.privacy || (item.cloud ? "Cloud AI" : "Local Mac"),
+    bestFor: item.bestFor || item.recommendedUse || item.recommended_use || "",
+    recommendedUse: item.recommendedUse || item.recommended_use || "",
+    supportsText: Boolean(item.supportsText ?? item.supports_text ?? true),
+    supportsImage: Boolean(item.supportsImage ?? item.supports_image),
+    supportsFileText: Boolean(item.supportsFileText ?? item.supports_file_text ?? true),
+    supportsWebSearch: Boolean(item.supportsWebSearch ?? item.supports_web_search),
+    version: item.version || item.model,
+    api_key_configured: Boolean(item.api_key_configured),
+  })).filter((item) => item.value && item.provider && item.model);
 }
 
 function searchLabel(mode) {

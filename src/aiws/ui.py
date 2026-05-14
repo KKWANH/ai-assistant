@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import os
 import base64
 import secrets
 import time
@@ -16,8 +15,19 @@ import hmac
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import attachments, automations, costs, openclaw
-from .core import action_registry, chat_orchestrator, context_manifest, home_workbench, model_capabilities
+from . import attachments, automations, costs
+from .app import context as request_context
+from .app import route_parser
+from .app.routes import actions as action_routes
+from .app.routes import chats as chat_routes
+from .app.routes import projects as project_routes
+from .app.routes import runtime as runtime_routes
+from .app.routes import workspace as workspace_routes
+from .core import action_registry, chat_orchestrator, home_workbench
+from .domain import accounts as account_domain
+from .domain import chats as chat_domain
+from .domain import goals as goal_domain
+from .domain import projects as project_domain
 from .i18n import t
 from . import runner
 from . import storage
@@ -52,6 +62,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         return
 
+    def request_context(self) -> request_context.RequestContext:
+        return request_context.RequestContext(self.root, self.current_username(), self.require_auth)
+
+    def require_project_access(self, project_path: str, mode: request_context.ProjectAccessMode = "read") -> None:
+        request_context.require_project_access(self.request_context(), project_path, mode)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
@@ -77,6 +93,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_home()
         elif path == "/api/action-library":
             self.api_action_library()
+        elif path == "/api/models":
+            self.api_models()
+        elif path == "/api/workbench-contract":
+            self.api_workbench_contract()
         elif path == "/api/home-run":
             query = parse_qs(parsed.query)
             run_id = unquote((query.get("run_id") or [""])[0])
@@ -145,7 +165,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
             else:
                 session_slug = parts[-1]
                 project_path = "/".join(parts[:-1])
-                self.page("Prompt", f"<pre>{html(storage.build_prompt_context(self.root, project_path, session_slug))}</pre>")
+                try:
+                    self.require_project_access(project_path, "read")
+                    self.page("Prompt", f"<pre>{html(storage.build_prompt_context(self.root, project_path, session_slug))}</pre>")
+                except storage.WorkspaceError:
+                    self.not_found()
         else:
             self.not_found()
 
@@ -235,7 +259,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_json(
                     {
                         "run": run,
-                        "home": home_payload(self.root, self.current_username() or "local"),
+                        "home": action_routes.home_payload(self.root, self.current_username() or "local"),
                     }
                 )
             except storage.WorkspaceError as exc:
@@ -255,7 +279,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     data.get("path", ""),
                     actor=self.current_username(),
                 )
-                self.send_json({"run": run, "home": home_payload(self.root, self.current_username() or "local")})
+                self.send_json({"run": run, "home": action_routes.home_payload(self.root, self.current_username() or "local")})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -269,12 +293,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 artifact = home_workbench.read_artifact(self.root, self.current_username() or "local", data.get("path", ""))
                 title = f"Artifact: {Path(str(artifact.get('path', 'artifact'))).name}"
-                project_path, session = storage.create_general_chat_session(self.root, self.current_username(), title)
+                project_path, session = chat_domain.create_general_session(self.root, self.current_username(), title)
                 content = (
                     data.get("content", "").strip()
                     or f"이 artifact를 해석해줘: {artifact['path']}\n\n{str(artifact.get('content', ''))[:8000]}"
                 )
-                storage.append_message(
+                chat_domain.append_message(
                     self.root,
                     project_path,
                     session["slug"],
@@ -296,8 +320,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                self.require_project_access(project_path, "owner")
                 template = data.get("template", "investment-rebalancer")
                 config = action_registry.import_template(self.root, project_path, template)
                 self.send_json({"config": config})
@@ -313,9 +336,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                project_path, command = split_project_action_route(route)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_access(self.root, project_path, self.current_username())
+                project_path, command = route_parser.split_project_action_route(route)
+                self.require_project_access(project_path, "read")
                 preview = action_registry.preview_action(self.root, project_path, command)
                 self.send_json({"preview": preview})
             except storage.WorkspaceError as exc:
@@ -330,9 +352,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                project_path, command = split_project_action_route(route)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_owner(self.root, project_path, self.current_username())
+                project_path, command = route_parser.split_project_action_route(route)
+                self.require_project_access(project_path, "owner")
                 run = action_registry.run_action(
                     self.root,
                     project_path,
@@ -343,8 +364,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 message_json = None
                 session_slug = str(data.get("session_slug", "")).strip()
                 if session_slug:
-                    storage.load_session(self.root, project_path, session_slug)
-                    message = storage.append_message(
+                    chat_domain.load_session(self.root, project_path, session_slug)
+                    message = chat_domain.append_message(
                         self.root,
                         project_path,
                         session_slug,
@@ -381,10 +402,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_access(self.root, project_path, self.current_username())
+                self.require_project_access(project_path, "write")
                 title = data.get("title", "").strip() or "New chat"
-                session = storage.create_session(
+                session = chat_domain.create_session(
                     self.root,
                     project_path,
                     title,
@@ -406,7 +426,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                project_path, session = storage.create_general_chat_session(
+                project_path, session = chat_domain.create_general_session(
                     self.root,
                     self.current_username(),
                     data.get("title", "").strip() or "New chat",
@@ -429,9 +449,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_access(self.root, project_path, self.current_username())
-                session = storage.update_session_title(self.root, project_path, session_slug, data.get("title", ""), auto=False)
+                self.require_project_access(project_path, "write")
+                session = chat_domain.update_title(self.root, project_path, session_slug, data.get("title", ""), auto=False)
                 self.send_json({"session": session})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -453,11 +472,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 target_project_path = data.get("target_project", "").strip()
                 if not target_project_path:
                     raise storage.WorkspaceError("Target project is required.")
-                username = self.current_username()
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_access(self.root, source_project_path, username)
-                    storage.ensure_project_owner(self.root, target_project_path, username)
-                session = storage.move_session_to_project(self.root, source_project_path, session_slug, target_project_path)
+                self.require_project_access(source_project_path, "read")
+                self.require_project_access(target_project_path, "owner")
+                session = chat_domain.move_to_project(self.root, source_project_path, session_slug, target_project_path)
                 self.send_json({"project_path": target_project_path, "session": session})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -477,9 +494,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 data = self.form_data()
                 self.require_csrf(data)
                 username = self.current_username()
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_owner(self.root, source_project_path, username)
-                project_path, session = storage.move_session_to_general_chat(self.root, source_project_path, session_slug, username)
+                self.require_project_access(source_project_path, "owner")
+                project_path, session = chat_domain.move_to_general(self.root, source_project_path, session_slug, username)
                 self.send_json({"project_path": project_path, "session": session})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -498,9 +514,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_owner(self.root, project_path, self.current_username())
-                storage.delete_session(self.root, project_path, session_slug)
+                self.require_project_access(project_path, "owner")
+                chat_domain.delete_session(self.root, project_path, session_slug)
                 self.send_json({"ok": True})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -514,9 +529,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_owner(self.root, project_path, self.current_username())
-                project = storage.update_project_title(self.root, project_path, data.get("title", ""))
+                self.require_project_access(project_path, "owner")
+                project = project_domain.update_title(self.root, project_path, data.get("title", ""))
                 self.send_json({"project": project})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -530,9 +544,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_owner(self.root, project_path, self.current_username())
-                storage.delete_project(self.root, project_path)
+                self.require_project_access(project_path, "owner")
+                project_domain.delete(self.root, project_path)
                 self.send_json({"ok": True})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -546,7 +559,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 data = self.form_data()
                 self.require_csrf(data)
                 skills = [item.strip() for item in data.get("skills", "").split(",") if item.strip()]
-                project = storage.create_project(
+                project = project_domain.create(
                     self.root,
                     data["title"],
                     parent=data.get("parent") or None,
@@ -571,7 +584,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                account = storage.update_account_profile(
+                account = account_domain.update_profile(
                     self.root,
                     username,
                     name=data.get("name", ""),
@@ -599,9 +612,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                if storage.has_accounts(self.root):
-                    storage.ensure_project_access(self.root, project_path, self.current_username())
-                goal = storage.save_goal(
+                self.require_project_access(project_path, "write")
+                goal = goal_domain.save(
                     self.root,
                     project_path,
                     {
@@ -613,7 +625,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                         "test_commands": data.get("test_commands", ""),
                     },
                 )
-                self.send_json({"goal": goal, "codex_prompt": storage.codex_goal_prompt(self.root, project_path)})
+                self.send_json({"goal": goal, "codex_prompt": goal_domain.codex_prompt(self.root, project_path)})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -654,7 +666,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         self.require_csrf(data)
         if parsed.path == "/projects":
             skills = [item.strip() for item in data.get("skills", "").split(",") if item.strip()]
-            project = storage.create_project(
+            project = project_domain.create(
                 self.root,
                 data["title"],
                 parent=data.get("parent") or None,
@@ -666,16 +678,15 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.redirect(f"/project/{project['path']}")
         elif parsed.path.startswith("/sessions/"):
             project_path = unquote(parsed.path.removeprefix("/sessions/"))
-            if storage.has_accounts(self.root):
-                storage.ensure_project_access(self.root, project_path, self.current_username())
-            session = storage.create_session(self.root, project_path, data["title"])
+            self.require_project_access(project_path, "write")
+            session = chat_domain.create_session(self.root, project_path, data["title"])
             self.redirect(f"/chat/{project_path}/{session['slug']}")
         elif parsed.path.startswith("/append/"):
             parts = unquote(parsed.path.removeprefix("/append/")).split("/")
             session_slug = parts[-1]
             project_path = "/".join(parts[:-1])
-            storage.ensure_project_access(self.root, project_path, self.current_username())
-            storage.append_message(
+            self.require_project_access(project_path, "write")
+            chat_domain.append_message(
                 self.root,
                 project_path,
                 session_slug,
@@ -697,7 +708,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             parts = unquote(parsed.path.removeprefix("/upload/")).split("/")
             session_slug = parts[-1]
             project_path = "/".join(parts[:-1])
-            storage.ensure_project_access(self.root, project_path, self.current_username())
+            self.require_project_access(project_path, "write")
             try:
                 filename, content = self.multipart_file("attachment")
                 attachments.save_attachment(
@@ -716,7 +727,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             if not username:
                 self.redirect("/login")
                 return
-            storage.update_account_profile(
+            account_domain.update_profile(
                 self.root,
                 username,
                 name=data.get("name", ""),
@@ -805,8 +816,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         raise storage.WorkspaceError("No avatar file found.")
 
     def handle_ask(self, project_path: str, session_slug: str, data: dict[str, str]) -> None:
-        if storage.has_accounts(self.root):
-            storage.ensure_project_access(self.root, project_path, self.current_username())
+        self.require_project_access(project_path, "read")
         visible_content = data.get("content", "").strip()
         model_content = visible_content
         user_metadata: dict[str, object] = {}
@@ -884,6 +894,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             "actor": self.current_username(),
             "search_mode": data.get("search_mode", "off"),
             "allow_remote": data.get("allow_remote") in {"1", "true", "yes"},
+            "allow_network": data.get("allow_network") in {"1", "true", "yes"},
             "confirm_cost": data.get("confirm_cost") in {"1", "true", "yes"},
             "execution_plan": execution_plan,
         }
@@ -899,97 +910,41 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def api_chat(self, project_path: str, session_slug: str) -> None:
         try:
-            if storage.has_accounts(self.root):
-                storage.ensure_project_access(self.root, project_path, self.current_username())
-            project = storage.load_project(self.root, project_path)
-            session = storage.load_session(self.root, project_path, session_slug)
-            messages = storage.read_messages(self.root, project_path, session_slug)
+            self.require_project_access(project_path, "read")
             self.send_json(
-                {
-                    "project": {
-                        "path": project_path,
-                        "title": project["title"],
-                        "hidden": bool(project.get("hidden", False)),
-                        "visibility": project.get("visibility", "private"),
-                    },
-                    "session": {"slug": session_slug, "title": session["title"]},
-                    "messages": [self.message_json(message) for message in messages],
-                    "skills": storage.resolve_skill_names(self.root, project_path),
-                    "attachments": [
-                        attachment_view(project_path, session_slug, item)
-                        for item in attachments.list_attachments(self.root, project_path, session_slug)
-                    ],
-                    "goal": storage.load_goal(self.root, project_path),
-                    "codex_prompt": storage.codex_goal_prompt(self.root, project_path, session_slug),
-                    "latest": latest_assistant_metadata(messages),
-                    "task_suggestions": action_registry.suggest_actions(
-                        self.root,
-                        project_path,
-                        messages=messages,
-                    ),
-                    "context_manifest": context_manifest.build_context_manifest(
-                        self.root,
-                        project_path,
-                        session_slug,
-                        actor=self.current_username(),
-                        provider=str(latest_assistant_metadata(messages).get("provider", "")),
-                        model=str(latest_assistant_metadata(messages).get("model", "")),
-                        search_mode=str(latest_assistant_metadata(messages).get("search_mode", "")),
-                    ),
-                }
+                chat_routes.chat_payload(
+                    self.root,
+                    project_path,
+                    session_slug,
+                    actor=self.current_username(),
+                    message_serializer=self.message_json,
+                    attachment_serializer=attachment_view,
+                )
             )
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def api_workspace(self) -> None:
         try:
-            projects = storage.list_visible_projects(self.root, self.current_username()) if storage.has_accounts(self.root) else storage.list_projects(self.root)
-            chats = storage.list_visible_general_chat_projects(self.root, self.current_username())
-            self.send_json(
-                {
-                    "projects": [self.project_json(project) for project in projects if not project.get("hidden")],
-                    "chats": [self.project_json(project) for project in chats],
-                    "account": self.current_account_json(),
-                }
-            )
+            self.send_json(workspace_routes.workspace_payload(self.root, self.current_username()))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=400)
 
     def api_account(self) -> None:
-        self.send_json({"account": self.current_account_json()})
+        self.send_json({"account": workspace_routes.account_payload(self.root, self.current_username())})
 
     def api_goal(self, project_path: str) -> None:
         try:
-            if storage.has_accounts(self.root):
-                storage.ensure_project_access(self.root, project_path, self.current_username())
-            self.send_json(
-                {
-                    "goal": storage.load_goal(self.root, project_path),
-                    "codex_prompt": storage.codex_goal_prompt(self.root, project_path),
-                }
-            )
+            self.require_project_access(project_path, "read")
+            self.send_json(project_routes.goal_payload(self.root, project_path))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def api_runtime(self) -> None:
-        workspace = storage.workspace_path(self.root)
-        run_dir = Path(os.environ.get("AIWS_RUN_DIR", str(workspace / "run"))).expanduser()
-        status_path = Path(os.environ.get("AIWS_STATUS_PATH", str(workspace / "runtime-status.json"))).expanduser()
-        url_path = run_dir / "cloudflare-url.txt"
-        status: dict[str, object] = {"status": "unknown", "cloudflare_url": "", "port": self.server.server_port}
-        if status_path.exists():
-            try:
-                loaded = json.loads(status_path.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict):
-                    status.update(loaded)
-            except json.JSONDecodeError:
-                status["message"] = "Runtime status file is not valid JSON."
-        if url_path.exists():
-            status["cloudflare_url"] = url_path.read_text(encoding="utf-8").strip()
-        self.send_json({"runtime": status})
+        self.send_json(runtime_routes.runtime_payload(self.root, self.server.server_port))
 
     def api_openclaw(self) -> None:
-        self.send_json({"openclaw": openclaw.status()})
+        self.send_json(runtime_routes.openclaw_payload())
 
     def api_automations(self) -> None:
         try:
@@ -999,7 +954,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json({"error": str(exc)}, status=403)
 
     def api_home(self) -> None:
-        self.send_json({"home": home_payload(self.root, self.current_username() or "local")})
+        self.send_json({"home": action_routes.home_payload(self.root, self.current_username() or "local")})
 
     def home_action_model_response(self, action_id: str, data: dict[str, str]) -> str:
         if action_id != "image_explain":
@@ -1027,42 +982,44 @@ class AIWSHandler(BaseHTTPRequestHandler):
         return response
 
     def api_action_library(self) -> None:
-        self.send_json({"actions": home_workbench.list_actions()})
+        self.send_json(action_routes.action_library_payload())
+
+    def api_models(self) -> None:
+        self.send_json(action_routes.models_payload())
+
+    def api_workbench_contract(self) -> None:
+        self.send_json(action_routes.workbench_contract_payload())
 
     def api_home_run(self, run_id: str) -> None:
         try:
-            self.send_json(home_workbench.read_run_detail(self.root, self.current_username() or "local", run_id))
+            self.send_json(action_routes.home_run_payload(self.root, self.current_username(), run_id))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def api_home_artifact(self, artifact_path: str) -> None:
         try:
-            self.send_json({"artifact": home_workbench.read_artifact(self.root, self.current_username() or "local", artifact_path)})
+            self.send_json(action_routes.home_artifact_payload(self.root, self.current_username(), artifact_path))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def api_project_config(self, project_path: str) -> None:
         try:
-            if storage.has_accounts(self.root):
-                storage.ensure_project_access(self.root, project_path, self.current_username())
-            config = action_registry.load_config(self.root, project_path)
-            self.send_json({"config": config, "runs": action_registry.latest_runs(self.root, project_path)})
+            self.require_project_access(project_path, "read")
+            self.send_json(project_routes.config_payload(self.root, project_path))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def api_project_run(self, project_path: str, run_id: str) -> None:
         try:
-            if storage.has_accounts(self.root):
-                storage.ensure_project_access(self.root, project_path, self.current_username())
-            self.send_json(action_registry.read_run_detail(self.root, project_path, run_id))
+            self.require_project_access(project_path, "read")
+            self.send_json(project_routes.run_payload(self.root, project_path, run_id))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def api_project_artifact(self, project_path: str, artifact_path: str) -> None:
         try:
-            if storage.has_accounts(self.root):
-                storage.ensure_project_access(self.root, project_path, self.current_username())
-            self.send_json({"artifact": action_registry.read_project_artifact(self.root, project_path, artifact_path)})
+            self.require_project_access(project_path, "read")
+            self.send_json(project_routes.artifact_payload(self.root, project_path, artifact_path))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
@@ -1075,31 +1032,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             file.write("\n")
 
     def current_account_json(self) -> dict[str, object]:
-        username = self.current_username()
-        if username and storage.has_accounts(self.root):
-            try:
-                account = storage.public_account(storage.load_account(self.root, username))
-                avatar = account.get("profile", {}).get("avatar") if isinstance(account.get("profile"), dict) else ""
-                if avatar:
-                    account["avatar_url"] = f"/avatar/{username}"
-                account["cost_usage"] = {
-                    "day_usd": storage.model_usage_total_usd(self.root, username, period="day"),
-                    "month_usd": storage.model_usage_total_usd(self.root, username, period="month"),
-                }
-                account["model_catalog"] = model_catalog()
-                return account
-            except storage.WorkspaceError:
-                pass
-        username = username or "local"
-        nickname = storage.display_name_for_username(username)
-        return {
-            "username": username,
-            "nickname": nickname,
-            "display_name": nickname,
-            "admin": False,
-            "profile": {"name": nickname, "ui_mode": "power"},
-            "model_catalog": model_catalog(),
-        }
+        return workspace_routes.account_payload(self.root, self.current_username())
 
     def require_admin(self) -> None:
         if not storage.has_accounts(self.root):
@@ -1108,29 +1041,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             raise storage.WorkspaceError("Admin access is required.")
 
     def project_json(self, project: dict[str, object]) -> dict[str, object]:
-        project_path = str(project["path"])
-        sessions = storage.list_sessions(self.root, project_path)
-        first_session_url = f"/chat/{project_path}/{sessions[0]['slug']}" if sessions else ""
-        return {
-            "path": project_path,
-            "title": project.get("title", project_path),
-            "created_at": project.get("created_at", ""),
-            "parent": project.get("parent", ""),
-            "level": 1 if project.get("parent") else 0,
-            "owner": project.get("owner", ""),
-            "owner_display": storage.display_name_for_username(str(project.get("owner", "") or "local")),
-            "visibility": project.get("visibility", "private"),
-            "hidden": bool(project.get("hidden", False)),
-            "firstSessionUrl": first_session_url,
-            "sessions": [
-                {
-                    "slug": session["slug"],
-                    "title": session["title"],
-                    "created_at": session.get("created_at", ""),
-                }
-                for session in sessions
-            ],
-        }
+        return workspace_routes.project_payload(self.root, project)
 
     def serve_spa(self) -> None:
         index = web_dist_path() / "index.html"
@@ -1710,7 +1621,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def projects(self) -> str:
         items = []
-        projects = storage.list_visible_projects(self.root, self.current_username()) if storage.has_accounts(self.root) else storage.list_projects(self.root)
+        projects = project_domain.visible(self.root, self.current_username()) if storage.has_accounts(self.root) else project_domain.list_all(self.root)
         for project in projects:
             items.append(
                 f"""<div class="panel"><h3><a href="/project/{project['path']}">{html(project['title'])}</a></h3>
@@ -1740,14 +1651,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
 </form>"""
 
     def project_detail(self, project_path: str) -> str:
-        if storage.has_accounts(self.root):
-            storage.ensure_project_access(self.root, project_path, self.current_username())
-        project = storage.load_project(self.root, project_path)
-        sessions = storage.list_sessions(self.root, project_path)
+        self.require_project_access(project_path, "read")
+        project = project_domain.load(self.root, project_path)
+        sessions = chat_domain.list_sessions(self.root, project_path)
         active_skills = storage.resolve_skill_names(self.root, project_path)
         session_items = []
         for session in sessions:
-            messages = storage.read_messages(self.root, project_path, session["slug"])
+            messages = chat_domain.read_messages(self.root, project_path, session["slug"])
             preview = ""
             if messages:
                 preview = str(messages[-1].get("content", ""))[:140]
@@ -1782,11 +1692,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
 <div class="session-list">{''.join(session_items or ['<div class="panel muted">No sessions yet.</div>'])}</div>"""
 
     def chat_page(self, project_path: str, session_slug: str) -> str:
-        if storage.has_accounts(self.root):
-            storage.ensure_project_access(self.root, project_path, self.current_username())
-        project = storage.load_project(self.root, project_path)
-        session = storage.load_session(self.root, project_path, session_slug)
-        messages = storage.read_messages(self.root, project_path, session_slug)
+        self.require_project_access(project_path, "read")
+        project = project_domain.load(self.root, project_path)
+        session = chat_domain.load_session(self.root, project_path, session_slug)
+        messages = chat_domain.read_messages(self.root, project_path, session_slug)
         rendered_messages = "".join(self.message_block(message) for message in messages)
         return f"""<div class="chat-shell">
   <input class="sidebar-toggle" id="sidebar-toggle" type="checkbox">
@@ -1830,7 +1739,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
 </div>"""
 
     def workspace_tree(self, active_project_path: str, active_session_slug: str) -> str:
-        projects = storage.list_visible_projects(self.root, self.current_username()) if storage.has_accounts(self.root) else storage.list_projects(self.root)
+        projects = project_domain.visible(self.root, self.current_username()) if storage.has_accounts(self.root) else project_domain.list_all(self.root)
         root_projects = [project for project in projects if not project.get("parent")]
         by_parent: dict[str, list[dict[str, object]]] = {}
         for project in projects:
@@ -1882,7 +1791,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         project_path = str(project["path"])
         active = " active" if project_path == active_project_path else ""
         project_class = "tree-project" if level == "root" else "tree-subproject"
-        sessions = storage.list_sessions(self.root, project_path)
+        sessions = chat_domain.list_sessions(self.root, project_path)
         session_links = []
         for session in sessions:
             session_active = " active" if project_path == active_project_path and session["slug"] == active_session_slug else ""
@@ -2050,8 +1959,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def serve_attachment(self, project_path: str, session_slug: str, filename: str) -> None:
         try:
-            storage.ensure_project_access(self.root, project_path, self.current_username())
-            storage.load_session(self.root, project_path, session_slug)
+            self.require_project_access(project_path, "read")
+            chat_domain.load_session(self.root, project_path, session_slug)
             path, _metadata = attachments.read_attachment_file(self.root, project_path, session_slug, filename)
             content = path.read_bytes()
         except storage.WorkspaceError:
@@ -2371,18 +2280,6 @@ def gemini_mime_type(extension: str) -> str:
     return "application/octet-stream"
 
 
-def split_project_action_route(route: str) -> tuple[str, str]:
-    parts = [part for part in route.split("/") if part]
-    if len(parts) < 2:
-        raise storage.WorkspaceError("Invalid project action route.")
-    command = parts[-1]
-    project_path = "/".join(parts[:-1])
-    storage.parse_project_path(project_path)
-    if not command or not all(ch.isalnum() or ch in "_-" for ch in command):
-        raise storage.WorkspaceError("Project action command must be a slug ID.")
-    return project_path, command
-
-
 def message_attachments_data(metadata: object) -> list[dict[str, object]]:
     if not isinstance(metadata, dict):
         return []
@@ -2414,44 +2311,6 @@ def model_cost_table() -> str:
     for item in costs.list_model_costs():
         lines.append(f"{item.provider}\t{item.model}\t{item.input_per_million}\t{item.output_per_million}\t{item.note}")
     return "\n".join(lines)
-
-
-def model_catalog() -> list[dict[str, object]]:
-    api_keys = {
-        "ollama": True,
-        "kimi": bool(os.environ.get("AIWS_KIMI_API_KEY") or os.environ.get("MOONSHOT_API_KEY")),
-        "gemini": bool(os.environ.get("AIWS_GEMINI_API_KEY")),
-        "openai": bool(os.environ.get("AIWS_OPENAI_API_KEY")),
-        "ernie": bool(os.environ.get("AIWS_ERNIE_API_KEY") or os.environ.get("AIWS_QIANFAN_API_KEY")),
-    }
-    return [
-        model_capabilities.capability_for_cost(item, api_key_configured=bool(api_keys.get(item.provider)))
-        for item in costs.list_model_costs()
-    ]
-
-
-def home_payload(root: str | Path, username: str | None) -> dict[str, object]:
-    home = home_workbench.home_dir(root, username)
-    return {
-        "path": str(home),
-        "actions": home_workbench.list_actions(),
-        "runs": home_workbench.list_runs(root, username),
-        "artifacts": home_workbench.list_artifacts(root, username),
-        "views": [
-            {
-                "id": "home",
-                "title": "Home Workbench",
-                "layout": "sidebar",
-                "panels": [
-                    {"id": "starter-actions", "type": "actionLauncher", "title": "Starter Actions", "source": "actions"},
-                    {"id": "recent-runs", "type": "runTimeline", "title": "Recent Runs", "source": "runs"},
-                    {"id": "recent-artifacts", "type": "artifactGallery", "title": "Recent Artifacts", "source": "artifacts"},
-                    {"id": "cost-meter", "type": "costMeter", "title": "Cost / Model", "source": "runtime"},
-                ],
-            }
-        ],
-        "message": "Home Workbench is ready for projectless starter actions.",
-    }
 
 
 def starter_actions() -> list[dict[str, object]]:

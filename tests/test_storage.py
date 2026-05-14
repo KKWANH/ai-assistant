@@ -1,4 +1,5 @@
 import json
+from threading import Thread
 
 import pytest
 
@@ -83,6 +84,54 @@ def test_session_creation_append_jsonl_and_markdown(tmp_path):
     assert "# Ollama MVP" in markdown
     assert "## User" in markdown
     assert "How should we implement" in markdown
+
+
+def test_concurrent_message_appends_remain_valid_jsonl(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Concurrency")
+
+    threads = [
+        Thread(
+            target=storage.append_message,
+            args=(root, "ai-system", "concurrency"),
+            kwargs={"role": "user", "content": f"message {index}"},
+        )
+        for index in range(20)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    messages = storage.read_messages(root, "ai-system", "concurrency")
+    assert len(messages) == 20
+    assert {message["content"] for message in messages} == {f"message {index}" for index in range(20)}
+
+
+def test_concurrent_profile_updates_do_not_corrupt_users_json(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret")
+
+    threads = [
+        Thread(
+            target=storage.update_account_profile,
+            args=(root, "kwanho"),
+            kwargs={"job": f"job-{index}", "memory": f"memory {index}"},
+        )
+        for index in range(12)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    users = storage.load_users(root)
+    account = users["users"]["kwanho"]
+    assert account["profile"]["job"].startswith("job-")
+    memories = account["profile"]["memory"]
+    assert len(memories) == 12
+    assert {item["content"] for item in memories} == {f"memory {index}" for index in range(12)}
 
 
 def test_skill_inheritance_from_parent_project(tmp_path):

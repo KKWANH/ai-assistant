@@ -121,6 +121,7 @@ def test_cli_ask_prints_response(tmp_path, capsys, monkeypatch):
         actor=None,
         search_mode="off",
         allow_remote=False,
+        allow_network=False,
         confirm_cost=False,
     ):
         assert root_arg == str(root)
@@ -132,6 +133,7 @@ def test_cli_ask_prints_response(tmp_path, capsys, monkeypatch):
         assert actor is None
         assert search_mode == "off"
         assert allow_remote is False
+        assert allow_network is False
         assert confirm_cost is False
         return "Hi from Ollama"
 

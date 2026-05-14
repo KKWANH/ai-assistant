@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from aiws import automations, runner, storage
+from aiws import attachments, automations, runner, storage
 from aiws.ui import AIWSHandler, validate_ui_options
 
 
@@ -53,6 +53,7 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         stored_content=None,
         provider_attachments=None,
         allow_remote=False,
+        allow_network=False,
         confirm_cost=False,
     ):
         calls["root"] = root_arg
@@ -260,6 +261,7 @@ def test_home_renders_workspace_shell_and_empty_state(tmp_path):
         assert '<div id="root"></div>' in actions_page
         workspace = request.urlopen(f"{base_url}/api/workspace", timeout=5).read().decode("utf-8")
         assert '"projects": []' in workspace
+        assert '"model_catalog"' in workspace
         home = json.loads(request.urlopen(f"{base_url}/api/home", timeout=5).read().decode("utf-8"))
         assert "home" in home
         assert home["home"]["message"] == "Home Workbench is ready for projectless starter actions."
@@ -268,6 +270,12 @@ def test_home_renders_workspace_shell_and_empty_state(tmp_path):
         actions = json.loads(request.urlopen(f"{base_url}/api/action-library", timeout=5).read().decode("utf-8"))
         assert actions["actions"][0]["id"] == "document_summary"
         assert any(item["id"] == "investment_rebalancer" for item in actions["actions"])
+        models = json.loads(request.urlopen(f"{base_url}/api/models", timeout=5).read().decode("utf-8"))
+        assert any(item["value"] == "local" and item["provider"] == "ollama" for item in models["models"])
+        contract = json.loads(request.urlopen(f"{base_url}/api/workbench-contract", timeout=5).read().decode("utf-8"))
+        assert contract["version"] == 1
+        assert contract["models"]
+        assert contract["actions"]
     finally:
         server.shutdown()
         server.server_close()
@@ -394,6 +402,7 @@ def test_kimi_image_upload_is_passed_as_vision_attachment(tmp_path, monkeypatch)
         stored_content=None,
         provider_attachments=None,
         allow_remote=False,
+        allow_network=False,
         confirm_cost=False,
     ):
         calls["provider"] = provider
@@ -462,6 +471,7 @@ def test_gemini_pdf_upload_is_passed_as_inline_file(tmp_path, monkeypatch):
         stored_content=None,
         provider_attachments=None,
         allow_remote=False,
+        allow_network=False,
         confirm_cost=False,
     ):
         calls["provider"] = provider
@@ -600,6 +610,45 @@ def test_login_sets_secure_cookie_behind_https_and_rate_limits_failures(tmp_path
         limited_payload = parse.urlencode({"username": "parent", "password": "wrong", "_csrf": bad_csrf}).encode("utf-8")
         with pytest.raises(Exception):
             bad_opener.open(request.Request(f"{base_url}/login", data=limited_payload, method="POST"), timeout=5)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_private_project_prompt_and_attachment_require_project_access(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Owner", "owner-secret")
+    storage.create_account(root, "Other", "other-secret")
+    storage.create_project(root, "Private Notes", owner="owner", visibility="private")
+    storage.create_session(root, "private-notes", "Secret")
+    storage.append_message(root, "private-notes", "secret", role="user", content="private", actor="owner")
+    attachments.save_attachment(root, "private-notes", "secret", "note.txt", b"secret attachment", actor="owner")
+
+    handler = partial(AIWSHandler, root=str(root), require_auth=True, password="server-secret")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    jar = CookieJar()
+    opener = request.build_opener(request.HTTPCookieProcessor(jar))
+    try:
+        opener.open(f"{base_url}/login", timeout=5).read()
+        csrf = next(cookie.value for cookie in jar if cookie.name == "aiws_csrf")
+        payload = parse.urlencode({"username": "other", "password": "other-secret", "_csrf": csrf}).encode("utf-8")
+        opener.open(request.Request(f"{base_url}/login", data=payload, method="POST"), timeout=5)
+
+        with pytest.raises(request.HTTPError) as prompt_error:
+            opener.open(f"{base_url}/prompt/private-notes/secret", timeout=5)
+        assert prompt_error.value.code == 404
+
+        with pytest.raises(request.HTTPError) as attachment_error:
+            opener.open(f"{base_url}/attachment/private-notes/secret/note.txt", timeout=5)
+        assert attachment_error.value.code == 404
+
+        with pytest.raises(request.HTTPError) as chat_error:
+            opener.open(f"{base_url}/api/chat/private-notes/secret", timeout=5)
+        assert chat_error.value.code == 404
     finally:
         server.shutdown()
         server.server_close()

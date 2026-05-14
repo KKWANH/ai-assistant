@@ -14,6 +14,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from aiws.infra import file_store
+from aiws.infra.locks import file_lock
+
 SUPPORTED_SKILL_FILES = ("CLAUDE.md", "SKILL.md", "skills.md", "README.md")
 SUPPORTED_AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 SUPPORTED_LANGUAGES = {"en", "ko"}
@@ -189,6 +192,11 @@ def save_users(root: str | Path, users: dict[str, Any]) -> None:
     write_json(users_json_path(root), users)
 
 
+def update_users(root: str | Path, mutator) -> Any:
+    init_workspace(root)
+    return file_store.locked_json_update(users_json_path(root), {"users": {}}, mutator)
+
+
 def config_json_path(root: str | Path) -> Path:
     return workspace_path(root) / "config.json"
 
@@ -234,11 +242,8 @@ def create_account(
 ) -> dict[str, Any]:
     init_workspace(root)
     username_slug = slugify(username)
-    users = load_users(root)
-    if username_slug in users["users"]:
-        raise WorkspaceError(f"Account already exists: {username_slug}")
     nickname = display_name or display_name_for_username(username_slug)
-    user = {
+    user_template = {
         "username": username_slug,
         "nickname": nickname,
         "display_name": nickname,
@@ -257,9 +262,15 @@ def create_account(
         },
         "usage": {"messages": 0, "asks": 0},
     }
-    users["users"][username_slug] = user
-    save_users(root, users)
-    return public_account(user)
+
+    def mutate(users: dict[str, Any]) -> dict[str, Any]:
+        users.setdefault("users", {})
+        if username_slug in users["users"]:
+            raise WorkspaceError(f"Account already exists: {username_slug}")
+        users["users"][username_slug] = user_template
+        return public_account(users["users"][username_slug])
+
+    return update_users(root, mutate)
 
 
 def public_account(user: dict[str, Any]) -> dict[str, Any]:
@@ -328,14 +339,16 @@ def is_admin(root: str | Path, username: str | None) -> bool:
 def record_usage(root: str | Path, username: str | None, *, messages: int = 0, asks: int = 0) -> None:
     if not username:
         return
-    users = load_users(root)
-    user = users["users"].get(slugify(username))
-    if not user:
-        return
-    usage = user.setdefault("usage", {"messages": 0, "asks": 0})
-    usage["messages"] = int(usage.get("messages", 0)) + messages
-    usage["asks"] = int(usage.get("asks", 0)) + asks
-    save_users(root, users)
+
+    def mutate(users: dict[str, Any]) -> None:
+        user = users.get("users", {}).get(slugify(username))
+        if not user:
+            return
+        usage = user.setdefault("usage", {"messages": 0, "asks": 0})
+        usage["messages"] = int(usage.get("messages", 0)) + messages
+        usage["asks"] = int(usage.get("asks", 0)) + asks
+
+    update_users(root, mutate)
 
 
 def model_usage_jsonl_path(root: str | Path) -> Path:
@@ -347,8 +360,7 @@ def model_usage_jsonl_path(root: str | Path) -> Path:
 def append_model_usage(root: str | Path, record: dict[str, Any]) -> dict[str, Any]:
     saved = dict(record)
     saved.setdefault("created_at", utc_now())
-    with model_usage_jsonl_path(root).open("a", encoding="utf-8") as file:
-        file.write(json.dumps(saved, ensure_ascii=False) + "\n")
+    file_store.append_jsonl(model_usage_jsonl_path(root), saved)
     return saved
 
 
@@ -398,35 +410,37 @@ def update_account_profile(
     ui_mode: str | None = None,
     memory: str | None = None,
 ) -> dict[str, Any]:
-    users = load_users(root)
     username_slug = slugify(username)
-    user = users["users"].get(username_slug)
-    if not user:
-        raise WorkspaceError(f"Account does not exist: {username_slug}")
-    profile = user.setdefault("profile", {})
-    if name is not None:
-        nickname = name or display_name_for_username(username_slug)
-        profile["name"] = nickname
-        user["nickname"] = nickname
-        user["display_name"] = nickname
-    if age is not None:
-        profile["age"] = age
-    if job is not None:
-        profile["job"] = job
-    if situation is not None:
-        profile["situation"] = situation
-    if language is not None:
-        if language not in SUPPORTED_LANGUAGES:
-            raise WorkspaceError("Language must be en or ko.")
-        profile["language"] = language
-    if ui_mode is not None:
-        if ui_mode not in {"easy", "power"}:
-            raise WorkspaceError("UI mode must be easy or power.")
-        profile["ui_mode"] = ui_mode
-    if memory:
-        append_account_memory(root, username_slug, memory, source="manual", users=users)
-    save_users(root, users)
-    return public_account(user)
+
+    def mutate(users: dict[str, Any]) -> dict[str, Any]:
+        user = users.get("users", {}).get(username_slug)
+        if not user:
+            raise WorkspaceError(f"Account does not exist: {username_slug}")
+        profile = user.setdefault("profile", {})
+        if name is not None:
+            nickname = name or display_name_for_username(username_slug)
+            profile["name"] = nickname
+            user["nickname"] = nickname
+            user["display_name"] = nickname
+        if age is not None:
+            profile["age"] = age
+        if job is not None:
+            profile["job"] = job
+        if situation is not None:
+            profile["situation"] = situation
+        if language is not None:
+            if language not in SUPPORTED_LANGUAGES:
+                raise WorkspaceError("Language must be en or ko.")
+            profile["language"] = language
+        if ui_mode is not None:
+            if ui_mode not in {"easy", "power"}:
+                raise WorkspaceError("UI mode must be easy or power.")
+            profile["ui_mode"] = ui_mode
+        if memory:
+            append_account_memory(root, username_slug, memory, source="manual", users=users)
+        return public_account(user)
+
+    return update_users(root, mutate)
 
 
 def append_account_memory(
@@ -442,15 +456,29 @@ def append_account_memory(
     if not text:
         raise WorkspaceError("Memory content must not be empty.")
     username_slug = slugify(username)
-    user_data = users or load_users(root)
+    if users is not None:
+        return append_account_memory_to_users(users, username_slug, text, source=source, metadata=metadata)
+
+    def mutate(user_data: dict[str, Any]) -> dict[str, Any]:
+        return append_account_memory_to_users(user_data, username_slug, text, source=source, metadata=metadata)
+
+    return update_users(root, mutate)
+
+
+def append_account_memory_to_users(
+    user_data: dict[str, Any],
+    username_slug: str,
+    text: str,
+    *,
+    source: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     user = user_data["users"].get(username_slug)
     if not user:
         raise WorkspaceError(f"Account does not exist: {username_slug}")
     profile = user.setdefault("profile", {})
     memories = profile.setdefault("memory", [])
     if any(item.get("content") == text for item in memories):
-        if users is None:
-            save_users(root, user_data)
         return public_account(user)
     memories.append(
         {
@@ -461,8 +489,6 @@ def append_account_memory(
         }
     )
     profile["memory"] = memories[-100:]
-    if users is None:
-        save_users(root, user_data)
     return public_account(user)
 
 
@@ -514,10 +540,16 @@ def set_account_avatar(root: str | Path, username: str, filename: str, content: 
     avatar_path = avatars_root / f"{username_slug}{ext}"
     avatar_path.write_bytes(content)
 
-    users = load_users(root)
-    users["users"][username_slug].setdefault("profile", {})["avatar"] = str(avatar_path.relative_to(workspace_path(root)))
-    save_users(root, users)
-    return users["users"][username_slug]["profile"]["avatar"]
+    avatar_ref = str(avatar_path.relative_to(workspace_path(root)))
+
+    def mutate(users: dict[str, Any]) -> str:
+        user = users.get("users", {}).get(username_slug)
+        if not user:
+            raise WorkspaceError(f"Account does not exist: {username_slug}")
+        user.setdefault("profile", {})["avatar"] = avatar_ref
+        return avatar_ref
+
+    return update_users(root, mutate)
 
 
 def get_account_language(root: str | Path, username: str | None) -> str:
@@ -568,7 +600,8 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    with file_lock(path):
+        file_store.atomic_write_json(path, data)
 
 
 def create_project(
@@ -723,7 +756,7 @@ def save_goal(root: str | Path, project_path: str, goal: dict[str, Any]) -> dict
     normalized = normalize_goal(goal)
     normalized["updated_at"] = utc_now()
     write_json(goal_json_path(root, project_path), normalized)
-    goal_markdown_path(root, project_path).write_text(goal_to_markdown(normalized), encoding="utf-8")
+    file_store.atomic_write_text(goal_markdown_path(root, project_path), goal_to_markdown(normalized))
     return normalized
 
 
@@ -911,7 +944,7 @@ def create_session(
         "created_at": utc_now(),
     }
     write_json(path / "session.json", session)
-    (path / "messages.jsonl").write_text("", encoding="utf-8")
+    file_store.atomic_write_text(path / "messages.jsonl", "")
     regenerate_session_markdown(root, project_path, session_slug)
     return session
 
@@ -1011,7 +1044,7 @@ def update_moved_attachment_paths(root: str | Path, project_path: str, session_s
                 (session_dir(root, project_path, session_slug) / "attachments" / filename).relative_to(workspace_path(root))
             )
         updated.append(json.dumps(item, ensure_ascii=False))
-    metadata_path.write_text("\n".join(updated) + ("\n" if updated else ""), encoding="utf-8")
+    file_store.atomic_write_text(metadata_path, "\n".join(updated) + ("\n" if updated else ""))
 
 
 def append_message(
@@ -1043,8 +1076,7 @@ def append_message(
         message["actor"] = slugify(actor)
 
     messages_path = session_dir(root, project_path, session_slug) / "messages.jsonl"
-    with messages_path.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(message, ensure_ascii=False) + "\n")
+    file_store.append_jsonl(messages_path, message)
     record_usage(root, actor, messages=1)
     regenerate_session_markdown(root, project_path, session_slug)
     return message
@@ -1168,7 +1200,7 @@ def create_execution_run(
         "updated_at": utc_now(),
     }
     write_json(run_dir / "run.json", run)
-    (run_dir / "events.jsonl").write_text("", encoding="utf-8")
+    file_store.atomic_write_text(run_dir / "events.jsonl", "")
     regenerate_run_markdown(root, project_path, session_slug, run_id)
     return run
 
@@ -1223,8 +1255,7 @@ def append_run_event(
         "metadata": metadata or {},
     }
     events_path = run_dir(root, project_path, session_slug, run_id) / "events.jsonl"
-    with events_path.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(event, ensure_ascii=False) + "\n")
+    file_store.append_jsonl(events_path, event)
     if mirror_to_session:
         append_message(
             root,
@@ -1266,10 +1297,7 @@ def regenerate_run_markdown(root: str | Path, project_path: str, session_slug: s
     ]
     for event in events:
         lines.extend([f"## {event['type']}", "", event["content"], ""])
-    (run_dir(root, project_path, session_slug, run_id) / "run.md").write_text(
-        "\n".join(lines),
-        encoding="utf-8",
-    )
+    file_store.atomic_write_text(run_dir(root, project_path, session_slug, run_id) / "run.md", "\n".join(lines))
 
 
 def read_messages(root: str | Path, project_path: str, session_slug: str) -> list[dict[str, Any]]:
@@ -1308,7 +1336,7 @@ def regenerate_session_markdown(root: str | Path, project_path: str, session_slu
             ]
         )
     session_md = session_dir(root, project_path, session_slug) / "session.md"
-    session_md.write_text("\n".join(lines), encoding="utf-8")
+    file_store.atomic_write_text(session_md, "\n".join(lines))
 
 
 def project_chain(root: str | Path, project_path: str) -> list[dict[str, Any]]:

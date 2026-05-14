@@ -71,6 +71,7 @@ def build_context_receipt(
         "provider": provider,
         "model": model,
         "privacy_mode": manifest.get("privacy_mode", "local"),
+        "privacy": manifest.get("privacy", {}),
         "used_files": used_files,
         "unused_files": unused_files,
         "excluded": manifest.get("excluded", []),
