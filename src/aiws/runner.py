@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 from . import costs, search, storage
-from .core import context_manifest
+from .core import context_manifest, context_receipts
 from .env import load_env
 from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
@@ -74,14 +74,22 @@ def ask(
     account_context = storage.account_context(root, actor)
     resolved_results = search_results or []
     if search.should_search(search_mode, content) and not resolved_results:
-        resolved_results = []
+        resolved_results = search.web_search(content)
+    active_files = context_receipts.current_attachment_filenames(user_metadata)
+    include_prior_files = context_receipts.should_include_prior_files(content, has_current_file=bool(active_files))
     prompt_context = (
         server_time_context()
         + account_context
         + search.format_search_context(resolved_results)
-        + storage.build_prompt_context(root, project_path, session_slug)
+        + storage.build_prompt_context(
+            root,
+            project_path,
+            session_slug,
+            active_attachment_filenames=(active_files or None) if not include_prior_files else None,
+            include_project_files=include_prior_files,
+        )
     )
-    write_used_context(root, project_path, session_slug, prompt_context, actor, provider, model, search_mode)
+    manifest = write_used_context(root, project_path, session_slug, prompt_context, actor, provider, model, search_mode)
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
     estimated = costs.estimate_cost(provider, model, input_tokens, max_output_tokens)
@@ -120,7 +128,17 @@ def ask(
         raise
     output_tokens = costs.rough_token_count(response)
     actual = costs.estimate_cost(provider, model, input_tokens, output_tokens)
-    assistant_metadata = {"cost": actual, "search": search.results_metadata(search_mode, resolved_results)}
+    assistant_metadata = {
+        "cost": actual,
+        "search": search.results_metadata(search_mode, resolved_results),
+        "context_receipt": context_receipts.build_context_receipt(
+            manifest,
+            provider,
+            model,
+            actual,
+            current_files=active_files if not include_prior_files else None,
+        ),
+    }
     if execution_plan:
         assistant_metadata["execution_plan"] = execution_plan
     storage.append_message(
@@ -164,8 +182,18 @@ def write_used_context(
     provider: str,
     model: str,
     search_mode: str,
-) -> None:
+) -> dict[str, object]:
     path = storage.session_dir(root, project_path, session_slug) / "used_context.json"
+    manifest = context_manifest.build_context_manifest(
+        root,
+        project_path,
+        session_slug,
+        actor=actor,
+        provider=provider,
+        model=model,
+        search_mode=search_mode,
+        prompt_context=prompt_context,
+    )
     storage.write_json(
         path,
         {
@@ -176,18 +204,10 @@ def write_used_context(
             "search_mode": search_mode,
             "context_chars": len(prompt_context),
             "context_preview": prompt_context[:8000],
-            "manifest": context_manifest.build_context_manifest(
-                root,
-                project_path,
-                session_slug,
-                actor=actor,
-                provider=provider,
-                model=model,
-                search_mode=search_mode,
-                prompt_context=prompt_context,
-            ),
+            "manifest": manifest,
         },
     )
+    return manifest
 
 
 def default_model_for_provider(provider: str) -> str:

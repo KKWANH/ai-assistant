@@ -8,5 +8,12 @@ from typing import Protocol
 class ChatProvider(Protocol):
     name: str
 
-    def chat(self, *, model: str, system: str, content: str) -> str:
+    def chat(
+        self,
+        *,
+        model: str,
+        system: str,
+        content: str,
+        attachments: list[dict[str, str]] | None = None,
+    ) -> str:
         """Return an assistant response for one user turn."""

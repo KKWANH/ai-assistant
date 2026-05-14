@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from aiws import storage
-from aiws.core import action_registry, context_manifest
+from aiws.core import action_registry, context_manifest, home_workbench
 
 
 def write_project_config(root: Path, project_path: str, body: str) -> None:
@@ -239,3 +239,57 @@ def test_suggest_actions_matches_recent_chat_text(tmp_path):
     assert suggestions
     assert suggestions[0]["command"] == "rebalance_plan"
     assert suggestions[0]["kind"] == "python"
+
+
+def test_home_csv_analysis_creates_stats_artifacts(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    run = home_workbench.run_action(
+        root,
+        "local",
+        "csv_analysis",
+        upload=("table.csv", b"name,value,missing\nalpha,10,\nbeta,20,x\n"),
+    )
+
+    assert run["status"] == "completed"
+    assert len(run["artifacts"]) == 2
+    summary = home_workbench.read_artifact(root, "local", run["artifacts"][1]["path"])
+    assert "Rows: 2" in summary["content"]
+    assert "value: min 10" in summary["content"]
+    assert "missing: 1" in summary["content"]
+
+
+def test_home_file_action_requires_file(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    with pytest.raises(storage.WorkspaceError, match="Attach a file"):
+        home_workbench.run_action(root, "local", "document_summary", content="Summarize this")
+
+
+def test_home_codex_prompt_requires_situation(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    with pytest.raises(storage.WorkspaceError, match="Describe the situation"):
+        home_workbench.run_action(root, "local", "codex_task_prompt", content="   ")
+
+
+def test_home_codex_prompt_starts_with_situation(tmp_path):
+    root = tmp_path / "workspace"
+    storage.init_workspace(root)
+
+    run = home_workbench.run_action(
+        root,
+        "local",
+        "codex_task_prompt",
+        content="Login layout is confusing because the logo blends into the background.",
+    )
+
+    assert run["status"] == "completed"
+    artifact = home_workbench.read_artifact(root, "local", run["artifacts"][0]["path"])
+    assert "# Codex Task Brief" in artifact["content"]
+    assert "## Situation" in artifact["content"]
+    assert "Login layout is confusing" in artifact["content"]
+    assert "## Verification Commands" in artifact["content"]

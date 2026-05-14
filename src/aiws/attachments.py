@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import re
 import zipfile
 from pathlib import Path
@@ -23,6 +24,19 @@ SUPPORTED_ATTACHMENT_EXTENSIONS = {
     ".webp",
 }
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
+DEFAULT_WORKSPACE_ATTACHMENT_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def max_attachment_bytes() -> int:
+    return int(os.environ.get("AIWS_MAX_ATTACHMENT_BYTES", str(MAX_ATTACHMENT_BYTES)))
+
+
+def max_upload_bytes() -> int:
+    return int(os.environ.get("AIWS_MAX_UPLOAD_BYTES", str(max_attachment_bytes() + 1024 * 1024)))
+
+
+def max_workspace_attachment_bytes() -> int:
+    return int(os.environ.get("AIWS_MAX_WORKSPACE_ATTACHMENT_BYTES", str(DEFAULT_WORKSPACE_ATTACHMENT_BYTES)))
 
 
 def validate_attachment(filename: str, content: bytes) -> str:
@@ -31,9 +45,36 @@ def validate_attachment(filename: str, content: bytes) -> str:
         raise storage.WorkspaceError("Unsupported attachment type.")
     if not content:
         raise storage.WorkspaceError("Attachment is empty.")
-    if len(content) > MAX_ATTACHMENT_BYTES:
+    if len(content) > max_attachment_bytes():
         raise storage.WorkspaceError("Attachment is too large.")
     return ext
+
+
+def attachment_usage_bytes(root: str | Path) -> int:
+    workspace = storage.workspace_path(root)
+    total = 0
+    for directory in ("projects", "users"):
+        base = workspace / directory
+        if not base.exists():
+            continue
+        for path in base.rglob("*"):
+            is_session_attachment = (
+                path.parent.name == "attachments"
+                and len(path.parents) > 2
+                and path.parent.parent.parent.name == "sessions"
+            )
+            is_file_store_item = path.parent.name == "files"
+            if path.is_file() and path.name != "attachments.jsonl" and (is_session_attachment or is_file_store_item):
+                total += path.stat().st_size
+    return total
+
+
+def ensure_workspace_quota(root: str | Path, incoming_bytes: int) -> None:
+    limit = max_workspace_attachment_bytes()
+    if limit <= 0:
+        return
+    if attachment_usage_bytes(root) + incoming_bytes > limit:
+        raise storage.WorkspaceError("Workspace attachment storage limit would be exceeded.")
 
 
 def is_image_extension(extension: str) -> bool:
@@ -66,6 +107,7 @@ def save_attachment(
 ) -> dict[str, object]:
     ext = validate_attachment(filename, content)
     storage.load_session(root, project_path, session_slug)
+    ensure_workspace_quota(root, len(content))
     safe_name = safe_filename(filename)
     path = attachment_dir(root, project_path, session_slug)
     path.mkdir(parents=True, exist_ok=True)

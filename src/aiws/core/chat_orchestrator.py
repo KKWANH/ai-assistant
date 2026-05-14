@@ -28,7 +28,7 @@ def plan_request(
     if has_attachment:
         steps.append(step("read_attachment", "file_read", f"첨부 파일 읽기: {attachment_type or 'file'}", "ready"))
     if needs_search(text, search_mode):
-        steps.append(step("web_research", "web_search", "필요한 최신 정보 검색", "planned", permission="network"))
+        steps.append(step("web_research", "web_search", "선택된 검색 모드로 웹 검색 실행", "ready", permission="network"))
     if needs_code(text):
         steps.append(
             step(
@@ -62,8 +62,8 @@ def plan_request(
         "requires_confirmation": any(item.get("permission") in {"network", "sandbox"} for item in steps),
         "execution_policy": {
             "planner_does_not_execute": True,
-            "implemented_now": ["analyze_request", "file_read", "analysis", "model_response"],
-            "requires_future_or_explicit_action": ["web_search", "containerized_code"],
+            "implemented_now": ["analyze_request", "file_read", "web_search", "analysis", "model_response"],
+            "requires_future_or_explicit_action": ["containerized_code"],
         },
         "ui": {"open_panels": ["plannerTrace", "artifactGallery"]},
     }

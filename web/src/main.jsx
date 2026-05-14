@@ -23,6 +23,11 @@ const MODEL_MODES = [
     easyPrice: "Free · local Mac",
     privacy: "Local Mac",
     bestFor: "Short questions, notes, everyday chat",
+    recommendedUse: "Local/private text",
+    supportsText: true,
+    supportsImage: false,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "qwen3:4b · Ollama local",
   },
   {
@@ -39,6 +44,11 @@ const MODEL_MODES = [
     easyPrice: "Free · stronger local model",
     privacy: "Local Mac",
     bestFor: "Higher local reasoning for a 24GB Mac mini · pull with Ollama if missing",
+    recommendedUse: "Stronger private text",
+    supportsText: true,
+    supportsImage: false,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "qwen3:8b · Ollama local",
   },
   {
@@ -57,6 +67,11 @@ const MODEL_MODES = [
     easyPrice: "Very cheap · fast cloud",
     privacy: "Cloud AI",
     bestFor: "General questions, fast summaries, low-cost work",
+    recommendedUse: "Cheap image analysis",
+    supportsText: true,
+    supportsImage: true,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "gemini-2.5-flash-lite",
   },
   {
@@ -74,6 +89,11 @@ const MODEL_MODES = [
     easyPrice: "Higher accuracy · paid",
     privacy: "Cloud AI",
     bestFor: "Complex questions, long writing, accuracy-sensitive work",
+    recommendedUse: "Large context and reasoning",
+    supportsText: true,
+    supportsImage: true,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "gemini-2.5-pro",
   },
   {
@@ -92,6 +112,11 @@ const MODEL_MODES = [
     easyPrice: "Long context · paid",
     privacy: "Cloud AI",
     bestFor: "Long documents, long context, analysis",
+    recommendedUse: "Long context",
+    supportsText: true,
+    supportsImage: true,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "kimi-k2.6",
   },
   {
@@ -110,6 +135,11 @@ const MODEL_MODES = [
     easyPrice: "Deep reasoning · slower",
     privacy: "Cloud AI",
     bestFor: "Deep reasoning, long analysis",
+    recommendedUse: "Deep reasoning",
+    supportsText: true,
+    supportsImage: true,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "kimi-k2-thinking",
   },
   {
@@ -128,6 +158,11 @@ const MODEL_MODES = [
     easyPrice: "Coding specialist · paid",
     privacy: "Cloud AI",
     bestFor: "Code changes, refactoring, development work",
+    recommendedUse: "Codex/code task",
+    supportsText: true,
+    supportsImage: false,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "gpt-5.1-codex",
   },
   {
@@ -144,6 +179,11 @@ const MODEL_MODES = [
     easyPrice: "Qianfan cloud · verify pricing",
     privacy: "Cloud AI",
     bestFor: "Chinese/multilingual work, long context, research analysis",
+    recommendedUse: "Multilingual text",
+    supportsText: true,
+    supportsImage: false,
+    supportsFileText: true,
+    supportsWebSearch: false,
     version: "ernie-5.1 · Baidu Qianfan API",
   },
 ];
@@ -159,7 +199,7 @@ const MODEL_GROUPS = [
 const SEARCH_OPTIONS = [
   { value: "off", label: "Search off" },
   { value: "auto", label: "Local context first", legacyLabel: "Local context only" },
-  { value: "always", label: "Web search (planned)" },
+  { value: "always", label: "Web search" },
 ];
 const ATTACHMENT_ACCEPT = ".txt,.md,.csv,.json,.yaml,.yml,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp";
 
@@ -190,7 +230,7 @@ const STARTER_ACTIONS = [
     id: "csv_analysis",
     label: "Analyze CSV",
     category: "Data",
-    status: "Partial",
+    status: "Ready",
     description: "Inspect CSV structure, key figures, and possible outliers.",
     inputs: ".csv",
     output: "Table preview + Summary",
@@ -206,6 +246,7 @@ const STARTER_ACTIONS = [
     inputs: "goal · files",
     output: "Codex prompt",
     prompt: "Turn the goal below into a Codex task prompt. Include repo context, constraints, test commands, and acceptance criteria.",
+    wantsBrief: true,
   },
   {
     id: "investment_rebalancer",
@@ -413,6 +454,15 @@ function App() {
     );
   }
 
+  if (!workspace) {
+    return (
+      <div className="app-shell loading-shell">
+        <span className="orbital-loader" aria-hidden="true"><i /><i /><i /></span>
+        <span>Loading workspace</span>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <TopBar
@@ -526,12 +576,6 @@ function LoginPage() {
   return (
     <main className="login-screen">
       <section className="login-card" aria-labelledby="login-title">
-        <a className="brand login-brand" href="/">
-          <span className="brand-mark" /> {copy.productName}
-        </a>
-        <div className="login-icon-frame" aria-hidden="true">
-          <img src="/aiws-icon.svg" alt="" />
-        </div>
         <div>
           <p className="eyebrow">{copy.shortName}</p>
           <h1 id="login-title">{copy.productName}</h1>
@@ -1061,7 +1105,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
   if (activePath.view === "actions") {
-    return <ActionLibraryPage navigate={navigate} />;
+    return <ActionLibraryPage navigate={navigate} copy={copy} />;
   }
   if (activePath.projectPath && !activePath.sessionSlug) {
     const project = projects.find((item) => item.path === activePath.projectPath);
@@ -1134,7 +1178,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
   );
 }
 
-function ActionLibraryPage({ navigate }) {
+function ActionLibraryPage({ navigate, copy = COPY }) {
   return (
     <section className="center-pane action-library-page">
       <div className="home-workbench">
@@ -1143,14 +1187,13 @@ function ActionLibraryPage({ navigate }) {
           <h1>Choose a reusable workbench action</h1>
           <p>Start document, image, CSV, and code workflows before creating a project. Save repeatable work as a project action when it becomes useful.</p>
         </div>
-        <StarterActionsGrid onStart={(action) => navigate(`/?starter=${encodeURIComponent(action.id)}`)} />
+        <StarterActionsGrid copy={copy} onStart={(action) => navigate(`/?starter=${encodeURIComponent(action.id)}`)} />
       </div>
     </section>
   );
 }
 
-function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false }) {
-  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
+function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false, copy = COPY }) {
   const items = actions?.length ? actions.map((action) => ({
     ...action,
     label: action.label || action.title,
@@ -1158,16 +1201,17 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
     output: Array.isArray(action.expected_output_artifacts) ? action.expected_output_artifacts.join(" · ") : action.output,
     disabled: String(action.status).toLowerCase() === "planned",
     wantsFile: Array.isArray(action.inputs) && action.inputs.some((item) => String(item).startsWith(".")),
+    wantsBrief: action.id === "codex_task_prompt",
   })) : STARTER_ACTIONS;
   const localizedItems = items.map((action) => localizeStarterAction(action, copy));
   return (
     <section className="starter-actions" aria-label={copy.home.quickActions}>
       <div className="section-row">
-        <div>
+        <div className="panel-title-stack">
           <p className="eyebrow">{copy.home.quickActions}</p>
           <h2>{copy.home.runBeforeProject}</h2>
         </div>
-        <span className="soft-pill">{copy.home.recentRuns}</span>
+        <span className="soft-pill">{copy.home.workbenchOutputs}</span>
       </div>
       <div className="starter-grid">
         {localizedItems.map((action) => (
@@ -1184,12 +1228,19 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
             </div>
             <div className="starter-actions-row">
               <button type="button" onClick={() => onStart?.(action)} disabled={action.disabled}>
-                {action.disabled ? "Planned" : hasFile ? "Use input" : copy.home.configure}
+                {action.disabled ? copy.home.notAvailable : action.wantsBrief ? copy.home.prepareBrief : hasFile ? copy.home.useInput : copy.home.configure}
               </button>
-              <button type="button" onClick={() => onRun?.(action)} disabled={action.disabled || running === action.id} title={action.disabled ? "Planned" : "Run starter action"}>
-                {running === action.id ? "Running" : "Run"}
+              <button
+                type="button"
+                onClick={() => onRun?.(action)}
+                disabled={action.disabled || running === action.id || (action.wantsFile && !hasFile)}
+                title={action.wantsFile && !hasFile ? copy.home.attachRequired : action.disabled ? copy.home.notAvailable : action.wantsBrief ? copy.home.createPrompt : copy.home.createArtifact}
+              >
+                {running === action.id ? copy.home.creating : action.wantsBrief ? copy.home.createPrompt : copy.home.createArtifact}
               </button>
             </div>
+            {action.wantsFile && !hasFile && <small className="action-requirement">{copy.home.attachRequired}</small>}
+            {action.wantsBrief && <small className="action-requirement">{copy.home.codexBriefHint}</small>}
           </article>
         ))}
       </div>
@@ -1202,37 +1253,36 @@ function localizeStarterAction(action, copy) {
   return localized ? { ...action, ...localized } : action;
 }
 
-function HomeWorkbenchHints() {
+function HomeWorkbenchHints({ copy = COPY }) {
   return (
     <section className="home-hints" aria-label="Home Workbench next steps">
       <article className="home-hint-card">
         <span>1</span>
-        <strong>Run a Starter Action</strong>
-        <p>Start document, image, CSV, or code work before creating a project.</p>
+        <strong>{copy.home.hintCreateTitle}</strong>
+        <p>{copy.home.hintCreateBody}</p>
       </article>
       <article className="home-hint-card">
         <span>2</span>
-        <strong>Inspect Runs and Artifacts</strong>
-        <p>Outputs stay as run records and clickable artifacts in the Home Workbench.</p>
+        <strong>{copy.home.hintInspectTitle}</strong>
+        <p>{copy.home.hintInspectBody}</p>
       </article>
       <article className="home-hint-card">
         <span>3</span>
-        <strong>Promote repeatable work</strong>
-        <p>Save useful flows into projects, actions, and configurable panels.</p>
+        <strong>{copy.home.hintPromoteTitle}</strong>
+        <p>{copy.home.hintPromoteBody}</p>
       </article>
     </section>
   );
 }
 
-function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact }) {
+function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact, copy = COPY }) {
   const runs = home?.runs || [];
   const artifacts = home?.artifacts || [];
-  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <section className="home-object-panels" aria-label="Recent runs and artifacts">
       <div className="dashboard-card">
         <div className="section-row">
-          <div>
+          <div className="panel-title-stack">
             <p className="eyebrow">{copy.home.recentRuns}</p>
             <h2>{copy.home.runHistory}</h2>
           </div>
@@ -1254,8 +1304,8 @@ function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact }) {
       </div>
       <div className="dashboard-card">
         <div className="section-row">
-          <div>
-            <p className="eyebrow">Recent Artifacts</p>
+          <div className="panel-title-stack">
+            <p className="eyebrow">{copy.home.recentArtifacts}</p>
             <h2>{copy.home.artifacts}</h2>
           </div>
           <span className="soft-pill">{artifacts.length}</span>
@@ -1281,12 +1331,13 @@ function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact }) {
 function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
   const run = detail.run || {};
   const plan = run.execution_plan || {};
+  const steps = Array.isArray(plan.steps) ? plan.steps : [];
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
         <button type="button" className="viewer-close" onClick={onClose}>Close</button>
-        <p className="eyebrow">Run Detail</p>
-        <h2>{run.label || run.action_id || "Run record"}</h2>
+        <p className="eyebrow">Work Detail</p>
+        <h2>{run.label || run.action_id || "Workbench output"}</h2>
         <div className="run-meta-grid">
           <span>Status: {run.status}</span>
           <span>Action: {run.action_id}</span>
@@ -1297,19 +1348,32 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
             <strong>Artifacts</strong>
             {run.artifacts.map((item) => (
               <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>
-                {item.path} · {item.viewer_type}
+                {item.path.split("/").pop()} · {item.viewer_type}
               </button>
             ))}
           </div>
         )}
+        {steps.length > 0 && (
+          <div className="run-step-list">
+            <strong>Steps</strong>
+            {steps.map((step) => (
+              <span key={step.id || step.type}>
+                <b>{step.id || step.type}</b>
+                <small>{step.output || step.status || "done"}</small>
+              </span>
+            ))}
+          </div>
+        )}
+        <details className="run-log-details" open={power}>
+          <summary>Logs</summary>
+          <pre>{(run.logs || []).map((item) => `[${item.kind}] ${item.content}`).join("\n") || "(empty)"}</pre>
+          {run.errors?.length > 0 && <pre className="error-text">{run.errors.join("\n")}</pre>}
+        </details>
         {power && (
-          <>
-            <h3>Planner Trace</h3>
+          <details className="run-log-details">
+            <summary>Raw plan</summary>
             <pre>{JSON.stringify(plan, null, 2)}</pre>
-            <h3>Logs</h3>
-            <pre>{(run.logs || []).map((item) => `[${item.kind}] ${item.content}`).join("\n") || "(empty)"}</pre>
-            {run.errors?.length > 0 && <pre className="error-text">{run.errors.join("\n")}</pre>}
-          </>
+          </details>
         )}
       </div>
     </div>
@@ -1317,18 +1381,22 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
 }
 
 function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
+  const filename = artifact.path?.split("/")?.pop() || artifact.path;
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
         <button type="button" className="viewer-close" onClick={onClose}>Close</button>
         <p className="eyebrow">Artifact Viewer</p>
-        <h2>{artifact.path}</h2>
-        <div className="next-actions">
-          <button type="button" onClick={() => onAsk?.(artifact)}>Ask AI about this</button>
-          <button type="button" onClick={() => onReport?.(artifact)}>Generate report</button>
-          <a className="button-link" href={`/api/home-artifact?path=${encodeURIComponent(artifact.path)}`} target="_blank" rel="noreferrer">Open</a>
+        <h2>{filename}</h2>
+        <small className="artifact-path">{artifact.path}</small>
+        <div className="artifact-toolbar">
+          <div className="next-actions">
+            <button type="button" onClick={() => onAsk?.(artifact)}>Ask AI about this</button>
+            <button type="button" onClick={() => onReport?.(artifact)}>Generate report</button>
+            <a className="button-link" href={`/api/home-artifact?path=${encodeURIComponent(artifact.path)}`} target="_blank" rel="noreferrer">Open</a>
+          </div>
+          <span className="soft-pill">{artifact.viewer_type} · {artifact.size} bytes</span>
         </div>
-        <span className="soft-pill">{artifact.viewer_type} · {artifact.size} bytes</span>
         <HomeArtifactContent artifact={artifact} />
       </div>
     </div>
@@ -1472,13 +1540,14 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
     if (!isHomeWorkbench) return;
     const starterId = new URLSearchParams(window.location.search).get("starter");
     if (!starterId) return;
-    const action = STARTER_ACTIONS.find((item) => item.id === starterId);
+    const rawAction = STARTER_ACTIONS.find((item) => item.id === starterId);
+    const action = rawAction ? localizeStarterAction(rawAction, copy) : null;
     if (action && !action.disabled) {
       setContent(action.prompt || action.label);
       if (action.wantsFile) window.setTimeout(() => inputRef.current?.click(), 50);
     }
     window.history.replaceState({}, "", window.location.pathname);
-  }, [isHomeWorkbench]);
+  }, [copy, isHomeWorkbench]);
 
   useEffect(() => {
     setCookie("aiws_model_mode", mode);
@@ -1521,15 +1590,31 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
 
   async function runHomeAction(action) {
     if (!isHomeWorkbench || homeRunning || action.disabled || String(action.status).toLowerCase() === "planned") return;
+    if (action.wantsFile && !file) {
+      setHomeError(copy.home.attachRequired);
+      inputRef.current?.click();
+      return;
+    }
+    if (action.id === "codex_task_prompt" && !content.trim()) {
+      setHomeError(copy.home.codexBriefRequired);
+      return;
+    }
     setHomeRunning(action.id);
     setHomeError("");
     try {
       const form = new FormData();
       form.set("content", content.trim() || action.prompt || action.label || action.title || "");
+      form.set("provider", selectedMode.provider);
+      form.set("model", selectedMode.model);
       if (file) form.set("attachment", file);
       const payload = await fetchJson(`/api/home-actions/${action.id}/run`, { method: "POST", body: form });
       onHome?.(payload.home);
-      setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
+      const firstArtifact = payload.run?.artifacts?.[0];
+      if (firstArtifact) {
+        await openHomeArtifact(firstArtifact);
+      } else {
+        setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
+      }
       clearFile();
     } catch (err) {
       setHomeError(err.message || "Could not run Starter Action.");
@@ -1644,6 +1729,13 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
     }
   }
 
+  function keyDown(event) {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
   const contentNode = (
       <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
         <div className={isHomeWorkbench ? "home-hero" : ""}>
@@ -1670,6 +1762,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            onKeyDown={keyDown}
             placeholder={copy.chat.placeholder}
             rows={1}
           />
@@ -1677,9 +1770,12 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
             <div className="selected-file">
               {previewUrl && <img src={previewUrl} alt={file.name} />}
               <span>{file.name}</span>
-              <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Vision model required" : "Read as text"}</small>
+              <small>{selectedMode.supportsImage && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Needs vision model" : "Read as text"}</small>
               <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
             </div>
+          )}
+          {file?.type?.startsWith("image/") && !selectedMode.supportsImage && (
+            <div className="system-note compact-warning">This image needs a vision model. AIWS will switch to Gemini Flash-Lite before sending.</div>
           )}
           <div className={`composer-toolbar ${power ? "start-toolbar" : ""}`}>
             <label className="attach-key" title="Attach file">
@@ -1734,14 +1830,16 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
               onRun={runHomeAction}
               running={homeRunning}
               hasFile={Boolean(file)}
+              copy={copy}
             />
             <HomeWorkbenchPanels
               home={home}
               power={power}
+              copy={copy}
               onOpenRun={openHomeRun}
               onOpenArtifact={openHomeArtifact}
             />
-            <HomeWorkbenchHints />
+            <HomeWorkbenchHints copy={copy} />
           </>
         ) : (
           <div className="quick-actions">
@@ -1811,9 +1909,29 @@ function MessageCard({ message, onPreview }) {
         {message.estimated_cost !== null && message.estimated_cost !== undefined && <span>USD {message.estimated_cost}</span>}
       </div>
       {message.pending ? <WaitingNotice label={copy.chat.assistantThinking} compact /> : <RenderedText text={message.content || ""} />}
+      {message.context_receipt && <ContextReceipt receipt={message.context_receipt} compact />}
       {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
+  );
+}
+
+function ContextReceipt({ receipt, compact = false }) {
+  if (!receipt) return null;
+  const used = Array.isArray(receipt.used_files) ? receipt.used_files : [];
+  const unused = Array.isArray(receipt.unused_files) ? receipt.unused_files : [];
+  const excluded = Array.isArray(receipt.excluded) ? receipt.excluded : [];
+  return (
+    <details className={`context-receipt ${compact ? "compact" : ""}`}>
+      <summary>View context receipt · {receipt.privacy_mode === "local" ? "local" : "cloud"} · {used.length} files used</summary>
+      <div className="receipt-grid">
+        <span><strong>Model</strong><small>{receipt.provider} {receipt.model}</small></span>
+        <span><strong>Cost</strong><small>{receipt.estimated_cost ?? 0} {receipt.currency || "USD"}</small></span>
+        <span><strong>Used files</strong><small>{used.length ? used.map((item) => item.filename).join(", ") : "None"}</small></span>
+        <span><strong>Not used</strong><small>{unused.length ? unused.map((item) => item.filename).join(", ") : "None"}</small></span>
+      </div>
+      {excluded.length > 0 && <p className="muted">{excluded.length} secret/path exclusion patterns were active.</p>}
+    </details>
   );
 }
 
@@ -1830,7 +1948,7 @@ function PlannerTraceSummary({ plan }) {
           </span>
         ))}
       </div>
-      {plan.requires_confirmation && <small>Search and sandbox execution require explicit approval or promotion into an Action.</small>}
+      {plan.requires_confirmation && <small>Web search runs only when selected. Sandbox/code execution still requires promotion into an Action.</small>}
     </details>
   );
 }
@@ -2107,13 +2225,16 @@ function Composer({ activePath, onAsk, account, power }) {
         onKeyDown={keyDown}
         placeholder={copy.chat.placeholder}
       />
-      {file && (
+          {file && (
         <div className="selected-file">
           {previewUrl && <img src={previewUrl} alt={file.name} />}
           <span>{file.name}</span>
-          <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Vision model required" : "Read as text"}</small>
+          <small>{selectedMode.supportsImage && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Needs vision model" : "Read as text"}</small>
           <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
         </div>
+      )}
+      {file?.type?.startsWith("image/") && !selectedMode.supportsImage && (
+        <div className="system-note compact-warning">This image needs a vision model. AIWS will switch to Gemini Flash-Lite before sending.</div>
       )}
       <div className="composer-toolbar">
         <label className="attach-key" title="Attach file">
@@ -2231,7 +2352,13 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
                   <span className="model-card-title">{item.label}</span>
                   <span className="model-card-version">{item.version || item.model}</span>
                   <span className="model-card-privacy">{item.cloud ? "Cloud AI" : "Local Mac"}</span>
-                  <span>{item.bestFor}</span>
+                  <span>{item.recommendedUse || item.bestFor}</span>
+                  <span className="model-card-capabilities">
+                    {item.supportsText && "Text"}
+                    {item.supportsImage ? " · Image" : " · No image"}
+                    {item.supportsFileText && " · File text"}
+                    {item.supportsWebSearch ? " · Web" : " · No web"}
+                  </span>
                   <span className="model-card-price">{power && item.cloud && item.inputPrice > 0 ? `Input ~$${item.inputPrice.toFixed(2)} / 1M · output ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
                   <span className="model-card-estimate">Single call estimate: {singleEstimate}</span>
                   {item.cloud && <span className="model-card-estimate">Agent {agentCalls}-step budget: {agentEstimate}</span>}
@@ -2343,6 +2470,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
   const attachments = collectVisibleAttachments(chat);
   const runs = projectConfig?.runs || [];
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
+  const latestReceipt = latestContextReceipt(chat);
   return (
     <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
       <h2>{power ? copy.inspector.powerTitle : copy.inspector.title}</h2>
@@ -2364,7 +2492,8 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       </div>
       {currentTab === "context" && (
         <section>
-          <h3>Workbench context</h3>
+          <h3>{latestReceipt ? "Latest context receipt" : "What will be sent"}</h3>
+          {latestReceipt ? <ContextReceipt receipt={latestReceipt} /> : <p className="muted">Send a message to create a receipt showing files, privacy mode, model, exclusions, and estimated cost.</p>}
           <ActionInspector projectConfig={projectConfig} power={power} />
           <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
         </section>
@@ -2372,7 +2501,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       {currentTab === "files" && (
         <section>
           <h3>Active files</h3>
-          {attachments.length === 0 ? <p className="muted">No files are attached to this chat yet.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
+          {attachments.length === 0 ? <div className="empty-action-state"><p className="muted">No files are attached to this chat yet.</p><span>Attach file from the composer or start from file on Home.</span></div> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
         </section>
       )}
       {currentTab === "memory" && (
@@ -2384,7 +2513,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       {currentTab === "runs" && (
         <section>
           <h3>{copy.inspector.tabs.runs}</h3>
-          {runs.length === 0 ? <p className="muted">No project runs yet. Run an aiws.yaml command to create a traceable run record.</p> : (
+          {runs.length === 0 ? <div className="empty-action-state"><p className="muted">No project runs yet.</p><span>Run an aiws.yaml action to create logs and artifacts.</span></div> : (
             <div className="compact-list">
               {runs.slice(0, 6).map((run) => (
                 <span key={run.run_id || `${run.command}-${run.created_at}`}>
@@ -2399,7 +2528,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       {currentTab === "artifacts" && (
         <section>
           <h3>{copy.inspector.tabs.artifacts}</h3>
-          {artifacts.length === 0 ? <p className="muted">No artifacts yet. Reports, CSVs, logs, and generated files will appear here after actions run.</p> : (
+          {artifacts.length === 0 ? <div className="empty-action-state"><p className="muted">No artifacts yet.</p><span>Run an action to generate shareable files.</span></div> : (
             <div className="compact-list">
               {artifacts.slice(0, 8).map((artifact) => (
                 <span key={`${artifact.run.run_id}-${artifact.path}`}>
@@ -2499,6 +2628,14 @@ function collectVisibleAttachments(chat) {
   (chat?.attachments || []).forEach(add);
   (chat?.messages || []).forEach((message) => (message.attachments || []).forEach(add));
   return items;
+}
+
+function latestContextReceipt(chat) {
+  const messages = Array.isArray(chat?.messages) ? chat.messages : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.context_receipt) return messages[index].context_receipt;
+  }
+  return null;
 }
 
 function GoalPanel({ chat, activePath, onChat, power = false }) {

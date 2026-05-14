@@ -6,6 +6,7 @@ import csv
 import json
 import shutil
 import secrets
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
     "image_explain": {
         "id": "image_explain",
         "title": "이미지 설명하기",
-        "description": "이미지를 Home artifact로 저장하고 AI 해석용 컨텍스트를 준비합니다.",
+        "description": "vision 모델이 선택되면 실제 이미지 설명을 만들고, 아니면 필요한 모델을 명확히 안내합니다.",
         "category": "이미지",
         "inputs": [".png", ".jpg", ".jpeg", ".webp"],
         "permission": "read-only",
@@ -43,16 +44,16 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "category": "데이터",
         "inputs": [".csv"],
         "permission": "read-only",
-        "status": "partial",
+        "status": "ready",
         "requires_confirmation": False,
         "expected_output_artifacts": ["table.csv", "summary.md"],
     },
     "codex_task_prompt": {
         "id": "codex_task_prompt",
         "title": "Codex 작업지시 만들기",
-        "description": "목표를 Codex 실행 프롬프트 Markdown으로 바꿉니다.",
+        "description": "상황, 관련 파일, 제약, 완료 기준을 Codex 실행용 작업지시 Markdown으로 정리합니다.",
         "category": "코드",
-        "inputs": ["goal"],
+        "inputs": ["brief"],
         "permission": "read-only",
         "status": "ready",
         "requires_confirmation": False,
@@ -132,6 +133,9 @@ def run_action(
     actor: str | None = None,
     content: str = "",
     upload: tuple[str, bytes] | None = None,
+    provider: str = "ollama",
+    model: str = "qwen3:4b",
+    model_response: str = "",
 ) -> dict[str, Any]:
     action = require_action(action_id)
     if action["status"] == "planned":
@@ -147,10 +151,23 @@ def run_action(
     errors: list[str] = []
     artifacts_out: list[dict[str, Any]] = []
     saved_file = save_upload(base, upload, logs) if upload else None
+    if action_requires_file(action) and not saved_file:
+        raise storage.WorkspaceError("Attach a file before creating this artifact.")
+    if action_id == "codex_task_prompt" and not content.strip():
+        raise storage.WorkspaceError("Describe the situation before creating a Codex task brief.")
     plan = build_plan(action_id, has_file=saved_file is not None)
     status = "completed"
     try:
-        created = create_action_artifacts(action_id, content, saved_file, artifact_root, logs)
+        created = create_action_artifacts(
+            action_id,
+            content,
+            saved_file,
+            artifact_root,
+            logs,
+            provider=provider,
+            model=model,
+            model_response=model_response,
+        )
         for path, summary in created:
             rel = path.relative_to(base).as_posix()
             artifacts_out.append(
@@ -182,6 +199,8 @@ def run_action(
     run["input_snapshot"] = {
         "content": content[:2000],
         "file": saved_file["path"] if saved_file else "",
+        "provider": provider,
+        "model": model,
     }
     storage.write_json(run_path / "run.json", run)
     storage.write_json(run_path / "result.json", {"run": run})
@@ -267,10 +286,11 @@ def save_upload(base: Path, upload: tuple[str, bytes], logs: list[dict[str, Any]
     if extension == ".csv":
         if not content:
             raise storage.WorkspaceError("Attachment is empty.")
-        if len(content) > attachments.MAX_ATTACHMENT_BYTES:
+        if len(content) > attachments.max_attachment_bytes():
             raise storage.WorkspaceError("Attachment is too large.")
     else:
         extension = attachments.validate_attachment(filename, content)
+    attachments.ensure_workspace_quota(base.parents[2], len(content))
     safe_name = storage.slugify_or_default(Path(filename).stem, "upload") + extension
     target = base / "files" / f"{storage.utc_now().replace(':', '').replace('.', '-')}-{safe_name}"
     target.write_bytes(content)
@@ -290,6 +310,10 @@ def create_action_artifacts(
     saved_file: dict[str, Any] | None,
     artifact_root: Path,
     logs: list[dict[str, Any]],
+    *,
+    provider: str = "ollama",
+    model: str = "qwen3:4b",
+    model_response: str = "",
 ) -> list[tuple[Path, str]]:
     if action_id == "document_summary":
         text = input_text(content, saved_file)
@@ -299,8 +323,7 @@ def create_action_artifacts(
         return [(path, "Structured document summary")]
     if action_id == "image_explain":
         path = artifact_root / "image-notes.md"
-        name = saved_file["filename"] if saved_file else "image"
-        path.write_text(f"# Image Notes\n\n- File: `{name}`\n- Status: ready for AI interpretation.\n", encoding="utf-8")
+        path.write_text(image_notes_markdown(saved_file, provider, model, model_response), encoding="utf-8")
         logs.append(log_event("artifact", "Created image notes Markdown."))
         return [(path, "Image interpretation notes")]
     if action_id == "csv_analysis":
@@ -326,24 +349,8 @@ def csv_artifacts(content: str, saved_file: dict[str, Any] | None, artifact_root
     else:
         table.write_text(text, encoding="utf-8")
     headers = rows[0] if rows else []
-    summary.write_text(
-        "\n".join(
-            [
-                "# CSV Analysis",
-                "",
-                f"- Rows sampled: {max(len(rows) - 1, 0)}",
-                f"- Columns: {len(headers)}",
-                f"- Header: {', '.join(headers[:20]) if headers else '(none)'}",
-                "",
-                "## Next Actions",
-                "",
-                "- Ask AI about this artifact",
-                "- Generate report",
-                "- Save workflow as project",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    data_rows = rows[1:] if headers else rows
+    summary.write_text(csv_summary_markdown(headers, data_rows, saved_file), encoding="utf-8")
     logs.append(log_event("artifact", "Created CSV table and summary artifacts."))
     return [(table, "CSV table preview"), (summary, "CSV analysis summary")]
 
@@ -357,15 +364,22 @@ def input_text(content: str, saved_file: dict[str, Any] | None) -> str:
 
 def document_summary_markdown(text: str, saved_file: dict[str, Any] | None) -> str:
     source = saved_file["filename"] if saved_file else "typed input"
+    status = "success" if text.strip() else "no readable text"
+    limitation = "This local starter uses extracted text and simple structure; ask a model for deeper interpretation." if text.strip() else "No text was extracted from the input."
     excerpt = text[:2400].strip() or "(no extracted text)"
     return f"""# Document Summary
 
 - Source: `{source}`
+- Extraction status: `{status}`
 - Mode: local starter action
 
 ## Key Points
 
 {bulletize(excerpt)}
+
+## Limitations
+
+- {limitation}
 
 ## Follow-up Questions
 
@@ -373,6 +387,107 @@ def document_summary_markdown(text: str, saved_file: dict[str, Any] | None) -> s
 - Should this become a repeatable project action?
 - Do you want a report artifact for sharing?
 """
+
+
+def image_notes_markdown(saved_file: dict[str, Any] | None, provider: str, model: str, model_response: str) -> str:
+    source = saved_file["filename"] if saved_file else "no image attached"
+    if not saved_file:
+        status = "Needs file"
+        body = "Attach a PNG, JPG, JPEG, or WebP image and run this action again."
+    elif model_response.strip():
+        if model_response.startswith("VISION_ERROR:"):
+            status = "Failed"
+            body = model_response.removeprefix("VISION_ERROR:").strip()
+        else:
+            status = "Implemented"
+            body = model_response.strip()
+    else:
+        status = "Needs vision model"
+        body = "Image interpretation was not run. Select a vision-capable cloud model such as Gemini Flash-Lite or Kimi with image input, then run this action again."
+    return f"""# Image Notes
+
+- Source: `{source}`
+- Status: `{status}`
+- Model: `{provider} {model}`
+
+## Description
+
+{body}
+
+## Follow-up Questions
+
+- What visible detail should be verified by a person?
+- Should this image be saved into a project workspace?
+"""
+
+
+def csv_summary_markdown(headers: list[str], rows: list[list[str]], saved_file: dict[str, Any] | None) -> str:
+    source = saved_file["filename"] if saved_file else "typed input"
+    row_count = len(rows)
+    col_count = len(headers) if headers else max((len(row) for row in rows), default=0)
+    missing = missing_counts(headers, rows)
+    numeric = numeric_stats(headers, rows)
+    missing_lines = [f"- {name}: {count}" for name, count in missing.items() if count]
+    numeric_lines = [
+        f"- {name}: min {stats['min']:.4g}, max {stats['max']:.4g}, mean {stats['mean']:.4g}"
+        for name, stats in numeric.items()
+    ]
+    return "\n".join(
+        [
+            "# CSV Analysis",
+            "",
+            f"- Source: `{source}`",
+            f"- Rows: {row_count}",
+            f"- Columns: {col_count}",
+            f"- Headers: {', '.join(headers[:30]) if headers else '(none)'}",
+            "",
+            "## Missing Values",
+            "",
+            *(missing_lines or ["- No missing values detected in the parsed rows."]),
+            "",
+            "## Numeric Columns",
+            "",
+            *(numeric_lines or ["- No numeric columns detected."]),
+            "",
+            "## Next Actions",
+            "",
+            "- Ask AI about this artifact",
+            "- Generate report",
+            "- Save workflow as project",
+        ]
+    )
+
+
+def missing_counts(headers: list[str], rows: list[list[str]]) -> dict[str, int]:
+    names = headers or [f"column_{index + 1}" for index in range(max((len(row) for row in rows), default=0))]
+    counts = {name: 0 for name in names}
+    for row in rows:
+        for index, name in enumerate(names):
+            value = row[index].strip() if index < len(row) else ""
+            if value == "":
+                counts[name] += 1
+    return counts
+
+
+def numeric_stats(headers: list[str], rows: list[list[str]]) -> dict[str, dict[str, float]]:
+    names = headers or [f"column_{index + 1}" for index in range(max((len(row) for row in rows), default=0))]
+    stats: dict[str, dict[str, float]] = {}
+    for index, name in enumerate(names):
+        values: list[float] = []
+        for row in rows:
+            if index >= len(row):
+                continue
+            raw = row[index].strip().replace(",", "")
+            if not raw:
+                continue
+            try:
+                values.append(float(raw))
+            except ValueError:
+                values = []
+                break
+        if values:
+            stats[name] = {"min": min(values), "max": max(values), "mean": statistics.fmean(values)}
+    return stats
 
 
 def investment_workflow_markdown(content: str, saved_file: dict[str, Any] | None) -> str:
@@ -397,23 +512,44 @@ def investment_workflow_markdown(content: str, saved_file: dict[str, Any] | None
 
 
 def codex_prompt_markdown(content: str) -> str:
-    goal = content.strip() or "Describe the implementation goal here."
-    return f"""# Codex Task Prompt
+    brief = content.strip()
+    if not brief:
+        raise storage.WorkspaceError("Describe the situation before creating a Codex task brief.")
+    return f"""# Codex Task Brief
 
-## Goal
+## Situation
 
-{goal}
+{brief}
+
+## Desired Outcome
+
+- State the user-visible behavior that should change.
+- Explain why the current behavior is confusing or insufficient.
+
+## Relevant Files
+
+- Add exact paths before handing this to Codex.
+- Include screenshots or run/artifact ids when they explain the problem.
 
 ## Constraints
 
 - Keep changes surgical.
 - Preserve AIWS storage invariants.
+- Do not expose secrets or API keys.
+- Respect the project depth rule.
 - Add focused tests for changed behavior.
 
 ## Acceptance Criteria
 
 - The requested behavior works from the UI.
+- Empty or misleading states are labeled honestly.
+- Any generated artifact explains what input produced it.
 - `python -m pytest` passes.
+
+## Verification Commands
+
+- `python -m pytest`
+- `cd web && npm run build`
 """
 
 
@@ -460,3 +596,7 @@ def require_action(action_id: str) -> dict[str, Any]:
     if not action:
         raise storage.WorkspaceError(f"Starter action does not exist: {action_id}")
     return action
+
+
+def action_requires_file(action: dict[str, Any]) -> bool:
+    return any(str(item).startswith(".") for item in action.get("inputs", []))

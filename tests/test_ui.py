@@ -96,7 +96,7 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "Attach file" in bundle_text
         assert "Local context only" in bundle_text
         assert "Search off" in bundle_text
-        assert "Web search (planned)" in bundle_text
+        assert "Web search" in bundle_text
         assert "Recent" in bundle_text
         assert "Projects" in bundle_text
         assert "Public - logged-in users" in bundle_text
@@ -120,7 +120,7 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "Investment Rebalancer" in bundle_text
         assert "AI Workbench Studio" in bundle_text
         assert "Quick Actions" in bundle_text
-        assert "Run before creating a project" in bundle_text
+        assert "Create from one input" in bundle_text
         assert "Action Library" in bundle_text
         assert "Summarize document" in bundle_text
         assert "Kwanho Kim" in bundle_text

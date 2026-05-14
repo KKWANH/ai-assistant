@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import attachments, automations, costs, openclaw
-from .core import action_registry, chat_orchestrator, context_manifest, home_workbench
+from .core import action_registry, chat_orchestrator, context_manifest, home_workbench, model_capabilities
 from .i18n import t
 from . import runner
 from . import storage
@@ -57,7 +57,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if self.require_auth:
             self.csrf_token()
-        public_asset = path.startswith("/assets/") or path in {"/vite.svg"}
+        public_asset = path.startswith("/assets/") or path in {"/vite.svg", "/aiws-icon.svg"}
         if self.require_auth and not self.is_authenticated() and path != "/login" and not public_asset:
             self.redirect("/login")
             return
@@ -136,7 +136,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.serve_spa()
         elif path.startswith("/project/"):
             self.serve_spa()
-        elif path.startswith("/assets/") or path in {"/vite.svg"}:
+        elif path.startswith("/assets/") or path in {"/vite.svg", "/aiws-icon.svg"}:
             self.serve_static_asset(path)
         elif path.startswith("/prompt/"):
             parts = unquote(path.removeprefix("/prompt/")).split("/")
@@ -228,6 +228,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     actor=self.current_username(),
                     content=data.get("content", ""),
                     upload=self._multipart_files.get("attachment"),
+                    provider=data.get("provider", "ollama"),
+                    model=data.get("model", "qwen3:4b"),
+                    model_response=self.home_action_model_response(action_id, data),
                 )
                 self.send_json(
                     {
@@ -755,7 +758,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             raise storage.WorkspaceError("Expected multipart form upload.")
         boundary = content_type.split("boundary=", 1)[1].encode("utf-8")
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 36 * 1024 * 1024:
+        if length > attachments.max_upload_bytes():
             raise storage.WorkspaceError("Upload is too large.")
         body = self.rfile.read(length)
         fields: dict[str, str] = {}
@@ -783,7 +786,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             raise storage.WorkspaceError("Expected multipart form upload.")
         boundary = content_type.split("boundary=", 1)[1].encode("utf-8")
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 3 * 1024 * 1024:
+        if length > attachments.max_upload_bytes():
             raise storage.WorkspaceError("Upload is too large.")
         body = self.rfile.read(length)
         for part in body.split(b"--" + boundary):
@@ -997,6 +1000,31 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def api_home(self) -> None:
         self.send_json({"home": home_payload(self.root, self.current_username() or "local")})
+
+    def home_action_model_response(self, action_id: str, data: dict[str, str]) -> str:
+        if action_id != "image_explain":
+            return ""
+        upload = self._multipart_files.get("attachment")
+        if not upload or not upload[1]:
+            return ""
+        provider = data.get("provider", "ollama")
+        model = data.get("model", "qwen3:4b")
+        filename, file_content = upload
+        extension = Path(filename).suffix.lower()
+        if not attachments.is_image_extension(extension) or not provider_supports_file_input(provider, extension):
+            return ""
+        prompt = data.get("content", "").strip() or "Describe this image. Include visible elements, important context, and details a human should verify."
+        try:
+            client = runner.get_provider(provider)
+            response = client.chat(
+                model=model,
+                system="You are AIWS Home Workbench. Describe the image honestly and note uncertainties.",
+                content=prompt,
+                attachments=provider_attachment_payload(provider, extension, file_content),
+            )
+        except Exception as exc:
+            return f"VISION_ERROR:{type(exc).__name__}: {str(exc)[:500]}"
+        return response
 
     def api_action_library(self) -> None:
         self.send_json({"actions": home_workbench.list_actions()})
@@ -2133,6 +2161,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             "attachments": message_attachments_data(metadata),
             "estimated_cost": cost.get("estimated_cost") if isinstance(cost, dict) else None,
             "execution_plan": metadata.get("execution_plan") if isinstance(metadata, dict) else None,
+            "context_receipt": metadata.get("context_receipt") if isinstance(metadata, dict) else None,
         }
 
     def message_attachments(self, message: dict[str, object]) -> str:
@@ -2317,6 +2346,25 @@ def provider_supports_file_input(provider: str, extension: str) -> bool:
     return False
 
 
+def provider_attachment_payload(provider: str, extension: str, content: bytes) -> list[dict[str, str]]:
+    if provider == "gemini":
+        return [
+            {
+                "kind": "inline_data",
+                "mime_type": attachments.image_mime_type(extension) if attachments.is_image_extension(extension) else gemini_mime_type(extension),
+                "data": base64.b64encode(content).decode("ascii"),
+            }
+        ]
+    if provider == "kimi" and attachments.is_image_extension(extension):
+        return [
+            {
+                "kind": "image_data_url",
+                "data_url": "data:%s;base64,%s" % (attachments.image_mime_type(extension), base64.b64encode(content).decode("ascii")),
+            }
+        ]
+    return []
+
+
 def gemini_mime_type(extension: str) -> str:
     if extension.lower() == ".pdf":
         return "application/pdf"
@@ -2377,15 +2425,7 @@ def model_catalog() -> list[dict[str, object]]:
         "ernie": bool(os.environ.get("AIWS_ERNIE_API_KEY") or os.environ.get("AIWS_QIANFAN_API_KEY")),
     }
     return [
-        {
-            "provider": item.provider,
-            "model": item.model,
-            "input_per_million": item.input_per_million,
-            "output_per_million": item.output_per_million,
-            "currency": item.currency,
-            "note": item.note,
-            "api_key_configured": bool(api_keys.get(item.provider)),
-        }
+        model_capabilities.capability_for_cost(item, api_key_configured=bool(api_keys.get(item.provider)))
         for item in costs.list_model_costs()
     ]
 

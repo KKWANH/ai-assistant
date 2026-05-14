@@ -117,6 +117,18 @@ def test_attachment_rejects_empty_and_large_files(tmp_path):
         )
 
 
+def test_workspace_attachment_quota_is_enforced(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+    monkeypatch.setenv("AIWS_MAX_WORKSPACE_ATTACHMENT_BYTES", "12")
+
+    attachments.save_attachment(root, "ai-system", "attachments", "one.txt", b"123456")
+
+    with pytest.raises(storage.WorkspaceError, match="storage limit"):
+        attachments.save_attachment(root, "ai-system", "attachments", "two.txt", b"1234567")
+
+
 def test_corrupt_attachment_metadata_is_ignored(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")

@@ -1336,12 +1336,19 @@ def skill_instruction_files(root: str | Path, skill_name: str) -> list[Path]:
     return [skill_dir / name for name in SUPPORTED_SKILL_FILES if (skill_dir / name).exists()]
 
 
-def build_prompt_context(root: str | Path, project_path: str, session_slug: str) -> str:
+def build_prompt_context(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    *,
+    active_attachment_filenames: set[str] | None = None,
+    include_project_files: bool = True,
+) -> str:
     session = load_session(root, project_path, session_slug)
     projects = project_chain(root, project_path)
     messages = read_messages(root, project_path, session_slug)
-    session_files = session_attachment_context(root, project_path, session_slug)
-    project_files = project_attachment_context(root, project_path, exclude_session=session_slug)
+    session_files = session_attachment_context(root, project_path, session_slug, filenames=active_attachment_filenames)
+    project_files = project_attachment_context(root, project_path, exclude_session=session_slug) if include_project_files else []
     try:
         from .core import action_registry
 
@@ -1442,11 +1449,14 @@ def attachment_context_lines(
     *,
     include_session_label: bool = False,
     text_budget: int = 50_000,
+    filenames: set[str] | None = None,
 ) -> list[str]:
     lines: list[str] = []
     used = 0
     for item in read_attachment_metadata(root, project_path, session_slug):
         filename = str(item.get("filename", "attachment"))
+        if filenames is not None and filename not in filenames:
+            continue
         content_type = str(item.get("content_type", "file"))
         text = str(item.get("text", "")).strip() if item.get("text_available") else ""
         delivery = str(item.get("delivery", "attached"))
@@ -1467,8 +1477,13 @@ def attachment_context_lines(
     return lines
 
 
-def session_attachment_context(root: str | Path, project_path: str, session_slug: str) -> list[str]:
-    return attachment_context_lines(root, project_path, session_slug)
+def session_attachment_context(
+    root: str | Path,
+    project_path: str,
+    session_slug: str,
+    filenames: set[str] | None = None,
+) -> list[str]:
+    return attachment_context_lines(root, project_path, session_slug, filenames=filenames)
 
 
 def project_attachment_context(root: str | Path, project_path: str, *, exclude_session: str = "") -> list[str]:

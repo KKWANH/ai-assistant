@@ -4,7 +4,7 @@ from urllib import error
 
 import pytest
 
-from aiws import runner, storage
+from aiws import attachments, runner, storage
 from aiws.providers import ollama
 
 
@@ -63,6 +63,10 @@ def test_ask_calls_ollama_and_persists_messages(tmp_path, monkeypatch):
     assert messages[1]["provider"] == "ollama"
     assert messages[1]["model"] == "qwen3:8b"
     assert messages[1]["content"] == "Use a small provider interface."
+    receipt = messages[1]["metadata"]["context_receipt"]
+    assert receipt["provider"] == "ollama"
+    assert receipt["privacy_mode"] == "local"
+    assert receipt["estimated_cost"] == 0.0
 
     markdown = (storage.session_dir(root, "ai-system/local-runner", "ollama-mvp") / "session.md").read_text(
         encoding="utf-8"
@@ -137,6 +141,69 @@ def test_ask_includes_account_context(tmp_path, monkeypatch):
     used_context = storage.read_json(storage.session_dir(root, "ai-system", "ollama-mvp") / "used_context.json")
     assert used_context["provider"] == "ollama"
     assert "Likes Korean UI." in used_context["context_preview"]
+
+
+def test_ask_with_current_attachment_does_not_send_previous_files(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Images")
+    attachments.save_attachment(root, "ai-system", "images", "old.txt", b"old private text", delivery="text_context")
+    attachments.save_attachment(root, "ai-system", "images", "current.txt", b"current text", delivery="text_context")
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    runner.ask(
+        str(root),
+        "ai-system",
+        "images",
+        provider="ollama",
+        model="qwen3:4b",
+        content="Read this",
+        user_metadata={"attachments": [{"filename": "current.txt"}]},
+    )
+
+    system = captured["payload"]["messages"][0]["content"]
+    assert "current text" in system
+    assert "old private text" not in system
+    receipt = storage.read_messages(root, "ai-system", "images")[-1]["metadata"]["context_receipt"]
+    assert [item["filename"] for item in receipt["used_files"]] == ["current.txt"]
+    assert any(item["filename"] == "old.txt" for item in receipt["unused_files"])
+
+
+def test_ask_can_include_previous_files_when_requested(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Images")
+    attachments.save_attachment(root, "ai-system", "images", "old.txt", b"old private text", delivery="text_context")
+    attachments.save_attachment(root, "ai-system", "images", "current.txt", b"current text", delivery="text_context")
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    runner.ask(
+        str(root),
+        "ai-system",
+        "images",
+        provider="ollama",
+        model="qwen3:4b",
+        content="Compare this with previous files",
+        user_metadata={"attachments": [{"filename": "current.txt"}]},
+    )
+
+    system = captured["payload"]["messages"][0]["content"]
+    assert "current text" in system
+    assert "old private text" in system
+    receipt = storage.read_messages(root, "ai-system", "images")[-1]["metadata"]["context_receipt"]
+    assert {item["filename"] for item in receipt["used_files"]} == {"current.txt", "old.txt"}
 
 
 def test_ask_updates_account_memory_for_future_context(tmp_path, monkeypatch):
