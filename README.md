@@ -1,8 +1,10 @@
-# Local AI Workspace (AIWS)
+# AI Workbench Studio (AIWS)
 
-Not another ChatGPT clone. AIWS is a local-first AI cockpit that turns folders into customizable AI workspaces.
+**Local-first AI cockpit for projects, files, and agent runs.**
 
-AIWS organizes conversations, project files, goals, prompt recipes, and local command runs around your own folders. It is designed for a Mac mini or similar personal machine first, with optional family access through a private tunnel.
+Not another ChatGPT clone. AI Workbench Studio turns a project folder into a configurable AI cockpit for chats, files, actions, run logs, artifacts, model routing, and diagnostics.
+
+AIWS organizes conversations, project files, goals, prompt recipes, and local command runs around your own folders. It is designed for a Mac mini or similar personal machine first, with optional family access through a private tunnel and bring-your-own-key cloud models.
 
 This MVP focuses on a reliable file-based foundation:
 
@@ -13,6 +15,8 @@ This MVP focuses on a reliable file-based foundation:
 - JSONL and Markdown archives for every session.
 - Reusable project skills with parent-to-subproject inheritance.
 - `aiws.yaml` project commands for prompt recipes, shell scripts, Python scripts, file indexing, Codex prompts, and optional OpenClaw status checks.
+- Context & Files inspector for attached files, context manifests, runs, artifacts, and diagnostics.
+- Experimental Agent Plan preview for controlled Planner -> Execute -> Analyze -> Report workflows.
 
 ## Core Idea
 

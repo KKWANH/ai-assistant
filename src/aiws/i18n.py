@@ -47,4 +47,4 @@ TEXT = {
 
 
 def t(language: str, key: str) -> str:
-    return TEXT.get(language, TEXT["ko"]).get(key, TEXT["ko"].get(key, key))
+    return TEXT.get(language, TEXT["en"]).get(key, TEXT["en"].get(key, key))

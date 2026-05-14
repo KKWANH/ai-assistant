@@ -124,7 +124,7 @@ class LocalRuntime:
         storage.init_workspace(self.root)
         probe_host = "127.0.0.1" if self.mode == "local" else "127.0.0.1"
         if is_port_open(probe_host, self.port):
-            print(f"Assistant is already running at http://{probe_host}:{self.port}")
+            print(f"AI Workbench Studio is already running at http://{probe_host}:{self.port}")
             return
         self.processes = self.build_processes()
         self._last_activity_mtime = self.newest_workspace_mtime()

@@ -225,7 +225,7 @@ def run(args: argparse.Namespace) -> int:
             ui_mode=args.ui_mode,
             memory=args.memory,
         )
-        print(f"{account['username']}\tlanguage={account.get('profile', {}).get('language', 'ko')}")
+        print(f"{account['username']}\tlanguage={account.get('profile', {}).get('language', 'en')}")
         return 0
 
     if args.command == "project" and args.project_command == "create":

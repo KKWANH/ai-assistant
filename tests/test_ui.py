@@ -91,42 +91,42 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "data-lightbox" in bundle_text
         assert "data-preview-src" in bundle_text
         assert "data-api-action" in bundle_text
-        assert "무엇을 도와드릴까요?" in bundle_text
+        assert "What are we working on?" in bundle_text
         assert "search_mode" in bundle_text
         assert "Attach file" in bundle_text
         assert "Local context only" in bundle_text
         assert "Search off" in bundle_text
-        assert "Search web (준비 중)" in bundle_text
+        assert "Web search (planned)" in bundle_text
         assert "Recent" in bundle_text
         assert "Projects" in bundle_text
-        assert "가족 공유" in bundle_text
-        assert "현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다." in bundle_text
+        assert "Public - logged-in users" in bundle_text
+        assert "AIWS prioritizes saved chats, project context, and attached files." in bundle_text
         assert "Artifacts, drafts, and generated files will appear here." not in bundle_text
         assert "Local only" in bundle_text
-        assert "Cheap cloud" in bundle_text
+        assert "Very cheap" in bundle_text
         assert "Gemini 2.5 Pro" in bundle_text
         assert "Kimi thinking" in bundle_text
         assert "aiws_model_mode" in bundle_text
         assert "window.confirm" not in bundle_text
-        assert "공개 범위" in bundle_text
+        assert "Visibility" in bundle_text
         assert "Logout" in bundle_text
         assert "multipart/form-data" in bundle_text
         assert "data-copy-codex-prompt" in bundle_text
         assert "data-pdf-preview" in bundle_text
         assert "data-markdown-renderer" in bundle_text
-        assert "프로젝트 명령" in bundle_text
-        assert "다음 작업 후보" in bundle_text
-        assert "사용자가 승인해야 실행됩니다" in bundle_text
+        assert "Project actions" in bundle_text
+        assert "Suggested next actions" in bundle_text
+        assert "User approval required" in bundle_text
         assert "Investment Rebalancer" in bundle_text
-        assert "개인 AI 작업실" in bundle_text
-        assert "Starter Actions" in bundle_text
-        assert "프로젝트 없이 바로 시작" in bundle_text
+        assert "AI Workbench Studio" in bundle_text
+        assert "Quick Actions" in bundle_text
+        assert "Run before creating a project" in bundle_text
         assert "Action Library" in bundle_text
-        assert "문서 요약하기" in bundle_text
+        assert "Summarize document" in bundle_text
         assert "Kwanho Kim" in bundle_text
         assert "Chungja Byun" in bundle_text
         assert "Gunwoo Kim" in bundle_text
-        assert "Assistant is thinking" in bundle_text
+        assert "Workbench is thinking" in bundle_text
         assert ".workbench" in style_text
         assert ".composer" in style_text
         assert ".goal-panel" in style_text
@@ -333,7 +333,7 @@ def test_login_uses_react_shell_and_public_assets_when_auth_required(tmp_path):
     try:
         page = request.urlopen(f"{base_url}/login", timeout=5).read().decode("utf-8")
         assert '<div id="root"></div>' in page
-        assert "Assistant" in page
+        assert "AI Workbench Studio" in page
         asset_match = re.search(r'src="([^"]*assets/[^"]+\.js)"', page)
         assert asset_match
         asset = request.urlopen(f"{base_url}{asset_match.group(1)}", timeout=5)

@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { actionStatus, ProjectActionsPanel } from "../actions/ActionPanels.jsx";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
+import { COPY } from "../../copy.js";
+import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts.js";
 
 export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig, navigate }) {
   const [runDetail, setRunDetail] = useState(null);
@@ -9,7 +11,8 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   const config = projectConfig?.config || {};
   const runs = projectConfig?.runs || [];
   const commands = Object.entries(config.commands || {});
-  const panels = config.panels || [];
+  const actions = commands.map(([name, command]) => normalizeActionDefinition(name, command));
+  const panels = (config.panels || []).map(normalizePanelDefinition);
   const context = config.context || {};
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
   const chatInsights = useMemo(() => summarizeProjectChats(project), [project]);
@@ -39,36 +42,30 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
       <div className="project-dashboard-hero">
         <p className="eyebrow">Project Workbench</p>
         <h1>{config.name || project?.title || activePath.projectPath}</h1>
-        <p>{config.description || project?.notes || "파일, 기억, 명령, 실행 기록을 묶는 로컬 작업실입니다."}</p>
+        <p>{config.description || project?.notes || COPY.tagline}</p>
       </div>
 
-      <div className="dashboard-grid">
-        <section className="dashboard-card">
-          <h2>현재 목표</h2>
-          <p className="muted">프로젝트 Goal을 설정하면 이 영역이 작업 기준점이 됩니다.</p>
-          <a className="soft-link" href={`/project/${activePath.projectPath}`}>목표 설정은 파일/기억 패널에서 진행</a>
-        </section>
+      <section className="dashboard-card workbench-operating-model">
+        <div>
+          <p className="eyebrow">Operating Model</p>
+          <h2>Folder to Manifest to Actions to Runs to Artifacts</h2>
+          <p className="muted">This project is treated as a configurable workbench, not a chat folder. aiws.yaml decides which files are context, which actions can run, and which panels explain the outputs.</p>
+        </div>
+        <div className="operating-steps" aria-label="AIWS operating loop">
+          {["Project folder", "aiws.yaml", "Action registry", "Run timeline", "Artifacts"].map((item) => <span key={item}>{item}</span>)}
+        </div>
+      </section>
 
-        <section className="dashboard-card">
-          <h2>Active Context</h2>
-          <div className="context-meter">
-          <span>{commands.length} commands</span>
-          <span>{runs.length} runs</span>
-          <span>{panels.length || 0} panels</span>
-          </div>
-          <p className="muted">
-            {(context.include || []).length > 0
-              ? `포함 패턴: ${(context.include || []).slice(0, 3).join(", ")}`
-              : "aiws.yaml을 가져오면 파일 패턴과 명령이 여기에 연결됩니다."}
-          </p>
-        </section>
+      <div className="dashboard-grid">
+        <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} />
+        <AgentPlanFoundationCard />
       </div>
 
       <section className="dashboard-card project-chat-overview">
         <div className="section-row">
           <div>
             <p className="eyebrow">Project Memory</p>
-            <h2>이 프로젝트에서 오간 대화</h2>
+            <h2>Project chat history</h2>
           </div>
           <span className="soft-pill">{project?.sessions?.length || 0} chats</span>
         </div>
@@ -93,7 +90,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
             ))}
           </div>
         ) : (
-          <p className="muted">아직 이 프로젝트 안에 대화가 없습니다. 아래 입력창에서 프로젝트 대화를 시작하면 여기에 쌓입니다.</p>
+          <p className="muted">No chats in this project yet. Start a project chat below and it will appear here.</p>
         )}
       </section>
 
@@ -101,7 +98,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
         <div className="section-row">
           <div>
             <p className="eyebrow">Actions</p>
-            <h2>프로젝트 명령</h2>
+            <h2>Project actions</h2>
           </div>
           {power && <span className="soft-pill">aiws.yaml</span>}
         </div>
@@ -115,16 +112,21 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
         />
       </section>
 
+      <div className="dashboard-grid">
+        <RegistryPreviewCard title="Panel Registry" items={PANEL_TYPES} active={panels.map((panel) => panel.type)} />
+        <RegistryPreviewCard title="Action Kinds" items={ACTION_KINDS} active={actions.map((action) => action.kind)} />
+      </div>
+
       <section className="dashboard-card">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Recipe Status</p>
-            <h2>되는 것 / 준비 중인 것</h2>
+            <p className="eyebrow">{COPY.project.recipeStatus}</p>
+            <h2>Ready and planned recipes</h2>
           </div>
           <span className="soft-pill">{commands.length}</span>
         </div>
         {commands.length === 0 ? (
-          <p className="muted">aiws.yaml을 가져오면 각 명령의 상태가 Ready / Partial / Planned로 표시됩니다.</p>
+          <p className="muted">Import aiws.yaml to show each command as Ready, Partial, Planned, or Broken.</p>
         ) : (
           <div className="recipe-status-grid">
             {commands.map(([name, command]) => (
@@ -138,15 +140,15 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
         )}
       </section>
 
-      <section className="dashboard-card dashboard-architecture">
+      <section className="dashboard-card dashboard-architecture passive-card">
         <div className="section-row">
           <div>
             <p className="eyebrow">Configurable Cockpit</p>
-            <h2>AIWS 아키텍처</h2>
+            <h2>AIWS architecture</h2>
           </div>
-          <span className="soft-pill">React Flow</span>
+          <span className="soft-pill">Architecture preview</span>
         </div>
-        <p className="muted">채팅은 입구이고, 실제 본체는 파일 작업실, 컨텍스트 manifest, 모델 라우터, 프로젝트 명령 실행 기록입니다.</p>
+        <p className="muted">This diagram is secondary. Runtime truth should come from real run records, logs, artifacts, and planner events.</p>
         <ArchitectureDiagram />
       </section>
 
@@ -154,12 +156,12 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
         <div className="section-row">
           <div>
             <p className="eyebrow">Recent Runs</p>
-            <h2>실행 기록</h2>
+            <h2>Run history</h2>
           </div>
           <span className="soft-pill">{runs.length}</span>
         </div>
         {runs.length === 0 ? (
-          <p className="muted">아직 실행 기록이 없습니다. 위의 작업 레시피를 실행하면 결과와 산출물이 여기에 남습니다.</p>
+          <p className="muted">No run records yet. Execute a project action to leave logs and artifacts here.</p>
         ) : (
           <div className="run-list">
             {runs.slice(0, 5).map((run) => (
@@ -176,13 +178,13 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
       <section className="dashboard-card">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Artifacts</p>
-            <h2>생성/확인된 결과물</h2>
+            <p className="eyebrow">{COPY.project.artifacts}</p>
+            <h2>Generated outputs</h2>
           </div>
           <span className="soft-pill">{artifacts.length}</span>
         </div>
         {artifacts.length === 0 ? (
-          <p className="muted">스크립트나 리포트 명령이 파일을 생성하면 여기서 바로 확인할 수 있습니다.</p>
+          <p className="muted">Generated reports, data files, and script outputs are inspectable here.</p>
         ) : (
           <div className="artifact-grid">
             {artifacts.slice(0, 8).map((artifact) => (
@@ -199,8 +201,8 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
       {modalError && (
         <div className="viewer-modal" role="dialog" aria-modal="true">
           <div className="viewer-card">
-            <button type="button" className="viewer-close" onClick={() => setModalError("")}>닫기</button>
-            <h2>열 수 없습니다</h2>
+            <button type="button" className="viewer-close" onClick={() => setModalError("")}>Close</button>
+            <h2>Could not open</h2>
             <p className="error-text">{modalError}</p>
           </div>
         </div>
@@ -211,11 +213,120 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   );
 }
 
+function ManifestSummaryCard({ config, context, panels, actions, runs }) {
+  const include = context.include || [];
+  const exclude = context.exclude || [];
+  const views = config.views || [];
+  return (
+    <section className="dashboard-card manifest-summary-card">
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">aiws.yaml Manifest</p>
+          <h2>Configurable workbench contract</h2>
+        </div>
+        <span className="soft-pill">{config.name ? "loaded" : "template-ready"}</span>
+      </div>
+      <div className="manifest-summary-grid">
+        <MetricTile label="Actions" value={actions.length} />
+        <MetricTile label="Panels" value={panels.length} />
+        <MetricTile label="Views" value={views.length} />
+        <MetricTile label="Runs" value={runs.length} />
+      </div>
+      <div className="manifest-section">
+        <strong>Context include</strong>
+        <p>{include.length ? include.slice(0, 4).join(", ") : "No include patterns yet. Add files/**/*.md, data/**/*.csv, or notes/**/*.txt."}</p>
+      </div>
+      <div className="manifest-section security">
+        <strong>Security exclusions</strong>
+        <p>{exclude.length ? exclude.slice(0, 4).join(", ") : ".env, secrets/**, keys/**, browser profiles, and SSH folders stay out of context by policy."}</p>
+      </div>
+      <pre className="manifest-code">{sampleManifest(config, panels, actions)}</pre>
+    </section>
+  );
+}
+
+function AgentPlanFoundationCard() {
+  const steps = [
+    ["read_file", "Inspect selected project files", false],
+    ["llm", "Create a plan and identify missing context", false],
+    ["search", "Search external context when allowed", true],
+    ["python", "Run analysis script in a controlled step", true],
+    ["report", "Write report artifact and summarize next actions", false],
+  ];
+  return (
+    <section className="dashboard-card agent-plan-card">
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">Agent Plan Foundation</p>
+          <h2>Controlled automation, not blind execution</h2>
+        </div>
+        <span className="soft-pill">experimental</span>
+      </div>
+      <p className="muted">General chat should evolve into a visible plan: goal, approval gates, step events, costs, artifacts, and final report.</p>
+      <div className="agent-step-list">
+        {steps.map(([kind, title, approval], index) => (
+          <div key={title} className={approval ? "needs-approval" : ""}>
+            <span>{index + 1}</span>
+            <strong>{title}</strong>
+            <small>{AGENT_STEP_KINDS.includes(kind) ? kind : "llm"}{approval ? " · approval required" : ""}</small>
+          </div>
+        ))}
+      </div>
+      <p className="warning-text">File writes, shell, Python, and network steps must remain approval-gated.</p>
+    </section>
+  );
+}
+
+function RegistryPreviewCard({ title, items, active }) {
+  const activeSet = new Set(active || []);
+  return (
+    <section className="dashboard-card registry-preview-card">
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">Registry</p>
+          <h2>{title}</h2>
+        </div>
+        <span className="soft-pill">{activeSet.size} active</span>
+      </div>
+      <div className="registry-chip-grid">
+        {items.map((item) => <span key={item} className={activeSet.has(item) ? "active" : ""}>{item}</span>)}
+      </div>
+    </section>
+  );
+}
+
+function MetricTile({ label, value }) {
+  return (
+    <span className="metric-tile">
+      <strong>{value}</strong>
+      <small>{label}</small>
+    </span>
+  );
+}
+
+function sampleManifest(config, panels, actions) {
+  const firstAction = actions[0] || { id: "summarize_file", kind: "prompt_recipe", label: "Summarize File" };
+  const firstPanel = panels[0] || { id: "files", type: "fileExplorer", title: "Files" };
+  return [
+    `name: ${config.name || "Project Workbench"}`,
+    "views:",
+    "  - id: desk",
+    "    panels:",
+    `      - id: ${firstPanel.id}`,
+    `        type: ${firstPanel.type}`,
+    `        title: ${firstPanel.title}`,
+    "commands:",
+    `  ${firstAction.id}:`,
+    `    kind: ${firstAction.kind}`,
+    `    label: ${firstAction.label}`,
+  ].join("\n");
+}
+
 function summarizeProjectChats(project) {
   const sessions = project?.sessions || [];
   if (sessions.length === 0) {
     return {
-      summary: "아직 대화 기록이 없어 프로젝트 성격을 분석할 수 없습니다.",
+      summary: "No chat history yet. Start a project chat and the workbench will summarize what this project is becoming.",
       topics: [],
     };
   }
@@ -226,12 +337,12 @@ function summarizeProjectChats(project) {
     .filter(Boolean)
     .sort()
     .at(-1);
-  const representative = titles.find((title) => title.length >= 4) || project?.title || "이 프로젝트";
+  const representative = titles.find((title) => title.length >= 4) || project?.title || "this project";
   const topicText = topics.length > 0
-    ? `주요 흐름은 ${topics.slice(0, 4).join(", ")} 쪽으로 보입니다.`
-    : `대표 대화는 "${representative}"입니다.`;
+    ? `Main themes appear to be ${topics.slice(0, 4).join(", ")}.`
+    : `Representative chat: "${representative}".`;
   return {
-    summary: `${sessions.length}개의 대화가 연결되어 있습니다. ${topicText}${latest ? ` 마지막 업데이트는 ${latest.slice(0, 10)}입니다.` : ""}`,
+    summary: `${sessions.length} chat${sessions.length === 1 ? "" : "s"} connected. ${topicText}${latest ? ` Last update ${latest.slice(0, 10)}.` : ""}`,
     topics,
   };
 }
@@ -273,9 +384,9 @@ function RunDetailModal({ detail, power, onClose, onOpenArtifact }) {
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
-        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <button type="button" className="viewer-close" onClick={onClose}>Close</button>
         <p className="eyebrow">Run Detail</p>
-        <h2>{run.label || run.command || "실행 기록"}</h2>
+        <h2>{run.label || run.command || "Run record"}</h2>
         <div className="run-meta-grid">
           <span>Status: {run.status}</span>
           <span>Kind: {run.kind}</span>
@@ -310,7 +421,7 @@ function ArtifactViewer({ artifact, onClose }) {
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
-        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <button type="button" className="viewer-close" onClick={onClose}>Close</button>
         <p className="eyebrow">Artifact Viewer</p>
         <h2>{artifact.path}</h2>
         <span className="soft-pill">{artifact.kind} · {artifact.size} bytes</span>

@@ -575,7 +575,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     age=data.get("age", ""),
                     job=data.get("job", ""),
                     situation=data.get("situation", ""),
-                    language=data.get("language", "ko"),
+                    language=data.get("language", "en"),
                     ui_mode=data.get("ui_mode", "easy"),
                     memory=data.get("memory", ""),
                 )
@@ -720,7 +720,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 age=data.get("age", ""),
                 job=data.get("job", ""),
                 situation=data.get("situation", ""),
-                language=data.get("language", "ko"),
+                language=data.get("language", "en"),
                 memory=data.get("memory", ""),
             )
             self.redirect("/profile")
@@ -1107,7 +1107,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def serve_spa(self) -> None:
         index = web_dist_path() / "index.html"
         if not index.exists():
-            self.page("Assistant", '<div id="root"></div><p>Build the React UI with <code>cd web && npm run build</code>.</p>')
+            self.page("AI Workbench Studio", '<div id="root"></div><p>Build the React UI with <code>cd web && npm run build</code>.</p>')
             return
         self.serve_file(index, "text/html; charset=utf-8")
 
@@ -1636,7 +1636,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
   </script>
 </head>
 <body class="{body_class}">
-  <header><nav><a class="brand" href="/">Assistant</a>{nav_links}<span class="muted">{html(self.current_username() or 'local')}</span></nav></header>
+  <header><nav><a class="brand" href="/">AI Workbench Studio</a>{nav_links}<span class="muted">{html(self.current_username() or 'local')}</span></nav></header>
   <div class="drop-overlay">Drop file to attach</div>
   <div class="image-lightbox" data-lightbox><button type="button" data-lightbox-close>×</button><img data-lightbox-image alt=""></div>
   <main>{body}</main>
@@ -1989,7 +1989,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
       <div class="field"><label>{html(t(language, 'age'))}</label><input name="age" value="{html(profile.get('age', ''))}"></div>
       <div class="field"><label>{html(t(language, 'job'))}</label><input name="job" value="{html(profile.get('job', ''))}"></div>
       <div class="field"><label>{html(t(language, 'situation'))}</label><textarea name="situation">{html(profile.get('situation', ''))}</textarea></div>
-      <div class="field"><label>{html(t(language, 'language'))}</label><select name="language"><option value="ko" {selected(profile.get('language'), 'ko')}>한국어</option><option value="en" {selected(profile.get('language'), 'en')}>English</option></select></div>
+      <div class="field"><label>{html(t(language, 'language'))}</label><select name="language"><option value="en" {selected(profile.get('language', 'en'), 'en')}>English</option><option value="ko" {selected(profile.get('language'), 'ko')}>한국어</option></select></div>
       <div class="field"><label>{html(t(language, 'memory'))}</label><textarea name="memory" placeholder="새 메모리를 추가합니다."></textarea></div>
       <button type="submit">{html(t(language, 'save'))}</button>
     </form>
@@ -2498,7 +2498,7 @@ def start_ui(root: str, *, mode: str, port: int, password: str | None = None) ->
         require_auth = True
     handler = partial(AIWSHandler, root=root, require_auth=require_auth, password=password)
     server = ThreadingHTTPServer((host, port), handler)
-    print(f"Assistant running at http://{host}:{port}")
+    print(f"AI Workbench Studio running at http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

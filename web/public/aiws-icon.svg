@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AI Workbench Studio icon">
+  <defs>
+    <linearGradient id="bg" x1="86" x2="426" y1="54" y2="458" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17243a"/>
+      <stop offset="0.54" stop-color="#08111f"/>
+      <stop offset="1" stop-color="#030711"/>
+    </linearGradient>
+    <linearGradient id="line" x1="149" x2="363" y1="147" y2="349" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#63d7ff"/>
+      <stop offset="0.72" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#64f0ff"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" values="0 0 0 0 0.22 0 0 0 0 0.74 0 0 0 0 1 0 0 0 .65 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#bg)"/>
+  <rect x="18" y="18" width="476" height="476" rx="104" fill="none" stroke="#7fb7ff" stroke-opacity=".16" stroke-width="2"/>
+  <path d="M170 328V188c0-18 14-32 32-32h136" fill="none" stroke="url(#line)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M342 156h-26" fill="none" stroke="#63d7ff" stroke-width="24" stroke-linecap="round" opacity=".96"/>
+  <circle cx="258" cy="246" r="18" fill="#63d7ff" filter="url(#glow)"/>
+  <path d="M204 348h108" fill="none" stroke="#63d7ff" stroke-width="18" stroke-linecap="round" opacity=".9" filter="url(#glow)"/>
+</svg>

@@ -1,6 +1,6 @@
-# Assistant UI Design Philosophy
+# AI Workbench Studio UI Design Philosophy
 
-Assistant is a local-first AI workspace, not a generic SaaS dashboard. The UI should feel calm, precise, and trustworthy: a dark developer workbench where projects, context, files, and conversations are always visible.
+AI Workbench Studio (AIWS) is a local-first AI workspace, not a generic SaaS dashboard or chatbot clone. The UI should feel calm, precise, and trustworthy: a dark developer workbench where projects, context, files, actions, runs, artifacts, and diagnostics are always visible.
 
 ## Direction
 

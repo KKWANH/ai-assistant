@@ -250,7 +250,7 @@ def create_account(
             "age": "",
             "job": "",
             "situation": "",
-            "language": "ko",
+            "language": "en",
             "ui_mode": "power" if admin else "easy",
             "memory": [],
             "avatar": "",
@@ -522,13 +522,13 @@ def set_account_avatar(root: str | Path, username: str, filename: str, content: 
 
 def get_account_language(root: str | Path, username: str | None) -> str:
     if not username:
-        return "ko"
+        return "en"
     try:
         account = load_account(root, username)
     except WorkspaceError:
-        return "ko"
-    language = account.get("profile", {}).get("language", "ko")
-    return language if language in SUPPORTED_LANGUAGES else "ko"
+        return "en"
+    language = account.get("profile", {}).get("language", "en")
+    return language if language in SUPPORTED_LANGUAGES else "en"
 
 
 def validate_visibility(visibility: str) -> str:

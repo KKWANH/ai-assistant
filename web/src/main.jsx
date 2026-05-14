@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ActionInspector, AutomationPanel, TaskSuggestionsPanel } from "./components/actions/ActionPanels.jsx";
 import { ProjectDashboard } from "./components/project/ProjectDashboard.jsx";
+import { COPY, copyForAccount, copyForLocale } from "./copy.js";
 import "./styles.css";
 
 const DEFAULT_MODEL = "qwen3:4b";
@@ -18,10 +19,10 @@ const MODEL_MODES = [
     cloud: false,
     inputPrice: 0,
     outputPrice: 0,
-    cost: "무료 · 내 Mac에서 처리",
-    easyPrice: "무료 · 내 Mac에서 처리",
-    privacy: "내 Mac에서 처리",
-    bestFor: "짧은 질문, 메모, 일상 대화",
+    cost: "Free · local Mac",
+    easyPrice: "Free · local Mac",
+    privacy: "Local Mac",
+    bestFor: "Short questions, notes, everyday chat",
     version: "qwen3:4b · Ollama local",
   },
   {
@@ -34,10 +35,10 @@ const MODEL_MODES = [
     cloud: false,
     inputPrice: 0,
     outputPrice: 0,
-    cost: "무료 · 내 Mac에서 처리",
-    easyPrice: "무료 · 더 똑똑한 로컬",
-    privacy: "내 Mac에서 처리",
-    bestFor: "24GB Mac mini용 상위 로컬 추론 · 없으면 ollama pull 필요",
+    cost: "Free · local Mac",
+    easyPrice: "Free · stronger local model",
+    privacy: "Local Mac",
+    bestFor: "Higher local reasoning for a 24GB Mac mini · pull with Ollama if missing",
     version: "qwen3:8b · Ollama local",
   },
   {
@@ -53,9 +54,9 @@ const MODEL_MODES = [
     outputPrice: 0.40,
     agentCalls: 2,
     cost: "~$0.10/M in · ~$0.40/M out",
-    easyPrice: "매우 저렴 · 빠른 클라우드",
-    privacy: "클라우드 AI",
-    bestFor: "일반 질문, 빠른 요약, 저비용 작업",
+    easyPrice: "Very cheap · fast cloud",
+    privacy: "Cloud AI",
+    bestFor: "General questions, fast summaries, low-cost work",
     version: "gemini-2.5-flash-lite",
   },
   {
@@ -70,9 +71,9 @@ const MODEL_MODES = [
     outputPrice: 10.0,
     agentCalls: 3,
     cost: "~$1.25/M in · ~$10/M out",
-    easyPrice: "정확도 높음 · 비용 있음",
-    privacy: "클라우드 AI",
-    bestFor: "복잡한 질문, 긴 글, 정확도가 필요한 작업",
+    easyPrice: "Higher accuracy · paid",
+    privacy: "Cloud AI",
+    bestFor: "Complex questions, long writing, accuracy-sensitive work",
     version: "gemini-2.5-pro",
   },
   {
@@ -88,9 +89,9 @@ const MODEL_MODES = [
     outputPrice: 4.00,
     agentCalls: 3,
     cost: "~$0.95/M in · ~$4.00/M out",
-    easyPrice: "긴 문서 특화 · 비용 있음",
-    privacy: "클라우드 AI",
-    bestFor: "긴 문서, 긴 컨텍스트, 분석",
+    easyPrice: "Long context · paid",
+    privacy: "Cloud AI",
+    bestFor: "Long documents, long context, analysis",
     version: "kimi-k2.6",
   },
   {
@@ -106,9 +107,9 @@ const MODEL_MODES = [
     outputPrice: 2.50,
     agentCalls: 4,
     cost: "~$0.60/M in · ~$2.50/M out",
-    easyPrice: "깊은 추론 · 조금 느림",
-    privacy: "클라우드 AI",
-    bestFor: "깊은 추론, 긴 분석",
+    easyPrice: "Deep reasoning · slower",
+    privacy: "Cloud AI",
+    bestFor: "Deep reasoning, long analysis",
     version: "kimi-k2-thinking",
   },
   {
@@ -124,9 +125,9 @@ const MODEL_MODES = [
     outputPrice: 10.0,
     agentCalls: 4,
     cost: "~$1.25/M in · ~$10/M out",
-    easyPrice: "코딩 특화 · 비용 있음",
-    privacy: "클라우드 AI",
-    bestFor: "코드 수정, 리팩토링, 개발 작업",
+    easyPrice: "Coding specialist · paid",
+    privacy: "Cloud AI",
+    bestFor: "Code changes, refactoring, development work",
     version: "gpt-5.1-codex",
   },
   {
@@ -139,93 +140,93 @@ const MODEL_MODES = [
     cloud: true,
     inputPrice: 0,
     outputPrice: 0,
-    cost: "Baidu Qianfan API · 가격은 콘솔 확인 필요",
-    easyPrice: "Qianfan 클라우드 · 가격 확인 필요",
-    privacy: "클라우드 AI",
-    bestFor: "중국어/다국어, 긴 컨텍스트, 검색형 분석",
+    cost: "Baidu Qianfan API · check console pricing",
+    easyPrice: "Qianfan cloud · verify pricing",
+    privacy: "Cloud AI",
+    bestFor: "Chinese/multilingual work, long context, research analysis",
     version: "ernie-5.1 · Baidu Qianfan API",
   },
 ];
 const MODEL_GROUPS = [
-  { value: "recommended", label: "추천", match: (model) => ["local", "cheap", "gemini-pro"].includes(model.value) },
-  { value: "local", label: "로컬", match: (model) => model.group === "local" },
-  { value: "fast", label: "빠른 작업", match: (model) => model.group === "fast" },
-  { value: "long", label: "긴 문서", match: (model) => model.group === "long" },
-  { value: "reasoning", label: "추론", match: (model) => model.group === "reasoning" },
-  { value: "coding", label: "코딩", match: (model) => model.group === "coding" },
-  { value: "all", label: "전체", match: () => true },
+  { value: "recommended", label: "Recommended", match: (model) => ["local", "cheap", "gemini-pro"].includes(model.value) },
+  { value: "local", label: "Local", match: (model) => model.group === "local" },
+  { value: "fast", label: "Fast", match: (model) => model.group === "fast" },
+  { value: "long", label: "Long context", match: (model) => model.group === "long" },
+  { value: "reasoning", label: "Reasoning", match: (model) => model.group === "reasoning" },
+  { value: "coding", label: "Coding", match: (model) => model.group === "coding" },
+  { value: "all", label: "All", match: () => true },
 ];
 const SEARCH_OPTIONS = [
   { value: "off", label: "Search off" },
-  { value: "auto", label: "로컬 컨텍스트 우선", legacyLabel: "Local context only" },
-  { value: "always", label: "Search web (준비 중)" },
+  { value: "auto", label: "Local context first", legacyLabel: "Local context only" },
+  { value: "always", label: "Web search (planned)" },
 ];
 const ATTACHMENT_ACCEPT = ".txt,.md,.csv,.json,.yaml,.yml,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp";
 
 const STARTER_ACTIONS = [
   {
     id: "document_summary",
-    label: "문서 요약하기",
-    category: "문서",
+    label: "Summarize document",
+    category: "Document",
     status: "Ready",
-    description: "PDF, DOCX, TXT, MD 파일을 읽고 구조적 요약을 시작합니다.",
+    description: "Read a PDF, DOCX, TXT, or MD file and start a structured summary.",
     inputs: ".pdf · .docx · .txt · .md",
     output: "Chat answer + Markdown",
-    prompt: "첨부한 문서를 구조적으로 요약해줘. 핵심 주장, 중요한 근거, 후속 질문을 분리해서 정리해줘.",
+    prompt: "Summarize the attached document structurally. Separate core claims, important evidence, and follow-up questions.",
     wantsFile: true,
   },
   {
     id: "image_explain",
-    label: "이미지 설명하기",
-    category: "이미지",
+    label: "Describe image",
+    category: "Image",
     status: "Ready",
-    description: "이미지를 첨부하고 무엇인지 설명하거나 비교 분석합니다.",
+    description: "Attach an image and ask the workspace to describe or compare what it sees.",
     inputs: ".png · .jpg · .webp",
     output: "Chat answer",
-    prompt: "첨부한 이미지를 설명해줘. 보이는 요소, 중요한 맥락, 확인해야 할 점을 나눠서 알려줘.",
+    prompt: "Describe the attached image. Split visible elements, important context, and things I should verify.",
     wantsFile: true,
   },
   {
     id: "csv_analysis",
-    label: "CSV 분석하기",
-    category: "데이터",
+    label: "Analyze CSV",
+    category: "Data",
     status: "Partial",
-    description: "CSV 구조를 파악하고 주요 숫자와 이상치를 요약합니다.",
+    description: "Inspect CSV structure, key figures, and possible outliers.",
     inputs: ".csv",
     output: "Table preview + Summary",
-    prompt: "첨부한 CSV를 읽고 컬럼 구조, 주요 수치, 이상치 후보, 다음 분석 방향을 정리해줘.",
+    prompt: "Read the attached CSV and summarize the column structure, key figures, possible outliers, and next analysis steps.",
     wantsFile: true,
   },
   {
     id: "codex_task_prompt",
-    label: "Codex 작업지시 만들기",
-    category: "코드",
+    label: "Create Codex task prompt",
+    category: "Code",
     status: "Ready",
-    description: "목표와 제약조건을 Codex용 실행 프롬프트로 정리합니다.",
+    description: "Turn a goal and constraints into an execution-ready Codex prompt.",
     inputs: "goal · files",
     output: "Codex prompt",
-    prompt: "아래 목표를 Codex에게 줄 작업 지시서로 바꿔줘. repo context, 제약조건, 테스트 명령, acceptance criteria를 포함해줘.",
+    prompt: "Turn the goal below into a Codex task prompt. Include repo context, constraints, test commands, and acceptance criteria.",
   },
   {
     id: "investment_rebalancer",
-    label: "투자 포트폴리오 리밸런싱",
-    category: "투자",
+    label: "Investment rebalancer",
+    category: "Investment",
     status: "Ready",
-    description: "CSV/YAML 입력을 기반으로 리밸런싱 작업실 템플릿을 시작합니다.",
+    description: "Start a rebalancing workspace from CSV/YAML inputs.",
     inputs: ".csv · .yaml",
     output: "CSV artifact + Report",
-    prompt: "포트폴리오 CSV와 목표 비중 YAML을 기준으로 현재 비중, 목표 대비 차이, 리밸런싱 후보를 정리해줘.",
+    prompt: "Use the portfolio CSV and target allocation YAML to summarize current weights, target gaps, and rebalance candidates.",
     wantsFile: true,
   },
   {
     id: "folder_index",
-    label: "폴더 구조 읽기",
-    category: "파일",
+    label: "Read folder structure",
+    category: "Files",
     status: "Planned",
-    description: "로컬 폴더를 작업실로 바꾸기 위한 파일 구조 요약을 준비합니다.",
+    description: "Plan a file index for turning a local folder into an AIWS project.",
     inputs: "folder",
     output: "File index",
-    prompt: "이 폴더 구조를 AIWS 프로젝트로 만들기 위한 파일 분류와 작업 계획을 제안해줘.",
+    prompt: "Propose file grouping and a workspace plan for turning this folder structure into an AIWS project.",
     disabled: true,
   },
 ];
@@ -370,6 +371,10 @@ function App() {
   }, [isLogin, activePath.projectPath, activePath.sessionSlug]);
 
   useEffect(() => {
+    document.documentElement.lang = copyForAccount(workspace?.account).locale;
+  }, [workspace?.account?.profile?.language]);
+
+  useEffect(() => {
     function onPop() {
       setActivePath(parseRoute());
     }
@@ -471,23 +476,25 @@ function TopBar({ runtime, account, activePath, chat, contextOpen, onToggleConte
   const [open, setOpen] = useState(false);
   const url = runtime?.cloudflare_url || "";
   const power = isPowerMode(account);
+  const copy = copyForAccount(account);
   const context = activePath?.sessionSlug ? (chat?.project?.hidden ? "General chat" : `${chat?.project?.title || "Project"} / ${chat?.session?.title || activePath.sessionSlug}`) : "Private AI Cockpit";
   return (
     <header className="topbar">
-      <button className="sidebar-toggle" type="button" onClick={onToggleSidebar} aria-label={sidebarOpen ? "사이드바 닫기" : "사이드바 열기"} aria-pressed={sidebarOpen}>
+      <button className="sidebar-toggle" type="button" onClick={onToggleSidebar} aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"} aria-pressed={sidebarOpen}>
         <span />
         <span />
         <span />
       </button>
       <a className="brand" href="/">
-        <span className="brand-mark" /> Assistant
+        <span className="brand-mark" /> {copy.productName}
       </a>
-      <span className="local-badge">Local-first</span>
+      <span className="local-badge">{copy.topbar.localFirst}</span>
       <span className="top-context">{context}</span>
-      <span className={`mode-icon ${power ? "power" : "easy"}`} title={power ? "Power mode" : "Easy mode"} aria-label={power ? "Power mode" : "Easy mode"}>
+      <span className={`mode-chip ${power ? "power" : "easy"}`} title={`${copy.topbar.modeLabel}: ${power ? "Power" : "Easy"}`} aria-label={`${copy.topbar.modeLabel}: ${power ? "Power" : "Easy"}`}>
         <span />
+        <b>{power ? "Power" : "Easy"}</b>
       </span>
-      <button className={`context-toggle icon-only ${contextOpen ? "active" : ""}`} type="button" onClick={onToggleContext} aria-label={contextOpen ? "파일과 기억 닫기" : "파일과 기억 열기"} aria-pressed={contextOpen}>
+      <button className={`context-toggle icon-only ${contextOpen ? "active" : ""}`} type="button" onClick={onToggleContext} aria-label={contextOpen ? copy.topbar.contextOpen : copy.topbar.contextClosed} aria-pressed={contextOpen}>
         <span />
         <i />
       </button>
@@ -495,7 +502,7 @@ function TopBar({ runtime, account, activePath, chat, contextOpen, onToggleConte
         className={`runtime-pill ${power ? "" : "dot-only"}`}
         type="button"
         onClick={() => power && setOpen(!open)}
-        aria-label={power ? `Runtime ${runtime?.status || "local"}` : "연결됨"}
+        aria-label={power ? `Runtime ${runtime?.status || "local"}` : "Connected"}
         aria-expanded={open}
       >
         <span className="status-lamp" />{power ? (runtime?.status || "local") : ""}
@@ -515,40 +522,44 @@ function TopBar({ runtime, account, activePath, chat, contextOpen, onToggleConte
 function LoginPage() {
   const params = new URLSearchParams(window.location.search);
   const hasError = params.get("error");
+  const copy = copyForLocale("en");
   return (
     <main className="login-screen">
       <section className="login-card" aria-labelledby="login-title">
         <a className="brand login-brand" href="/">
-          <span className="brand-mark" /> Assistant
+          <span className="brand-mark" /> {copy.productName}
         </a>
-        <div>
-          <p className="eyebrow">Private workspace</p>
-          <h1 id="login-title">개인 AI 작업실</h1>
-          <p className="login-copy">대화, 프로젝트, 파일을 안전하게 이어가는 로컬 우선 AI 비서입니다.</p>
+        <div className="login-icon-frame" aria-hidden="true">
+          <img src="/aiws-icon.svg" alt="" />
         </div>
-        {hasError && <div className="system-note compact">사용자 이름 또는 비밀번호가 올바르지 않습니다.</div>}
+        <div>
+          <p className="eyebrow">{copy.shortName}</p>
+          <h1 id="login-title">{copy.productName}</h1>
+          <p className="login-copy">{copy.tagline}</p>
+        </div>
+        {hasError && <div className="system-note compact">Username or password is incorrect.</div>}
         <form className="login-form" method="post" action="/login">
           <input type="hidden" name="_csrf" value={document.cookie.split("; ").find((item) => item.startsWith("aiws_csrf="))?.split("=")[1] || ""} />
           <label>
-            <span>사용자 이름</span>
+            <span>Username</span>
             <input name="username" autoComplete="username" autoFocus />
           </label>
           <label>
-            <span>비밀번호</span>
+            <span>Password</span>
             <input type="password" name="password" autoComplete="current-password" />
           </label>
-          <button className="primary-button" type="submit">로그인</button>
+          <button className="primary-button" type="submit">Login</button>
         </form>
       </section>
       <aside className="login-aside">
         <div className="status-card">
           <span className="status-lamp" />
           <strong>Local-first</strong>
-          <p>Mac mini에서 실행되고 대화와 파일은 내 워크스페이스에 저장됩니다.</p>
+          <p>Your files, chats, and runs stay in your workspace by default.</p>
         </div>
         <div className="status-card">
-          <strong>가족 계정 지원</strong>
-          <p>필요한 사람에게만 접근을 열고 프로젝트 기억을 함께 관리합니다.</p>
+          <strong>Configurable workbench</strong>
+          <p>Projects can expose actions, panels, context, and artifacts through aiws.yaml.</p>
         </div>
       </aside>
     </main>
@@ -562,6 +573,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
   const projects = workspace?.projects || [];
   const chats = workspace?.chats || [];
   const account = workspace?.account || { username: "local", nickname: "Kwanho Kim", display_name: "Kwanho Kim", profile: {} };
+  const copy = copyForAccount(account);
   const activeIsGeneralChat = chats.some((project) => project.path === activePath.projectPath);
   const allChatSessions = chats.flatMap((project) => project.sessions.map((session) => ({ ...session, projectPath: project.path })));
   const needle = query.trim().toLowerCase();
@@ -615,21 +627,21 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
         </button>
       </div>
       <section className="sidebar-actions">
-        <button className={`secondary-action home-action ${(!activePath.view || activePath.view === "home") && !activePath.projectPath && !activePath.sessionSlug ? "active" : ""}`} type="button" onClick={() => navigate("/")}>Home</button>
-        <NewGeneralChatForm onCreated={(path) => navigate(path)} />
-        <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>새 프로젝트</button>
-        <button className={`secondary-action ${activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/actions")}>Actions</button>
+        <button className={`secondary-action home-action ${(!activePath.view || activePath.view === "home") && !activePath.projectPath && !activePath.sessionSlug ? "active" : ""}`} type="button" onClick={() => navigate("/")}>{copy.nav.home}</button>
+        <NewGeneralChatForm onCreated={(path) => navigate(path)} copy={copy} />
+        <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>{copy.nav.newProject}</button>
+        <button className={`secondary-action ${activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/actions")}>{copy.nav.actions}</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>
       <div className="search-row">
-        <input id="workspace-search" className="search-box" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="대화 제목 검색" />
-        {query && <button type="button" onClick={() => setQuery("")} aria-label="검색어 지우기">×</button>}
+        <input id="workspace-search" className="search-box" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy.nav.searchPlaceholder} />
+        {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
       </div>
       <nav className="project-tree" aria-label="Workspace">
         {!workspace && <div className="empty-card">Loading workspace...</div>}
-        {!hasSearchResults && <div className="empty-card compact-empty">검색 결과가 없습니다.</div>}
-        {workspace && projects.length > 0 && <div className="tree-heading primary-heading"><span>Projects</span><small>작업실</small></div>}
+        {!hasSearchResults && <div className="empty-card compact-empty">{copy.nav.noSearchResults}</div>}
+        {workspace && projects.length > 0 && <div className="tree-heading primary-heading"><span>{copy.nav.projects}</span><small>{copy.nav.workspace}</small></div>}
         {workspace && projects.length === 0 && (
           <div className="empty-card">
             <strong>No projects yet.</strong>
@@ -649,9 +661,9 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
             onDropOnProject={dropOnProject}
           />
         ))}
-        <div className="tree-heading"><span>Chats</span><small>일회성 대화</small></div>
+        <div className="tree-heading"><span>{copy.nav.chats}</span><small>{copy.nav.oneOffChats}</small></div>
         <ChatSection
-          title={needle ? "검색 결과" : "Recent"}
+          title={needle ? "Search results" : "Recent"}
           sessions={visibleChats}
           activePath={activePath}
           navigate={navigate}
@@ -663,7 +675,7 @@ function Sidebar({ workspace, activePath, navigate, onRefresh, automations = [],
         />
         {account?.admin && automations.length > 0 && (
           <section className="tree-section local-jobs-section">
-            <h2><span>작업 레시피</span></h2>
+            <h2><span>Automation Recipes</span></h2>
             {automations.map((project) => (
               <LocalJobItem key={project.slug} project={project} onAutomations={onAutomations} />
             ))}
@@ -694,9 +706,9 @@ function LocalJobItem({ project, onAutomations }) {
       <div>
         <strong>{project.title}</strong>
         <small>{project.category || project.kind}</small>
-        <small>{latest ? `${latest.status} · ${formatDate(latest.created_at)}` : "아직 실행 전"}</small>
+        <small>{latest ? `${latest.status} · ${formatDate(latest.created_at)}` : "Not run yet"}</small>
       </div>
-      <button type="button" onClick={run} disabled={running}>{running ? "..." : "실행"}</button>
+      <button type="button" onClick={run} disabled={running}>{running ? "..." : "Run"}</button>
     </div>
   );
 }
@@ -880,7 +892,7 @@ function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false,
 
   async function remove() {
     setOpen(false);
-    if (!globalThis.confirm(kind === "project" ? "이 프로젝트를 삭제할까요?" : "이 대화를 삭제할까요?")) return;
+    if (!globalThis.confirm(kind === "project" ? "Delete this project?" : "Delete this chat?")) return;
     if (kind === "project") {
       await fetchJson(`/api/delete-project/${projectPath}`, { method: "POST", body: new URLSearchParams() });
     } else {
@@ -905,7 +917,7 @@ function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false,
 
   return (
     <span className="item-options" ref={menuRef}>
-      <button className="item-options-button" type="button" onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }} aria-label="옵션" aria-expanded={open}>
+      <button className="item-options-button" type="button" onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }} aria-label="Options" aria-expanded={open}>
         <span />
         <span />
         <span />
@@ -914,29 +926,29 @@ function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false,
         <span className="item-menu" role="menu">
           {renaming ? (
             <form className="mini-menu-form" onSubmit={(event) => { event.preventDefault(); rename(); }}>
-              <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} autoFocus aria-label={kind === "project" ? "프로젝트 이름" : "대화 제목"} />
+              <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} autoFocus aria-label={kind === "project" ? "Project name" : "Chat title"} />
               <div>
-                <button type="submit">저장</button>
-                <button type="button" onClick={() => { setDraftTitle(title || ""); setRenaming(false); }}>취소</button>
+                <button type="submit">Save</button>
+                <button type="button" onClick={() => { setDraftTitle(title || ""); setRenaming(false); }}>Cancel</button>
               </div>
             </form>
           ) : moving ? (
             <div className="move-menu">
-              <strong>옮길 프로젝트</strong>
+              <strong>Move to project</strong>
               {targetProjects.map((project) => (
                 <button key={project.path} type="button" onClick={() => moveToProject(project.path)}>
                   <span>{project.title}</span>
                   <small>{project.owner_display || project.owner || project.path}</small>
                 </button>
               ))}
-              <button type="button" onClick={() => setMoving(false)}>취소</button>
+              <button type="button" onClick={() => setMoving(false)}>Cancel</button>
             </div>
           ) : (
             <>
-              <button type="button" onClick={() => setRenaming(true)}>이름 변경</button>
-              {kind === "session" && targetProjects.length > 0 && <button type="button" onClick={() => setMoving(true)}>프로젝트로 이동</button>}
-              {kind === "session" && !isGeneral && <button type="button" onClick={moveOut}>밖으로 빼기</button>}
-              <button type="button" className="danger-option" onClick={remove}>삭제</button>
+              <button type="button" onClick={() => setRenaming(true)}>Rename</button>
+              {kind === "session" && targetProjects.length > 0 && <button type="button" onClick={() => setMoving(true)}>Move to project</button>}
+              {kind === "session" && !isGeneral && <button type="button" onClick={moveOut}>Move out</button>}
+              <button type="button" className="danger-option" onClick={remove}>Delete</button>
             </>
           )}
         </span>
@@ -966,10 +978,10 @@ function NewProjectForm({ onCreated }) {
       <form onSubmit={submit}>
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Project title" aria-label="Project title" />
         <label className="inline-field">
-          <span>공개 범위</span>
+          <span>Visibility</span>
           <select value={visibility} onChange={(event) => setVisibility(event.target.value)} aria-label="Project visibility">
-            <option value="private">비공개 - 작성자와 admin만</option>
-            <option value="public">공개 - 모든 사용자</option>
+            <option value="private">Private - owner and admins</option>
+            <option value="public">Public - logged-in users</option>
           </select>
         </label>
         <button className="primary-button" type="submit" disabled={!canSubmit}>Create</button>
@@ -992,44 +1004,44 @@ function NewProjectModal({ onClose, onCreated }) {
       const payload = await fetchJson("/api/projects", { method: "POST", body: form });
       onCreated(payload.project);
     } catch (err) {
-      setError(err.message || "프로젝트를 만들 수 없습니다.");
+      setError(err.message || "Could not create project.");
     }
   }
   return (
     createPortal(<div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal project-modal" onClick={(event) => event.stopPropagation()}>
         <header>
-          <h2>새 프로젝트</h2>
-          <button type="button" onClick={onClose}>닫기</button>
+          <h2>New Project</h2>
+          <button type="button" onClick={onClose}>Close</button>
         </header>
-        <p className="muted">프로젝트는 대화, 파일, 목표를 함께 기억하는 작업 공간입니다.</p>
+        <p className="muted">Projects are repeatable workbenches for chats, files, goals, actions, and artifacts.</p>
         <form onSubmit={submit}>
           <label>
-            <span>프로젝트 이름</span>
+            <span>Project name</span>
             <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
           </label>
           <label>
-            <span>공개 범위</span>
+            <span>Visibility</span>
             <select value={visibility} onChange={(event) => setVisibility(event.target.value)}>
-              <option value="private">개인용 - 나와 admin만</option>
-              <option value="public">가족 공유</option>
+              <option value="private">Private - owner and admins</option>
+              <option value="public">Public - logged-in users</option>
             </select>
           </label>
           {error && <div className="system-note compact">{error}</div>}
-          <button className="primary-button" type="submit" disabled={!canSubmit}>프로젝트 만들기</button>
+          <button className="primary-button" type="submit" disabled={!canSubmit}>Create project</button>
         </form>
       </section>
     </div>, document.body)
   );
 }
 
-function NewGeneralChatForm({ onCreated }) {
+function NewGeneralChatForm({ onCreated, copy = COPY }) {
   function create() {
     onCreated("/");
   }
   return (
     <button className="new-chat-button" type="button" onClick={create}>
-      <span>＋</span>New chat
+      <span>＋</span>{copy.nav.newChat}
     </button>
   );
 }
@@ -1040,13 +1052,14 @@ function NewSessionForm({ projectPath, onCreated }) {
   }
   return (
     <button className="secondary-action project-chat-action" type="button" onClick={startBlankProjectChat}>
-      프로젝트 새 대화
+      New project chat
     </button>
   );
 }
 
 function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }) {
   const power = isPowerMode(account);
+  const copy = copyForAccount(account);
   if (activePath.view === "actions") {
     return <ActionLibraryPage navigate={navigate} />;
   }
@@ -1100,11 +1113,11 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
           <EditableTitle chat={chat} activePath={activePath} onAsk={onAsk} refreshWorkspace={refreshWorkspace} />
         </div>
         <div className="context-chips">
-          <span>{chat?.project?.hidden ? "개인 대화" : "프로젝트 기억"}</span>
+          <span>{chat?.project?.hidden ? "Private chat" : "Project memory"}</span>
           <span>{(chat?.attachments || []).length} files</span>
           {chat?.goal?.objective && <span>Goal set</span>}
           <span>{power ? `${chat?.latest?.provider || "ollama"} · ${modelLabel(chat?.latest?.model || DEFAULT_MODEL)}` : providerFriendlyLabel(chat?.latest?.provider || "ollama")}</span>
-          <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? "닫기" : "파일/기억 보기"}</button>
+          <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? "Close" : copy.inspector.title}</button>
         </div>
       </div>
       <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} />
@@ -1127,8 +1140,8 @@ function ActionLibraryPage({ navigate }) {
       <div className="home-workbench">
         <div className="home-hero">
           <p className="eyebrow">Action Library</p>
-          <h1>작업 레시피를 먼저 고르세요</h1>
-          <p>프로젝트를 만들기 전에도 문서, 이미지, CSV, 코드 작업을 시작할 수 있습니다. 반복할 가치가 생기면 나중에 프로젝트나 내 액션으로 저장합니다.</p>
+          <h1>Choose a reusable workbench action</h1>
+          <p>Start document, image, CSV, and code workflows before creating a project. Save repeatable work as a project action when it becomes useful.</p>
         </div>
         <StarterActionsGrid onStart={(action) => navigate(`/?starter=${encodeURIComponent(action.id)}`)} />
       </div>
@@ -1137,6 +1150,7 @@ function ActionLibraryPage({ navigate }) {
 }
 
 function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false }) {
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   const items = actions?.length ? actions.map((action) => ({
     ...action,
     label: action.label || action.title,
@@ -1145,17 +1159,18 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
     disabled: String(action.status).toLowerCase() === "planned",
     wantsFile: Array.isArray(action.inputs) && action.inputs.some((item) => String(item).startsWith(".")),
   })) : STARTER_ACTIONS;
+  const localizedItems = items.map((action) => localizeStarterAction(action, copy));
   return (
-    <section className="starter-actions" aria-label="Starter Actions">
+    <section className="starter-actions" aria-label={copy.home.quickActions}>
       <div className="section-row">
         <div>
-          <p className="eyebrow">Starter Actions</p>
-          <h2>프로젝트 없이 바로 시작</h2>
+          <p className="eyebrow">{copy.home.quickActions}</p>
+          <h2>{copy.home.runBeforeProject}</h2>
         </div>
-        <span className="soft-pill">Home runs</span>
+        <span className="soft-pill">{copy.home.recentRuns}</span>
       </div>
       <div className="starter-grid">
-        {items.map((action) => (
+        {localizedItems.map((action) => (
           <article className={`starter-card ${action.disabled ? "is-disabled" : ""}`} key={action.id}>
             <div className="starter-card-head">
               <span className="starter-category">{action.category}</span>
@@ -1164,15 +1179,15 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
             <h3>{action.label}</h3>
             <p>{action.description}</p>
             <div className="starter-meta">
-              <span>입력: {action.inputs}</span>
-              <span>출력: {action.output}</span>
+                <span>Input: {action.inputs}</span>
+                <span>Output: {action.output}</span>
             </div>
             <div className="starter-actions-row">
               <button type="button" onClick={() => onStart?.(action)} disabled={action.disabled}>
-                {action.disabled ? "준비 중" : hasFile ? "입력 채우기" : "준비"}
+                {action.disabled ? "Planned" : hasFile ? "Use input" : copy.home.configure}
               </button>
               <button type="button" onClick={() => onRun?.(action)} disabled={action.disabled || running === action.id} title={action.disabled ? "Planned" : "Run starter action"}>
-                {running === action.id ? "실행 중" : "Run"}
+                {running === action.id ? "Running" : "Run"}
               </button>
             </div>
           </article>
@@ -1182,23 +1197,28 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
   );
 }
 
+function localizeStarterAction(action, copy) {
+  const localized = copy.starterActions?.[action.id];
+  return localized ? { ...action, ...localized } : action;
+}
+
 function HomeWorkbenchHints() {
   return (
     <section className="home-hints" aria-label="Home Workbench next steps">
       <article className="home-hint-card">
         <span>1</span>
-        <strong>Starter Action 실행</strong>
-        <p>문서 요약, 이미지 설명, CSV 분석처럼 프로젝트 없이 한 번 실행합니다.</p>
+        <strong>Run a Starter Action</strong>
+        <p>Start document, image, CSV, or code work before creating a project.</p>
       </article>
       <article className="home-hint-card">
         <span>2</span>
-        <strong>Run과 Artifact 확인</strong>
-        <p>결과는 Home Workbench의 실행 기록과 산출물로 남는 구조로 확장됩니다.</p>
+        <strong>Inspect Runs and Artifacts</strong>
+        <p>Outputs stay as run records and clickable artifacts in the Home Workbench.</p>
       </article>
       <article className="home-hint-card">
         <span>3</span>
-        <strong>반복 작업은 저장</strong>
-        <p>반복할 가치가 있으면 프로젝트, 내 액션, 패널로 승격합니다.</p>
+        <strong>Promote repeatable work</strong>
+        <p>Save useful flows into projects, actions, and configurable panels.</p>
       </article>
     </section>
   );
@@ -1207,18 +1227,19 @@ function HomeWorkbenchHints() {
 function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact }) {
   const runs = home?.runs || [];
   const artifacts = home?.artifacts || [];
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
-    <section className="home-object-panels" aria-label="Home runs and artifacts">
+    <section className="home-object-panels" aria-label="Recent runs and artifacts">
       <div className="dashboard-card">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Recent Runs</p>
-            <h2>실행 기록</h2>
+            <p className="eyebrow">{copy.home.recentRuns}</p>
+            <h2>{copy.home.runHistory}</h2>
           </div>
           <span className="soft-pill">{runs.length}</span>
         </div>
         {runs.length === 0 ? (
-          <p className="muted">Starter Action을 실행하면 Plan, Log, Artifact가 여기에 남습니다.</p>
+          <p className="muted">{copy.home.starterEmpty}</p>
         ) : (
           <div className="run-list">
             {runs.slice(0, 6).map((run) => (
@@ -1235,12 +1256,12 @@ function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact }) {
         <div className="section-row">
           <div>
             <p className="eyebrow">Recent Artifacts</p>
-            <h2>산출물</h2>
+            <h2>{copy.home.artifacts}</h2>
           </div>
           <span className="soft-pill">{artifacts.length}</span>
         </div>
         {artifacts.length === 0 ? (
-          <p className="muted">Markdown, CSV, JSON 같은 결과물이 클릭 가능한 객체로 표시됩니다.</p>
+          <p className="muted">{copy.home.artifactEmpty}</p>
         ) : (
           <div className="artifact-grid">
             {artifacts.slice(0, 8).map((artifact) => (
@@ -1263,9 +1284,9 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
-        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <button type="button" className="viewer-close" onClick={onClose}>Close</button>
         <p className="eyebrow">Run Detail</p>
-        <h2>{run.label || run.action_id || "실행 기록"}</h2>
+        <h2>{run.label || run.action_id || "Run record"}</h2>
         <div className="run-meta-grid">
           <span>Status: {run.status}</span>
           <span>Action: {run.action_id}</span>
@@ -1299,12 +1320,12 @@ function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
-        <button type="button" className="viewer-close" onClick={onClose}>닫기</button>
+        <button type="button" className="viewer-close" onClick={onClose}>Close</button>
         <p className="eyebrow">Artifact Viewer</p>
         <h2>{artifact.path}</h2>
         <div className="next-actions">
-          <button type="button" onClick={() => onAsk?.(artifact)}>AI에게 해석시키기</button>
-          <button type="button" onClick={() => onReport?.(artifact)}>리포트 생성</button>
+          <button type="button" onClick={() => onAsk?.(artifact)}>Ask AI about this</button>
+          <button type="button" onClick={() => onReport?.(artifact)}>Generate report</button>
           <a className="button-link" href={`/api/home-artifact?path=${encodeURIComponent(artifact.path)}`} target="_blank" rel="noreferrer">Open</a>
         </div>
         <span className="soft-pill">{artifact.viewer_type} · {artifact.size} bytes</span>
@@ -1390,7 +1411,7 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1800);
     } catch (err) {
-      setError(err.message || "제목을 바꿀 수 없습니다.");
+      setError(err.message || "Could not change title.");
     }
   }
 
@@ -1408,10 +1429,10 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
             }
           }}
           autoFocus
-          aria-label="채팅 제목"
+          aria-label="Chat title"
         />
-        <button type="submit">저장</button>
-        <button type="button" onClick={() => setEditing(false)}>취소</button>
+        <button type="submit">Save</button>
+        <button type="button" onClick={() => setEditing(false)}>Cancel</button>
         {error && <small>{error}</small>}
       </form>
     );
@@ -1419,8 +1440,8 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
   return (
     <h1 className="editable-title">
       <span>{chat?.session?.title || activePath.sessionSlug}</span>
-      <button type="button" onClick={() => setEditing(true)} aria-label="채팅 제목 변경">✎</button>
-      {saved && <small className="title-toast">대화 제목을 변경했습니다.</small>}
+      <button type="button" onClick={() => setEditing(true)} aria-label="Edit chat title">✎</button>
+      {saved && <small className="title-toast">Chat title saved.</small>}
     </h1>
   );
 }
@@ -1443,6 +1464,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
   const inputRef = useRef(null);
   const formRef = useRef(null);
   const power = isPowerMode(account);
+  const copy = copyForAccount(account);
   const selectedMode = modelMode(mode);
   const isHomeWorkbench = !embedded && !projectPath;
 
@@ -1510,7 +1532,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
       setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
       clearFile();
     } catch (err) {
-      setHomeError(err.message || "Starter Action을 실행할 수 없습니다.");
+      setHomeError(err.message || "Could not run Starter Action.");
     } finally {
       setHomeRunning("");
     }
@@ -1626,11 +1648,11 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
       <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
         <div className={isHomeWorkbench ? "home-hero" : ""}>
         {isHomeWorkbench && <p className="eyebrow">Home Workbench</p>}
-        <h1>{isHomeWorkbench ? "개인 AI 작업실" : "무엇을 도와드릴까요?"}</h1>
+        <h1>{isHomeWorkbench ? copy.home.title : copy.chat.emptyTitle}</h1>
         <p className="start-subtitle">
           {projectPath
-            ? "첫 메시지를 보내면 이 프로젝트 안에 새 대화가 저장됩니다."
-            : "프로젝트를 만들기 전에도 파일, 액션, 실행 기록을 바로 사용할 수 있습니다."}
+            ? "Your first message creates a saved chat inside this project."
+            : copy.tagline}
         </p>
         </div>
         <form
@@ -1644,24 +1666,24 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
           }}
           onDrop={pickDroppedFile}
         >
-          {dragging && <div className="drop-hint">여기에 파일을 놓으면 첫 메시지에 첨부됩니다.</div>}
+          {dragging && <div className="drop-hint">Drop a file to attach it to the first message.</div>}
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder="무엇이든 물어보세요"
+            placeholder={copy.chat.placeholder}
             rows={1}
           />
           {file && (
             <div className="selected-file">
               {previewUrl && <img src={previewUrl} alt={file.name} />}
               <span>{file.name}</span>
-              <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "Gemini vision 필요" : "텍스트로 읽힘"}</small>
+              <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Vision model required" : "Read as text"}</small>
               <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
             </div>
           )}
           <div className={`composer-toolbar ${power ? "start-toolbar" : ""}`}>
             <label className="attach-key" title="Attach file">
-              {power ? "Attach file" : "사진/파일 추가"}
+              {power ? copy.chat.attachFile : copy.chat.attachFile}
               <input
                 ref={inputRef}
                 data-attachment-input
@@ -1681,7 +1703,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
               modelCatalog={account?.model_catalog}
             />
             <select className="search-select" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
-              {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
             </select>
             <button className="send-key" type="submit" disabled={starting}>{starting ? <span className="typing" /> : "Send"}</button>
           </div>
@@ -1703,7 +1725,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
             />
           )}
         </form>
-        {starting && <WaitingNotice label="Assistant is preparing your answer" />}
+        {starting && <WaitingNotice label={copy.chat.preparing} />}
         {isHomeWorkbench ? (
           <>
             <StarterActionsGrid
@@ -1723,10 +1745,10 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
           </>
         ) : (
           <div className="quick-actions">
-            {["사진 설명하기", "문서 요약하기", "할 일 정리하기", "글쓰기 도와줘"].map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}
+            {copy.chat.quickPrompts.map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}
           </div>
         )}
-        <p className="honest-note">현재는 저장된 대화, 프로젝트, 첨부파일 컨텍스트를 우선 사용합니다. 웹 검색은 아직 준비 중입니다.</p>
+        <p className="honest-note">AIWS prioritizes saved chats, project context, and attached files. Agentic web/search execution is exposed through controlled actions and plan previews.</p>
         {startError && <div className="system-note">{startError}</div>}
         {homeError && <div className="system-note">{homeError}</div>}
         {error && <div className="system-note">{error}</div>}
@@ -1756,13 +1778,14 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, projectP
 
 function MessageTimeline({ messages, onPreview }) {
   const endRef = useRef(null);
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages.length]);
   if (messages.length === 0) {
     return (
       <div className="messages empty-thread">
         <div className="desk-note">
-          <h2>무엇을 도와드릴까요?</h2>
-          <p>This session is ready. Model controls and active context are below.</p>
+          <h2>{copy.chat.emptyTitle}</h2>
+          <p>{copy.chat.emptyBody}</p>
         </div>
       </div>
     );
@@ -1778,6 +1801,7 @@ function MessageTimeline({ messages, onPreview }) {
 }
 
 function MessageCard({ message, onPreview }) {
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
       <div className="message-meta">
@@ -1786,7 +1810,7 @@ function MessageCard({ message, onPreview }) {
         {message.provider && <span>{message.provider} {message.model}</span>}
         {message.estimated_cost !== null && message.estimated_cost !== undefined && <span>USD {message.estimated_cost}</span>}
       </div>
-      {message.pending ? <WaitingNotice label="Assistant is thinking" compact /> : <RenderedText text={message.content || ""} />}
+      {message.pending ? <WaitingNotice label={copy.chat.assistantThinking} compact /> : <RenderedText text={message.content || ""} />}
       {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
@@ -1806,14 +1830,14 @@ function PlannerTraceSummary({ plan }) {
           </span>
         ))}
       </div>
-      {plan.requires_confirmation && <small>검색/샌드박스 실행은 명시적 확인 또는 Action으로 승격한 뒤 실행됩니다.</small>}
+      {plan.requires_confirmation && <small>Search and sandbox execution require explicit approval or promotion into an Action.</small>}
     </details>
   );
 }
 
 function messageAuthorLabel(message) {
   if (message.role === "user") return message.actor_display || displayNameForId(message.actor);
-  if (message.role === "assistant") return "Assistant";
+  if (message.role === "assistant") return COPY.brandCompact;
   if (message.role === "system") return "System";
   if (message.role === "tool") return message.actor_display ? `Tool · ${message.actor_display}` : "Tool";
   return message.actor_display || displayNameForId(message.actor) || message.role || "message";
@@ -1916,11 +1940,11 @@ function renderInline(text) {
 function AttachmentList({ attachments, onPreview }) {
   if (!attachments.length) return null;
   function statusLabel(item) {
-    if (item.extraction_status === "failed") return "읽기 실패";
-    if (item.extraction_status === "success") return "텍스트 읽음";
-    if (item.delivery === "Sent as vision input") return "이미지로 전달";
-    if (item.delivery === "Sent as text context") return "텍스트로 사용";
-    return item.delivery || "대화에 첨부";
+    if (item.extraction_status === "failed") return "Read failed";
+    if (item.extraction_status === "success") return "Text extracted";
+    if (item.delivery === "Sent as vision input") return "Sent as image input";
+    if (item.delivery === "Sent as text context") return "Used as text";
+    return item.delivery || "Attached to chat";
   }
   return (
     <div className="attachment-list">
@@ -1958,6 +1982,7 @@ function Composer({ activePath, onAsk, account, power }) {
   const textRef = useRef(null);
   const formRef = useRef(null);
   const selectedMode = modelMode(mode);
+  const copy = copyForAccount(account);
 
   useEffect(() => {
     setCookie("aiws_model_mode", mode);
@@ -2074,25 +2099,25 @@ function Composer({ activePath, onAsk, account, power }) {
       }}
       onDrop={pickDroppedFile}
     >
-      {dragging && <div className="drop-hint">여기에 파일을 놓으면 이번 대화에 첨부됩니다.</div>}
+      {dragging && <div className="drop-hint">Drop a file to attach it to this message.</div>}
       <textarea
         ref={textRef}
         value={content}
         onChange={(event) => setContent(event.target.value)}
         onKeyDown={keyDown}
-        placeholder="무엇을 도와드릴까요? 파일은 이 입력에만 첨부됩니다."
+        placeholder={copy.chat.placeholder}
       />
       {file && (
         <div className="selected-file">
           {previewUrl && <img src={previewUrl} alt={file.name} />}
           <span>{file.name}</span>
-          <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "이미지로 전달됨" : file.type.startsWith("image/") ? "Gemini vision 필요" : "텍스트로 읽힘"}</small>
+          <small>{["kimi", "gemini"].includes(selectedMode.provider) && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Vision model required" : "Read as text"}</small>
           <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
         </div>
       )}
       <div className="composer-toolbar">
         <label className="attach-key" title="Attach file">
-          {power ? "Attach file" : "사진/파일 추가"}
+          {copy.chat.attachFile}
           <input
             ref={inputRef}
             data-attachment-input
@@ -2112,7 +2137,7 @@ function Composer({ activePath, onAsk, account, power }) {
           modelCatalog={account?.model_catalog}
         />
         <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
-          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
         </select>
         <button className="send-key" type="submit" disabled={sending}>{sending ? <span className="typing" /> : "Send"}</button>
       </div>
@@ -2141,6 +2166,7 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
   const mode = modelMode(selectedKey);
   const [group, setGroup] = useState("recommended");
   const wrapRef = useRef(null);
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   const visibleModels = MODEL_MODES.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
   useEffect(() => {
     if (!open) return undefined;
@@ -2167,10 +2193,10 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
         <div className="model-picker" role="dialog" aria-label="AI model picker">
           <header>
             <div>
-              <strong>AI 모델 선택</strong>
-              <small>{mode.label} 사용 중</small>
+              <strong>{copy.modelPicker.title}</strong>
+              <small>{mode.label} {copy.modelPicker.selected}</small>
             </div>
-            <button type="button" onClick={() => setOpen(false)}>닫기</button>
+            <button type="button" onClick={() => setOpen(false)}>Close</button>
           </header>
           <div className="model-quick-row">
             {MODEL_GROUPS.map((item) => (
@@ -2180,7 +2206,7 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
                 className={group === item.value ? "active" : ""}
                 onClick={() => setGroup(item.value)}
               >
-                {item.label}
+                {copy.modelPicker.groups[item.value] || item.label}
               </button>
             ))}
           </div>
@@ -2191,7 +2217,7 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
               const agentCalls = item.agentCalls || (item.cloud ? 2 : 1);
               const agentEstimate = estimateCurrentCost(item, content, hasFile, agentCalls);
               const catalog = modelCatalog.find((entry) => entry.provider === item.provider && entry.model === item.model);
-              const keyStatus = item.cloud ? (catalog?.api_key_configured ? "API key 연결됨" : "API key 없음") : "로컬";
+              const keyStatus = item.cloud ? (catalog?.api_key_configured ? "API key connected" : "API key missing") : "Local";
               return (
                 <button
                   key={item.value}
@@ -2204,12 +2230,12 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
                 >
                   <span className="model-card-title">{item.label}</span>
                   <span className="model-card-version">{item.version || item.model}</span>
-                  <span className="model-card-privacy">{item.cloud ? "클라우드 AI" : "내 Mac에서 처리"}</span>
+                  <span className="model-card-privacy">{item.cloud ? "Cloud AI" : "Local Mac"}</span>
                   <span>{item.bestFor}</span>
-                  <span className="model-card-price">{power && item.cloud && item.inputPrice > 0 ? `입력 ~$${item.inputPrice.toFixed(2)} / 1M · 출력 ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
-                  <span className="model-card-estimate">단일 호출 예상: {singleEstimate}</span>
-                  {item.cloud && <span className="model-card-estimate">에이전트 {agentCalls}스텝 예산: {agentEstimate}</span>}
-                  {item.cloud && <span className="model-card-estimate">실제 비용은 실행된 모델 호출 수만큼 누적</span>}
+                  <span className="model-card-price">{power && item.cloud && item.inputPrice > 0 ? `Input ~$${item.inputPrice.toFixed(2)} / 1M · output ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
+                  <span className="model-card-estimate">Single call estimate: {singleEstimate}</span>
+                  {item.cloud && <span className="model-card-estimate">Agent {agentCalls}-step budget: {agentEstimate}</span>}
+                  {item.cloud && <span className="model-card-estimate">Actual cost accumulates per executed model call</span>}
                   <span className={`model-key-status ${item.cloud && !catalog?.api_key_configured ? "missing" : ""}`}>{keyStatus}</span>
                   {power && <code>{item.provider} · {item.model}</code>}
                 </button>
@@ -2225,12 +2251,12 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
 function CloudConfirm({ mode, hasFile, onUseOnce, onUseAlways, onCancel }) {
   return (
     <div className="cloud-confirm" role="alert">
-      <strong>{mode.label}는 클라우드 AI입니다.</strong>
-      <p>선택한 대화 내용{hasFile ? "과 첨부파일 내용" : ""}이 외부 API로 전송될 수 있습니다. 예상 비용: {estimateCurrentCost(mode, "", hasFile)}</p>
+      <strong>{mode.label} is a cloud AI model.</strong>
+      <p>The selected chat content{hasFile ? " and attachment content" : ""} may be sent to an external API. Estimated cost: {estimateCurrentCost(mode, "", hasFile)}</p>
       <div>
-        <button type="button" onClick={onUseOnce}>이번만 사용</button>
-        <button type="button" onClick={onUseAlways}>이 모델 계속 사용</button>
-        <button type="button" onClick={onCancel}>취소</button>
+        <button type="button" onClick={onUseOnce}>Use once</button>
+        <button type="button" onClick={onUseAlways}>Keep using this model</button>
+        <button type="button" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
@@ -2249,13 +2275,13 @@ function confirmCloudAlways(key) {
 }
 
 function compactModelCost(mode) {
-  if (!mode.cloud) return "무료 · 내 Mac";
-  return mode.easyPrice || "비용 있음";
+  if (!mode.cloud) return "Free · local Mac";
+  return mode.easyPrice || "Paid";
 }
 
 function estimateCurrentCost(mode, content, hasFile, calls = 1) {
   if (!mode.cloud) return "$0";
-  if (!(mode.inputPrice > 0) && !(mode.outputPrice > 0)) return "가격 확인 필요";
+  if (!(mode.inputPrice > 0) && !(mode.outputPrice > 0)) return "Verify pricing";
   const inputTokens = Math.max(120, Math.ceil(String(content || "").length / 3) + (hasFile ? 3000 : 0));
   const outputTokens = 1024;
   const estimated = ((inputTokens / 1_000_000) * mode.inputPrice + (outputTokens / 1_000_000) * mode.outputPrice) * calls;
@@ -2286,7 +2312,7 @@ function searchLabel(mode) {
 }
 
 function providerFriendlyLabel(provider) {
-  return provider === "kimi" ? "고성능 AI" : "빠른 로컬 AI";
+  return provider === "kimi" ? "High-context AI" : "Fast local AI";
 }
 
 function isPowerMode(account) {
@@ -2295,16 +2321,17 @@ function isPowerMode(account) {
 
 function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account }) {
   const power = isPowerMode(account);
-  const tabs = power ? ["files", "inspector", "memory", "goal", "debug"] : ["files", "inspector", "memory", "goal"];
-  const [tab, setTab] = useState("files");
-  const currentTab = tabs.includes(tab) ? tab : "files";
+  const copy = copyForAccount(account);
+  const tabs = power ? ["context", "files", "memory", "runs", "artifacts", "diagnostics"] : ["context", "files", "memory", "runs", "artifacts"];
+  const [tab, setTab] = useState("context");
+  const currentTab = tabs.includes(tab) ? tab : "context";
   if (!activePath.projectPath || !activePath.sessionSlug) {
     return (
       <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
-        <h2>{power ? "Context / Workbench" : "파일과 기억"}</h2>
+        <h2>{power ? copy.inspector.powerTitle : copy.inspector.title}</h2>
         <section>
-          <h3>현재 대화 목적</h3>
-          <p className="muted">대화를 시작하면 이 비서가 참고하는 파일, 기억, 목표가 여기에 정리됩니다.</p>
+          <h3>{copy.inspector.currentContext}</h3>
+          <p className="muted">{copy.inspector.emptyPurpose}</p>
         </section>
         <ActionInspector projectConfig={projectConfig} power={power} />
         {power && <RuntimePanel runtime={runtime} />}
@@ -2314,11 +2341,13 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
     );
   }
   const attachments = collectVisibleAttachments(chat);
+  const runs = projectConfig?.runs || [];
+  const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
   return (
     <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
-      <h2>{power ? "Context / Workbench" : "파일과 기억"}</h2>
+      <h2>{power ? copy.inspector.powerTitle : copy.inspector.title}</h2>
       <section className="context-summary">
-        <h3>현재 대화 목적</h3>
+        <h3>{copy.inspector.currentContext}</h3>
         <p><strong>{chat?.project?.hidden ? "General chat" : chat?.project?.title || activePath.projectPath}</strong></p>
         {power && <p className="muted">{activePath.projectPath} / {activePath.sessionSlug}</p>}
         <div className="skill-stack">
@@ -2329,39 +2358,70 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       <div className="context-tabs" role="tablist">
         {tabs.map((item) => (
           <button key={item} type="button" className={currentTab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {{ files: "Files", inspector: "Inspector", memory: "Memory", goal: "Goal", debug: "Debug" }[item]}
+            {copy.inspector.tabs[item]}
           </button>
         ))}
       </div>
-      {currentTab === "files" && (
+      {currentTab === "context" && (
         <section>
-          <h3>사용 중인 파일</h3>
-          {attachments.length === 0 ? <p className="muted">아직 이 대화에 사용 중인 파일이 없습니다.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
-        </section>
-      )}
-      {currentTab === "goal" && (
-        <section>
-          <h3>다음에 할 일</h3>
+          <h3>Workbench context</h3>
+          <ActionInspector projectConfig={projectConfig} power={power} />
           <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
         </section>
       )}
-      {currentTab === "inspector" && (
+      {currentTab === "files" && (
         <section>
-          <h3>작업 Inspector</h3>
-          <ActionInspector projectConfig={projectConfig} power={power} />
+          <h3>Active files</h3>
+          {attachments.length === 0 ? <p className="muted">No files are attached to this chat yet.</p> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
         </section>
       )}
       {currentTab === "memory" && (
         <section>
-          <h3>기억된 정보</h3>
-          <p className="muted">프로필 기억과 프로젝트 노트는 답변 컨텍스트에 함께 사용됩니다.</p>
+          <h3>Workspace memory</h3>
+          <p className="muted">Profile memory, project notes, and chat summaries are available as explicit context when the workspace includes them.</p>
         </section>
       )}
-      {power && currentTab === "debug" && (
+      {currentTab === "runs" && (
         <section>
-          <h3>개발자 도구</h3>
+          <h3>{copy.inspector.tabs.runs}</h3>
+          {runs.length === 0 ? <p className="muted">No project runs yet. Run an aiws.yaml command to create a traceable run record.</p> : (
+            <div className="compact-list">
+              {runs.slice(0, 6).map((run) => (
+                <span key={run.run_id || `${run.command}-${run.created_at}`}>
+                  <strong>{run.label || run.command}</strong>
+                  <small>{run.status} · {run.created_at}</small>
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+      {currentTab === "artifacts" && (
+        <section>
+          <h3>{copy.inspector.tabs.artifacts}</h3>
+          {artifacts.length === 0 ? <p className="muted">No artifacts yet. Reports, CSVs, logs, and generated files will appear here after actions run.</p> : (
+            <div className="compact-list">
+              {artifacts.slice(0, 8).map((artifact) => (
+                <span key={`${artifact.run.run_id}-${artifact.path}`}>
+                  <strong>{artifact.path}</strong>
+                  <small>{artifact.exists ? `${artifact.size} bytes` : "not found"} · {artifact.run.label || artifact.run.command}</small>
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+      {power && currentTab === "diagnostics" && (
+        <section>
+          <h3>{copy.inspector.tabs.diagnostics}</h3>
           <RuntimePanel runtime={runtime} />
           <OpenClawPanel openclaw={openclaw} />
+          <div className="runtime-card diagnostics-link-card">
+            <strong>Local Diagnostics</strong>
+            <p>Open the protected local dashboard for model failures, logs, tunnel status, and structured health checks.</p>
+            <a href="http://127.0.0.1:8790" target="_blank" rel="noreferrer">Open diagnostics dashboard</a>
+            <code>scripts/aiws-admin-dashboard.sh</code>
+          </div>
           <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />
           <a href={`/prompt/${activePath.projectPath}/${activePath.sessionSlug}`}>Open prompt context</a>
           <code>aiws prompt {activePath.projectPath} {activePath.sessionSlug} --root ~/.ai-workspace</code>
@@ -2378,9 +2438,9 @@ function ContextManifestCard({ manifest, power }) {
   const estimates = manifest.estimates || {};
   return (
     <section className="manifest-card">
-      <h3>AI가 참고하는 것</h3>
+      <h3>Context Manifest</h3>
       {included.length === 0 ? (
-        <p className="muted">이번 대화에는 추가 컨텍스트가 거의 없습니다.</p>
+        <p className="muted">This chat has little additional context.</p>
       ) : (
         <div className="manifest-list">
           {included.map((item, index) => (
@@ -2397,17 +2457,17 @@ function ContextManifestCard({ manifest, power }) {
           <small>{manifest.privacy_mode === "local" ? "local-only" : "cloud allowed"}</small>
         </div>
       )}
-      {power && excluded.length > 0 && <p className="muted">보안 제외 패턴 {excluded.length}개가 적용됩니다.</p>}
+      {power && excluded.length > 0 && <p className="muted">{excluded.length} security exclusion patterns are active.</p>}
     </section>
   );
 }
 
 function manifestLabel(item) {
-  if (item.type === "goal") return `목표: ${item.label}`;
-  if (item.type === "skills") return `스킬 ${item.count}개`;
-  if (item.type === "chat_files") return `대화 파일 ${item.count}개`;
-  if (item.type === "project_files") return `프로젝트 파일 ${item.count}개`;
-  if (item.type === "recent_runs") return `최근 실행 ${item.count}개`;
+  if (item.type === "goal") return `Goal: ${item.label}`;
+  if (item.type === "skills") return `${item.count} skills`;
+  if (item.type === "chat_files") return `${item.count} chat files`;
+  if (item.type === "project_files") return `${item.count} project files`;
+  if (item.type === "recent_runs") return `${item.count} recent runs`;
   return item.label || item.type;
 }
 
@@ -2498,7 +2558,7 @@ function GoalPanel({ chat, activePath, onChat, power = false }) {
       {goal.current_status && <p>{goal.current_status}</p>}
       {(goal.next_actions || []).length > 0 && <ul>{goal.next_actions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>}
       <div className="goal-actions">
-        <button type="button" data-edit-goal onClick={() => setEditing(true)}>{goal.objective ? "목표 수정" : "목표 설정"}</button>
+        <button type="button" data-edit-goal onClick={() => setEditing(true)}>{goal.objective ? "Edit goal" : "Set goal"}</button>
         {power && <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy full project prompt</button>}
         {power && <button type="button" onClick={() => copyVariant("task")} disabled={!codexPrompt}>Copy task prompt</button>}
         {power && <button type="button" onClick={() => copyVariant("ui")} disabled={!codexPrompt}>Copy UI refinement prompt</button>}
@@ -2511,11 +2571,13 @@ function GoalPanel({ chat, activePath, onChat, power = false }) {
 
 function RuntimePanel({ runtime }) {
   const url = runtime?.cloudflare_url || "";
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <div className="runtime-card">
       <strong>Runtime</strong>
       <p>{runtime?.status || "local"}</p>
       {url ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <span className="muted">No public tunnel URL.</span>}
+      {url && <p className="warning-text">{copy.inspector.diagnosticsWarning}</p>}
     </div>
   );
 }
@@ -2543,6 +2605,7 @@ function Lightbox({ item, onClose }) {
 function SettingsModal({ account, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const profile = account.profile || {};
+  const copy = copyForAccount(account);
   const usage = account.usage || {};
   const costUsage = account.cost_usage || {};
   async function submit(event) {
@@ -2567,46 +2630,46 @@ function SettingsModal({ account, onClose, onSaved }) {
     createPortal(<div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
         <header>
-          <h2>내 비서 설정</h2>
+          <h2>{copy.settings.title}</h2>
           <div className="settings-header-actions">
             <button className="danger-button compact" type="button" onClick={logout}>Logout</button>
-            <button type="button" onClick={onClose}>닫기</button>
+            <button type="button" onClick={onClose}>{copy.settings.close}</button>
           </div>
         </header>
         <section className="settings-stats" aria-label="Account usage history">
           <div>
             <strong>{usage.messages || 0}</strong>
-            <span>저장 메시지</span>
+            <span>{copy.settings.savedMessages}</span>
           </div>
           <div>
             <strong>{usage.asks || 0}</strong>
-            <span>AI 요청</span>
+            <span>{copy.settings.aiRequests}</span>
           </div>
           <div>
             <strong>${Number(costUsage.month_usd || 0).toFixed(4)}</strong>
-            <span>이번 달 API 비용</span>
+            <span>{copy.settings.monthlyApiCost}</span>
           </div>
         </section>
         <form onSubmit={submit}>
           <fieldset>
-            <legend>Profile</legend>
-            <label><span>프로필 사진</span><input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
-            <label><span>이름</span><input name="name" defaultValue={profile.name || account.display_name || ""} /></label>
-            <label><span>나이</span><input name="age" defaultValue={profile.age || ""} /></label>
-            <label><span>직업 / 역할</span><input name="job" defaultValue={profile.job || ""} /></label>
-            <label><span>언어</span><select name="language" defaultValue={profile.language || "ko"}><option value="ko">한국어</option><option value="en">English</option></select></label>
+            <legend>{copy.settings.profile}</legend>
+            <label><span>{copy.settings.avatar}</span><input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+            <label><span>{copy.settings.name}</span><input name="name" defaultValue={profile.name || account.display_name || ""} /></label>
+            <label><span>{copy.settings.age}</span><input name="age" defaultValue={profile.age || ""} /></label>
+            <label><span>{copy.settings.role}</span><input name="job" defaultValue={profile.job || ""} /></label>
+            <label><span>{copy.settings.language}</span><select name="language" defaultValue={profile.language || "en"}><option value="en">English</option><option value="ko">한국어</option></select></label>
           </fieldset>
           <fieldset>
-            <legend>Personal Context</legend>
-            <label><span>상황 / 대화 컨텍스트</span><textarea name="situation" defaultValue={profile.situation || ""} /></label>
-            <label><span>기억에 추가</span><textarea name="memory" placeholder="비서가 앞으로 기억하면 좋은 내용을 적어주세요." /></label>
+            <legend>{copy.settings.personalContext}</legend>
+            <label><span>{copy.settings.situation}</span><textarea name="situation" defaultValue={profile.situation || ""} /></label>
+            <label><span>{copy.settings.addMemory}</span><textarea name="memory" placeholder={copy.settings.memoryPlaceholder} /></label>
           </fieldset>
           <fieldset>
-            <legend>Interface</legend>
-            <label><span>사용 모드</span><select name="ui_mode" defaultValue={profile.ui_mode || (account.admin ? "power" : "easy")}><option value="easy">Easy Mode - 쉬운 화면</option><option value="power">Power Mode - 개발자 도구 표시</option></select></label>
-            <p className="settings-help">Easy는 모델 선택과 파일 첨부는 그대로 두고 개발자 로그를 숨깁니다. Power는 실행 경로, 비용, prompt, runtime을 확인하는 운영자 화면입니다.</p>
+            <legend>{copy.settings.interface}</legend>
+            <label><span>{copy.settings.uiMode}</span><select name="ui_mode" defaultValue={profile.ui_mode || (account.admin ? "power" : "easy")}><option value="easy">{copy.settings.easyMode}</option><option value="power">{copy.settings.powerMode}</option></select></label>
+            <p className="settings-help">{copy.settings.modeHelp}</p>
           </fieldset>
-          <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button>
+          <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : copy.settings.saveProfile}</button>
         </form>
       </section>
     </div>, document.body)
