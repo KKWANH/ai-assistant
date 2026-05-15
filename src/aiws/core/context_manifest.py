@@ -140,6 +140,12 @@ def _attachment_items(
                 "reason": _inclusion_reason(item, scope) if included else "",
                 "token_count": costs.rough_token_count(str(item.get("text", ""))) if included else 0,
                 "text_preview": str(item.get("text", ""))[:500] if included else "",
+                "parser": _analysis_parser(item),
+                "analysis": _analysis_summary(item),
+                "analysis_artifacts": item.get("analysis_artifacts", []),
+                "raw_text_sent_to_model": bool(item.get("raw_text_sent_to_model", False)),
+                "computed_profile_sent_to_model": bool(item.get("computed_profile_sent_to_model", False)),
+                "security_findings": item.get("security_findings", []),
             }
         )
     return items, excluded
@@ -208,9 +214,34 @@ def _included_chunks(files: list[dict[str, Any]], *, model_delivery: str) -> lis
                 "token_count": token_count,
                 "privacy": "sent_to_cloud" if model_delivery == "cloud" else "local_only",
                 "content_preview": text,
+                "parser": item.get("parser", ""),
+                "raw_text_sent_to_model": bool(item.get("raw_text_sent_to_model", False)),
+                "computed_profile_sent_to_model": bool(item.get("computed_profile_sent_to_model", False)),
             }
         )
     return chunks
+
+
+def _analysis_parser(item: dict[str, Any]) -> str:
+    profile = item.get("analysis_profile")
+    if isinstance(profile, dict):
+        return str(profile.get("parser", ""))
+    return ""
+
+
+def _analysis_summary(item: dict[str, Any]) -> dict[str, Any]:
+    profile = item.get("analysis_profile")
+    if not isinstance(profile, dict) or not profile:
+        return {}
+    return {
+        "parser": profile.get("parser", ""),
+        "rows": profile.get("row_count", 0),
+        "columns": profile.get("column_count", 0),
+        "missing_cells": profile.get("missing_cells", 0),
+        "numeric_columns": len(profile.get("numeric_columns", []) or []),
+        "categorical_columns": len(profile.get("categorical_columns", []) or []),
+        "suspicious_columns": profile.get("suspicious_columns", []),
+    }
 
 
 def _run_summary(run: dict[str, Any]) -> dict[str, Any]:

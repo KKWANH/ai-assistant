@@ -20,7 +20,7 @@ MODEL_UI = {
         "version": "qwen3:0.6b · Ollama local",
     },
     ("ollama", "qwen3:4b"): {
-        "value": "local",
+        "value": "local-small",
         "group": "local",
         "label": "Qwen3 4B Local",
         "legacy_label": "Local only",
@@ -30,7 +30,7 @@ MODEL_UI = {
         "version": "qwen3:4b · Ollama local",
     },
     ("ollama", "qwen3:8b"): {
-        "value": "local-pro",
+        "value": "local",
         "group": "local",
         "label": "Qwen3 8B Local",
         "short": "Qwen3 8B",

@@ -72,6 +72,11 @@ def test_ask_calls_ollama_and_persists_messages(tmp_path, monkeypatch):
     receipts = [json.loads(line) for line in receipts_path.read_text(encoding="utf-8").splitlines()]
     assert receipts[-1]["provider"] == "ollama"
     assert receipts[-1]["model_delivery"] == "local"
+    work_session = storage.read_json(storage.session_dir(root, "ai-system/local-runner", "ollama-mvp") / "work_session.json")
+    assert work_session["status"] == "completed"
+    assert work_session["type"] == "project_task"
+    assert work_session["model_calls"][-1]["model"] == "qwen3:8b"
+    assert any(item["id"] == "save_answer_artifact" for item in work_session["next_actions"])
 
     markdown = (storage.session_dir(root, "ai-system/local-runner", "ollama-mvp") / "session.md").read_text(encoding="utf-8")
     assert "## User" in markdown

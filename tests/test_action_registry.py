@@ -468,15 +468,23 @@ def test_home_csv_analysis_creates_stats_artifacts(tmp_path):
     )
 
     assert run["status"] == "completed"
-    assert len(run["artifacts"]) == 2
-    assert run["outputs"]["expected_artifacts"] == ["table.csv", "summary.md"]
+    artifact_names = {Path(item["path"]).name for item in run["artifacts"]}
+    assert {"csv-profile.json", "csv-preview.csv", "csv-summary.md", "missing-values.csv", "numeric-stats.csv"} <= artifact_names
+    assert run["outputs"]["expected_artifacts"] == [
+        "csv-profile.json",
+        "csv-preview.csv",
+        "csv-summary.md",
+        "missing-values.csv",
+        "numeric-stats.csv",
+    ]
     assert run["capabilities"]["write_files"] is True
     detail = home_workbench.read_run_detail(root, "local", run["run_id"])
     assert detail["logs"]
-    summary = home_workbench.read_artifact(root, "local", run["artifacts"][1]["path"])
+    summary_path = next(item["path"] for item in run["artifacts"] if Path(item["path"]).name == "csv-summary.md")
+    summary = home_workbench.read_artifact(root, "local", summary_path)
     assert "Rows: 2" in summary["content"]
-    assert "value: min 10" in summary["content"]
-    assert "missing: 1" in summary["content"]
+    assert "`value`: min 10" in summary["content"]
+    assert "`missing`: 1" in summary["content"]
 
 
 def test_home_file_action_requires_file(tmp_path):

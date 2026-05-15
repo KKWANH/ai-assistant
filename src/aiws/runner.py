@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from . import costs, search, storage
-from .core import context_manifest, context_receipts
+from .core import context_manifest, context_receipts, work_sessions
 from .env import load_env
 from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
@@ -70,6 +70,13 @@ def ask(
     load_env()
     provider = provider or os.environ.get("AIWS_DEFAULT_PROVIDER", "ollama")
     model = model or default_model_for_provider(provider)
+    work_sessions.update(
+        root,
+        project_path,
+        session_slug,
+        status="running",
+        input_item={"kind": "message", "content_preview": (stored_content if stored_content is not None else content)[:500]},
+    )
     account_context = storage.account_context(root, actor)
     resolved_results = search_results or []
     if search.should_search(search_mode, content) and not resolved_results:
@@ -122,6 +129,7 @@ def ask(
     try:
         response = client.chat(model=model, system=prompt_context, content=content, attachments=provider_attachments)
     except Exception as exc:
+        work_sessions.update(root, project_path, session_slug, status="failed")
         if provider in REMOTE_PROVIDERS:
             storage.append_model_usage(
                 root,
@@ -153,6 +161,23 @@ def ask(
         output_tokens=output_tokens,
     )
     context_receipts.append_context_receipt(root, project_path, session_slug, receipt)
+    work_sessions.update(
+        root,
+        project_path,
+        session_slug,
+        status="completed",
+        type="file_analysis" if active_files else None,
+        model_call={
+            "provider": provider,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_cost": actual.get("estimated_cost"),
+            "created_at": storage.utc_now(),
+        },
+        context_receipt=receipt,
+        next_actions=next_actions_for_turn(active_files=active_files, provider=provider),
+    )
     assistant_metadata = {
         "cost": actual,
         "search": search.results_metadata(search_mode, resolved_results),
@@ -239,7 +264,7 @@ def write_used_context(
 
 def default_model_for_provider(provider: str) -> str:
     if provider == "ollama":
-        return os.environ.get("AIWS_DEFAULT_MODEL", "qwen3:4b")
+        return os.environ.get("AIWS_DEFAULT_MODEL", "qwen3:8b")
     if provider == "kimi":
         return os.environ.get("AIWS_KIMI_DEFAULT_MODEL", "kimi-k2.5")
     if provider == "gemini":
@@ -256,6 +281,18 @@ def server_time_context() -> str:
     timezone = now.tzname() or str(now.astimezone().tzinfo)
     locale = os.environ.get("AIWS_LOCALE", "ko-KR")
     return f"## Current Server Time\nCurrent server time: {now:%Y-%m-%d %H:%M}\nTimezone: {timezone}\nLocale: {locale}\n\n"
+
+
+def next_actions_for_turn(*, active_files: set[str], provider: str) -> list[dict[str, object]]:
+    actions = [
+        {"id": "save_answer_artifact", "label": "Save answer as artifact", "kind": "artifact"},
+        {"id": "promote_to_project", "label": "Promote this chat to a project", "kind": "project"},
+    ]
+    if active_files:
+        actions.insert(0, {"id": "review_context_receipt", "label": "Review file analysis receipt", "kind": "receipt"})
+    if provider in REMOTE_PROVIDERS:
+        actions.append({"id": "review_cloud_manifest", "label": "Review cloud privacy manifest", "kind": "privacy"})
+    return actions
 
 
 def enforce_remote_guardrails(

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from aiws import attachments, storage
-from aiws.core import action_registry, context_manifest
+from aiws.core import action_registry, context_manifest, work_sessions
 from aiws.domain import chats as chat_domain
 from aiws.domain import goals as goal_domain
 from aiws.domain import projects as project_domain
@@ -76,4 +76,5 @@ def chat_payload(
             model=str(latest.get("model", "")),
             search_mode=str(latest.get("search_mode", "")),
         ),
+        "work_session": work_sessions.load(root, project_path, session_slug),
     }

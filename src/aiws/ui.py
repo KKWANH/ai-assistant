@@ -23,7 +23,7 @@ from .app.routes import chats as chat_routes
 from .app.routes import projects as project_routes
 from .app.routes import runtime as runtime_routes
 from .app.routes import workspace as workspace_routes
-from .core import action_registry, chat_orchestrator, home_workbench
+from .core import action_registry, chat_orchestrator, home_workbench, work_sessions
 from .domain import accounts as account_domain
 from .domain import chats as chat_domain
 from .domain import goals as goal_domain
@@ -253,7 +253,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     content=data.get("content", ""),
                     upload=self._multipart_files.get("attachment"),
                     provider=data.get("provider", "ollama"),
-                    model=data.get("model", "qwen3:4b"),
+                    model=data.get("model", "qwen3:8b"),
                     model_response=self.home_action_model_response(action_id, data),
                 )
                 self.send_json(
@@ -476,6 +476,67 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_project_access(target_project_path, "owner")
                 session = chat_domain.move_to_project(self.root, source_project_path, session_slug, target_project_path)
                 self.send_json({"project_path": target_project_path, "session": session})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/promote-chat/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/promote-chat/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            source_project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.require_project_access(source_project_path, "read")
+                session = chat_domain.load_session(self.root, source_project_path, session_slug)
+                title = data.get("title", "").strip() or str(session.get("title", "Promoted Chat"))
+                project = project_domain.create(
+                    self.root,
+                    title,
+                    notes="Promoted from a general AIWS chat.",
+                    owner=self.current_username(),
+                    visibility="private",
+                )
+                promoted = chat_domain.move_to_project(self.root, source_project_path, session_slug, str(project["path"]))
+                goal_domain.save(
+                    self.root,
+                    str(project["path"]),
+                    {
+                        "objective": f"Continue work from promoted chat: {title}",
+                        "current_status": "Chat history and attachments were moved into this project.",
+                        "next_actions": ["Review context receipt", "Save useful answers as artifacts", "Define repeatable project actions"],
+                        "constraints": ["Keep private files local unless explicitly approved"],
+                        "success_criteria": ["Project has a clear goal and reusable artifacts"],
+                        "test_commands": [],
+                    },
+                )
+                self.send_json({"project": project, "project_path": project["path"], "session": promoted})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/chat-artifact/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/chat-artifact/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.require_project_access(project_path, "write")
+                artifact = self.save_latest_answer_artifact(project_path, session_slug, data.get("title", ""))
+                self.send_json({"artifact": artifact})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -847,6 +908,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 actor=self.current_username(),
                 delivery=delivery,
             )
+            if provider_name in runner.REMOTE_PROVIDERS and saved.get("security_findings"):
+                raise storage.WorkspaceError(
+                    "Possible secret-like content was detected in the attachment. "
+                    "Use a local model or remove sensitive values before sending to a cloud model."
+                )
             attachment = attachment_view(project_path, session_slug, saved)
             if provider_name == "gemini" and provider_file_enabled:
                 provider_attachments.append(
@@ -941,9 +1007,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json({"error": str(exc)}, status=404)
 
     def api_runtime(self) -> None:
-        self.send_json(runtime_routes.runtime_payload(self.root, self.server.server_port))
+        public_view = storage.has_accounts(self.root) and not storage.is_admin(self.root, self.current_username())
+        self.send_json(runtime_routes.runtime_payload(self.root, self.server.server_port, public_view=public_view))
 
     def api_openclaw(self) -> None:
+        if storage.has_accounts(self.root) and not storage.is_admin(self.root, self.current_username()):
+            self.send_json({"error": "Admin access is required."}, status=403)
+            return
         self.send_json(runtime_routes.openclaw_payload())
 
     def api_automations(self) -> None:
@@ -963,7 +1033,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         if not upload or not upload[1]:
             return ""
         provider = data.get("provider", "ollama")
-        model = data.get("model", "qwen3:4b")
+        model = data.get("model", "qwen3:8b")
         filename, file_content = upload
         extension = Path(filename).suffix.lower()
         if not attachments.is_image_extension(extension) or not provider_supports_file_input(provider, extension):
@@ -1025,6 +1095,44 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json(project_routes.artifact_payload(self.root, project_path, artifact_path))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
+
+    def save_latest_answer_artifact(self, project_path: str, session_slug: str, title: str = "") -> dict[str, object]:
+        messages = chat_domain.read_messages(self.root, project_path, session_slug)
+        assistant = next((message for message in reversed(messages) if message.get("role") == "assistant"), None)
+        if not assistant:
+            raise storage.WorkspaceError("No assistant answer is available to save.")
+        slug = storage.slugify_or_default(title or str(assistant.get("content", ""))[:40], "assistant-answer")
+        artifact_root = storage.session_dir(self.root, project_path, session_slug) / "artifacts"
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        path = artifact_root / f"{storage.utc_now().replace(':', '').replace('.', '-')}-{slug}.md"
+        path.write_text(
+            "\n".join(
+                [
+                    f"# {title.strip() or 'Assistant Answer'}",
+                    "",
+                    f"- Project: `{project_path}`",
+                    f"- Session: `{session_slug}`",
+                    f"- Created: `{storage.utc_now()}`",
+                    "",
+                    str(assistant.get("content", "")).strip(),
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        rel = path.relative_to(storage.session_dir(self.root, project_path, session_slug)).as_posix()
+        artifact = {
+            "id": rel,
+            "path": rel,
+            "filename": path.name,
+            "type": "md",
+            "viewer_type": "markdownViewer",
+            "size": path.stat().st_size,
+            "summary": "Saved assistant answer",
+            "created_at": storage.utc_now(),
+        }
+        work_sessions.update(self.root, project_path, session_slug, artifact=artifact)
+        return artifact
 
     def log_internal_error(self, area: str, exc: Exception) -> None:
         log_dir = storage.workspace_path(self.root) / "logs"
@@ -1735,7 +1843,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         <div class="file-chip">{self.attachment_chips(project_path, session_slug)}<span data-file-chip></span></div>
         <div class="composer-actions">
           <label class="attach-button" title="Attach file">+
-            <input class="file-input" data-attachment-input type="file" name="attachment" accept=".txt,.md,.csv,.json,.yaml,.yml,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp">
+            <input class="file-input" data-attachment-input type="file" name="attachment" accept=".txt,.md,.csv,.xls,.xlsx,.json,.yaml,.yml,.pdf,.docx,.ppt,.pptx,image/png,image/jpeg,image/gif,image/webp">
           </label>
           {self.model_select()}
           <select name="provider"><option>ollama</option><option>kimi</option></select>
@@ -2231,6 +2339,10 @@ def attachment_content_type(extension: str) -> str:
         return "application/pdf"
     if extension.lower() == ".docx":
         return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if extension.lower() == ".xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if extension.lower() == ".pptx":
+        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     return image_content_type(extension)
 
 
@@ -2349,10 +2461,10 @@ def starter_actions() -> list[dict[str, object]]:
         },
         {
             "id": "csv_analysis",
-            "label": "CSV 분석하기",
+            "label": "표 분석하기",
             "category": "데이터",
-            "description": "CSV 구조를 파악하고 주요 숫자와 이상치를 요약합니다.",
-            "inputs": [".csv"],
+            "description": "CSV, Excel, 붙여넣은 표 구조를 파악하고 주요 숫자와 이상치를 요약합니다.",
+            "inputs": [".csv", ".xls", ".xlsx"],
             "output": "Table preview + Summary",
             "status": "Partial",
         },

@@ -51,11 +51,44 @@ print(pid or "")
 PY
 }
 
+tunnel_url_resolves() {
+  [[ -s "$URL_FILE" ]] || return 1
+  local host=""
+  host="$("$REPO_ROOT/.venv/bin/python" - "$(cat "$URL_FILE")" <<'PY' 2>/dev/null || true
+import sys
+from urllib.parse import urlparse
+
+print(urlparse(sys.argv[1]).hostname or "")
+PY
+)"
+  [[ -n "$host" ]] || return 1
+  if "$REPO_ROOT/.venv/bin/python" - "$host" <<'PY' 2>/dev/null; then
+import socket
+import sys
+
+try:
+    socket.getaddrinfo(sys.argv[1], 443)
+except OSError:
+    raise SystemExit(1)
+PY
+    return 0
+  fi
+  if command -v dig >/dev/null 2>&1; then
+    [[ -n "$(dig @1.1.1.1 +short "$host" 2>/dev/null | head -n 1)" ]]
+    return $?
+  fi
+  return 1
+}
+
 start() {
   if is_running; then
-    echo "AIWS Cloudflare daemon is already running: pid $(cat "$PID_FILE")"
-    url
-    return 0
+    if tunnel_url_resolves; then
+      echo "AIWS Cloudflare daemon is already running: pid $(cat "$PID_FILE")"
+      url
+      return 0
+    fi
+    echo "AIWS Cloudflare daemon has a stale tunnel URL; restarting..."
+    stop
   fi
   if ! command -v cloudflared >/dev/null 2>&1; then
     echo "cloudflared is not installed. Run: brew install cloudflared" >&2

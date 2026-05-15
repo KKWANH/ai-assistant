@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import csv
 import json
-import shutil
 import secrets
-import statistics
 from pathlib import Path
 from typing import Any
 
 from aiws import attachments, storage
-from aiws.core import contracts
+from aiws.core import contracts, csv_profile
 from aiws.infra import file_store
 from aiws.infra.paths import resolve_under_root
 
@@ -22,7 +19,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "title": "문서 요약하기",
         "description": "첨부 문서를 읽고 구조적 Markdown 요약 산출물을 만듭니다.",
         "category": "문서",
-        "inputs": [".pdf", ".docx", ".txt", ".md"],
+        "inputs": [".pdf", ".docx", ".ppt", ".pptx", ".txt", ".md"],
         "permission": "read-only",
         "status": "ready",
         "requires_confirmation": False,
@@ -41,14 +38,14 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
     },
     "csv_analysis": {
         "id": "csv_analysis",
-        "title": "CSV 분석하기",
-        "description": "CSV 컬럼과 샘플을 분석하고 표/요약 artifact를 생성합니다.",
+        "title": "표 분석하기",
+        "description": "CSV, XLS, XLSX, 붙여넣은 표를 분석하고 표/요약 artifact를 생성합니다.",
         "category": "데이터",
-        "inputs": [".csv"],
+        "inputs": [".csv", ".xls", ".xlsx"],
         "permission": "read-only",
         "status": "ready",
         "requires_confirmation": False,
-        "expected_output_artifacts": ["table.csv", "summary.md"],
+        "expected_output_artifacts": ["csv-profile.json", "csv-preview.csv", "csv-summary.md", "missing-values.csv", "numeric-stats.csv"],
     },
     "codex_task_prompt": {
         "id": "codex_task_prompt",
@@ -136,7 +133,7 @@ def run_action(
     content: str = "",
     upload: tuple[str, bytes] | None = None,
     provider: str = "ollama",
-    model: str = "qwen3:4b",
+    model: str = "qwen3:8b",
     model_response: str = "",
 ) -> dict[str, Any]:
     action = require_action(action_id)
@@ -350,7 +347,7 @@ def create_action_artifacts(
     logs: list[dict[str, Any]],
     *,
     provider: str = "ollama",
-    model: str = "qwen3:4b",
+    model: str = "qwen3:8b",
     model_response: str = "",
 ) -> list[tuple[Path, str]]:
     if action_id == "document_summary":
@@ -380,19 +377,29 @@ def create_action_artifacts(
 def csv_artifacts(
     content: str, saved_file: dict[str, Any] | None, artifact_root: Path, logs: list[dict[str, Any]]
 ) -> list[tuple[Path, str]]:
-    text = input_text(content, saved_file)
-    rows = list(csv.reader(text.splitlines())) if text.strip() else []
-    table = artifact_root / "table.csv"
-    summary = artifact_root / "summary.md"
-    if saved_file and Path(saved_file["absolute"]).suffix.lower() == ".csv":
-        shutil.copy2(saved_file["absolute"], table)
+    if saved_file and Path(saved_file["absolute"]).suffix.lower() in {".xls", ".xlsx"}:
+        absolute = Path(saved_file["absolute"])
+        text = attachments.xls_first_sheet_csv(absolute) if absolute.suffix.lower() == ".xls" else attachments.xlsx_first_sheet_csv(absolute)
     else:
-        table.write_text(text, encoding="utf-8")
-    headers = rows[0] if rows else []
-    data_rows = rows[1:] if headers else rows
-    summary.write_text(csv_summary_markdown(headers, data_rows, saved_file), encoding="utf-8")
-    logs.append(log_event("artifact", "Created CSV table and summary artifacts."))
-    return [(table, "CSV table preview"), (summary, "CSV analysis summary")]
+        text = input_text(content, saved_file)
+    source = saved_file["filename"] if saved_file else "typed input"
+    profile = csv_profile.profile_csv_text(text, filename=source)
+    artifacts = csv_profile.write_csv_artifacts(artifact_root, profile, text)
+    logs.append(
+        log_event(
+            "artifact",
+            f"Profiled CSV deterministically with {profile['row_count']} rows, {profile['column_count']} columns, and {len(artifacts)} artifacts.",
+        )
+    )
+    summaries = {
+        "csv-profile.json": "Deterministic CSV profile",
+        "csv-preview.csv": "CSV preview",
+        "csv-summary.md": "CSV analysis summary",
+        "missing-values.csv": "Missing value report",
+        "numeric-stats.csv": "Numeric statistics",
+        "suspicious-columns.md": "CSV warnings",
+    }
+    return [(artifact_root / str(item["filename"]), summaries.get(str(item["filename"]), "CSV artifact")) for item in artifacts]
 
 
 def input_text(content: str, saved_file: dict[str, Any] | None) -> str:
@@ -463,74 +470,6 @@ def image_notes_markdown(saved_file: dict[str, Any] | None, provider: str, model
 - What visible detail should be verified by a person?
 - Should this image be saved into a project workspace?
 """
-
-
-def csv_summary_markdown(headers: list[str], rows: list[list[str]], saved_file: dict[str, Any] | None) -> str:
-    source = saved_file["filename"] if saved_file else "typed input"
-    row_count = len(rows)
-    col_count = len(headers) if headers else max((len(row) for row in rows), default=0)
-    missing = missing_counts(headers, rows)
-    numeric = numeric_stats(headers, rows)
-    missing_lines = [f"- {name}: {count}" for name, count in missing.items() if count]
-    numeric_lines = [
-        f"- {name}: min {stats['min']:.4g}, max {stats['max']:.4g}, mean {stats['mean']:.4g}" for name, stats in numeric.items()
-    ]
-    return "\n".join(
-        [
-            "# CSV Analysis",
-            "",
-            f"- Source: `{source}`",
-            f"- Rows: {row_count}",
-            f"- Columns: {col_count}",
-            f"- Headers: {', '.join(headers[:30]) if headers else '(none)'}",
-            "",
-            "## Missing Values",
-            "",
-            *(missing_lines or ["- No missing values detected in the parsed rows."]),
-            "",
-            "## Numeric Columns",
-            "",
-            *(numeric_lines or ["- No numeric columns detected."]),
-            "",
-            "## Next Actions",
-            "",
-            "- Ask AI about this artifact",
-            "- Generate report",
-            "- Save workflow as project",
-        ]
-    )
-
-
-def missing_counts(headers: list[str], rows: list[list[str]]) -> dict[str, int]:
-    names = headers or [f"column_{index + 1}" for index in range(max((len(row) for row in rows), default=0))]
-    counts = {name: 0 for name in names}
-    for row in rows:
-        for index, name in enumerate(names):
-            value = row[index].strip() if index < len(row) else ""
-            if value == "":
-                counts[name] += 1
-    return counts
-
-
-def numeric_stats(headers: list[str], rows: list[list[str]]) -> dict[str, dict[str, float]]:
-    names = headers or [f"column_{index + 1}" for index in range(max((len(row) for row in rows), default=0))]
-    stats: dict[str, dict[str, float]] = {}
-    for index, name in enumerate(names):
-        values: list[float] = []
-        for row in rows:
-            if index >= len(row):
-                continue
-            raw = row[index].strip().replace(",", "")
-            if not raw:
-                continue
-            try:
-                values.append(float(raw))
-            except ValueError:
-                values = []
-                break
-        if values:
-            stats[name] = {"min": min(values), "max": max(values), "mean": statistics.fmean(values)}
-    return stats
 
 
 def investment_workflow_markdown(content: str, saved_file: dict[str, Any] | None) -> str:

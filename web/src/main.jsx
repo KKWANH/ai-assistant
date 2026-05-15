@@ -2,14 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ActionInspector, AutomationPanel, TaskSuggestionsPanel } from "./components/actions/ActionPanels.jsx";
+import { MarkdownRenderer } from "./components/markdown/MarkdownRenderer.jsx";
 import { ProjectDashboard } from "./components/project/ProjectDashboard.jsx";
 import { COPY, copyForAccount, copyForLocale } from "./copy.js";
+import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "./lib/table.js";
 import "./styles.css";
 
-const DEFAULT_MODEL = "qwen3:4b";
+const DEFAULT_MODEL = "qwen3:8b";
 const MODEL_MODES = [
   {
-    value: "local",
+    value: "local-small",
     group: "local",
     label: "Qwen3 4B Local",
     legacyLabel: "Local only",
@@ -31,7 +33,7 @@ const MODEL_MODES = [
     version: "qwen3:4b · Ollama local",
   },
   {
-    value: "local-pro",
+    value: "local",
     group: "local",
     label: "Qwen3 8B Local",
     short: "Qwen3 8B",
@@ -201,7 +203,7 @@ const SEARCH_OPTIONS = [
   { value: "auto", label: "Local context first", legacyLabel: "Local context only" },
   { value: "always", label: "Web search" },
 ];
-const ATTACHMENT_ACCEPT = ".txt,.md,.csv,.json,.yaml,.yml,.pdf,.docx,image/png,image/jpeg,image/gif,image/webp";
+const ATTACHMENT_ACCEPT = ".txt,.md,.csv,.xls,.xlsx,.json,.yaml,.yml,.pdf,.docx,.ppt,.pptx,image/png,image/jpeg,image/gif,image/webp";
 
 const STARTER_ACTIONS = [
   {
@@ -228,13 +230,13 @@ const STARTER_ACTIONS = [
   },
   {
     id: "csv_analysis",
-    label: "Analyze CSV",
+    label: "Analyze table",
     category: "Data",
     status: "Ready",
-    description: "Inspect CSV structure, key figures, and possible outliers.",
-    inputs: ".csv",
+    description: "Inspect CSV, Excel, or pasted table structure, key figures, and possible outliers.",
+    inputs: ".csv · .xls · .xlsx · pasted table",
     output: "Table preview + Summary",
-    prompt: "Read the attached CSV and summarize the column structure, key figures, possible outliers, and next analysis steps.",
+    prompt: "Profile this table deterministically and summarize the column structure, key figures, possible outliers, and next analysis steps.",
     wantsFile: true,
   },
   {
@@ -556,6 +558,7 @@ function TopBar({ runtime, account, activePath, chat, contextOpen, onToggleConte
   const [open, setOpen] = useState(false);
   const url = runtime?.cloudflare_url || "";
   const power = isPowerMode(account);
+  const operator = power && Boolean(account?.admin);
   const copy = copyForAccount(account);
   const context = activePath?.sessionSlug ? (chat?.project?.hidden ? "General chat" : `${chat?.project?.title || "Project"} / ${chat?.session?.title || activePath.sessionSlug}`) : "Private AI Cockpit";
   return (
@@ -581,13 +584,13 @@ function TopBar({ runtime, account, activePath, chat, contextOpen, onToggleConte
       <button
         className={`runtime-pill ${power ? "" : "dot-only"}`}
         type="button"
-        onClick={() => power && setOpen(!open)}
-        aria-label={power ? `Runtime ${runtime?.status || "local"}` : "Connected"}
+        onClick={() => operator && setOpen(!open)}
+        aria-label={operator ? `Runtime ${runtime?.status || "local"}` : "Connected"}
         aria-expanded={open}
       >
         <span className="status-lamp" />{power ? (runtime?.status || "local") : ""}
       </button>
-      {power && open && (
+      {operator && open && (
         <div className="runtime-popover">
           <strong>Runtime</strong>
           <p>{runtime?.status || "local"}</p>
@@ -1197,7 +1200,7 @@ function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, err
           <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? "Close" : copy.inspector.title}</button>
         </div>
       </div>
-      <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} />
+      <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} activePath={activePath} onChat={onAsk} />
       <TaskSuggestionsPanel
         activePath={activePath}
         suggestions={chat?.task_suggestions || []}
@@ -1226,7 +1229,7 @@ function ActionLibraryPage({ navigate, copy = COPY }) {
   );
 }
 
-function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false, copy = COPY }) {
+function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false, onOpenTable, copy = COPY }) {
   const items = actions?.length ? actions.map((action) => ({
     ...action,
     label: action.label || action.title,
@@ -1260,8 +1263,8 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
                 <span>Output: {action.output}</span>
             </div>
             <div className="starter-actions-row">
-              <button type="button" onClick={() => onStart?.(action)} disabled={action.disabled}>
-                {action.disabled ? copy.home.notAvailable : action.wantsBrief ? copy.home.prepareBrief : hasFile ? copy.home.useInput : copy.home.configure}
+              <button type="button" onClick={() => action.id === "csv_analysis" ? onOpenTable?.() : onStart?.(action)} disabled={action.disabled}>
+                {action.disabled ? copy.home.notAvailable : action.id === "csv_analysis" ? copy.home.openTable : action.wantsBrief ? copy.home.prepareBrief : hasFile ? copy.home.useInput : copy.home.configure}
               </button>
               <button
                 type="button"
@@ -1305,6 +1308,70 @@ function HomeWorkbenchHints({ copy = COPY }) {
         <p>{copy.home.hintPromoteBody}</p>
       </article>
     </section>
+  );
+}
+
+function TableWorkbenchPanel({ open, file, rows, running, onClose, onChooseFile, onSetText, onDropFile, onRun, copy = COPY }) {
+  const [text, setText] = useState("");
+  const tableCopy = copy.table || COPY.table;
+  if (!open) return null;
+  function drop(event) {
+    event.preventDefault();
+    const nextFile = event.dataTransfer?.files?.[0];
+    if (nextFile) onDropFile?.(nextFile);
+  }
+  function paste(event) {
+    const value = event.clipboardData?.getData("text/plain") || "";
+    if (!value.trim()) return;
+    event.preventDefault();
+    setText(value);
+    onSetText?.(value);
+  }
+  return (
+    <section className="table-workbench" onDragOver={(event) => event.preventDefault()} onDrop={drop}>
+      <div className="section-row">
+        <div className="panel-title-stack">
+          <p className="eyebrow">{tableCopy.eyebrow}</p>
+          <h2>{tableCopy.title}</h2>
+        </div>
+        <button type="button" onClick={onClose}>{tableCopy.close}</button>
+      </div>
+      <div className="table-drop-zone">
+        <strong>{file ? file.name : tableCopy.emptyDrop}</strong>
+        <span>{tableCopy.pastedHint}</span>
+        <div className="table-actions">
+          <button type="button" onClick={onChooseFile}>{tableCopy.chooseFile}</button>
+          <button type="button" onClick={onRun} disabled={!file || running}>{running ? tableCopy.analyzing : tableCopy.analyze}</button>
+        </div>
+      </div>
+      <textarea
+        className="table-paste-box"
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          if (looksLikePastedTable(event.target.value)) onSetText?.(event.target.value);
+        }}
+        onPaste={paste}
+        placeholder={tableCopy.pastePlaceholder}
+      />
+      {rows.length > 0 ? <TablePreview rows={rows} /> : <div className="empty-action-state"><p className="muted">{tableCopy.noPreview}</p><span>{tableCopy.noPreviewHint}</span></div>}
+    </section>
+  );
+}
+
+function TablePreview({ rows }) {
+  return (
+    <div className="artifact-table-wrap live-table-preview">
+      <table className="artifact-table">
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`${rowIndex}-${row.join("|")}`}>
+              {row.map((cell, cellIndex) => rowIndex === 0 ? <th key={cellIndex}>{cell}</th> : <td key={cellIndex}>{cell}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -1505,28 +1572,9 @@ function HomeArtifactContent({ artifact }) {
     }
   }
   if (kind === "md" || kind === "markdown") {
-    return <MarkdownPreview content={content} />;
+    return <MarkdownRenderer>{content}</MarkdownRenderer>;
   }
   return <pre>{content}</pre>;
-}
-
-function MarkdownPreview({ content }) {
-  return (
-    <div className="markdown-preview" data-markdown-renderer>
-      {content.split(/\n{2,}/).map((block, index) => {
-        if (block.startsWith("# ")) return <h1 key={index}>{block.slice(2)}</h1>;
-        if (block.startsWith("## ")) return <h2 key={index}>{block.slice(3)}</h2>;
-        if (block.startsWith("- ")) {
-          return (
-            <ul key={index}>
-              {block.split(/\n/).filter(Boolean).map((line) => <li key={line}>{line.replace(/^- /, "")}</li>)}
-            </ul>
-          );
-        }
-        return <p key={index}>{block}</p>;
-      })}
-    </div>
-  );
 }
 
 function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
@@ -1602,6 +1650,8 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
   const [homeRunDetail, setHomeRunDetail] = useState(null);
   const [homeArtifact, setHomeArtifact] = useState(null);
   const [homeError, setHomeError] = useState("");
+  const [tableOpen, setTableOpen] = useState(false);
+  const [tablePreview, setTablePreview] = useState([]);
   const inputRef = useRef(null);
   const formRef = useRef(null);
   const power = isPowerMode(account);
@@ -1651,15 +1701,53 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
     event.stopPropagation();
     setDragging(false);
     const dropped = event.dataTransfer?.files?.[0];
-    if (dropped) setFile(dropped);
+    if (dropped) {
+      setFile(dropped);
+      updateTablePreviewFromFile(dropped);
+    }
+  }
+
+  function pasteTable(event) {
+    if (file) return;
+    const pasted = event.clipboardData?.getData("text/plain") || "";
+    if (!looksLikePastedTable(pasted)) return;
+    event.preventDefault();
+    const csv = pastedTableToCsv(pasted);
+    const nextFile = new File([csv], `pasted-table-${Date.now()}.csv`, { type: "text/csv" });
+    setFile(nextFile);
+    setTablePreview(parseCsvRows(csv).slice(0, 30));
+    setTableOpen(true);
+    setContent((current) => current || "Analyze this pasted table.");
   }
 
   function startAction(action) {
     if (action.disabled) return;
     setContent(action.prompt || action.label);
+    if (action.id === "csv_analysis") {
+      setTableOpen(true);
+      return;
+    }
     if (action.wantsFile) {
       window.setTimeout(() => inputRef.current?.click(), 30);
     }
+  }
+
+  async function updateTablePreviewFromFile(nextFile) {
+    const name = nextFile?.name || "";
+    if (!/\.(csv|txt)$/i.test(name)) {
+      setTablePreview([]);
+      return;
+    }
+    const text = await nextFile.text();
+    setTablePreview(parseCsvRows(text).slice(0, 30));
+  }
+
+  function setTableFromText(value) {
+    const csv = looksLikePastedTable(value) ? pastedTableToCsv(value) : value;
+    const nextFile = new File([csv], `pasted-table-${Date.now()}.csv`, { type: "text/csv" });
+    setFile(nextFile);
+    setContent((current) => current || "Analyze this pasted table.");
+    setTablePreview(parseCsvRows(csv).slice(0, 30));
   }
 
   async function runHomeAction(action) {
@@ -1846,6 +1934,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            onPaste={pasteTable}
             onKeyDown={keyDown}
             placeholder={copy.chat.placeholder}
             rows={1}
@@ -1868,7 +1957,11 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
                 ref={inputRef}
                 data-attachment-input
                 type="file"
-                onChange={(event) => setFile(event.target.files?.[0] || null)}
+                onChange={(event) => {
+                  const nextFile = event.target.files?.[0] || null;
+                  setFile(nextFile);
+                  if (nextFile) updateTablePreviewFromFile(nextFile);
+                }}
                 accept={ATTACHMENT_ACCEPT}
               />
             </label>
@@ -1908,12 +2001,28 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
         {starting && <WaitingNotice label={copy.chat.preparing} />}
         {isHomeWorkbench ? (
           <>
+            <TableWorkbenchPanel
+              open={tableOpen}
+              file={file}
+              rows={tablePreview}
+              running={homeRunning === "csv_analysis"}
+              onClose={() => setTableOpen(false)}
+              onChooseFile={() => inputRef.current?.click()}
+              onSetText={setTableFromText}
+              onDropFile={(nextFile) => {
+                setFile(nextFile);
+                updateTablePreviewFromFile(nextFile);
+              }}
+              onRun={() => runHomeAction(localizeStarterAction((home?.actions || STARTER_ACTIONS).find((item) => item.id === "csv_analysis") || STARTER_ACTIONS.find((item) => item.id === "csv_analysis"), copy))}
+              copy={copy}
+            />
             <StarterActionsGrid
               actions={home?.actions}
               onStart={startAction}
               onRun={runHomeAction}
               running={homeRunning}
               hasFile={Boolean(file)}
+              onOpenTable={() => setTableOpen(true)}
               copy={copy}
             />
             <HomeWorkbenchPanels
@@ -1958,7 +2067,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
   return <section className="center-pane start-pane">{contentNode}</section>;
 }
 
-function MessageTimeline({ messages, onPreview }) {
+function MessageTimeline({ messages, onPreview, activePath, onChat }) {
   const endRef = useRef(null);
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages.length]);
@@ -1975,14 +2084,14 @@ function MessageTimeline({ messages, onPreview }) {
   return (
     <div className="messages">
       {messages.map((message, index) => (
-        <MessageCard key={`${index}-${message.role}`} message={message} onPreview={onPreview} />
+        <MessageCard key={`${index}-${message.role}`} message={message} onPreview={onPreview} activePath={activePath} onChat={onChat} />
       ))}
       <div ref={endRef} />
     </div>
   );
 }
 
-function MessageCard({ message, onPreview }) {
+function MessageCard({ message, onPreview, activePath, onChat }) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
@@ -1992,11 +2101,41 @@ function MessageCard({ message, onPreview }) {
         {message.provider && <span>{message.provider} {message.model}</span>}
         {message.estimated_cost !== null && message.estimated_cost !== undefined && <span>USD {message.estimated_cost}</span>}
       </div>
-      {message.pending ? <WaitingNotice label={copy.chat.assistantThinking} compact /> : <RenderedText text={message.content || ""} />}
+      {message.pending ? <WaitingNotice label={copy.chat.assistantThinking} compact /> : <MarkdownRenderer>{message.content || ""}</MarkdownRenderer>}
+      {message.role === "assistant" && !message.pending && activePath?.projectPath && (
+        <MessageActions activePath={activePath} onChat={onChat} copy={copy} />
+      )}
       {message.context_receipt && <ContextReceipt receipt={message.context_receipt} compact />}
       {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
+  );
+}
+
+function MessageActions({ activePath, onChat, copy = COPY }) {
+  const [saving, setSaving] = useState(false);
+  async function saveArtifact() {
+    setSaving(true);
+    try {
+      const payload = await fetchJson(`/api/chat-artifact/${activePath.projectPath}/${activePath.sessionSlug}`, {
+        method: "POST",
+        body: new URLSearchParams({ title: "Assistant Answer" }),
+      });
+      onChat((current) => ({
+        ...(current || {}),
+        work_session: {
+          ...(current?.work_session || {}),
+          artifacts: [...(current?.work_session?.artifacts || []), payload.artifact],
+        },
+      }));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="message-actions">
+      <button type="button" onClick={saveArtifact} disabled={saving}>{saving ? copy.messageActions.saving : copy.messageActions.saveArtifact}</button>
+    </div>
   );
 }
 
@@ -2007,6 +2146,9 @@ function ContextReceipt({ receipt, compact = false }) {
   const excluded = Array.isArray(receipt.excluded) ? receipt.excluded : [];
   const chunks = Array.isArray(receipt.included_chunks) ? receipt.included_chunks : [];
   const privacy = receipt.privacy || {};
+  const analysis = receipt.analysis || {};
+  const csv = Array.isArray(analysis.csv) ? analysis.csv : [];
+  const artifacts = Array.isArray(analysis.artifacts) ? analysis.artifacts : [];
   return (
     <details className={`context-receipt ${compact ? "compact" : ""}`}>
       <summary>View context receipt · {receipt.privacy_mode === "local" ? "local" : "cloud"} · {chunks.length || used.length} chunks used</summary>
@@ -2026,6 +2168,22 @@ function ContextReceipt({ receipt, compact = false }) {
               <small>{chunk.reason} · {chunk.token_count} tokens · {chunk.privacy}</small>
             </span>
           ))}
+        </div>
+      )}
+      {csv.length > 0 && (
+        <div className="receipt-chunks">
+          {csv.map((item, index) => (
+            <span key={`${item.parser || "csv"}-${index}`}>
+              <strong>CSV parser: {item.parser || "python-csv"}</strong>
+              <small>{item.rows || 0} rows · {item.columns || 0} columns · {item.missing_cells || 0} missing cells · profile sent: {analysis.computed_profile_sent_to_model ? "yes" : "no"} · raw CSV sent: {analysis.raw_text_sent_to_model ? "yes" : "no"}</small>
+            </span>
+          ))}
+          {artifacts.length > 0 && (
+            <span>
+              <strong>Artifacts</strong>
+              <small>{artifacts.map((item) => item.filename || item.path).join(", ")}</small>
+            </span>
+          )}
         </div>
       )}
       {excluded.length > 0 && <p className="muted">{excluded.length} file/path exclusions were active.</p>}
@@ -2093,64 +2251,6 @@ function WaitingNotice({ label, compact = false }) {
       <span>{label}</span>
     </div>
   );
-}
-
-function RenderedText({ text }) {
-  const parts = String(text).split(/```/);
-  return (
-    <div className="message-text" data-markdown-renderer>
-      {parts.map((part, index) =>
-        index % 2 ? <pre className="code-block" key={index}><code>{part.trim()}</code></pre> : <MarkdownBlock key={index} text={part} />
-      )}
-    </div>
-  );
-}
-
-function MarkdownBlock({ text }) {
-  const lines = String(text).split(/\n/);
-  const nodes = [];
-  let list = [];
-  function flushList() {
-    if (!list.length) return;
-    nodes.push(<ul key={`ul-${nodes.length}`}>{list.map((item, index) => <li key={index}>{renderInline(item)}</li>)}</ul>);
-    list = [];
-  }
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      flushList();
-      return;
-    }
-    const bullet = trimmed.match(/^[-*]\s+(.+)/);
-    if (bullet) {
-      list.push(bullet[1]);
-      return;
-    }
-    flushList();
-    const heading = trimmed.match(/^(#{1,4})\s+(.+)/);
-    if (heading) {
-      const level = Math.min(heading[1].length + 2, 6);
-      const Tag = `h${level}`;
-      nodes.push(<Tag key={index}>{renderInline(heading[2])}</Tag>);
-    } else if (trimmed.startsWith("> ")) {
-      nodes.push(<blockquote key={index}>{renderInline(trimmed.slice(2))}</blockquote>);
-    } else {
-      nodes.push(<p key={index}>{renderInline(line)}</p>);
-    }
-  });
-  flushList();
-  return nodes;
-}
-
-function renderInline(text) {
-  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
-  return String(text).split(pattern).filter(Boolean).map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
-    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link && /^https?:\/\//.test(link[2])) return <a key={index} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>;
-    return <React.Fragment key={index}>{part}</React.Fragment>;
-  });
 }
 
 function AttachmentList({ attachments, onPreview }) {
@@ -2322,6 +2422,7 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
         ref={textRef}
         value={content}
         onChange={(event) => setContent(event.target.value)}
+        onPaste={pasteTable}
         onKeyDown={keyDown}
         placeholder={copy.chat.placeholder}
       />
@@ -2389,6 +2490,7 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
   const [group, setGroup] = useState("recommended");
   const wrapRef = useRef(null);
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
+  const recommendation = recommendModel(models, { content, hasFile });
   const visibleModels = models.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
   useEffect(() => {
     if (!open) return undefined;
@@ -2432,9 +2534,14 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
               </button>
             ))}
           </div>
+          <div className="model-recommendation">
+            <strong>AIWS recommends {recommendation.model.label}</strong>
+            <small>{recommendation.reason}</small>
+          </div>
           <div className="model-grid">
             {visibleModels.map((item) => {
               const selected = item.value === selectedKey;
+              const recommended = item.value === recommendation.model.value;
               const singleEstimate = estimateCurrentCost(item, content, hasFile);
               const agentCalls = item.agentCalls || (item.cloud ? 2 : 1);
               const agentEstimate = estimateCurrentCost(item, content, hasFile, agentCalls);
@@ -2444,13 +2551,14 @@ function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasF
                 <button
                   key={item.value}
                   type="button"
-                  className={`model-card ${selected ? "selected" : ""} ${item.cloud ? "cloud" : "local"}`}
+                  className={`model-card ${selected ? "selected" : ""} ${recommended ? "recommended" : ""} ${item.cloud ? "cloud" : "local"}`}
                   onClick={() => {
                     onSelect(item.value);
                     setOpen(false);
                   }}
                 >
                   <span className="model-card-title">{item.label}</span>
+                  {recommended && <span className="model-key-status">Recommended</span>}
                   <span className="model-card-version">{item.version || item.model}</span>
                   <span className="model-card-privacy">{item.cloud ? "Cloud AI" : "Local Mac"}</span>
                   <span>{item.recommendedUse || item.bestFor}</span>
@@ -2480,7 +2588,13 @@ function CloudConfirm({ mode, hasFile, onUseOnce, onUseAlways, onCancel }) {
   return (
     <div className="cloud-confirm" role="alert">
       <strong>{mode.label} is a cloud AI model.</strong>
-      <p>The selected chat content{hasFile ? " and attachment content" : ""} may be sent to an external API. Estimated cost: {estimateCurrentCost(mode, "", hasFile)}</p>
+      <p>The privacy manifest for this request will record exactly what leaves AIWS before the cloud call completes.</p>
+      <ul>
+        <li>Provider/model: {mode.provider} · {mode.model}</li>
+        <li>User message: included</li>
+        <li>Attached file: {hasFile ? "computed file context or vision/file input" : "none"}</li>
+        <li>Estimated cost: {estimateCurrentCost(mode, "", hasFile)}</li>
+      </ul>
       <div>
         <button type="button" onClick={onUseOnce}>Use once</button>
         <button type="button" onClick={onUseAlways}>Keep using this model</button>
@@ -2564,6 +2678,24 @@ function normalizeModelCatalog(models = []) {
   })).filter((item) => item.value && item.provider && item.model);
 }
 
+function recommendModel(models, { content = "", hasFile = false } = {}) {
+  const local = models.find((item) => !item.cloud) || models[0];
+  const flash = models.find((item) => item.provider === "gemini" && item.model.includes("flash"));
+  const pro = models.find((item) => item.provider === "gemini" && item.model.includes("pro"));
+  const codex = models.find((item) => item.provider === "openai" || item.group === "coding");
+  const text = String(content || "").toLowerCase();
+  if (hasFile) {
+    return { model: flash || local, reason: flash ? "File/image work benefits from a low-cost file-capable model when cloud is allowed. CSV/XLSX still runs deterministic profiling first." : "File work will use local deterministic preprocessing first." };
+  }
+  if (/(code|bug|test|refactor|codex|파일|코드|버그|테스트)/.test(text) && codex) {
+    return { model: codex, reason: "This looks like a coding task, so a code-oriented model is the strongest match." };
+  }
+  if (content.length > 8000 && pro) {
+    return { model: pro, reason: "Long context or higher reasoning requests fit a larger cloud model when cloud is allowed." };
+  }
+  return { model: local, reason: "Private short text defaults to local Qwen for zero API cost." };
+}
+
 function searchLabel(mode) {
   return SEARCH_OPTIONS.find((item) => item.value === mode)?.label || `Search ${mode}`;
 }
@@ -2578,8 +2710,9 @@ function isPowerMode(account) {
 
 function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }) {
   const power = isPowerMode(account);
+  const operator = power && Boolean(account?.admin);
   const copy = copyForAccount(account);
-  const tabs = power ? ["context", "files", "memory", "runs", "artifacts", "diagnostics"] : ["context", "files", "memory", "runs", "artifacts"];
+  const tabs = operator ? ["context", "files", "memory", "runs", "artifacts", "diagnostics"] : power ? ["context", "files", "memory", "runs", "artifacts"] : ["context"];
   const [tab, setTab] = useState("context");
   const currentTab = tabs.includes(tab) ? tab : "context";
   if (!activePath.projectPath || !activePath.sessionSlug) {
@@ -2591,9 +2724,9 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           <p className="muted">{copy.inspector.emptyPurpose}</p>
         </section>
         <ActionInspector projectConfig={projectConfig} power={power} />
-        {power && <RuntimePanel runtime={runtime} />}
-        {power && <OpenClawPanel openclaw={openclaw} />}
-        {power && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
+        {operator && <RuntimePanel runtime={runtime} />}
+        {operator && <OpenClawPanel openclaw={openclaw} />}
+        {operator && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
       </aside>
     );
   }
@@ -2622,6 +2755,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
         </div>
       </section>
       <ContextManifestCard manifest={chat?.context_manifest} power={power} />
+      <SessionControlPanel chat={chat} attachments={attachments} latestReceipt={latestReceipt} artifacts={artifacts} power={power} copy={copy} />
       <div className="context-tabs" role="tablist">
         {tabs.map((item) => (
           <button key={item} type="button" className={currentTab === item ? "active" : ""} onClick={() => setTab(item)}>
@@ -2633,6 +2767,8 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
         <section>
           <h3>{latestReceipt ? "Latest context receipt" : "What will be sent"}</h3>
           {latestReceipt ? <ContextReceipt receipt={latestReceipt} /> : <p className="muted">Send a message to create a receipt showing files, privacy mode, model, exclusions, and estimated cost.</p>}
+          {chat?.project?.hidden && <PromoteChatCard chat={chat} activePath={activePath} copy={copy} />}
+          <WorkSessionCard workSession={chat?.work_session} copy={copy} />
           <ActionInspector projectConfig={projectConfig} power={power} />
           <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
         </section>
@@ -2701,7 +2837,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           )}
         </section>
       )}
-      {power && currentTab === "diagnostics" && (
+      {operator && currentTab === "diagnostics" && (
         <section>
           <h3>{copy.inspector.tabs.diagnostics}</h3>
           <RuntimePanel runtime={runtime} />
@@ -2718,6 +2854,74 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
         </section>
       )}
     </aside>
+  );
+}
+
+function PromoteChatCard({ chat, activePath, copy = COPY }) {
+  const [busy, setBusy] = useState(false);
+  async function promote() {
+    setBusy(true);
+    try {
+      const title = chat?.session?.title || copy.inspector.promoteTitle;
+      const payload = await fetchJson(`/api/promote-chat/${activePath.projectPath}/${activePath.sessionSlug}`, {
+        method: "POST",
+        body: new URLSearchParams({ title }),
+      });
+      window.location.href = `/chat/${payload.project_path}/${payload.session.slug}`;
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="empty-action-state">
+      <p><strong>{copy.inspector.promoteTitle}</strong></p>
+      <span>{copy.inspector.promoteBody}</span>
+      <button type="button" onClick={promote} disabled={busy}>{busy ? copy.inspector.promoting : copy.inspector.promote}</button>
+    </div>
+  );
+}
+
+function SessionControlPanel({ chat, attachments, latestReceipt, artifacts, power, copy = COPY }) {
+  const workSession = chat?.work_session || {};
+  const taskType = workSession.type || (attachments.length ? "file_analysis" : "ask_once");
+  const privacy = latestReceipt?.privacy_mode || chat?.context_manifest?.privacy_mode || "local";
+  const nextActions = workSession.next_actions || [];
+  return (
+    <section className="session-control-panel">
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">{copy.inspector.currentTask}</p>
+          <h3>{taskType.replaceAll("_", " ")} · {workSession.status || "draft"}</h3>
+        </div>
+        <span className="soft-pill">{privacy === "local" ? copy.inspector.local : copy.inspector.cloud}</span>
+      </div>
+      <div className="inspector-fact-grid">
+        <span><strong>{attachments.length}</strong>{copy.inspector.files}</span>
+        <span><strong>{artifacts.length}</strong>artifacts</span>
+        <span><strong>{latestReceipt ? 1 : 0}</strong>{copy.inspector.receipts}</span>
+        <span><strong>{(workSession.model_calls || []).length}</strong>{copy.inspector.calls}</span>
+      </div>
+      <div className="next-action-list">
+        {(nextActions.length ? nextActions : [
+          { id: "attach", label: attachments.length ? copy.inspector.runAction : copy.inspector.attachOrPaste },
+          { id: "save", label: latestReceipt ? copy.inspector.saveUsefulAnswer : copy.inspector.sendToCreateReceipt },
+        ]).slice(0, power ? 5 : 3).map((item) => <span key={item.id || item.label}>{item.label}</span>)}
+      </div>
+    </section>
+  );
+}
+
+function WorkSessionCard({ workSession, copy = COPY }) {
+  if (!workSession) return null;
+  return (
+    <div className="manifest-file-facts">
+      <strong>{copy.inspector.workSession}</strong>
+      <span>{workSession.type} · {workSession.status}</span>
+      <span>{(workSession.model_calls || []).length} model calls · {(workSession.artifacts || []).length} artifacts</span>
+      {(workSession.next_actions || []).slice(0, 3).map((item) => (
+        <span key={item.id || item.label}><small>{item.label}</small></span>
+      ))}
+    </div>
   );
 }
 

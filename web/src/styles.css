@@ -1779,8 +1779,91 @@ mark {
   background: rgba(13, 27, 48, .98);
 }
 
+.table-workbench {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid rgba(82, 196, 255, .18);
+  border-radius: 8px;
+  background: rgba(8, 14, 23, .72);
+}
+
+.table-drop-zone {
+  display: grid;
+  gap: 8px;
+  min-height: 110px;
+  align-content: center;
+  border: 1px dashed rgba(160, 190, 230, .32);
+  border-radius: 8px;
+  padding: 16px;
+  background: rgba(255, 255, 255, .03);
+}
+
+.table-drop-zone span,
+.table-paste-box::placeholder {
+  color: var(--muted);
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-actions button,
+.message-actions button,
+.table-workbench .section-row button {
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--text);
+  background: rgba(255, 255, 255, .06);
+}
+
+.table-paste-box {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: rgba(5, 10, 18, .74);
+}
+
+.live-table-preview {
+  max-height: 320px;
+}
+
 .manifest-card {
   padding: 14px;
+}
+
+.session-control-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .035);
+}
+
+.session-control-panel h3 {
+  margin: 2px 0 0;
+  text-transform: capitalize;
+}
+
+.next-action-list {
+  display: grid;
+  gap: 6px;
+}
+
+.next-action-list span {
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, .045);
 }
 
 .manifest-card h3 {
@@ -2798,6 +2881,20 @@ mark {
   gap: 8px;
 }
 
+.model-recommendation {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(82, 196, 255, .24);
+  border-radius: 8px;
+  background: rgba(82, 196, 255, .08);
+}
+
+.model-recommendation small {
+  color: var(--text-soft);
+}
+
 .model-card {
   display: grid;
   gap: 4px;
@@ -2812,6 +2909,10 @@ mark {
 .model-card.selected {
   border-color: rgba(79, 140, 255, .75);
   background: #142542;
+}
+
+.model-card.recommended {
+  border-color: rgba(82, 196, 255, .38);
 }
 
 .model-card-title {

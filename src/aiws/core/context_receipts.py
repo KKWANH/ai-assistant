@@ -81,6 +81,7 @@ def build_context_receipt(
         "output_tokens": output_tokens,
         "used_files": used_files,
         "unused_files": unused_files,
+        "analysis": _analysis_receipt(used_files),
         "included_chunks": manifest.get("included_chunks", []),
         "excluded": manifest.get("excluded", []),
         "estimated_cost": cost.get("estimated_cost"),
@@ -98,3 +99,25 @@ def append_context_receipt(
     path = storage.session_dir(root, project_path, session_slug) / "context_receipts.jsonl"
     file_store.append_jsonl(path, receipt)
     return receipt
+
+
+def _analysis_receipt(files: list[dict[str, object]]) -> dict[str, object]:
+    csv_items = []
+    artifacts = []
+    raw_text_sent = False
+    computed_profile_sent = False
+    for item in files:
+        analysis = item.get("analysis")
+        if isinstance(analysis, dict) and analysis:
+            csv_items.append(analysis)
+        for artifact in item.get("analysis_artifacts", []) if isinstance(item.get("analysis_artifacts"), list) else []:
+            if isinstance(artifact, dict):
+                artifacts.append(artifact)
+        raw_text_sent = raw_text_sent or bool(item.get("raw_text_sent_to_model"))
+        computed_profile_sent = computed_profile_sent or bool(item.get("computed_profile_sent_to_model"))
+    return {
+        "csv": csv_items,
+        "artifacts": artifacts,
+        "raw_text_sent_to_model": raw_text_sent,
+        "computed_profile_sent_to_model": computed_profile_sent,
+    }
