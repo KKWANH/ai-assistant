@@ -332,6 +332,8 @@ Detailed docs:
 5. Keep projects `private` by default; use `public` only for family-shared material.
 6. Start local use with `aiws run --root ~/.ai-workspace --mode local --port 8765 --models ollama`.
 7. Start browser access with `aiws-cloudflare start`, then open the URL from `aiws-cloudflare status`.
+   For a stable custom domain such as `ai.kwanho.dev`, use a named Cloudflare Tunnel.
+   See [Cloudflare Custom Domain Runbook](docs/CLOUDFLARE_CUSTOM_DOMAIN.md).
 8. Add Kimi by copying `.env.example` to `.env` and setting `AIWS_KIMI_API_KEY` or `MOONSHOT_API_KEY`.
 9. Create regular backups:
 
