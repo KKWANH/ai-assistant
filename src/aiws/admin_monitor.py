@@ -133,7 +133,7 @@ def render_dashboard(snapshot: dict[str, object], analysis_result: str = "") -> 
   </div>
   <section>
     <h2>Findings</h2>
-    {''.join(f'<p class="{escape(item.get("severity", ""))}"><strong>{escape(item.get("title", ""))}</strong><br><small>{escape(item.get("detail", ""))}</small></p>' for item in findings if isinstance(item, dict))}
+    {"".join(f'<p class="{escape(item.get("severity", ""))}"><strong>{escape(item.get("title", ""))}</strong><br><small>{escape(item.get("detail", ""))}</small></p>' for item in findings if isinstance(item, dict))}
   </section>
   <section>
     <h2>Structured Analysis Form</h2>
@@ -146,7 +146,7 @@ def render_dashboard(snapshot: dict[str, object], analysis_result: str = "") -> 
       <textarea name="note" placeholder="Optional note for the diagnostic run"></textarea>
       <button type="submit">Run local analysis</button>
     </form>
-    {f'<pre>{escape(analysis_result)}</pre>' if analysis_result else ''}
+    {f"<pre>{escape(analysis_result)}</pre>" if analysis_result else ""}
   </section>
   <section>
     <h2>Recent Model Failures</h2>
@@ -154,7 +154,7 @@ def render_dashboard(snapshot: dict[str, object], analysis_result: str = "") -> 
   </section>
   <section>
     <h2>Logs</h2>
-    {''.join(f'<h3>{escape(name)}</h3><pre>{escape(text)}</pre>' for name, text in logs.items())}
+    {"".join(f"<h3>{escape(name)}</h3><pre>{escape(text)}</pre>" for name, text in logs.items())}
   </section>
 </main>
 </body>
@@ -170,7 +170,9 @@ def structured_analysis(snapshot: dict[str, object], kind: str, note: str) -> st
     if kind == "logs":
         logs = snapshot.get("logs", {})
         return json.dumps({"kind": kind, "note": note, "findings": findings, "log_names": list(logs)}, indent=2, ensure_ascii=False)
-    return json.dumps({"kind": "runtime", "note": note, "findings": findings, "runtime": snapshot.get("runtime", {})}, indent=2, ensure_ascii=False)
+    return json.dumps(
+        {"kind": "runtime", "note": note, "findings": findings, "runtime": snapshot.get("runtime", {})}, indent=2, ensure_ascii=False
+    )
 
 
 def escape(value: object) -> str:

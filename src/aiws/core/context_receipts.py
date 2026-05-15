@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from aiws import storage
+from aiws.infra import file_store
 
 PRIOR_FILE_TRIGGERS = (
     "previous file",
@@ -54,8 +53,11 @@ def build_context_receipt(
     cost: dict[str, object],
     *,
     current_files: set[str] | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> dict[str, object]:
-    files = [item for item in manifest.get("files", []) if isinstance(item, dict)]
+    raw_files = manifest.get("files", [])
+    files = [item for item in raw_files if isinstance(item, dict)] if isinstance(raw_files, list) else []
     active = current_files or set()
     if active:
         used_files = [item for item in files if str(item.get("filename", "")) in active]
@@ -66,15 +68,33 @@ def build_context_receipt(
             if item.get("delivery") in {"Sent as text context", "Sent as vision input", "Sent as file input", "vision", "text_context"}
         ]
     unused_files = [item for item in files if item not in used_files]
+    raw_privacy = manifest.get("privacy", {})
+    privacy = raw_privacy if isinstance(raw_privacy, dict) else {}
     return {
         "created_at": storage.utc_now(),
         "provider": provider,
         "model": model,
         "privacy_mode": manifest.get("privacy_mode", "local"),
-        "privacy": manifest.get("privacy", {}),
+        "model_delivery": privacy.get("model_delivery", ""),
+        "privacy": privacy,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
         "used_files": used_files,
         "unused_files": unused_files,
+        "included_chunks": manifest.get("included_chunks", []),
         "excluded": manifest.get("excluded", []),
         "estimated_cost": cost.get("estimated_cost"),
+        "actual_cost": cost.get("estimated_cost"),
         "currency": cost.get("currency", "USD"),
     }
+
+
+def append_context_receipt(
+    root: str,
+    project_path: str,
+    session_slug: str,
+    receipt: dict[str, object],
+) -> dict[str, object]:
+    path = storage.session_dir(root, project_path, session_slug) / "context_receipts.jsonl"
+    file_store.append_jsonl(path, receipt)
+    return receipt

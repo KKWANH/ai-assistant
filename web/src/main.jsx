@@ -332,6 +332,8 @@ function App() {
   const [openclaw, setOpenclaw] = useState(null);
   const [automations, setAutomations] = useState([]);
   const [projectConfig, setProjectConfig] = useState(null);
+  const [projectRunDetail, setProjectRunDetail] = useState(null);
+  const [projectArtifact, setProjectArtifact] = useState(null);
   const [activePath, setActivePath] = useState(parseRoute());
   const [lightbox, setLightbox] = useState(null);
   const [error, setError] = useState("");
@@ -386,6 +388,18 @@ function App() {
     }
     const payload = await fetchJson(`/api/project-config/${target.projectPath}`);
     setProjectConfig(payload);
+  }
+
+  async function openProjectRun(run) {
+    if (!activePath.projectPath || !run?.run_id) return;
+    const payload = await fetchJson(`/api/project-run?project=${encodeURIComponent(activePath.projectPath)}&run_id=${encodeURIComponent(run.run_id)}`);
+    setProjectRunDetail(payload);
+  }
+
+  async function openProjectArtifact(artifact) {
+    if (!activePath.projectPath || !artifact?.path) return;
+    const payload = await fetchJson(`/api/project-artifact?project=${encodeURIComponent(activePath.projectPath)}&path=${encodeURIComponent(artifact.path)}`);
+    setProjectArtifact(payload.artifact);
   }
 
   useEffect(() => {
@@ -515,8 +529,24 @@ function App() {
           onPreview={setLightbox}
           onChat={setChat}
           account={workspace?.account}
+          onOpenRun={openProjectRun}
+          onOpenArtifact={openProjectArtifact}
         />
       </main>
+      {projectRunDetail && (
+        <HomeRunDetailModal
+          detail={projectRunDetail}
+          power={isPowerMode(workspace?.account)}
+          onClose={() => setProjectRunDetail(null)}
+          onOpenArtifact={openProjectArtifact}
+        />
+      )}
+      {projectArtifact && (
+        <HomeArtifactViewer
+          artifact={projectArtifact}
+          onClose={() => setProjectArtifact(null)}
+        />
+      )}
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
@@ -1278,6 +1308,40 @@ function HomeWorkbenchHints({ copy = COPY }) {
   );
 }
 
+function HomeWorkSessionOverview({ home, hasFile, onAttach, onCreateProject, copy = COPY }) {
+  const runCount = home?.runs?.length || 0;
+  const artifactCount = home?.artifacts?.length || 0;
+  const actionCount = home?.actions?.filter((action) => String(action.status || "").toLowerCase() !== "planned").length || STARTER_ACTIONS.length;
+  return (
+    <section className="work-session-overview" aria-label="Start a work session">
+      <div className="work-session-copy">
+        <p className="eyebrow">{copy.home.workSessionEyebrow}</p>
+        <h2>{copy.home.workSessionTitle}</h2>
+        <p>{copy.home.workSessionBody}</p>
+      </div>
+      <div className="work-session-lanes">
+        <button type="button" className="work-lane" onClick={() => document.querySelector(".start-composer textarea")?.focus()}>
+          <strong>{copy.home.laneAsk}</strong>
+          <span>{copy.home.laneAskBody}</span>
+        </button>
+        <button type="button" className={`work-lane ${hasFile ? "ready" : ""}`} onClick={onAttach}>
+          <strong>{copy.home.laneFile}</strong>
+          <span>{hasFile ? copy.home.laneFileReady : copy.home.laneFileBody}</span>
+        </button>
+        <button type="button" className="work-lane" onClick={onCreateProject}>
+          <strong>{copy.home.laneProject}</strong>
+          <span>{copy.home.laneProjectBody}</span>
+        </button>
+      </div>
+      <div className="work-session-facts" aria-label="Persisted workbench facts">
+        <span><strong>{actionCount}</strong>{copy.home.factActions}</span>
+        <span><strong>{runCount}</strong>{copy.home.factRuns}</span>
+        <span><strong>{artifactCount}</strong>{copy.home.factArtifacts}</span>
+      </div>
+    </section>
+  );
+}
+
 function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact, copy = COPY }) {
   const runs = home?.runs || [];
   const artifacts = home?.artifacts || [];
@@ -1292,7 +1356,10 @@ function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact, copy = CO
           <span className="soft-pill">{runs.length}</span>
         </div>
         {runs.length === 0 ? (
-          <p className="muted">{copy.home.starterEmpty}</p>
+          <div className="empty-action-state">
+            <p className="muted">{copy.home.starterEmpty}</p>
+            <span>{copy.home.starterEmptyAction}</span>
+          </div>
         ) : (
           <div className="run-list">
             {runs.slice(0, 6).map((run) => (
@@ -1314,7 +1381,10 @@ function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact, copy = CO
           <span className="soft-pill">{artifacts.length}</span>
         </div>
         {artifacts.length === 0 ? (
-          <p className="muted">{copy.home.artifactEmpty}</p>
+          <div className="empty-action-state">
+            <p className="muted">{copy.home.artifactEmpty}</p>
+            <span>{copy.home.artifactEmptyAction}</span>
+          </div>
         ) : (
           <div className="artifact-grid">
             {artifacts.slice(0, 8).map((artifact) => (
@@ -1369,7 +1439,7 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
         )}
         <details className="run-log-details" open={power}>
           <summary>Logs</summary>
-          <pre>{(run.logs || []).map((item) => `[${item.kind}] ${item.content}`).join("\n") || "(empty)"}</pre>
+          <pre>{(run.logs || detail.logs || []).map((item) => `[${item.kind || item.type || "log"}] ${item.content || item.message || ""}`).join("\n") || "(empty)"}</pre>
           {run.errors?.length > 0 && <pre className="error-text">{run.errors.join("\n")}</pre>}
         </details>
         {power && (
@@ -1745,13 +1815,22 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
       <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
         <div className={isHomeWorkbench ? "home-hero" : ""}>
         {isHomeWorkbench && <p className="eyebrow">Home Workbench</p>}
-        <h1>{isHomeWorkbench ? copy.home.title : copy.chat.emptyTitle}</h1>
+        <h1>{isHomeWorkbench ? copy.home.workSessionTitle : copy.chat.emptyTitle}</h1>
         <p className="start-subtitle">
           {projectPath
             ? "Your first message creates a saved chat inside this project."
-            : copy.tagline}
+            : copy.home.subtitle}
         </p>
         </div>
+        {isHomeWorkbench && (
+          <HomeWorkSessionOverview
+            home={home}
+            hasFile={Boolean(file)}
+            onAttach={() => inputRef.current?.click()}
+            onCreateProject={() => navigate("/projects/new")}
+            copy={copy}
+          />
+        )}
         <form
           ref={formRef}
           className={`start-composer ${dragging ? "dragging" : ""}`}
@@ -1926,16 +2005,30 @@ function ContextReceipt({ receipt, compact = false }) {
   const used = Array.isArray(receipt.used_files) ? receipt.used_files : [];
   const unused = Array.isArray(receipt.unused_files) ? receipt.unused_files : [];
   const excluded = Array.isArray(receipt.excluded) ? receipt.excluded : [];
+  const chunks = Array.isArray(receipt.included_chunks) ? receipt.included_chunks : [];
+  const privacy = receipt.privacy || {};
   return (
     <details className={`context-receipt ${compact ? "compact" : ""}`}>
-      <summary>View context receipt · {receipt.privacy_mode === "local" ? "local" : "cloud"} · {used.length} files used</summary>
+      <summary>View context receipt · {receipt.privacy_mode === "local" ? "local" : "cloud"} · {chunks.length || used.length} chunks used</summary>
       <div className="receipt-grid">
         <span><strong>Model</strong><small>{receipt.provider} {receipt.model}</small></span>
         <span><strong>Cost</strong><small>{receipt.estimated_cost ?? 0} {receipt.currency || "USD"}</small></span>
+        <span><strong>Tokens</strong><small>{receipt.input_tokens || 0} in · {receipt.output_tokens || 0} out</small></span>
         <span><strong>Used files</strong><small>{used.length ? used.map((item) => item.filename).join(", ") : "None"}</small></span>
         <span><strong>Not used</strong><small>{unused.length ? unused.map((item) => item.filename).join(", ") : "None"}</small></span>
+        <span><strong>Cloud files</strong><small>{privacy.files_sent_to_cloud?.length ? privacy.files_sent_to_cloud.join(", ") : "None"}</small></span>
       </div>
-      {excluded.length > 0 && <p className="muted">{excluded.length} secret/path exclusion patterns were active.</p>}
+      {chunks.length > 0 && (
+        <div className="receipt-chunks">
+          {chunks.slice(0, 4).map((chunk) => (
+            <span key={chunk.chunk_id || `${chunk.path}-${chunk.token_count}`}>
+              <strong>{chunk.filename || chunk.path}</strong>
+              <small>{chunk.reason} · {chunk.token_count} tokens · {chunk.privacy}</small>
+            </span>
+          ))}
+        </div>
+      )}
+      {excluded.length > 0 && <p className="muted">{excluded.length} file/path exclusions were active.</p>}
     </details>
   );
 }
@@ -2483,7 +2576,7 @@ function isPowerMode(account) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account }) {
+function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }) {
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
   const tabs = power ? ["context", "files", "memory", "runs", "artifacts", "diagnostics"] : ["context", "files", "memory", "runs", "artifacts"];
@@ -2508,6 +2601,9 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
   const runs = projectConfig?.runs || [];
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
   const latestReceipt = latestContextReceipt(chat);
+  const manifest = chat?.context_manifest || {};
+  const manifestChunks = Array.isArray(manifest.included_chunks) ? manifest.included_chunks : [];
+  const manifestExcluded = Array.isArray(manifest.excluded) ? manifest.excluded : [];
   return (
     <aside className={`workbench context-panel ${power ? "power" : "easy"}`}>
       <h2>{power ? copy.inspector.powerTitle : copy.inspector.title}</h2>
@@ -2517,6 +2613,12 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
         {power && <p className="muted">{activePath.projectPath} / {activePath.sessionSlug}</p>}
         <div className="skill-stack">
           {(chat?.skills || []).map((skill) => <span key={skill}>{skill}</span>)}
+        </div>
+        <div className="inspector-fact-grid">
+          <span><strong>{latestReceipt?.included_chunks?.length || manifestChunks.length || 0}</strong>{copy.inspector.factChunks}</span>
+          <span><strong>{attachments.length}</strong>{copy.inspector.factFiles}</span>
+          <span><strong>{runs.length}</strong>{copy.inspector.factRuns}</span>
+          <span><strong>{artifacts.length}</strong>{copy.inspector.factArtifacts}</span>
         </div>
       </section>
       <ContextManifestCard manifest={chat?.context_manifest} power={power} />
@@ -2539,6 +2641,28 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
         <section>
           <h3>Active files</h3>
           {attachments.length === 0 ? <div className="empty-action-state"><p className="muted">No files are attached to this chat yet.</p><span>Attach file from the composer or start from file on Home.</span></div> : <AttachmentList attachments={attachments} onPreview={onPreview} />}
+          {manifestChunks.length > 0 && (
+            <div className="manifest-file-facts">
+              <strong>{copy.inspector.includedChunks}</strong>
+              {manifestChunks.slice(0, 5).map((chunk) => (
+                <span key={chunk.chunk_id || chunk.path}>
+                  {chunk.filename || chunk.path}
+                  <small>{chunk.reason} · {chunk.privacy}</small>
+                </span>
+              ))}
+            </div>
+          )}
+          {power && manifestExcluded.length > 0 && (
+            <details className="manifest-exclusions">
+              <summary>{manifestExcluded.length} exclusions</summary>
+              {manifestExcluded.slice(0, 8).map((item, index) => (
+                <span key={`${item.path || item.pattern}-${index}`}>
+                  {item.path || item.pattern}
+                  <small>{item.reason}</small>
+                </span>
+              ))}
+            </details>
+          )}
         </section>
       )}
       {currentTab === "memory" && (
@@ -2553,10 +2677,10 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           {runs.length === 0 ? <div className="empty-action-state"><p className="muted">No project runs yet.</p><span>Run an aiws.yaml action to create logs and artifacts.</span></div> : (
             <div className="compact-list">
               {runs.slice(0, 6).map((run) => (
-                <span key={run.run_id || `${run.command}-${run.created_at}`}>
+                <button type="button" className="compact-row-button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => onOpenRun?.(run)}>
                   <strong>{run.label || run.command}</strong>
                   <small>{run.status} · {run.created_at}</small>
-                </span>
+                </button>
               ))}
             </div>
           )}
@@ -2568,10 +2692,10 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           {artifacts.length === 0 ? <div className="empty-action-state"><p className="muted">No artifacts yet.</p><span>Run an action to generate shareable files.</span></div> : (
             <div className="compact-list">
               {artifacts.slice(0, 8).map((artifact) => (
-                <span key={`${artifact.run.run_id}-${artifact.path}`}>
+                <button type="button" className="compact-row-button" key={`${artifact.run.run_id}-${artifact.path}`} onClick={() => onOpenArtifact?.(artifact)}>
                   <strong>{artifact.path}</strong>
                   <small>{artifact.exists ? `${artifact.size} bytes` : "not found"} · {artifact.run.label || artifact.run.command}</small>
-                </span>
+                </button>
               ))}
             </div>
           )}

@@ -56,7 +56,9 @@ def gateway_status() -> dict[str, Any]:
             rpc = payload.get("rpc", {}) if isinstance(payload, dict) else {}
             gateway = payload.get("gateway", {}) if isinstance(payload, dict) else {}
             summary = {
-                "runtime": str(payload.get("service", {}).get("runtime", {}).get("status", "")) if isinstance(payload.get("service"), dict) else "",
+                "runtime": str(payload.get("service", {}).get("runtime", {}).get("status", ""))
+                if isinstance(payload.get("service"), dict)
+                else "",
                 "gateway": f"{gateway.get('bindHost', '')}:{gateway.get('port', '')}".strip(":") if isinstance(gateway, dict) else "",
                 "connectivity_probe": "ok" if rpc.get("ok") else "failed",
                 "capability": str(rpc.get("capability", "")),

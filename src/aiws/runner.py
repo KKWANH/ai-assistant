@@ -102,6 +102,8 @@ def ask(
         search_mode,
         network_used=network_used,
         search_queries=[content] if network_used else [],
+        active_attachment_filenames=(active_files or None) if not include_prior_files else None,
+        include_project_files=include_prior_files,
     )
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
@@ -141,16 +143,20 @@ def ask(
         raise
     output_tokens = costs.rough_token_count(response)
     actual = costs.estimate_cost(provider, model, input_tokens, output_tokens)
+    receipt = context_receipts.build_context_receipt(
+        manifest,
+        provider,
+        model,
+        actual,
+        current_files=active_files if not include_prior_files else None,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    context_receipts.append_context_receipt(root, project_path, session_slug, receipt)
     assistant_metadata = {
         "cost": actual,
         "search": search.results_metadata(search_mode, resolved_results),
-        "context_receipt": context_receipts.build_context_receipt(
-            manifest,
-            provider,
-            model,
-            actual,
-            current_files=active_files if not include_prior_files else None,
-        ),
+        "context_receipt": receipt,
     }
     if execution_plan:
         assistant_metadata["execution_plan"] = execution_plan
@@ -197,6 +203,8 @@ def write_used_context(
     search_mode: str,
     network_used: bool = False,
     search_queries: list[str] | None = None,
+    active_attachment_filenames: set[str] | None = None,
+    include_project_files: bool = True,
 ) -> dict[str, object]:
     path = storage.session_dir(root, project_path, session_slug) / "used_context.json"
     manifest = context_manifest.build_context_manifest(
@@ -210,6 +218,8 @@ def write_used_context(
         prompt_context=prompt_context,
         network_used=network_used,
         search_queries=search_queries or [],
+        active_attachment_filenames=active_attachment_filenames,
+        include_project_files=include_project_files,
     )
     storage.write_json(
         path,
@@ -245,12 +255,7 @@ def server_time_context() -> str:
     now = datetime.now().astimezone()
     timezone = now.tzname() or str(now.astimezone().tzinfo)
     locale = os.environ.get("AIWS_LOCALE", "ko-KR")
-    return (
-        "## Current Server Time\n"
-        f"Current server time: {now:%Y-%m-%d %H:%M}\n"
-        f"Timezone: {timezone}\n"
-        f"Locale: {locale}\n\n"
-    )
+    return f"## Current Server Time\nCurrent server time: {now:%Y-%m-%d %H:%M}\nTimezone: {timezone}\nLocale: {locale}\n\n"
 
 
 def enforce_remote_guardrails(

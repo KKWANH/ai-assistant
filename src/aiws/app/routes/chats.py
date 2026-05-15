@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
 
 from aiws import attachments, storage
 from aiws.core import action_registry, context_manifest

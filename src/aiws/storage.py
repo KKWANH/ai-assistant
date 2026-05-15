@@ -174,7 +174,17 @@ def restore_workspace_backup(archive_path: str | Path, destination: str | Path, 
             target = (destination_path / member.name).resolve()
             if not str(target).startswith(str(destination_path) + "/") and target != destination_path:
                 raise WorkspaceError("Backup archive contains an unsafe path.")
-        tar.extractall(destination_path)
+            if member.issym() or member.islnk() or not member.isfile() and not member.isdir():
+                raise WorkspaceError("Backup archive contains an unsupported member.")
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = tar.extractfile(member)
+            if source is None:
+                raise WorkspaceError("Backup archive contains an unreadable file.")
+            with source, target.open("wb") as handle:
+                shutil.copyfileobj(source, handle)
     init_workspace(destination_path)
     return destination_path
 
@@ -890,19 +900,11 @@ def can_access_project(root: str | Path, project: dict[str, Any], username: str 
 
 
 def list_visible_projects(root: str | Path, username: str | None) -> list[dict[str, Any]]:
-    return [
-        project
-        for project in list_projects(root)
-        if not project.get("hidden") and can_access_project(root, project, username)
-    ]
+    return [project for project in list_projects(root) if not project.get("hidden") and can_access_project(root, project, username)]
 
 
 def list_visible_general_chat_projects(root: str | Path, username: str | None) -> list[dict[str, Any]]:
-    return [
-        project
-        for project in list_projects(root)
-        if project.get("hidden") and can_access_project(root, project, username)
-    ]
+    return [project for project in list_projects(root) if project.get("hidden") and can_access_project(root, project, username)]
 
 
 def ensure_project_access(root: str | Path, project_path: str, username: str | None) -> None:
@@ -1040,9 +1042,7 @@ def update_moved_attachment_paths(root: str | Path, project_path: str, session_s
     for item in read_attachment_metadata(root, project_path, session_slug):
         filename = str(item.get("filename", ""))
         if filename:
-            item["path"] = str(
-                (session_dir(root, project_path, session_slug) / "attachments" / filename).relative_to(workspace_path(root))
-            )
+            item["path"] = str((session_dir(root, project_path, session_slug) / "attachments" / filename).relative_to(workspace_path(root)))
         updated.append(json.dumps(item, ensure_ascii=False))
     file_store.atomic_write_text(metadata_path, "\n".join(updated) + ("\n" if updated else ""))
 

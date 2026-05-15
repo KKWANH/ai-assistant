@@ -21,7 +21,9 @@ SAFE_ENV_KEYS = {"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR"}
 class CommandSpec:
     argv: list[str]
     cwd: Path
+    root: Path | None = None
     timeout_sec: int = 120
+    output_limit: int = 200_000
     stdin: str | None = None
 
 
@@ -33,12 +35,26 @@ class CommandResult:
     stderr: str
 
 
-def run(command: str | list[str] | tuple[str, ...] | CommandSpec, *, cwd: Path, timeout: int = 120) -> CommandResult:
-    spec = command if isinstance(command, CommandSpec) else CommandSpec(
-        argv=normalize_argv(command),
-        cwd=cwd,
-        timeout_sec=timeout,
+def run(
+    command: str | list[str] | tuple[str, ...] | CommandSpec,
+    *,
+    cwd: Path,
+    root: Path | None = None,
+    timeout: int = 120,
+    output_limit: int = 200_000,
+) -> CommandResult:
+    spec = (
+        command
+        if isinstance(command, CommandSpec)
+        else CommandSpec(
+            argv=normalize_argv(command),
+            cwd=cwd,
+            root=root,
+            timeout_sec=timeout,
+            output_limit=output_limit,
+        )
     )
+    validate_cwd(spec.cwd, spec.root)
     validate_command(spec.argv)
     completed = subprocess.run(
         spec.argv,
@@ -48,14 +64,14 @@ def run(command: str | list[str] | tuple[str, ...] | CommandSpec, *, cwd: Path, 
         capture_output=True,
         text=True,
         timeout=spec.timeout_sec,
-        stdin=spec.stdin,
+        input=spec.stdin,
         env=scrubbed_env(),
     )
     return CommandResult(
         args=list(completed.args) if isinstance(completed.args, (list, tuple)) else [str(completed.args)],
         returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        stdout=truncate_output(completed.stdout, spec.output_limit),
+        stderr=truncate_output(completed.stderr, spec.output_limit),
     )
 
 
@@ -86,7 +102,19 @@ def validate_command(argv: list[str]) -> None:
         raise storage.WorkspaceError("python -c is not allowed by default.")
 
 
+def validate_cwd(cwd: Path, root: Path | None) -> None:
+    resolved = cwd.expanduser().resolve()
+    if root is not None and not resolved.is_relative_to(root.expanduser().resolve()):
+        raise storage.WorkspaceError("Command cwd escapes the project root.")
+
+
 def scrubbed_env() -> dict[str, str]:
     env = {key: value for key, value in os.environ.items() if key in SAFE_ENV_KEYS}
     env.setdefault("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
     return env
+
+
+def truncate_output(value: str, limit: int) -> str:
+    if limit <= 0 or len(value) <= limit:
+        return value
+    return value[:limit] + "\n[output truncated]\n"

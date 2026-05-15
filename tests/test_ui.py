@@ -201,28 +201,28 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         "provider": "ollama",
         "model": "qwen3:0.6b",
         "content": "Read this file\n\nAttached file: note.txt\n\nExtracted attachment text:\nfile body",
-            "actor": None,
-            "search_mode": "auto",
-            "stored_content": "Read this file",
-            "user_metadata": {
-                "attachments": [
-                        {
-                            "filename": "note.txt",
-                            "url": "/attachment/ai-system/local-runner/ollama-mvp/note.txt",
-                            "content_type": "txt",
-                            "mime": "text/plain",
-                            "size": 9,
-                        "is_image": False,
-                        "is_pdf": False,
-                        "delivery": "Sent as text context",
-                        "text_available": True,
-                        "extraction_status": "success",
-                        "extraction_error": "",
-                    }
-                ]
-            },
-            "provider_attachments": [],
-        }
+        "actor": None,
+        "search_mode": "auto",
+        "stored_content": "Read this file",
+        "user_metadata": {
+            "attachments": [
+                {
+                    "filename": "note.txt",
+                    "url": "/attachment/ai-system/local-runner/ollama-mvp/note.txt",
+                    "content_type": "txt",
+                    "mime": "text/plain",
+                    "size": 9,
+                    "is_image": False,
+                    "is_pdf": False,
+                    "delivery": "Sent as text context",
+                    "text_available": True,
+                    "extraction_status": "success",
+                    "extraction_error": "",
+                }
+            ]
+        },
+        "provider_attachments": [],
+    }
 
 
 def test_admin_dashboard_requires_admin_and_shows_usage(tmp_path):
@@ -318,7 +318,9 @@ def test_home_starter_action_creates_run_and_artifact(tmp_path):
         assert artifact_path.endswith("summary.md")
 
         detail = json.loads(request.urlopen(f"{base_url}/api/home-run?run_id={parse.quote(run_id)}", timeout=5).read().decode("utf-8"))
-        artifact = json.loads(request.urlopen(f"{base_url}/api/home-artifact?path={parse.quote(artifact_path)}", timeout=5).read().decode("utf-8"))
+        artifact = json.loads(
+            request.urlopen(f"{base_url}/api/home-artifact?path={parse.quote(artifact_path)}", timeout=5).read().decode("utf-8")
+        )
 
         assert detail["run"]["run_id"] == run_id
         assert artifact["artifact"]["viewer_type"] == "markdownViewer"
@@ -419,19 +421,23 @@ def test_kimi_image_upload_is_passed_as_vision_attachment(tmp_path, monkeypatch)
     try:
         boundary = "----aiws-image-boundary"
         multipart_body = (
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="provider"\r\n\r\n'
-            "kimi\r\n"
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="model"\r\n\r\n'
-            "kimi-k2.5\r\n"
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="content"\r\n\r\n'
-            "What is in this image?\r\n"
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="attachment"; filename="photo.png"\r\n'
-            "Content-Type: image/png\r\n\r\n"
-        ).encode("utf-8") + b"\x89PNG\r\n\x1a\nx\r\n" + f"--{boundary}--\r\n".encode("utf-8")
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="provider"\r\n\r\n'
+                "kimi\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="model"\r\n\r\n'
+                "kimi-k2.5\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="content"\r\n\r\n'
+                "What is in this image?\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="attachment"; filename="photo.png"\r\n'
+                "Content-Type: image/png\r\n\r\n"
+            ).encode("utf-8")
+            + b"\x89PNG\r\n\x1a\nx\r\n"
+            + f"--{boundary}--\r\n".encode("utf-8")
+        )
         req = request.Request(
             f"{base_url}/api/ask/ai-system/vision",
             data=multipart_body,
@@ -541,19 +547,23 @@ def test_local_image_upload_returns_clear_vision_error(tmp_path, monkeypatch):
     try:
         boundary = "----aiws-local-image-boundary"
         multipart_body = (
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="provider"\r\n\r\n'
-            "ollama\r\n"
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="model"\r\n\r\n'
-            "qwen3:4b\r\n"
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="content"\r\n\r\n'
-            "What is in this image?\r\n"
-            f"--{boundary}\r\n"
-            'Content-Disposition: form-data; name="attachment"; filename="photo.png"\r\n'
-            "Content-Type: image/png\r\n\r\n"
-        ).encode("utf-8") + b"\x89PNG\r\n\x1a\nx\r\n" + f"--{boundary}--\r\n".encode("utf-8")
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="provider"\r\n\r\n'
+                "ollama\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="model"\r\n\r\n'
+                "qwen3:4b\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="content"\r\n\r\n'
+                "What is in this image?\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="attachment"; filename="photo.png"\r\n'
+                "Content-Type: image/png\r\n\r\n"
+            ).encode("utf-8")
+            + b"\x89PNG\r\n\x1a\nx\r\n"
+            + f"--{boundary}--\r\n".encode("utf-8")
+        )
         req = request.Request(
             f"{base_url}/api/ask/ai-system/vision",
             data=multipart_body,
@@ -717,17 +727,25 @@ commands:
         assert '"hello"' in config
 
         preview_body = parse.urlencode({"_csrf": csrf}).encode("utf-8")
-        preview = opener.open(
-            request.Request(f"{base_url}/api/project-actions/tools/hello/preview", data=preview_body, method="POST"),
-            timeout=5,
-        ).read().decode("utf-8")
+        preview = (
+            opener.open(
+                request.Request(f"{base_url}/api/project-actions/tools/hello/preview", data=preview_body, method="POST"),
+                timeout=5,
+            )
+            .read()
+            .decode("utf-8")
+        )
         assert '"requires_confirmation": true' in preview
 
         run_body = parse.urlencode({"_csrf": csrf, "confirm": "1", "session_slug": "action-chat"}).encode("utf-8")
-        run = opener.open(
-            request.Request(f"{base_url}/api/project-actions/tools/hello/run", data=run_body, method="POST"),
-            timeout=5,
-        ).read().decode("utf-8")
+        run = (
+            opener.open(
+                request.Request(f"{base_url}/api/project-actions/tools/hello/run", data=run_body, method="POST"),
+                timeout=5,
+            )
+            .read()
+            .decode("utf-8")
+        )
         assert '"stdout": "hello"' in run
         run_payload = json.loads(run)
         assert run_payload["message"]["role"] == "tool"
@@ -737,10 +755,14 @@ commands:
         assert messages[-1]["metadata"]["project_action"]["command"] == "hello"
 
         run_id = run_payload["run"]["run_id"]
-        detail = opener.open(
-            f"{base_url}/api/project-run?project=tools&run_id={parse.quote(run_id)}",
-            timeout=5,
-        ).read().decode("utf-8")
+        detail = (
+            opener.open(
+                f"{base_url}/api/project-run?project=tools&run_id={parse.quote(run_id)}",
+                timeout=5,
+            )
+            .read()
+            .decode("utf-8")
+        )
         assert '"stdout": "hello"' in detail
     finally:
         server.shutdown()

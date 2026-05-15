@@ -12,6 +12,8 @@ from typing import Any
 
 from aiws import attachments, storage
 from aiws.core import contracts
+from aiws.infra import file_store
+from aiws.infra.paths import resolve_under_root
 
 
 HOME_ACTIONS: dict[str, dict[str, Any]] = {
@@ -195,17 +197,29 @@ def run_action(
         logs=logs,
         artifacts=artifacts_out,
         errors=errors,
+        kind="home_action",
+        approval={"required": bool(action.get("requires_confirmation")), "confirmed": False, "approved_by": ""},
+        capabilities={
+            "read_files": bool(saved_file),
+            "write_files": True,
+            "run_shell": False,
+            "run_python": False,
+            "allow_network": False,
+            "allow_cloud": provider != "ollama",
+        },
+        inputs={
+            "content": content[:2000],
+            "file": saved_file["path"] if saved_file else "",
+            "provider": provider,
+            "model": model,
+        },
+        outputs={"expected_artifacts": action.get("expected_output_artifacts", [])},
+        error="\n".join(errors),
     )
-    run["input_snapshot"] = {
-        "content": content[:2000],
-        "file": saved_file["path"] if saved_file else "",
-        "provider": provider,
-        "model": model,
-    }
     storage.write_json(run_path / "run.json", run)
     storage.write_json(run_path / "result.json", {"run": run})
-    (run_path / "logs.jsonl").write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in logs), encoding="utf-8")
-    (run_path / "run.md").write_text(run_markdown(run), encoding="utf-8")
+    write_logs_jsonl(run_path, logs)
+    file_store.atomic_write_text(run_path / "run.md", run_markdown(run))
     return run
 
 
@@ -229,6 +243,29 @@ def list_artifacts(root: str | Path, username: str | None, *, limit: int = 20) -
     return artifacts_out[:limit]
 
 
+def write_logs_jsonl(run_path: Path, logs: list[dict[str, Any]]) -> None:
+    file_store.atomic_write_text(
+        run_path / "logs.jsonl",
+        "\n".join(json.dumps(item, ensure_ascii=False) for item in logs) + ("\n" if logs else ""),
+    )
+
+
+def read_logs_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_file():
+        return []
+    logs: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            logs.append(value)
+    return logs
+
+
 def read_run_detail(root: str | Path, username: str | None, run_id: str) -> dict[str, Any]:
     base = home_dir(root, username)
     if not run_id or "/" in run_id or "\\" in run_id:
@@ -243,6 +280,7 @@ def read_run_detail(root: str | Path, username: str | None, run_id: str) -> dict
         "result": storage.read_json(run_path / "result.json") if (run_path / "result.json").exists() else {"run": run},
         "stdout": "",
         "stderr": "\n".join(run.get("errors", [])),
+        "logs": read_logs_jsonl(run_path / "logs.jsonl"),
         "markdown": (run_path / "run.md").read_text(encoding="utf-8", errors="replace"),
     }
 
@@ -252,8 +290,8 @@ def read_artifact(root: str | Path, username: str | None, artifact_path: str) ->
     rel = artifact_path.strip().lstrip("/")
     if not rel or ".." in Path(rel).parts:
         raise storage.WorkspaceError("Invalid artifact path.")
-    resolved = (base / rel).resolve()
-    if not resolved.is_relative_to(base) or not resolved.exists() or not resolved.is_file():
+    resolved = resolve_under_root(base, rel)
+    if not resolved.exists() or not resolved.is_file():
         raise storage.WorkspaceError("Artifact file does not exist.")
     if resolved.stat().st_size > 1_000_000:
         raise storage.WorkspaceError("Artifact is too large to preview.")
@@ -339,7 +377,9 @@ def create_action_artifacts(
     return [(path, "Codex task prompt")]
 
 
-def csv_artifacts(content: str, saved_file: dict[str, Any] | None, artifact_root: Path, logs: list[dict[str, Any]]) -> list[tuple[Path, str]]:
+def csv_artifacts(
+    content: str, saved_file: dict[str, Any] | None, artifact_root: Path, logs: list[dict[str, Any]]
+) -> list[tuple[Path, str]]:
     text = input_text(content, saved_file)
     rows = list(csv.reader(text.splitlines())) if text.strip() else []
     table = artifact_root / "table.csv"
@@ -365,7 +405,11 @@ def input_text(content: str, saved_file: dict[str, Any] | None) -> str:
 def document_summary_markdown(text: str, saved_file: dict[str, Any] | None) -> str:
     source = saved_file["filename"] if saved_file else "typed input"
     status = "success" if text.strip() else "no readable text"
-    limitation = "This local starter uses extracted text and simple structure; ask a model for deeper interpretation." if text.strip() else "No text was extracted from the input."
+    limitation = (
+        "This local starter uses extracted text and simple structure; ask a model for deeper interpretation."
+        if text.strip()
+        else "No text was extracted from the input."
+    )
     excerpt = text[:2400].strip() or "(no extracted text)"
     return f"""# Document Summary
 
@@ -429,8 +473,7 @@ def csv_summary_markdown(headers: list[str], rows: list[list[str]], saved_file: 
     numeric = numeric_stats(headers, rows)
     missing_lines = [f"- {name}: {count}" for name, count in missing.items() if count]
     numeric_lines = [
-        f"- {name}: min {stats['min']:.4g}, max {stats['max']:.4g}, mean {stats['mean']:.4g}"
-        for name, stats in numeric.items()
+        f"- {name}: min {stats['min']:.4g}, max {stats['max']:.4g}, mean {stats['mean']:.4g}" for name, stats in numeric.items()
     ]
     return "\n".join(
         [
@@ -507,7 +550,7 @@ def investment_workflow_markdown(content: str, saved_file: dict[str, Any] | None
 
 ## Notes
 
-{(content or 'Import the investment template into a project to run the Python rebalancing action.').strip()}
+{(content or "Import the investment template into a project to run the Python rebalancing action.").strip()}
 """
 
 

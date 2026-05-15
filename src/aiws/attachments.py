@@ -11,6 +11,8 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from . import storage
+from .infra import file_store
+from .infra.paths import resolve_under_root
 
 SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".yaml", ".yml"}
 SUPPORTED_ATTACHMENT_EXTENSIONS = {
@@ -59,9 +61,7 @@ def attachment_usage_bytes(root: str | Path) -> int:
             continue
         for path in base.rglob("*"):
             is_session_attachment = (
-                path.parent.name == "attachments"
-                and len(path.parents) > 2
-                and path.parent.parent.parent.name == "sessions"
+                path.parent.name == "attachments" and len(path.parents) > 2 and path.parent.parent.parent.name == "sessions"
             )
             is_file_store_item = path.parent.name == "files"
             if path.is_file() and path.name != "attachments.jsonl" and (is_session_attachment or is_file_store_item):
@@ -165,13 +165,10 @@ def list_attachments(root: str | Path, project_path: str, session_slug: str) -> 
     return items
 
 
-def append_attachment_metadata(
-    root: str | Path, project_path: str, session_slug: str, metadata: dict[str, object]
-) -> None:
+def append_attachment_metadata(root: str | Path, project_path: str, session_slug: str, metadata: dict[str, object]) -> None:
     path = attachment_dir(root, project_path, session_slug)
     path.mkdir(parents=True, exist_ok=True)
-    with (path / "attachments.jsonl").open("a", encoding="utf-8") as file:
-        file.write(json.dumps(metadata, ensure_ascii=False) + "\n")
+    file_store.append_jsonl(path / "attachments.jsonl", metadata)
 
 
 def safe_filename(filename: str) -> str:
@@ -237,9 +234,7 @@ def extract_text(path: Path, extension: str) -> str:
 def read_attachment_file(root: str | Path, project_path: str, session_slug: str, filename: str) -> tuple[Path, dict[str, object]]:
     safe_name = safe_filename(filename)
     root_dir = attachment_dir(root, project_path, session_slug).resolve()
-    path = (root_dir / safe_name).resolve()
-    if not str(path).startswith(str(root_dir)):
-        raise storage.WorkspaceError("Attachment path is invalid.")
+    path = resolve_under_root(root_dir, safe_name)
     if not path.exists() or not path.is_file():
         raise storage.WorkspaceError("Attachment does not exist.")
     metadata = {}

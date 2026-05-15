@@ -968,7 +968,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
         extension = Path(filename).suffix.lower()
         if not attachments.is_image_extension(extension) or not provider_supports_file_input(provider, extension):
             return ""
-        prompt = data.get("content", "").strip() or "Describe this image. Include visible elements, important context, and details a human should verify."
+        prompt = (
+            data.get("content", "").strip()
+            or "Describe this image. Include visible elements, important context, and details a human should verify."
+        )
         try:
             client = runner.get_provider(provider)
             response = client.chat(
@@ -1575,7 +1578,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
   </script>
 </head>
 <body class="{body_class}">
-  <header><nav><a class="brand" href="/">AI Workbench Studio</a>{nav_links}<span class="muted">{html(self.current_username() or 'local')}</span></nav></header>
+  <header><nav><a class="brand" href="/">AI Workbench Studio</a>{nav_links}<span class="muted">{html(self.current_username() or "local")}</span></nav></header>
   <div class="drop-overlay">Drop file to attach</div>
   <div class="image-lightbox" data-lightbox><button type="button" data-lightbox-close>×</button><img data-lightbox-image alt=""></div>
   <main>{body}</main>
@@ -1590,14 +1593,14 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def login_form(self, error: str = "") -> str:
         language = self.language()
-        return f"""<h1>{html(t(language, 'login'))}</h1>
+        return f"""<h1>{html(t(language, "login"))}</h1>
 <p>{html(error)}</p>
 <form method="post" action="/login">
-  <label>{html(t(language, 'username'))}</label>
+  <label>{html(t(language, "username"))}</label>
   <input name="username" autocomplete="username">
-  <label>{html(t(language, 'password'))}</label>
+  <label>{html(t(language, "password"))}</label>
   <input type="password" name="password" autocomplete="current-password">
-  <button type="submit">{html(t(language, 'login'))}</button>
+  <button type="submit">{html(t(language, "login"))}</button>
 </form>"""
 
     def home(self) -> str:
@@ -1621,18 +1624,26 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def projects(self) -> str:
         items = []
-        projects = project_domain.visible(self.root, self.current_username()) if storage.has_accounts(self.root) else project_domain.list_all(self.root)
+        projects = (
+            project_domain.visible(self.root, self.current_username())
+            if storage.has_accounts(self.root)
+            else project_domain.list_all(self.root)
+        )
         for project in projects:
             items.append(
-                f"""<div class="panel"><h3><a href="/project/{project['path']}">{html(project['title'])}</a></h3>
-<div class="muted"><code>{html(project['path'])}</code></div>
-<p>{html(project.get('notes', ''))}</p>
-<p class="muted">owner={html(project.get('owner') or '-')} · {html(project.get('visibility', 'private'))}</p>
-{self.skill_pills(project.get('skills', []))}</div>"""
+                f"""<div class="panel"><h3><a href="/project/{project["path"]}">{html(project["title"])}</a></h3>
+<div class="muted"><code>{html(project["path"])}</code></div>
+<p>{html(project.get("notes", ""))}</p>
+<p class="muted">owner={html(project.get("owner") or "-")} · {html(project.get("visibility", "private"))}</p>
+{self.skill_pills(project.get("skills", []))}</div>"""
             )
-        return """<h1>Projects</h1>
+        return (
+            """<h1>Projects</h1>
 <div class="toolbar"><a class="button-link" href="/projects/new">Create Project</a></div>
-<div class="grid">""" + "".join(items or ['<div class="panel muted">No projects yet.</div>']) + "</div>"
+<div class="grid">"""
+            + "".join(items or ['<div class="panel muted">No projects yet.</div>'])
+            + "</div>"
+        )
 
     def project_form(self) -> str:
         skill_text = ", ".join(storage.list_skills(self.root))
@@ -1644,7 +1655,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
   <div class="field"><label>Notes</label><textarea name="notes"></textarea></div>
   <div class="field"><label>Skills, comma-separated</label><input name="skills" placeholder="{html(skill_text)}"></div>
   <div class="form-grid">
-    <div class="field"><label>Owner</label><input name="owner" value="{html(self.current_username() or '')}"></div>
+    <div class="field"><label>Owner</label><input name="owner" value="{html(self.current_username() or "")}"></div>
     <div class="field"><label>Visibility</label><select name="visibility"><option>private</option><option>public</option></select></div>
   </div>
   <button type="submit">Create</button>
@@ -1662,24 +1673,24 @@ class AIWSHandler(BaseHTTPRequestHandler):
             if messages:
                 preview = str(messages[-1].get("content", ""))[:140]
             session_items.append(
-                f"""<a class="session-card" href="/chat/{project_path}/{session['slug']}">
-  <h3>{html(session['title'])}</h3>
-  <div class="muted"><code>{html(session['slug'])}</code> · {len(messages)} messages</div>
-  <p class="muted">{html(preview) if preview else 'No messages yet.'}</p>
+                f"""<a class="session-card" href="/chat/{project_path}/{session["slug"]}">
+  <h3>{html(session["title"])}</h3>
+  <div class="muted"><code>{html(session["slug"])}</code> · {len(messages)} messages</div>
+  <p class="muted">{html(preview) if preview else "No messages yet."}</p>
 </a>"""
             )
         language = self.language()
         skill_cards = "".join(f'<div class="skill-card">{html(skill)}</div>' for skill in active_skills)
         return f"""<section class="hero">
   <div>
-    <h1>{html(project['title'])}</h1>
-    <p class="muted"><code>{html(project_path)}</code> · owner={html(project.get('owner') or '-')} · {html(project.get('visibility', 'private'))}</p>
-    <p>{html(project.get('notes', ''))}</p>
+    <h1>{html(project["title"])}</h1>
+    <p class="muted"><code>{html(project_path)}</code> · owner={html(project.get("owner") or "-")} · {html(project.get("visibility", "private"))}</p>
+    <p>{html(project.get("notes", ""))}</p>
   </div>
   <a class="button-link secondary" href="/projects">Projects</a>
 </section>
 <div class="grid">
-  <div class="panel"><strong>{html(t(language, 'active_skills'))}</strong><div>{skill_cards or '<span class="muted">No skills selected.</span>'}</div></div>
+  <div class="panel"><strong>{html(t(language, "active_skills"))}</strong><div>{skill_cards or '<span class="muted">No skills selected.</span>'}</div></div>
   <form class="panel" method="post" action="/sessions/{project_path}">
     <h3>Create Session</h3>
     <div class="compact-form">
@@ -1689,7 +1700,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
   </form>
 </div>
 <h2>Sessions</h2>
-<div class="session-list">{''.join(session_items or ['<div class="panel muted">No sessions yet.</div>'])}</div>"""
+<div class="session-list">{"".join(session_items or ['<div class="panel muted">No sessions yet.</div>'])}</div>"""
 
     def chat_page(self, project_path: str, session_slug: str) -> str:
         self.require_project_access(project_path, "read")
@@ -1710,8 +1721,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
     <div class="chat-top">
       <label class="sidebar-button" for="sidebar-toggle" title="Toggle sidebar">☰</label>
       <div class="chat-title">
-        <h1>{html(session['title'])}</h1>
-        <div class="muted">{html(project['title'])} · <code>{html(project_path)}</code> · <a href="/prompt/{project_path}/{session_slug}">prompt context</a></div>
+        <h1>{html(session["title"])}</h1>
+        <div class="muted">{html(project["title"])} · <code>{html(project_path)}</code> · <a href="/prompt/{project_path}/{session_slug}">prompt context</a></div>
         <div class="context-strip">{self.context_chips(project_path, session_slug, messages)}</div>
       </div>
     </div>
@@ -1739,7 +1750,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
 </div>"""
 
     def workspace_tree(self, active_project_path: str, active_session_slug: str) -> str:
-        projects = project_domain.visible(self.root, self.current_username()) if storage.has_accounts(self.root) else project_domain.list_all(self.root)
+        projects = (
+            project_domain.visible(self.root, self.current_username())
+            if storage.has_accounts(self.root)
+            else project_domain.list_all(self.root)
+        )
         root_projects = [project for project in projects if not project.get("parent")]
         by_parent: dict[str, list[dict[str, object]]] = {}
         for project in projects:
@@ -1796,17 +1811,17 @@ class AIWSHandler(BaseHTTPRequestHandler):
         for session in sessions:
             session_active = " active" if project_path == active_project_path and session["slug"] == active_session_slug else ""
             session_links.append(
-                f"""<a class="tree-session{session_active}" data-tree-item href="/chat/{project_path}/{session['slug']}">
-  {html(session['title'])}
-  <span class="tree-date">{html(short_date(session.get('created_at')))}</span>
+                f"""<a class="tree-session{session_active}" data-tree-item href="/chat/{project_path}/{session["slug"]}">
+  {html(session["title"])}
+  <span class="tree-date">{html(short_date(session.get("created_at")))}</span>
 </a>"""
             )
         return f"""<div class="tree-group">
   <a class="{project_class}{active}" data-tree-item href="/project/{project_path}">
-    {html(project['title'])}
-    <span class="tree-date">{html(short_date(project.get('created_at')))}</span>
+    {html(project["title"])}
+    <span class="tree-date">{html(short_date(project.get("created_at")))}</span>
   </a>
-  {''.join(session_links)}
+  {"".join(session_links)}
 </div>"""
 
     def context_chips(self, project_path: str, session_slug: str, messages: list[dict[str, object]]) -> str:
@@ -1842,7 +1857,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
 </aside>"""
         messages = messages or []
         skills = storage.resolve_skill_names(self.root, project_path)
-        skill_cards = "".join(f'<div class="skill-card">{html(skill)}</div>' for skill in skills) or '<p class="muted">No active skills.</p>'
+        skill_cards = (
+            "".join(f'<div class="skill-card">{html(skill)}</div>' for skill in skills) or '<p class="muted">No active skills.</p>'
+        )
         file_cards = self.attachment_workbench_cards(project_path, session_slug)
         latest = latest_assistant_metadata(messages)
         return f"""<aside class="workbench-panel" aria-label="Workbench">
@@ -1855,9 +1872,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
   <section class="workbench-section" data-workbench-panel="context">
     <h3>Context</h3>
     <div class="surface">
-      <p><strong>{html(project['title'])}</strong></p>
+      <p><strong>{html(project["title"])}</strong></p>
       <p class="muted"><code>{html(project_path)}</code> · <code>{html(session_slug)}</code></p>
-      <p>{html(project.get('notes', '') or 'No project notes yet.')}</p>
+      <p>{html(project.get("notes", "") or "No project notes yet.")}</p>
     </div>
     <h3>Active Skills / 활성 스킬</h3>
     {skill_cards}
@@ -1874,10 +1891,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
   <section class="workbench-section" data-workbench-panel="dev" hidden>
     <h3>Dev</h3>
     <div class="graphite-surface surface">
-      <p><span class="status-lamp"></span>{html(str(latest.get('provider') or 'provider pending'))}</p>
-      <p>Model: <code>{html(str(latest.get('model') or 'not selected'))}</code></p>
-      <p>Search: <code>{html(str(latest.get('search_mode') or 'off'))}</code></p>
-      <p>Cost: <code>{html(str(latest.get('cost') if latest.get('cost') is not None else 'n/a'))}</code></p>
+      <p><span class="status-lamp"></span>{html(str(latest.get("provider") or "provider pending"))}</p>
+      <p>Model: <code>{html(str(latest.get("model") or "not selected"))}</code></p>
+      <p>Search: <code>{html(str(latest.get("search_mode") or "off"))}</code></p>
+      <p>Cost: <code>{html(str(latest.get("cost") if latest.get("cost") is not None else "n/a"))}</code></p>
     </div>
     <p class="archive-hint">JSONL and Markdown archives live under the session folder in the local workspace.</p>
     <pre class="code-block"><code>aiws prompt {html(project_path)} {html(session_slug)} --root ~/.ai-workspace</code></pre>
@@ -1910,29 +1927,33 @@ class AIWSHandler(BaseHTTPRequestHandler):
         profile = account.get("profile", {})
         language = self.language()
         avatar = profile.get("avatar", "")
-        avatar_html = f'<img src="/avatar/{html(username)}" alt="" style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:1px solid var(--border)">' if avatar else '<div class="muted">No profile photo.</div>'
+        avatar_html = (
+            f'<img src="/avatar/{html(username)}" alt="" style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:1px solid var(--border)">'
+            if avatar
+            else '<div class="muted">No profile photo.</div>'
+        )
         memories = "".join(f"<li>{html(item.get('content', ''))}</li>" for item in profile.get("memory", [])[-10:])
-        return f"""<h1>{html(t(language, 'profile'))}</h1>
+        return f"""<h1>{html(t(language, "profile"))}</h1>
 <div class="grid">
   <div class="panel">{avatar_html}
     <form method="post" action="/profile/avatar" enctype="multipart/form-data">
-      <div class="field"><label>{html(t(language, 'avatar'))}</label><input type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp" required></div>
-      <button type="submit">{html(t(language, 'save'))}</button>
+      <div class="field"><label>{html(t(language, "avatar"))}</label><input type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp" required></div>
+      <button type="submit">{html(t(language, "save"))}</button>
     </form>
   </div>
   <div class="panel">
     <form method="post" action="/profile">
-      <div class="field"><label>{html(t(language, 'name'))}</label><input name="name" value="{html(profile.get('name', ''))}"></div>
-      <div class="field"><label>{html(t(language, 'age'))}</label><input name="age" value="{html(profile.get('age', ''))}"></div>
-      <div class="field"><label>{html(t(language, 'job'))}</label><input name="job" value="{html(profile.get('job', ''))}"></div>
-      <div class="field"><label>{html(t(language, 'situation'))}</label><textarea name="situation">{html(profile.get('situation', ''))}</textarea></div>
-      <div class="field"><label>{html(t(language, 'language'))}</label><select name="language"><option value="en" {selected(profile.get('language', 'en'), 'en')}>English</option><option value="ko" {selected(profile.get('language'), 'ko')}>한국어</option></select></div>
-      <div class="field"><label>{html(t(language, 'memory'))}</label><textarea name="memory" placeholder="새 메모리를 추가합니다."></textarea></div>
-      <button type="submit">{html(t(language, 'save'))}</button>
+      <div class="field"><label>{html(t(language, "name"))}</label><input name="name" value="{html(profile.get("name", ""))}"></div>
+      <div class="field"><label>{html(t(language, "age"))}</label><input name="age" value="{html(profile.get("age", ""))}"></div>
+      <div class="field"><label>{html(t(language, "job"))}</label><input name="job" value="{html(profile.get("job", ""))}"></div>
+      <div class="field"><label>{html(t(language, "situation"))}</label><textarea name="situation">{html(profile.get("situation", ""))}</textarea></div>
+      <div class="field"><label>{html(t(language, "language"))}</label><select name="language"><option value="en" {selected(profile.get("language", "en"), "en")}>English</option><option value="ko" {selected(profile.get("language"), "ko")}>한국어</option></select></div>
+      <div class="field"><label>{html(t(language, "memory"))}</label><textarea name="memory" placeholder="새 메모리를 추가합니다."></textarea></div>
+      <button type="submit">{html(t(language, "save"))}</button>
     </form>
   </div>
 </div>
-<h2>{html(t(language, 'memory'))}</h2>
+<h2>{html(t(language, "memory"))}</h2>
 <div class="panel"><ul>{memories or '<li class="muted">No saved memory yet.</li>'}</ul></div>"""
 
     def serve_avatar(self, username: str) -> None:
@@ -2010,7 +2031,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def login_key(self, username: str) -> tuple[str, str]:
         forwarded = self.headers.get("CF-Connecting-IP") or self.headers.get("X-Forwarded-For", "")
-        ip = (forwarded.split(",", 1)[0].strip() or self.client_address[0])
+        ip = forwarded.split(",", 1)[0].strip() or self.client_address[0]
         return ip, storage.slugify(username or "unknown")
 
     def login_is_limited(self, username: str) -> bool:
@@ -2044,10 +2065,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         if isinstance(metadata, dict) and isinstance(metadata.get("cost"), dict):
             cost = metadata["cost"]
             if cost.get("estimated_cost") is not None:
-                meta += (
-                    f'<div class="muted">estimated cost: '
-                    f'{html(cost.get("currency", "USD"))} {html(cost.get("estimated_cost"))}</div>'
-                )
+                meta += f'<div class="muted">estimated cost: {html(cost.get("currency", "USD"))} {html(cost.get("estimated_cost"))}</div>'
         content = render_content(message.get("content", ""))
         return f"""<div class="message-row {html(role)}"><div class="message {html(role)}">
 <div class="message-role">{html(role)}</div>
@@ -2102,8 +2120,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             url = f"/attachment/{project_path}/{session_slug}/{item['filename']}"
             preview = html(str(item.get("text", ""))[:240]) or "No extracted text."
             items.append(
-                f"""<div class="panel"><a href="{html(url)}">{html(item['filename'])}</a>
-<div class="muted">{html(item.get('content_type', 'file'))} · {html(item.get('size', 0))} bytes</div>
+                f"""<div class="panel"><a href="{html(url)}">{html(item["filename"])}</a>
+<div class="muted">{html(item.get("content_type", "file"))} · {html(item.get("size", 0))} bytes</div>
 <pre>{preview}</pre></div>"""
             )
         return "".join(items) or '<p class="muted">No attachments yet.</p>'
@@ -2130,13 +2148,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
         for account in storage.list_accounts(self.root):
             usage = account.get("usage", {})
             rows.append(
-                f"""<tr><td>{html(account['username'])}</td><td>{html(account['admin'])}</td>
-<td>{html(usage.get('messages', 0))}</td><td>{html(usage.get('asks', 0))}</td></tr>"""
+                f"""<tr><td>{html(account["username"])}</td><td>{html(account["admin"])}</td>
+<td>{html(usage.get("messages", 0))}</td><td>{html(usage.get("asks", 0))}</td></tr>"""
             )
         return f"""<h1>Admin Dashboard</h1>
 <div class="panel"><table>
 <thead><tr><th>User</th><th>Admin</th><th>Messages</th><th>Asks</th></tr></thead>
-<tbody>{''.join(rows)}</tbody>
+<tbody>{"".join(rows)}</tbody>
 </table></div>
 <h2>Model Costs</h2>
 <div class="panel"><pre>{html(model_cost_table())}</pre></div>"""
@@ -2153,13 +2171,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
 
 def html(value: object) -> str:
-    return (
-        str(value)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def render_content(value: object) -> str:
@@ -2260,7 +2272,9 @@ def provider_attachment_payload(provider: str, extension: str, content: bytes) -
         return [
             {
                 "kind": "inline_data",
-                "mime_type": attachments.image_mime_type(extension) if attachments.is_image_extension(extension) else gemini_mime_type(extension),
+                "mime_type": attachments.image_mime_type(extension)
+                if attachments.is_image_extension(extension)
+                else gemini_mime_type(extension),
                 "data": base64.b64encode(content).decode("ascii"),
             }
         ]

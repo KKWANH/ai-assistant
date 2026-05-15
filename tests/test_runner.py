@@ -67,10 +67,13 @@ def test_ask_calls_ollama_and_persists_messages(tmp_path, monkeypatch):
     assert receipt["provider"] == "ollama"
     assert receipt["privacy_mode"] == "local"
     assert receipt["estimated_cost"] == 0.0
+    assert receipt["input_tokens"] > 0
+    receipts_path = storage.session_dir(root, "ai-system/local-runner", "ollama-mvp") / "context_receipts.jsonl"
+    receipts = [json.loads(line) for line in receipts_path.read_text(encoding="utf-8").splitlines()]
+    assert receipts[-1]["provider"] == "ollama"
+    assert receipts[-1]["model_delivery"] == "local"
 
-    markdown = (storage.session_dir(root, "ai-system/local-runner", "ollama-mvp") / "session.md").read_text(
-        encoding="utf-8"
-    )
+    markdown = (storage.session_dir(root, "ai-system/local-runner", "ollama-mvp") / "session.md").read_text(encoding="utf-8")
     assert "## User" in markdown
     assert "## Assistant" in markdown
 
@@ -173,6 +176,9 @@ def test_ask_with_current_attachment_does_not_send_previous_files(tmp_path, monk
     receipt = storage.read_messages(root, "ai-system", "images")[-1]["metadata"]["context_receipt"]
     assert [item["filename"] for item in receipt["used_files"]] == ["current.txt"]
     assert any(item["filename"] == "old.txt" for item in receipt["unused_files"])
+    assert receipt["included_chunks"][0]["filename"] == "current.txt"
+    assert receipt["included_chunks"][0]["privacy"] == "local_only"
+    assert any(item["filename"] == "old.txt" and item["reason"] == "not selected for this request" for item in receipt["excluded"])
 
 
 def test_ask_can_include_previous_files_when_requested(tmp_path, monkeypatch):
@@ -204,6 +210,7 @@ def test_ask_can_include_previous_files_when_requested(tmp_path, monkeypatch):
     assert "old private text" in system
     receipt = storage.read_messages(root, "ai-system", "images")[-1]["metadata"]["context_receipt"]
     assert {item["filename"] for item in receipt["used_files"]} == {"current.txt", "old.txt"}
+    assert {item["filename"] for item in receipt["included_chunks"]} == {"current.txt", "old.txt"}
 
 
 def test_ask_does_not_store_memory_without_explicit_request(tmp_path, monkeypatch):

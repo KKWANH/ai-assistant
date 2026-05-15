@@ -144,7 +144,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_command.add_argument("--port", type=int, default=8765)
     run_command.add_argument("--password")
     run_command.add_argument("--models", default="ollama", help="Comma-separated local services to start. Supported: ollama, none.")
-    run_command.add_argument("--idle-timeout", type=int, default=1800, help="Seconds before idle local model services are stopped. 0 disables idle stop.")
+    run_command.add_argument(
+        "--idle-timeout", type=int, default=1800, help="Seconds before idle local model services are stopped. 0 disables idle stop."
+    )
     run_command.add_argument("--status-path")
     add_root(run_command)
 
@@ -188,10 +190,7 @@ def run(args: argparse.Namespace) -> int:
 
     if args.command == "models" and args.models_command == "costs":
         for item in costs.list_model_costs():
-            print(
-                f"{item.provider}\t{item.model}\t"
-                f"input=${item.input_per_million}/M\toutput=${item.output_per_million}/M\t{item.note}"
-            )
+            print(f"{item.provider}\t{item.model}\tinput=${item.input_per_million}/M\toutput=${item.output_per_million}/M\t{item.note}")
         return 0
 
     if args.command == "account" and args.account_command == "create":
@@ -208,10 +207,7 @@ def run(args: argparse.Namespace) -> int:
     if args.command == "account" and args.account_command == "list":
         for account in storage.list_accounts(args.root):
             usage = account.get("usage", {})
-            print(
-                f"{account['username']}\tadmin={account['admin']}\t"
-                f"messages={usage.get('messages', 0)}\tasks={usage.get('asks', 0)}"
-            )
+            print(f"{account['username']}\tadmin={account['admin']}\tmessages={usage.get('messages', 0)}\tasks={usage.get('asks', 0)}")
         return 0
 
     if args.command == "account" and args.account_command == "update":

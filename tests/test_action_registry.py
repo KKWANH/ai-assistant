@@ -199,6 +199,8 @@ commands:
 
     assert run["status"] == "completed"
     assert run["stdout"] == "hi"
+    assert (run_dir / "run.json").exists()
+    assert (run_dir / "logs.jsonl").exists()
     assert (run_dir / "run.md").exists()
     assert (run_dir / "stdout.txt").read_text(encoding="utf-8") == "hi"
     assert (run_dir / "stderr.txt").exists()
@@ -225,6 +227,121 @@ commands:
         action_registry.load_config(root, "unsafe")
 
 
+def test_action_cwd_path_traversal_is_rejected(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Unsafe")
+    write_project_config(
+        root,
+        "unsafe",
+        """
+name: Unsafe
+root: .
+commands:
+  escape:
+    kind: shell
+    cwd: ..
+    command: printf hi
+""",
+    )
+
+    with pytest.raises(storage.WorkspaceError, match="escapes"):
+        action_registry.preview_action(root, "unsafe", "escape")
+
+
+def test_action_absolute_script_path_is_rejected(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Unsafe")
+    write_project_config(
+        root,
+        "unsafe",
+        f"""
+name: Unsafe
+root: .
+commands:
+  escape:
+    kind: python
+    script: {tmp_path / "script.py"}
+""",
+    )
+
+    with pytest.raises(storage.WorkspaceError, match="Absolute paths"):
+        action_registry.run_action(root, "unsafe", "escape", confirmed=True)
+
+
+def test_shell_action_requires_run_shell_capability(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Unsafe")
+    write_project_config(
+        root,
+        "unsafe",
+        """
+name: Unsafe
+root: .
+commands:
+  blocked:
+    kind: shell
+    permissions:
+      shell: false
+    command: printf hi
+""",
+    )
+
+    with pytest.raises(storage.WorkspaceError, match="run_shell capability"):
+        action_registry.run_action(root, "unsafe", "blocked", confirmed=True)
+
+
+def test_python_action_requires_run_python_capability(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Unsafe")
+    script = storage.project_dir(root, "unsafe") / "script.py"
+    script.write_text("print('hi')\n", encoding="utf-8")
+    write_project_config(
+        root,
+        "unsafe",
+        """
+name: Unsafe
+root: .
+commands:
+  blocked:
+    kind: python
+    permissions:
+      python: false
+    script: script.py
+""",
+    )
+
+    with pytest.raises(storage.WorkspaceError, match="run_python capability"):
+        action_registry.run_action(root, "unsafe", "blocked", confirmed=True)
+
+
+def test_run_record_contains_approval_capabilities_and_tails(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Tools")
+    write_project_config(
+        root,
+        "tools",
+        """
+name: Tools
+root: .
+commands:
+  say_hi:
+    kind: shell
+    label: Say hi
+    command: printf hi
+""",
+    )
+
+    run = action_registry.run_action(root, "tools", "say_hi", actor="kwanho", confirmed=True)
+
+    assert run["approval"]["confirmed"] is True
+    assert run["approval"]["approved_by"] == "kwanho"
+    assert run["capabilities"]["run_shell"] is True
+    assert run["stdout_tail"] == "hi"
+    assert run["requested_by"] == "kwanho"
+    assert run["inputs"]["command_line"] == "printf hi"
+    assert run["outputs"]["expected_files"] == []
+
+
 def test_investment_rebalancer_template_python_action(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "Investment")
@@ -248,8 +365,11 @@ def test_project_artifact_and_run_detail_readers(tmp_path):
     artifact = action_registry.read_project_artifact(root, "investment", "artifacts/rebalance-table.csv")
 
     assert detail["run"]["run_id"] == run["run_id"]
+    assert detail["logs"]
+    assert detail["run"]["artifacts"][0]["viewer_type"] == "tableViewer"
     assert "Wrote" in detail["stdout"]
     assert artifact["kind"] == "csv"
+    assert artifact["viewer_type"] == "tableViewer"
     assert "asset_class,current_value" in artifact["content"]
 
 
@@ -293,6 +413,33 @@ def test_context_manifest_summarizes_files_runs_and_cost(tmp_path):
     assert any(item["reason"] == "blocked secret path" for item in manifest["excluded"])
 
 
+def test_context_manifest_records_retrieval_chunks_and_privacy(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Research")
+    storage.create_session(root, "research", "Current")
+    storage.create_session(root, "research", "Source")
+    from aiws import attachments
+
+    attachments.save_attachment(root, "research", "current", "brief.txt", b"current brief text", delivery="text_context")
+    attachments.save_attachment(root, "research", "source", "archive.txt", b"prior archive text", delivery="text_context")
+
+    manifest = context_manifest.build_context_manifest(
+        root,
+        "research",
+        "current",
+        provider="gemini",
+        model="gemini-2.5-flash-lite",
+        prompt_context="current brief text\nprior archive text",
+        active_attachment_filenames={"brief.txt"},
+        include_project_files=False,
+    )
+
+    assert [item["filename"] for item in manifest["included_chunks"]] == ["brief.txt"]
+    assert manifest["included_chunks"][0]["privacy"] == "sent_to_cloud"
+    assert manifest["privacy"]["files_sent_to_cloud"]
+    assert any(item["filename"] == "archive.txt" and "limited" in item["reason"] for item in manifest["excluded"])
+
+
 def test_suggest_actions_matches_recent_chat_text(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "Investment")
@@ -322,6 +469,10 @@ def test_home_csv_analysis_creates_stats_artifacts(tmp_path):
 
     assert run["status"] == "completed"
     assert len(run["artifacts"]) == 2
+    assert run["outputs"]["expected_artifacts"] == ["table.csv", "summary.md"]
+    assert run["capabilities"]["write_files"] is True
+    detail = home_workbench.read_run_detail(root, "local", run["run_id"])
+    assert detail["logs"]
     summary = home_workbench.read_artifact(root, "local", run["artifacts"][1]["path"])
     assert "Rows: 2" in summary["content"]
     assert "value: min 10" in summary["content"]

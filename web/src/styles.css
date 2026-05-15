@@ -1830,6 +1830,26 @@ mark {
   overflow-wrap: anywhere;
 }
 
+.receipt-chunks {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.receipt-chunks span {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid rgba(143, 192, 255, .12);
+  border-radius: 10px;
+  background: rgba(143, 192, 255, .06);
+}
+
+.receipt-chunks small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .empty-action-state {
   display: grid;
   gap: 7px;
@@ -1908,6 +1928,106 @@ mark {
   display: grid;
   justify-items: center;
   gap: 10px;
+}
+
+.work-session-overview {
+  width: min(1080px, 100%);
+  display: grid;
+  grid-template-columns: minmax(280px, .92fr) minmax(0, 1.28fr);
+  gap: 16px;
+  align-items: stretch;
+  border: 1px solid rgba(143, 192, 255, .16);
+  border-radius: 22px;
+  padding: 18px;
+  text-align: left;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(99, 215, 255, .12), transparent 18rem),
+    linear-gradient(135deg, rgba(13, 24, 42, .82), rgba(6, 12, 22, .72));
+  box-shadow: var(--shadow-mid), var(--inset);
+}
+
+.work-session-copy {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.work-session-copy h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.12;
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+.work-session-copy p {
+  margin: 0;
+  max-width: none;
+  text-align: left;
+}
+
+.work-session-lanes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.work-lane {
+  min-height: 118px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid rgba(143, 192, 255, .16);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(7, 14, 25, .62);
+  box-shadow: none;
+}
+
+.work-lane:hover,
+.work-lane.ready {
+  border-color: rgba(99, 215, 255, .42);
+  background: rgba(79, 140, 255, .13);
+}
+
+.work-lane strong {
+  font-size: 15px;
+}
+
+.work-lane span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.work-session-facts {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.work-session-facts span,
+.inspector-fact-grid span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  border: 1px solid rgba(143, 192, 255, .12);
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: rgba(255,255,255,.035);
+  font-size: 12px;
+}
+
+.work-session-facts strong,
+.inspector-fact-grid strong {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 650;
 }
 
 .eyebrow {
@@ -2972,6 +3092,44 @@ mark {
     linear-gradient(180deg, rgba(13, 24, 42, .68), rgba(5, 9, 17, .9));
 }
 
+.inspector-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.manifest-file-facts,
+.manifest-exclusions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid rgba(143, 192, 255, .12);
+  padding-top: 12px;
+}
+
+.manifest-file-facts > span,
+.manifest-exclusions > span {
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(143, 192, 255, .12);
+  border-radius: 12px;
+  padding: 9px;
+  background: rgba(255,255,255,.035);
+  overflow-wrap: anywhere;
+}
+
+.manifest-file-facts small,
+.manifest-exclusions small {
+  color: var(--muted);
+}
+
+.manifest-exclusions summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .workbench section {
   border: 1px solid rgba(143, 192, 255, .15);
   border-radius: var(--radius-lg);
@@ -3017,13 +3175,27 @@ mark {
   gap: 8px;
 }
 
-.compact-list > span {
+.compact-list > span,
+.compact-row-button {
   display: grid;
   gap: 3px;
   padding: 10px;
   border: 1px solid rgba(143, 192, 255, .12);
   border-radius: 12px;
   background: var(--surface-passive);
+  color: inherit;
+  text-align: left;
+  box-shadow: none;
+}
+
+.compact-row-button {
+  width: 100%;
+  cursor: pointer;
+}
+
+.compact-row-button:hover {
+  border-color: rgba(143, 192, 255, .34);
+  background: rgba(143, 192, 255, .09);
 }
 
 .compact-list strong {
@@ -3419,6 +3591,9 @@ mark {
   :root { --rail: 280px; }
   .layout { grid-template-columns: var(--rail) minmax(0, 1fr); }
   .starter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .work-session-overview {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 780px) {
@@ -3638,6 +3813,8 @@ mark {
   .dashboard-grid,
   .home-object-panels,
   .workbench-operating-model,
+  .work-session-lanes,
+  .work-session-facts,
   .manifest-summary-grid {
     grid-template-columns: 1fr;
   }

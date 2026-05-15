@@ -102,8 +102,7 @@ def ollama_http_error_message(exc: error.HTTPError, model: str) -> str:
         detail = str(payload.get("error") or payload.get("message") or "")
     if exc.code in {400, 404} and ("not found" in detail.lower() or "model" in detail.lower()):
         return (
-            f"Ollama model '{model}' is not available locally. "
-            f"Run `ollama pull {model}` or choose an installed local model. {detail}"
+            f"Ollama model '{model}' is not available locally. Run `ollama pull {model}` or choose an installed local model. {detail}"
         ).strip()
     if exc.code == 400:
         return f"Ollama rejected the request for model '{model}'. {detail}".strip()

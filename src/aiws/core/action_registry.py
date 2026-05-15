@@ -6,11 +6,14 @@ import fnmatch
 import json
 import os
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from aiws import openclaw, storage
 from aiws.core import contracts
+from aiws.infra import file_store
+from aiws.infra.paths import resolve_under_root
 from aiws.tools import python_script, shell
 
 ACTION_KINDS = {"prompt_recipe", "shell", "python", "file_index", "codex_prompt", "openclaw_status"}
@@ -30,6 +33,41 @@ SECRET_PATTERNS = {
     "Library/Application Support/Google/Chrome/*",
     "Library/Application Support/BraveSoftware/*",
 }
+
+CAPABILITY_KEYS = {
+    "read_files",
+    "write_files",
+    "run_shell",
+    "run_python",
+    "allow_network",
+    "allow_cloud",
+    "allow_external_paths",
+}
+
+
+@dataclass(frozen=True)
+class ActionCapability:
+    read_files: bool = False
+    write_files: bool = False
+    run_shell: bool = False
+    run_python: bool = False
+    allow_network: bool = False
+    allow_cloud: bool = False
+    allow_external_paths: bool = False
+
+    def to_dict(self) -> dict[str, bool]:
+        return {
+            "read_files": self.read_files,
+            "write_files": self.write_files,
+            "run_shell": self.run_shell,
+            "run_python": self.run_python,
+            "allow_network": self.allow_network,
+            "allow_cloud": self.allow_cloud,
+            "allow_external_paths": self.allow_external_paths,
+        }
+
+    def enabled(self) -> list[str]:
+        return [key for key, value in self.to_dict().items() if value]
 
 
 def config_path(root: str | Path, project_path: str) -> Path:
@@ -145,6 +183,44 @@ def normalize_action_permissions(kind: str, value: object) -> dict[str, bool]:
     return base
 
 
+def capabilities_for_action(command: dict[str, Any]) -> ActionCapability:
+    raw_permissions = command.get("permissions")
+    permissions = raw_permissions if isinstance(raw_permissions, dict) else {}
+    inputs = normalize_string_list(command.get("input") or command.get("inputs"))
+    outputs = normalize_outputs(command)
+    return ActionCapability(
+        read_files=bool(permissions.get("file_read")) or bool(inputs),
+        write_files=bool(permissions.get("file_write")) or bool(outputs),
+        run_shell=bool(permissions.get("shell")),
+        run_python=bool(permissions.get("python")),
+        allow_network=bool(permissions.get("network")),
+        allow_cloud=bool(permissions.get("cloud") or permissions.get("allow_cloud")),
+        allow_external_paths=bool(permissions.get("external_paths") or permissions.get("allow_external_paths")),
+    )
+
+
+def ensure_capabilities(command: dict[str, Any], capabilities: ActionCapability, *, approved: bool) -> None:
+    kind = str(command.get("kind", ""))
+    if kind == "shell" and not capabilities.run_shell:
+        raise storage.WorkspaceError("Shell action requires run_shell capability.")
+    if kind == "python" and not capabilities.run_python:
+        raise storage.WorkspaceError("Python action requires run_python capability.")
+    if command.get("network") and not capabilities.allow_network:
+        raise storage.WorkspaceError("Network action requires allow_network capability.")
+    if capabilities.enabled() and kind in {"shell", "python"} and not approved:
+        raise storage.WorkspaceError("This action requires explicit confirmation.")
+
+
+def log_event(event_type: str, message: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "type": event_type,
+        "message": message,
+        "content": message,
+        "created_at": storage.utc_now(),
+        "metadata": metadata or {},
+    }
+
+
 def normalize_views(config: dict[str, Any]) -> list[dict[str, Any]]:
     raw_views = config.get("views")
     if isinstance(raw_views, list):
@@ -165,7 +241,11 @@ def normalize_views(config: dict[str, Any]) -> list[dict[str, Any]]:
                             layout=str(panel.get("layout") or "main"),
                             actions=normalize_string_list(panel.get("actions")),
                             visibility=str(panel.get("visibility") or "private"),
-                            props={key: value for key, value in panel.items() if key not in {"id", "type", "title", "source", "layout", "actions", "visibility"}},
+                            props={
+                                key: value
+                                for key, value in panel.items()
+                                if key not in {"id", "type", "title", "source", "layout", "actions", "visibility"}
+                            },
                         )
                     )
             views.append(
@@ -207,9 +287,9 @@ def legacy_panel_title(panel: str) -> str:
 
 def resolve_project_root(project_root: Path, configured: str) -> Path:
     raw = Path(os.path.expanduser(configured or "."))
-    if not raw.is_absolute():
-        raw = project_root / raw
-    return raw.resolve()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (project_root / raw).resolve()
 
 
 def permission_for_kind(kind: str) -> str:
@@ -225,6 +305,7 @@ def preview_action(root: str | Path, project_path: str, command_name: str) -> di
     cwd = resolve_cwd(project_root, command)
     expected_inputs = expected_input_files(project_root, config, command)
     expected_outputs = normalize_outputs(command)
+    capabilities = capabilities_for_action(command)
     return {
         "project_path": project_path,
         "command": command_name,
@@ -241,6 +322,8 @@ def preview_action(root: str | Path, project_path: str, command_name: str) -> di
         "expected_output_files": expected_outputs,
         "permission": command.get("permission", permission_for_kind(command["kind"])),
         "requires_confirmation": command["kind"] in {"shell", "python"},
+        "capabilities": capabilities.to_dict(),
+        "required_capabilities": capabilities.enabled(),
     }
 
 
@@ -253,17 +336,23 @@ def run_action(
     confirmed: bool = False,
 ) -> dict[str, Any]:
     preview = preview_action(root, project_path, command_name)
-    if preview["requires_confirmation"] and not confirmed:
-        raise storage.WorkspaceError("This action requires explicit confirmation.")
     config = load_config(root, project_path)
     command = command_by_name(config, command_name)
     project_root = Path(config["resolved_root"])
+    capabilities = capabilities_for_action(command)
+    ensure_capabilities(command, capabilities, approved=confirmed)
     run_id = storage.utc_now().replace(":", "").replace(".", "-")
     run_path = storage.project_dir(root, project_path) / "runs" / run_id
     run_path.mkdir(parents=True, exist_ok=False)
     stdout = ""
     stderr = ""
     status = "completed"
+    logs: list[dict[str, Any]] = [
+        log_event("preview", "Action preview created.", {"command": command_name, "kind": command["kind"]}),
+        log_event(
+            "approval", "Action approval checked.", {"confirmed": bool(confirmed), "required": bool(preview["requires_confirmation"])}
+        ),
+    ]
     result: dict[str, Any] = {"preview": preview}
     try:
         if command["kind"] == "prompt_recipe":
@@ -280,37 +369,90 @@ def run_action(
             result["openclaw"] = openclaw.status()
             stdout = json.dumps(result["openclaw"], ensure_ascii=False, indent=2)
         elif command["kind"] == "shell":
-            completed = shell.run(str(command.get("command", "")), cwd=resolve_cwd(project_root, command))
-            stdout, stderr = completed.stdout, completed.stderr
-            status = "completed" if completed.returncode == 0 else "failed"
-            result["returncode"] = completed.returncode
+            logs.append(
+                log_event("execute", "Running shell action.", {"cwd": preview.get("cwd", ""), "command": preview.get("command_line", "")})
+            )
+            shell_completed = shell.run(
+                str(command.get("command", "")),
+                cwd=resolve_cwd(project_root, command),
+                root=project_root,
+            )
+            stdout, stderr = shell_completed.stdout, shell_completed.stderr
+            status = "completed" if shell_completed.returncode == 0 else "failed"
+            result["returncode"] = shell_completed.returncode
         elif command["kind"] == "python":
             script_path = safe_child_path(project_root, str(command.get("script", "")))
-            completed = python_script.run(script_path, [str(item) for item in command.get("args", []) or []], cwd=resolve_cwd(project_root, command))
-            stdout, stderr = completed.stdout, completed.stderr
-            status = "completed" if completed.returncode == 0 else "failed"
-            result["returncode"] = completed.returncode
+            args = [
+                str(resolve_action_arg(project_root, item)) if looks_like_path_arg(str(item)) else str(item)
+                for item in command.get("args", []) or []
+            ]
+            logs.append(
+                log_event("execute", "Running Python action.", {"cwd": preview.get("cwd", ""), "script": str(script_path), "args": args})
+            )
+            python_completed = python_script.run(
+                script_path,
+                args,
+                cwd=resolve_cwd(project_root, command),
+                root=project_root,
+                allow_network=capabilities.allow_network,
+            )
+            stdout, stderr = python_completed.stdout, python_completed.stderr
+            status = "completed" if python_completed.returncode == 0 else "failed"
+            result["returncode"] = python_completed.returncode
         else:
             raise storage.WorkspaceError(f"Unsupported project action kind: {command['kind']}")
     except Exception as exc:
         status = "failed"
         stderr = f"{type(exc).__name__}: {exc}"
         result["error"] = stderr
-    run = {
-        "run_id": run_id,
-        "project_path": project_path,
-        "command": command_name,
-        "kind": command["kind"],
-        "label": command["label"],
-        "status": status,
-        "actor": actor or "local",
-        "created_at": storage.utc_now(),
-        "run_dir": str(run_path),
-        "stdout_path": "stdout.txt",
-        "stderr_path": "stderr.txt",
-        "result_path": "result.json",
-        "artifacts": collect_artifacts(project_root, preview),
-    }
+        logs.append(log_event("error", stderr))
+    artifacts = collect_artifacts(project_root, preview, source_run=run_id)
+    if artifacts:
+        logs.append(log_event("artifact", "Collected expected artifacts.", {"count": len(artifacts)}))
+    run = contracts.run_contract(
+        run_id=run_id,
+        action_id=command_name,
+        command_id=command_name,
+        project_path=project_path,
+        label=str(command["label"]),
+        actor=actor or "local",
+        status=status,
+        created_at=storage.utc_now(),
+        plan={
+            "steps": [
+                {"id": "preview", "status": "completed"},
+                {"id": "approval", "status": "completed" if confirmed or not preview["requires_confirmation"] else "waiting"},
+                {"id": "execute", "status": status},
+                {"id": "artifacts", "status": "completed"},
+            ],
+            "preview": preview,
+        },
+        logs=logs,
+        artifacts=artifacts,
+        errors=[stderr] if stderr and status == "failed" else [],
+        kind=str(command["kind"]),
+        approval={
+            "confirmed": bool(confirmed),
+            "approved_by": (actor or "local") if confirmed else "",
+            "required": bool(preview["requires_confirmation"]),
+        },
+        capabilities=capabilities.to_dict(),
+        inputs={
+            "expected_files": preview.get("expected_input_files", []),
+            "cwd": preview.get("cwd", ""),
+            "command_line": preview.get("command_line", ""),
+            "script": preview.get("script", ""),
+            "args": preview.get("args", []),
+        },
+        outputs={"expected_files": preview.get("expected_output_files", [])},
+        stdout=stdout,
+        stderr=stderr,
+        error=str(result.get("error", "")),
+    )
+    run["run_dir"] = str(run_path)
+    run["stdout_path"] = "stdout.txt"
+    run["stderr_path"] = "stderr.txt"
+    run["result_path"] = "result.json"
     result["run"] = run
     write_run_artifacts(run_path, run, stdout, stderr, result)
     return run | {"stdout": stdout, "stderr": stderr, "result": result}
@@ -341,9 +483,14 @@ def run_chat_summary(run: dict[str, Any]) -> str:
 
 
 def write_run_artifacts(run_path: Path, run: dict[str, Any], stdout: str, stderr: str, result: dict[str, Any]) -> None:
-    (run_path / "stdout.txt").write_text(stdout, encoding="utf-8")
-    (run_path / "stderr.txt").write_text(stderr, encoding="utf-8")
+    file_store.atomic_write_text(run_path / "stdout.txt", stdout)
+    file_store.atomic_write_text(run_path / "stderr.txt", stderr)
+    storage.write_json(run_path / "run.json", run)
     storage.write_json(run_path / "result.json", result)
+    file_store.atomic_write_text(
+        run_path / "logs.jsonl",
+        "\n".join(json.dumps(item, ensure_ascii=False) for item in run.get("logs", []) or []) + ("\n" if run.get("logs") else ""),
+    )
     lines = [
         f"# {run['label']}",
         "",
@@ -365,19 +512,23 @@ def write_run_artifacts(run_path: Path, run: dict[str, Any], stdout: str, stderr
         "```",
         "",
     ]
-    (run_path / "run.md").write_text("\n".join(lines), encoding="utf-8")
+    file_store.atomic_write_text(run_path / "run.md", "\n".join(lines))
 
 
-def collect_artifacts(project_root: Path, preview: dict[str, Any]) -> list[dict[str, Any]]:
+def collect_artifacts(project_root: Path, preview: dict[str, Any], *, source_run: str = "") -> list[dict[str, Any]]:
     artifacts: list[dict[str, Any]] = []
     for value in preview.get("expected_output_files", []) or []:
         path = safe_child_path(project_root, str(value))
+        size = path.stat().st_size if path.exists() and path.is_file() else 0
         artifacts.append(
-            {
-                "path": str(value),
-                "exists": path.exists(),
-                "size": path.stat().st_size if path.exists() and path.is_file() else 0,
-            }
+            contracts.artifact_contract(
+                artifact_id=f"{source_run}:{value}" if source_run else str(value),
+                path=str(value),
+                source_run=source_run,
+                size=size,
+                summary="Generated project action artifact" if path.exists() else "Expected artifact not found",
+            )
+            | {"exists": path.exists()}
         )
     return artifacts
 
@@ -396,6 +547,7 @@ def read_run_detail(root: str | Path, project_path: str, run_id: str) -> dict[st
         "result": result,
         "stdout": read_text_if_exists(run_path / "stdout.txt"),
         "stderr": read_text_if_exists(run_path / "stderr.txt"),
+        "logs": read_jsonl_if_exists(run_path / "logs.jsonl"),
         "markdown": read_text_if_exists(run_path / "run.md"),
     }
 
@@ -408,9 +560,7 @@ def read_project_artifact(root: str | Path, project_path: str, artifact_path: st
         raise storage.WorkspaceError("Artifact path is required.")
     if is_secret_reference(rel):
         raise storage.WorkspaceError("Artifact path is blocked.")
-    resolved = (project_root / rel).resolve()
-    if not resolved.is_relative_to(project_root):
-        raise storage.WorkspaceError("Artifact path escapes the project root.")
+    resolved = resolve_under_root(project_root, rel)
     first = Path(rel).parts[0] if Path(rel).parts else ""
     if first not in {"artifacts", "files", "runs"}:
         raise storage.WorkspaceError("Only project files, artifacts, and runs can be opened.")
@@ -420,7 +570,13 @@ def read_project_artifact(root: str | Path, project_path: str, artifact_path: st
         raise storage.WorkspaceError("Artifact is too large to preview.")
     text = resolved.read_text(encoding="utf-8", errors="replace")
     suffix = resolved.suffix.lower().lstrip(".") or "text"
-    return {
+    contract = contracts.artifact_contract(
+        artifact_id=rel,
+        path=rel,
+        source_run="",
+        size=resolved.stat().st_size,
+    )
+    return contract | {
         "path": rel,
         "kind": suffix,
         "size": resolved.stat().st_size,
@@ -432,17 +588,36 @@ def read_text_if_exists(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() and path.is_file() else ""
 
 
+def read_jsonl_if_exists(path: Path) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_file():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            items.append(value)
+    return items
+
+
 def latest_runs(root: str | Path, project_path: str, *, limit: int = 10) -> list[dict[str, Any]]:
     runs_root = storage.project_dir(root, project_path) / "runs"
     if not runs_root.exists():
         return []
     runs: list[dict[str, Any]] = []
-    for result_path in sorted(runs_root.glob("*/result.json"), reverse=True)[:limit]:
+    run_paths = sorted(runs_root.glob("*/run.json"), reverse=True)
+    if not run_paths:
+        run_paths = sorted(runs_root.glob("*/result.json"), reverse=True)
+    for result_path in run_paths[:limit]:
         try:
             result = storage.read_json(result_path)
         except (OSError, json.JSONDecodeError):
             continue
-        run = result.get("run")
+        run = result.get("run") if result_path.name == "result.json" else result
         if isinstance(run, dict):
             runs.append(run)
     return runs
@@ -551,10 +726,23 @@ def resolve_cwd(project_root: Path, command: dict[str, Any]) -> Path:
 def safe_child_path(root: Path, value: str) -> Path:
     if not value:
         raise storage.WorkspaceError("Path is required.")
-    path = (root / value).resolve() if not Path(value).expanduser().is_absolute() else Path(value).expanduser().resolve()
+    path = resolve_under_root(root, value)
     if is_secret_path(path):
         raise storage.WorkspaceError("Action references a blocked secret path.")
     return path
+
+
+def resolve_action_arg(project_root: Path, value: object) -> Path:
+    path = safe_child_path(project_root, str(value))
+    return path
+
+
+def looks_like_path_arg(value: str) -> bool:
+    if not value or value.startswith("-"):
+        return False
+    if "/" in value or "\\" in value:
+        return True
+    return Path(value).suffix != ""
 
 
 def assert_no_secret_references(project_root: Path, command: dict[str, Any]) -> None:
@@ -570,13 +758,12 @@ def assert_no_secret_references(project_root: Path, command: dict[str, Any]) -> 
     for value in values:
         if is_secret_reference(value):
             raise storage.WorkspaceError("Action references a blocked secret path.")
-        candidate = (project_root / value).resolve() if not Path(value).expanduser().is_absolute() else Path(value).expanduser().resolve()
+        candidate = resolve_under_root(project_root, value)
         if is_secret_path(candidate):
             raise storage.WorkspaceError("Action references a blocked secret path.")
 
 
 def is_secret_path(path: Path) -> bool:
-    text = str(path)
     parts = set(path.parts)
     if {".ssh", "secrets", "secret", "credentials", "wallets"} & parts:
         return True

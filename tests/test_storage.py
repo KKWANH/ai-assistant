@@ -258,9 +258,7 @@ def test_projectless_general_chat_is_hidden_from_project_list(tmp_path):
     assert project["hidden"] is True
     assert project["visibility"] == "private"
     assert storage.list_visible_projects(root, "kwanho") == []
-    assert [project["path"] for project in storage.list_visible_general_chat_projects(root, "kwanho")] == [
-        "general-chat-kwanho"
-    ]
+    assert [project["path"] for project in storage.list_visible_general_chat_projects(root, "kwanho")] == ["general-chat-kwanho"]
 
     context = storage.build_prompt_context(root, project_path, "quick-thought")
     assert "Projectless general chat" in context

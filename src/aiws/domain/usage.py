@@ -9,7 +9,14 @@ from aiws import storage
 
 
 def record(root: str | Path, username: str, provider: str, cost: float, *, metadata: dict[str, Any] | None = None) -> None:
-    storage.record_usage(root, username, provider, cost, metadata=metadata)
+    payload = {
+        "user_id": storage.slugify(username),
+        "provider": provider,
+        "estimated_usd": cost,
+    }
+    if metadata:
+        payload.update(metadata)
+    storage.append_model_usage(root, payload)
 
 
 def model_total_usd(root: str | Path, username: str, *, period: str = "day") -> float:

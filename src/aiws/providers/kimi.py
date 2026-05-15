@@ -46,9 +46,7 @@ class KimiProvider:
         if not self.api_key:
             raise storage.WorkspaceError("Kimi requires AIWS_KIMI_API_KEY or MOONSHOT_API_KEY.")
         if model not in self.models:
-            raise storage.WorkspaceError(
-                f"Kimi model is not configured: {model}. Set AIWS_KIMI_MODELS to enable it."
-            )
+            raise storage.WorkspaceError(f"Kimi model is not configured: {model}. Set AIWS_KIMI_MODELS to enable it.")
         user_content: str | list[dict[str, object]] = content
         if attachments:
             user_content = [{"type": "text", "text": content}]

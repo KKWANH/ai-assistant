@@ -132,8 +132,5 @@ def results_metadata(mode: str, results: list[SearchResult]) -> dict[str, object
     validate_search_mode(mode)
     return {
         "mode": mode,
-        "sources": [
-            {"title": result.title, "url": result.url, "snippet": result.snippet}
-            for result in results
-        ],
+        "sources": [{"title": result.title, "url": result.url, "snippet": result.snippet} for result in results],
     }
