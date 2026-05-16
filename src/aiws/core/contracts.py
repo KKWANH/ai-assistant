@@ -108,13 +108,24 @@ def run_contract(
     model_calls: list[dict[str, Any]] | None = None,
     estimated_cost: dict[str, Any] | float | None = None,
     actual_cost: dict[str, Any] | float | None = None,
+    workspace_id: str = "",
+    session_id: str = "",
+    context_receipt: dict[str, Any] | None = None,
+    steps: list[dict[str, Any]] | None = None,
     error: str = "",
 ) -> dict[str, Any]:
     finished_at = created_at if status in {"completed", "failed", "cancelled"} else ""
+    input_snapshot = inputs or {}
+    calls = model_calls or []
+    model_summary = model_contract(calls, input_snapshot)
+    plan_steps = steps if steps is not None else plan.get("steps", []) if isinstance(plan, dict) else []
     return {
         "id": run_id,
         "run_id": run_id,
+        "workspace_id": workspace_id or project_path or "home",
+        "session_id": session_id or session_slug or None,
         "action_id": action_id,
+        "action_label": label,
         "command_id": command_id or action_id,
         "command": command_id or action_id,
         "project_path": project_path,
@@ -130,10 +141,11 @@ def run_contract(
         "completed_at": finished_at,
         "approval": approval or {"required": False, "confirmed": False, "approved_by": ""},
         "capabilities": capabilities or {},
-        "input_snapshot": inputs or {},
-        "inputs": inputs or {},
+        "input_snapshot": input_snapshot,
+        "inputs": input_snapshot,
         "outputs": outputs or {},
         "execution_plan": plan,
+        "steps": plan_steps,
         "logs": logs or [],
         "stdout_tail": stdout[-4000:],
         "stderr_tail": stderr[-4000:],
@@ -141,9 +153,25 @@ def run_contract(
         "estimated_cost": estimated_cost,
         "actual_cost": actual_cost,
         "artifacts": artifacts or [],
-        "model_calls": model_calls or [],
+        "model": model_summary,
+        "model_calls": calls,
+        "context_receipt": context_receipt or {},
         "errors": errors or [],
         "error": error or ("\n".join(errors or []) if errors else ""),
+    }
+
+
+def model_contract(model_calls: list[dict[str, Any]], inputs: dict[str, Any]) -> dict[str, Any]:
+    """Return the compact model shape used by run timelines."""
+    call = model_calls[-1] if model_calls else {}
+    provider = str(call.get("provider") or inputs.get("provider") or "")
+    model_id = str(call.get("id") or call.get("model") or inputs.get("model") or "")
+    if not provider and not model_id:
+        return {}
+    return {
+        "provider": provider,
+        "id": model_id,
+        "local": bool(call.get("local")) if "local" in call else provider == "ollama",
     }
 
 

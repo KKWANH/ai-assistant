@@ -20,9 +20,7 @@ def workbench_contract_payload() -> dict[str, object]:
 
 
 def home_payload(root: str | Path, username: str | None) -> dict[str, object]:
-    home = home_workbench.home_dir(root, username)
     return {
-        "path": str(home),
         "actions": home_workbench.list_actions(),
         "runs": home_workbench.list_runs(root, username),
         "artifacts": home_workbench.list_artifacts(root, username),

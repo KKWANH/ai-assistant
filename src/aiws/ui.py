@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import base64
+import os
 import secrets
 import time
 import traceback
@@ -23,7 +24,7 @@ from .app.routes import chats as chat_routes
 from .app.routes import projects as project_routes
 from .app.routes import runtime as runtime_routes
 from .app.routes import workspace as workspace_routes
-from .core import action_registry, chat_orchestrator, home_workbench, work_sessions
+from .core import action_registry, action_runs, chat_orchestrator, home_workbench, work_sessions
 from .domain import accounts as account_domain
 from .domain import chats as chat_domain
 from .domain import goals as goal_domain
@@ -56,6 +57,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         self.require_auth = require_auth
         self.password = password
         self._multipart_files: dict[str, tuple[str, bytes]] = {}
+        self._multipart_file_lists: dict[str, list[tuple[str, bytes]]] = {}
         self._csrf_to_set = ""
         super().__init__(*args, **kwargs)
 
@@ -232,7 +234,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                self.send_json({"preview": home_workbench.preview_action(action_id)})
+                self.send_json({"preview": action_runs.preview_home(action_id)})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -245,7 +247,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             try:
                 data = self.form_data()
                 self.require_csrf(data)
-                run = home_workbench.run_action(
+                run = action_runs.run_home(
                     self.root,
                     self.current_username() or "local",
                     action_id,
@@ -338,7 +340,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 project_path, command = route_parser.split_project_action_route(route)
                 self.require_project_access(project_path, "read")
-                preview = action_registry.preview_action(self.root, project_path, command)
+                preview = action_runs.preview_project(self.root, project_path, command)
                 self.send_json({"preview": preview})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -354,7 +356,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 project_path, command = route_parser.split_project_action_route(route)
                 self.require_project_access(project_path, "owner")
-                run = action_registry.run_action(
+                run = action_runs.run_project(
                     self.root,
                     project_path,
                     command,
@@ -817,14 +819,15 @@ class AIWSHandler(BaseHTTPRequestHandler):
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" in content_type:
             fields, files = self.multipart_form()
-            self._multipart_files = files
+            self._multipart_files = {key: value[0] for key, value in files.items() if value}
+            self._multipart_file_lists = files
             return fields
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length).decode("utf-8")
         parsed = parse_qs(raw)
         return {key: values[0] for key, values in parsed.items()}
 
-    def multipart_form(self) -> tuple[dict[str, str], dict[str, tuple[str, bytes]]]:
+    def multipart_form(self) -> tuple[dict[str, str], dict[str, list[tuple[str, bytes]]]]:
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in content_type or "boundary=" not in content_type:
             raise storage.WorkspaceError("Expected multipart form upload.")
@@ -834,7 +837,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             raise storage.WorkspaceError("Upload is too large.")
         body = self.rfile.read(length)
         fields: dict[str, str] = {}
-        files: dict[str, tuple[str, bytes]] = {}
+        files: dict[str, list[tuple[str, bytes]]] = {}
         for part in body.split(b"--" + boundary):
             if b"\r\n\r\n" not in part:
                 continue
@@ -845,7 +848,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 continue
             filename = re_search_filename(headers)
             if filename:
-                files[name] = (filename, content)
+                files.setdefault(name, []).append((filename, content))
             else:
                 fields[name] = content.decode("utf-8", errors="replace")
         return fields, files
@@ -876,83 +879,96 @@ class AIWSHandler(BaseHTTPRequestHandler):
             return filename, content
         raise storage.WorkspaceError("No avatar file found.")
 
+    def multipart_files(self, field_name: str) -> list[tuple[str, bytes]]:
+        if field_name in self._multipart_file_lists:
+            return self._multipart_file_lists[field_name]
+        if field_name in self._multipart_files:
+            return [self._multipart_files[field_name]]
+        return []
+
     def handle_ask(self, project_path: str, session_slug: str, data: dict[str, str]) -> None:
         self.require_project_access(project_path, "read")
         visible_content = data.get("content", "").strip()
         model_content = visible_content
         user_metadata: dict[str, object] = {}
         provider_attachments: list[dict[str, str]] = []
-        upload = self._multipart_files.get("attachment")
+        uploads = [item for item in self.multipart_files("attachment") if item[1]]
+        upload = uploads[0] if uploads else None
         title_source = visible_content
         provider_name = data.get("provider", "ollama")
         attachment_type = ""
-        if upload and upload[1]:
+        if uploads:
+            attachment_contexts: list[str] = []
+            attachment_views: list[dict[str, object]] = []
             filename, file_content = upload
             title_source = title_source or filename
-            extension = attachments.validate_attachment(filename, file_content)
-            attachment_type = extension
-            image_upload = attachments.is_image_extension(extension)
-            provider_file_enabled = provider_supports_file_input(provider_name, extension)
-            if image_upload and not provider_file_enabled:
-                raise storage.WorkspaceError(
-                    "이미지 파일은 현재 Gemini 또는 Kimi vision 모델로만 실제 분석할 수 있습니다. "
-                    "모델을 Gemini Flash-Lite로 바꾸고 클라우드 사용을 확인한 뒤 다시 보내주세요."
+            for filename, file_content in uploads:
+                extension = attachments.validate_attachment(filename, file_content)
+                attachment_type = attachment_type or extension
+                image_upload = attachments.is_image_extension(extension)
+                provider_file_enabled = provider_supports_file_input(provider_name, extension)
+                if image_upload and not provider_file_enabled:
+                    raise storage.WorkspaceError(
+                        "이미지 파일은 현재 Gemini 또는 Kimi vision 모델로만 실제 분석할 수 있습니다. "
+                        "모델을 Gemini Flash-Lite로 바꾸고 클라우드 사용을 확인한 뒤 다시 보내주세요."
+                    )
+                delivery = "vision" if image_upload and provider_file_enabled else None
+                saved = attachments.save_attachment(
+                    self.root,
+                    project_path,
+                    session_slug,
+                    filename,
+                    file_content,
+                    actor=self.current_username(),
+                    delivery=delivery,
                 )
-            delivery = "vision" if image_upload and provider_file_enabled else None
-            saved = attachments.save_attachment(
-                self.root,
-                project_path,
-                session_slug,
-                filename,
-                file_content,
-                actor=self.current_username(),
-                delivery=delivery,
-            )
-            if provider_name in runner.REMOTE_PROVIDERS and saved.get("security_findings"):
-                raise storage.WorkspaceError(
-                    "Possible secret-like content was detected in the attachment. "
-                    "Use a local model or remove sensitive values before sending to a cloud model."
-                )
-            attachment = attachment_view(project_path, session_slug, saved)
-            if provider_name == "gemini" and provider_file_enabled:
-                provider_attachments.append(
-                    {
-                        "kind": "inline_data",
-                        "mime_type": attachments.image_mime_type(extension) if image_upload else gemini_mime_type(extension),
-                        "data": base64.b64encode(file_content).decode("ascii"),
-                    }
-                )
-                attachment["delivery"] = "Sent as file input"
-            elif provider_name == "kimi" and image_upload and provider_file_enabled:
-                data_url = "data:%s;base64,%s" % (
-                    attachments.image_mime_type(extension),
-                    base64.b64encode(file_content).decode("ascii"),
-                )
-                provider_attachments.append({"kind": "image_data_url", "data_url": data_url})
-                attachment["delivery"] = "Sent as vision input"
-            elif str(saved.get("text", "")).strip() and not image_upload:
-                attachment["delivery"] = "Sent as text context"
-            else:
-                attachment["delivery"] = "Attached to chat"
-            user_metadata["attachments"] = [attachment]
-            extracted = "" if provider_attachments or image_upload else str(saved.get("text", "")).strip()
-            attachment_context = f"Attached file: {saved['filename']}"
-            if extracted:
-                attachment_context += f"\n\nExtracted attachment text:\n{extracted[:8000]}"
-            model_content = f"{visible_content}\n\n{attachment_context}".strip()
+                if provider_name in runner.REMOTE_PROVIDERS and saved.get("security_findings"):
+                    raise storage.WorkspaceError(
+                        "Possible secret-like content was detected in the attachment. "
+                        "Use a local model or remove sensitive values before sending to a cloud model."
+                    )
+                attachment = attachment_view(project_path, session_slug, saved)
+                if provider_name == "gemini" and provider_file_enabled:
+                    provider_attachments.append(
+                        {
+                            "kind": "inline_data",
+                            "mime_type": attachments.image_mime_type(extension) if image_upload else gemini_mime_type(extension),
+                            "data": base64.b64encode(file_content).decode("ascii"),
+                        }
+                    )
+                    attachment["delivery"] = "Sent as file input"
+                elif provider_name == "kimi" and image_upload and provider_file_enabled:
+                    data_url = "data:%s;base64,%s" % (
+                        attachments.image_mime_type(extension),
+                        base64.b64encode(file_content).decode("ascii"),
+                    )
+                    provider_attachments.append({"kind": "image_data_url", "data_url": data_url})
+                    attachment["delivery"] = "Sent as vision input"
+                elif str(saved.get("text", "")).strip() and not image_upload:
+                    attachment["delivery"] = "Sent as text context"
+                else:
+                    attachment["delivery"] = "Attached to chat"
+                attachment_views.append(attachment)
+                extracted = "" if provider_attachments or image_upload else str(saved.get("text", "")).strip()
+                attachment_context = f"Attached file: {saved['filename']}"
+                if extracted:
+                    attachment_context += f"\n\nExtracted attachment text:\n{extracted[:8000]}"
+                attachment_contexts.append(attachment_context)
+            user_metadata["attachments"] = attachment_views
+            model_content = "\n\n".join([visible_content, *attachment_contexts]).strip()
         if not model_content:
             raise storage.WorkspaceError("Message or attachment is required.")
         execution_plan = chat_orchestrator.plan_request(
             content=visible_content,
             provider=provider_name,
-            model=data.get("model", "qwen3:0.6b"),
+            model=data.get("model", "qwen3:8b"),
             search_mode=data.get("search_mode", "off"),
             has_attachment=bool(upload and upload[1]),
             attachment_type=attachment_type,
         )
         ask_kwargs = {
             "provider": data.get("provider", "ollama"),
-            "model": data.get("model", "qwen3:0.6b"),
+            "model": data.get("model", "qwen3:8b"),
             "content": model_content,
             "stored_content": visible_content or "Attached file",
             "user_metadata": user_metadata,
@@ -1007,10 +1023,15 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json({"error": str(exc)}, status=404)
 
     def api_runtime(self) -> None:
-        public_view = storage.has_accounts(self.root) and not storage.is_admin(self.root, self.current_username())
+        public_demo = os.environ.get("AIWS_PUBLIC_DEMO", "").strip().lower() in {"1", "true", "yes", "on"}
+        public_view = public_demo or (storage.has_accounts(self.root) and not storage.is_admin(self.root, self.current_username()))
         self.send_json(runtime_routes.runtime_payload(self.root, self.server.server_port, public_view=public_view))
 
     def api_openclaw(self) -> None:
+        diagnostics_enabled = os.environ.get("AIWS_SHOW_DIAGNOSTICS", "true").strip().lower() not in {"0", "false", "no", "off"}
+        if not diagnostics_enabled:
+            self.send_json({"error": "Diagnostics are disabled."}, status=403)
+            return
         if storage.has_accounts(self.root) and not storage.is_admin(self.root, self.current_username()):
             self.send_json({"error": "Admin access is required."}, status=403)
             return
@@ -1937,7 +1958,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         attachment_count = len(attachments.list_attachments(self.root, project_path, session_slug))
         latest = latest_assistant_metadata(messages)
         provider = html(str(latest.get("provider") or "ollama"))
-        model = html(str(latest.get("model") or "qwen3:0.6b"))
+        model = html(str(latest.get("model") or "qwen3:8b"))
         search_mode = html(str(latest.get("search_mode") or "off"))
         return (
             f'<span class="status-chip"><span class="status-lamp"></span>{provider}</span>'
@@ -2218,7 +2239,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
         options = []
         for item in costs.list_model_costs():
             label = f"{item.model} ({item.provider}, ${item.input_per_million}/M in, ${item.output_per_million}/M out)"
-            selected_attr = " selected" if item.model == "qwen3:0.6b" else ""
+            selected_attr = " selected" if item.model == "qwen3:8b" else ""
             options.append(f'<option value="{html(item.model)}"{selected_attr}>{html(label)}</option>')
         return f'<select name="model">{"".join(options)}</select>'
 
@@ -2356,6 +2377,16 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "text_context": "Sent as text context",
         "stored_only": "Attached to chat",
     }.get(str(metadata.get("delivery", "")), str(metadata.get("delivery", "Attached to chat")))
+    profile = metadata.get("analysis_profile")
+    table_preview = {}
+    if isinstance(profile, dict) and content_type in {"csv", "xls", "xlsx"}:
+        table_preview = {
+            "columns": profile.get("column_names", [])[:12] if isinstance(profile.get("column_names"), list) else [],
+            "rows": profile.get("sample_rows", [])[:8] if isinstance(profile.get("sample_rows"), list) else [],
+            "row_count": profile.get("row_count", 0),
+            "column_count": profile.get("column_count", 0),
+            "parser": profile.get("parser", ""),
+        }
     return {
         "filename": filename,
         "url": f"/attachment/{project_path}/{session_slug}/{filename}",
@@ -2368,6 +2399,8 @@ def attachment_view(project_path: str, session_slug: str, metadata: dict[str, ob
         "text_available": bool(metadata.get("text_available", False)),
         "extraction_status": extraction_status,
         "extraction_error": extraction_error,
+        "text_preview": str(metadata.get("text", ""))[:500],
+        "table_preview": table_preview,
     }
 
 
@@ -2427,6 +2460,8 @@ def message_attachments_data(metadata: object) -> list[dict[str, object]]:
                     "text_available": bool(item.get("text_available", False)),
                     "extraction_status": str(item.get("extraction_status", "stored")),
                     "extraction_error": str(item.get("extraction_error", "")),
+                    "text_preview": str(item.get("text_preview", "")),
+                    "table_preview": item.get("table_preview", {}) if isinstance(item.get("table_preview"), dict) else {},
                 }
             )
     return items

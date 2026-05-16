@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ActionInspector, AutomationPanel, TaskSuggestionsPanel } from "./components/actions/ActionPanels.jsx";
+import { AttachmentList } from "./components/chat/AttachmentList.jsx";
+import { ContextReceiptCard } from "./components/chat/ContextReceiptCard.jsx";
 import { MarkdownRenderer } from "./components/markdown/MarkdownRenderer.jsx";
+import { ModelPickerButton } from "./components/model/ModelPickerButton.jsx";
 import { ProjectDashboard } from "./components/project/ProjectDashboard.jsx";
 import { COPY, copyForAccount, copyForLocale } from "./copy.js";
 import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "./lib/table.js";
@@ -188,15 +191,6 @@ const MODEL_MODES = [
     supportsWebSearch: false,
     version: "ernie-5.1 · Baidu Qianfan API",
   },
-];
-const MODEL_GROUPS = [
-  { value: "recommended", label: "Recommended", match: (model) => ["local", "cheap", "gemini-pro"].includes(model.value) },
-  { value: "local", label: "Local", match: (model) => model.group === "local" },
-  { value: "fast", label: "Fast", match: (model) => model.group === "fast" },
-  { value: "long", label: "Long context", match: (model) => model.group === "long" },
-  { value: "reasoning", label: "Reasoning", match: (model) => model.group === "reasoning" },
-  { value: "coding", label: "Coding", match: (model) => model.group === "coding" },
-  { value: "all", label: "All", match: () => true },
 ];
 const SEARCH_OPTIONS = [
   { value: "off", label: "Search off" },
@@ -1240,6 +1234,12 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
     wantsBrief: action.id === "codex_task_prompt",
   })) : STARTER_ACTIONS;
   const localizedItems = items.map((action) => localizeStarterAction(action, copy));
+  const actionState = (action) => {
+    if (action.disabled) return { value: "planned", label: copy.home.notAvailable, helper: copy.home.notAvailable };
+    if (action.wantsFile && !hasFile) return { value: "needs-file", label: copy.home.needsFile, helper: copy.home.attachRequired };
+    if (action.wantsBrief) return { value: "ready", label: copy.home.ready, helper: copy.home.codexBriefHint };
+    return { value: "ready", label: copy.home.ready, helper: copy.home.readyToRun };
+  };
   return (
     <section className="starter-actions" aria-label={copy.home.quickActions}>
       <div className="section-row">
@@ -1250,11 +1250,13 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
         <span className="soft-pill">{copy.home.workbenchOutputs}</span>
       </div>
       <div className="starter-grid">
-        {localizedItems.map((action) => (
+        {localizedItems.map((action) => {
+          const state = actionState(action);
+          return (
           <article className={`starter-card ${action.disabled ? "is-disabled" : ""}`} key={action.id}>
             <div className="starter-card-head">
               <span className="starter-category">{action.category}</span>
-              <span className={`status-badge ${String(action.status).toLowerCase()}`}>{action.status}</span>
+              <span className={`status-badge ${state.value}`}>{state.label}</span>
             </div>
             <h3>{action.label}</h3>
             <p>{action.description}</p>
@@ -1275,10 +1277,10 @@ function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = f
                 {running === action.id ? copy.home.creating : action.wantsBrief ? copy.home.createPrompt : copy.home.createArtifact}
               </button>
             </div>
-            {action.wantsFile && !hasFile && <small className="action-requirement">{copy.home.attachRequired}</small>}
-            {action.wantsBrief && <small className="action-requirement">{copy.home.codexBriefHint}</small>}
+            <small className="action-requirement">{state.helper}</small>
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -1831,7 +1833,7 @@ function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models =
     event.preventDefault();
     if (starting || (!content.trim() && !file)) return;
     let submitMode = selectedMode;
-    if (fileNeedsVisionModel(file, mode, modelModes)) {
+    if (files.some((item) => fileNeedsVisionModel(item, mode, modelModes))) {
       setMode("cheap");
       submitMode = modelMode("cheap", modelModes);
     }
@@ -2105,7 +2107,7 @@ function MessageCard({ message, onPreview, activePath, onChat }) {
       {message.role === "assistant" && !message.pending && activePath?.projectPath && (
         <MessageActions activePath={activePath} onChat={onChat} copy={copy} />
       )}
-      {message.context_receipt && <ContextReceipt receipt={message.context_receipt} compact />}
+      {message.context_receipt && <ContextReceiptCard receipt={message.context_receipt} compact />}
       {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
@@ -2136,58 +2138,6 @@ function MessageActions({ activePath, onChat, copy = COPY }) {
     <div className="message-actions">
       <button type="button" onClick={saveArtifact} disabled={saving}>{saving ? copy.messageActions.saving : copy.messageActions.saveArtifact}</button>
     </div>
-  );
-}
-
-function ContextReceipt({ receipt, compact = false }) {
-  if (!receipt) return null;
-  const used = Array.isArray(receipt.used_files) ? receipt.used_files : [];
-  const unused = Array.isArray(receipt.unused_files) ? receipt.unused_files : [];
-  const excluded = Array.isArray(receipt.excluded) ? receipt.excluded : [];
-  const chunks = Array.isArray(receipt.included_chunks) ? receipt.included_chunks : [];
-  const privacy = receipt.privacy || {};
-  const analysis = receipt.analysis || {};
-  const csv = Array.isArray(analysis.csv) ? analysis.csv : [];
-  const artifacts = Array.isArray(analysis.artifacts) ? analysis.artifacts : [];
-  return (
-    <details className={`context-receipt ${compact ? "compact" : ""}`}>
-      <summary>View context receipt · {receipt.privacy_mode === "local" ? "local" : "cloud"} · {chunks.length || used.length} chunks used</summary>
-      <div className="receipt-grid">
-        <span><strong>Model</strong><small>{receipt.provider} {receipt.model}</small></span>
-        <span><strong>Cost</strong><small>{receipt.estimated_cost ?? 0} {receipt.currency || "USD"}</small></span>
-        <span><strong>Tokens</strong><small>{receipt.input_tokens || 0} in · {receipt.output_tokens || 0} out</small></span>
-        <span><strong>Used files</strong><small>{used.length ? used.map((item) => item.filename).join(", ") : "None"}</small></span>
-        <span><strong>Not used</strong><small>{unused.length ? unused.map((item) => item.filename).join(", ") : "None"}</small></span>
-        <span><strong>Cloud files</strong><small>{privacy.files_sent_to_cloud?.length ? privacy.files_sent_to_cloud.join(", ") : "None"}</small></span>
-      </div>
-      {chunks.length > 0 && (
-        <div className="receipt-chunks">
-          {chunks.slice(0, 4).map((chunk) => (
-            <span key={chunk.chunk_id || `${chunk.path}-${chunk.token_count}`}>
-              <strong>{chunk.filename || chunk.path}</strong>
-              <small>{chunk.reason} · {chunk.token_count} tokens · {chunk.privacy}</small>
-            </span>
-          ))}
-        </div>
-      )}
-      {csv.length > 0 && (
-        <div className="receipt-chunks">
-          {csv.map((item, index) => (
-            <span key={`${item.parser || "csv"}-${index}`}>
-              <strong>CSV parser: {item.parser || "python-csv"}</strong>
-              <small>{item.rows || 0} rows · {item.columns || 0} columns · {item.missing_cells || 0} missing cells · profile sent: {analysis.computed_profile_sent_to_model ? "yes" : "no"} · raw CSV sent: {analysis.raw_text_sent_to_model ? "yes" : "no"}</small>
-            </span>
-          ))}
-          {artifacts.length > 0 && (
-            <span>
-              <strong>Artifacts</strong>
-              <small>{artifacts.map((item) => item.filename || item.path).join(", ")}</small>
-            </span>
-          )}
-        </div>
-      )}
-      {excluded.length > 0 && <p className="muted">{excluded.length} file/path exclusions were active.</p>}
-    </details>
   );
 }
 
@@ -2245,41 +2195,17 @@ function accountDisplayName(account) {
 }
 
 function WaitingNotice({ label, compact = false }) {
+  const details = [
+    "Request accepted",
+    "Preparing files and context",
+    "Calling selected model",
+    "Saving receipt and response",
+  ];
   return (
     <div className={`waiting-notice ${compact ? "compact" : ""}`} role="status" aria-live="polite">
       <span className="orbital-loader" aria-hidden="true"><i /><i /><i /></span>
       <span>{label}</span>
-    </div>
-  );
-}
-
-function AttachmentList({ attachments, onPreview }) {
-  if (!attachments.length) return null;
-  function statusLabel(item) {
-    if (item.extraction_status === "failed") return "Read failed";
-    if (item.extraction_status === "success") return "Text extracted";
-    if (item.delivery === "Sent as vision input") return "Sent as image input";
-    if (item.delivery === "Sent as text context") return "Used as text";
-    return item.delivery || "Attached to chat";
-  }
-  return (
-    <div className="attachment-list">
-      {attachments.map((item) =>
-        item.is_image || item.is_pdf ? (
-          <button key={item.url} className="attachment-card image" type="button" onClick={() => onPreview(item)}>
-            {item.is_image ? <img src={item.url} alt={item.filename} /> : <span className="pdf-thumb" data-pdf-preview>PDF</span>}
-            <span>{item.filename}</span>
-            <small className={item.extraction_status === "failed" ? "status-failed" : ""}>{statusLabel(item)}</small>
-            {item.extraction_status === "failed" && item.extraction_error && <em>{item.extraction_error}</em>}
-          </button>
-        ) : (
-          <a key={item.url} className="attachment-card" href={item.url} target="_blank" rel="noreferrer">
-            {item.filename}
-            <small className={item.extraction_status === "failed" ? "status-failed" : ""}>{statusLabel(item)}</small>
-            {item.extraction_status === "failed" && item.extraction_error && <em>{item.extraction_error}</em>}
-          </a>
-        )
-      )}
+      <small>{details.join(" · ")}</small>
     </div>
   );
 }
@@ -2288,7 +2214,7 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [previewUrl, setPreviewUrl] = useState("");
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -2297,9 +2223,11 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
   const inputRef = useRef(null);
   const textRef = useRef(null);
   const formRef = useRef(null);
+  const abortRef = useRef(null);
   const modelModes = normalizeModelCatalog(models);
   const selectedMode = modelMode(mode, modelModes);
   const copy = copyForAccount(account);
+  const file = files[0] || null;
 
   useEffect(() => {
     setCookie("aiws_model_mode", mode);
@@ -2330,7 +2258,7 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
   }, [content]);
 
   function clearFile() {
-    setFile(null);
+    setFiles([]);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -2338,15 +2266,43 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
     event.preventDefault();
     event.stopPropagation();
     setDragging(false);
-    const dropped = event.dataTransfer?.files?.[0];
-    if (dropped) setFile(dropped);
+    const dropped = Array.from(event.dataTransfer?.files || []);
+    if (dropped.length) setFiles((current) => [...current, ...dropped]);
+  }
+
+  function pasteTable(event) {
+    const pasted = event.clipboardData?.getData("text/plain") || "";
+    if (!looksLikePastedTable(pasted)) return;
+    event.preventDefault();
+    const csv = pastedTableToCsv(pasted);
+    const nextFile = new File([csv], `pasted-table-${Date.now()}.csv`, { type: "text/csv" });
+    setFiles((current) => [...current, nextFile]);
+    setContent((current) => current || "Analyze this pasted table.");
+  }
+
+  function removeFile(index) {
+    setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    if (inputRef.current && files.length <= 1) inputRef.current.value = "";
+  }
+
+  function stopThinking() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setSending(false);
+    onAsk((current) => ({
+      ...(current || {}),
+      messages: [
+        ...(current?.messages || []).filter((message) => !message.pending),
+        { role: "system", content: "Request stopped before AIWS received a final answer.", attachments: [] },
+      ],
+    }));
   }
 
   async function submit(event) {
     event.preventDefault();
-    if (sending || (!content.trim() && !file)) return;
+    if (sending || (!content.trim() && files.length === 0)) return;
     let submitMode = selectedMode;
-    if (fileNeedsVisionModel(file, mode, modelModes)) {
+    if (files.some((item) => fileNeedsVisionModel(item, mode, modelModes))) {
       setMode("cheap");
       submitMode = modelMode("cheap", modelModes);
     }
@@ -2360,29 +2316,51 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
       form.set("allow_remote", "1");
       form.set("confirm_cost", "1");
     }
-    if (file) form.set("attachment", file);
+    files.forEach((item) => form.append("attachment", item));
 
     const optimistic = {
       role: "user",
       actor_display: accountDisplayName(account),
-      content: content || "Attached file",
-      attachments: file ? [{ filename: file.name, url: previewUrl || "", is_image: file.type.startsWith("image/") }] : [],
+      content: content || `Attached ${files.length} file${files.length === 1 ? "" : "s"}`,
+      attachments: files.map((item) => ({ filename: item.name, url: item === file ? previewUrl || "" : "", is_image: item.type.startsWith("image/") })),
     };
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSending(true);
     setContent("");
     clearFile();
     onAsk((current) => ({
       ...(current || {}),
-      messages: [...(current?.messages || []), optimistic, { role: "assistant", pending: true, content: "", attachments: [] }],
+      messages: [
+        ...(current?.messages || []),
+        optimistic,
+        {
+          role: "assistant",
+          pending: true,
+          content: "",
+          attachments: [],
+          execution_plan: {
+            steps: [
+              { id: "accepted", status: "completed", title: "Request accepted" },
+              { id: "context", status: "running", title: `${files.length} file${files.length === 1 ? "" : "s"} and chat context prepared` },
+              { id: "model", status: "pending", title: `${submitMode.provider} · ${submitMode.model}` },
+              { id: "receipt", status: "pending", title: "Context receipt and answer will be saved" },
+            ],
+            estimated_model_calls: 1,
+          },
+        },
+      ],
     }));
     try {
       const payload = await fetchJson(`/api/ask/${activePath.projectPath}/${activePath.sessionSlug}`, {
         method: "POST",
         body: form,
+        signal: controller.signal,
       });
       onAsk(payload);
     } catch (err) {
+      if (err.name === "AbortError") return;
       onAsk((current) => ({
         ...(current || {}),
         messages: [
@@ -2392,6 +2370,7 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
       }));
     } finally {
       setSending(false);
+      abortRef.current = null;
       textRef.current?.focus();
     }
   }
@@ -2426,12 +2405,16 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
         onKeyDown={keyDown}
         placeholder={copy.chat.placeholder}
       />
-          {file && (
+      {files.length > 0 && (
         <div className="selected-file">
-          {previewUrl && <img src={previewUrl} alt={file.name} />}
-          <span>{file.name}</span>
-          <small>{selectedMode.supportsImage && file.type.startsWith("image/") ? "Sent as image input" : file.type.startsWith("image/") ? "Needs vision model" : "Read as text"}</small>
-          <button type="button" data-remove-attachment onClick={clearFile}>Remove</button>
+          {files.map((item, index) => (
+            <span className="selected-file-chip" key={`${item.name}-${index}`}>
+              {index === 0 && previewUrl && <img src={previewUrl} alt={item.name} />}
+              <span>{item.name}</span>
+              <small>{selectedMode.supportsImage && item.type.startsWith("image/") ? "Sent as image input" : item.type.startsWith("image/") ? "Needs vision model" : "Read as text"}</small>
+              <button type="button" data-remove-attachment onClick={() => removeFile(index)}>Remove</button>
+            </span>
+          ))}
         </div>
       )}
       {file?.type?.startsWith("image/") && !selectedMode.supportsImage && (
@@ -2444,7 +2427,8 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
             ref={inputRef}
             data-attachment-input
             type="file"
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
+            multiple
+            onChange={(event) => setFiles((current) => [...current, ...Array.from(event.target.files || [])])}
             accept={ATTACHMENT_ACCEPT}
           />
         </label>
@@ -2454,19 +2438,23 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
           selectedKey={mode}
             onSelect={setMode}
             content={content}
-            hasFile={Boolean(file)}
+            hasFile={files.length > 0}
             power={power}
             modelCatalog={modelModes}
           />
         <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
           {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
         </select>
-        <button className="send-key" type="submit" disabled={sending}>{sending ? <span className="typing" /> : "Send"}</button>
+        {sending ? (
+          <button className="send-key stop" type="button" onClick={stopThinking}>Stop</button>
+        ) : (
+          <button className="send-key" type="submit">Send</button>
+        )}
       </div>
       {cloudPrompt && (
         <CloudConfirm
           mode={selectedMode}
-          hasFile={Boolean(file)}
+          hasFile={files.length > 0}
           onCancel={() => setCloudPrompt(false)}
           onUseOnce={() => {
             confirmCloudOnce(mode);
@@ -2481,106 +2469,6 @@ function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
         />
       )}
     </form>
-  );
-}
-
-function ModelPickerButton({ open, setOpen, selectedKey, onSelect, content, hasFile, power, modelCatalog = [] }) {
-  const models = normalizeModelCatalog(modelCatalog);
-  const mode = modelMode(selectedKey, models);
-  const [group, setGroup] = useState("recommended");
-  const wrapRef = useRef(null);
-  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
-  const recommendation = recommendModel(models, { content, hasFile });
-  const visibleModels = models.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
-  useEffect(() => {
-    if (!open) return undefined;
-    function onKey(event) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    function onPointer(event) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer);
-    };
-  }, [open, setOpen]);
-  return (
-    <div className="model-picker-wrap" ref={wrapRef}>
-      <button className="model-select-button" type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <strong>{mode.label}</strong>
-        <span>{compactModelCost(mode)}</span>
-      </button>
-      {open && (
-        <div className="model-picker" role="dialog" aria-label="AI model picker">
-          <header>
-            <div>
-              <strong>{copy.modelPicker.title}</strong>
-              <small>{mode.label} {copy.modelPicker.selected}</small>
-            </div>
-            <button type="button" onClick={() => setOpen(false)}>Close</button>
-          </header>
-          <div className="model-quick-row">
-            {MODEL_GROUPS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={group === item.value ? "active" : ""}
-                onClick={() => setGroup(item.value)}
-              >
-                {copy.modelPicker.groups[item.value] || item.label}
-              </button>
-            ))}
-          </div>
-          <div className="model-recommendation">
-            <strong>AIWS recommends {recommendation.model.label}</strong>
-            <small>{recommendation.reason}</small>
-          </div>
-          <div className="model-grid">
-            {visibleModels.map((item) => {
-              const selected = item.value === selectedKey;
-              const recommended = item.value === recommendation.model.value;
-              const singleEstimate = estimateCurrentCost(item, content, hasFile);
-              const agentCalls = item.agentCalls || (item.cloud ? 2 : 1);
-              const agentEstimate = estimateCurrentCost(item, content, hasFile, agentCalls);
-              const catalog = models.find((entry) => entry.provider === item.provider && entry.model === item.model);
-              const keyStatus = item.cloud ? (catalog?.api_key_configured ? "API key connected" : "API key missing") : "Local";
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={`model-card ${selected ? "selected" : ""} ${recommended ? "recommended" : ""} ${item.cloud ? "cloud" : "local"}`}
-                  onClick={() => {
-                    onSelect(item.value);
-                    setOpen(false);
-                  }}
-                >
-                  <span className="model-card-title">{item.label}</span>
-                  {recommended && <span className="model-key-status">Recommended</span>}
-                  <span className="model-card-version">{item.version || item.model}</span>
-                  <span className="model-card-privacy">{item.cloud ? "Cloud AI" : "Local Mac"}</span>
-                  <span>{item.recommendedUse || item.bestFor}</span>
-                  <span className="model-card-capabilities">
-                    {item.supportsText && "Text"}
-                    {item.supportsImage ? " · Image" : " · No image"}
-                    {item.supportsFileText && " · File text"}
-                    {item.supportsWebSearch ? " · Web" : " · No web"}
-                  </span>
-                  <span className="model-card-price">{power && item.cloud && item.inputPrice > 0 ? `Input ~$${item.inputPrice.toFixed(2)} / 1M · output ~$${item.outputPrice.toFixed(2)} / 1M` : item.easyPrice || item.cost}</span>
-                  <span className="model-card-estimate">Single call estimate: {singleEstimate}</span>
-                  {item.cloud && <span className="model-card-estimate">Agent {agentCalls}-step budget: {agentEstimate}</span>}
-                  {item.cloud && <span className="model-card-estimate">Actual cost accumulates per executed model call</span>}
-                  <span className={`model-key-status ${item.cloud && !catalog?.api_key_configured ? "missing" : ""}`}>{keyStatus}</span>
-                  {power && <code>{item.provider} · {item.model}</code>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -2614,11 +2502,6 @@ function confirmCloudOnce(key) {
 
 function confirmCloudAlways(key) {
   setCookie(`aiws_cloud_ok_${key}`, "1");
-}
-
-function compactModelCost(mode) {
-  if (!mode.cloud) return "Free · local Mac";
-  return mode.easyPrice || "Paid";
 }
 
 function estimateCurrentCost(mode, content, hasFile, calls = 1) {
@@ -2678,24 +2561,6 @@ function normalizeModelCatalog(models = []) {
   })).filter((item) => item.value && item.provider && item.model);
 }
 
-function recommendModel(models, { content = "", hasFile = false } = {}) {
-  const local = models.find((item) => !item.cloud) || models[0];
-  const flash = models.find((item) => item.provider === "gemini" && item.model.includes("flash"));
-  const pro = models.find((item) => item.provider === "gemini" && item.model.includes("pro"));
-  const codex = models.find((item) => item.provider === "openai" || item.group === "coding");
-  const text = String(content || "").toLowerCase();
-  if (hasFile) {
-    return { model: flash || local, reason: flash ? "File/image work benefits from a low-cost file-capable model when cloud is allowed. CSV/XLSX still runs deterministic profiling first." : "File work will use local deterministic preprocessing first." };
-  }
-  if (/(code|bug|test|refactor|codex|파일|코드|버그|테스트)/.test(text) && codex) {
-    return { model: codex, reason: "This looks like a coding task, so a code-oriented model is the strongest match." };
-  }
-  if (content.length > 8000 && pro) {
-    return { model: pro, reason: "Long context or higher reasoning requests fit a larger cloud model when cloud is allowed." };
-  }
-  return { model: local, reason: "Private short text defaults to local Qwen for zero API cost." };
-}
-
 function searchLabel(mode) {
   return SEARCH_OPTIONS.find((item) => item.value === mode)?.label || `Search ${mode}`;
 }
@@ -2711,8 +2576,9 @@ function isPowerMode(account) {
 function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }) {
   const power = isPowerMode(account);
   const operator = power && Boolean(account?.admin);
+  const diagnosticsVisible = operator && runtime?.diagnostics_visible !== false;
   const copy = copyForAccount(account);
-  const tabs = operator ? ["context", "files", "memory", "runs", "artifacts", "diagnostics"] : power ? ["context", "files", "memory", "runs", "artifacts"] : ["context"];
+  const tabs = diagnosticsVisible ? ["context", "files", "memory", "runs", "artifacts", "diagnostics"] : power ? ["context", "files", "memory", "runs", "artifacts"] : ["context"];
   const [tab, setTab] = useState("context");
   const currentTab = tabs.includes(tab) ? tab : "context";
   if (!activePath.projectPath || !activePath.sessionSlug) {
@@ -2724,9 +2590,9 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           <p className="muted">{copy.inspector.emptyPurpose}</p>
         </section>
         <ActionInspector projectConfig={projectConfig} power={power} />
-        {operator && <RuntimePanel runtime={runtime} />}
-        {operator && <OpenClawPanel openclaw={openclaw} />}
-        {operator && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
+        {diagnosticsVisible && <RuntimePanel runtime={runtime} />}
+        {diagnosticsVisible && <OpenClawPanel openclaw={openclaw} />}
+        {diagnosticsVisible && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
       </aside>
     );
   }
@@ -2766,7 +2632,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       {currentTab === "context" && (
         <section>
           <h3>{latestReceipt ? "Latest context receipt" : "What will be sent"}</h3>
-          {latestReceipt ? <ContextReceipt receipt={latestReceipt} /> : <p className="muted">Send a message to create a receipt showing files, privacy mode, model, exclusions, and estimated cost.</p>}
+          {latestReceipt ? <ContextReceiptCard receipt={latestReceipt} /> : <p className="muted">Send a message to create a receipt showing files, privacy mode, model, exclusions, and estimated cost.</p>}
           {chat?.project?.hidden && <PromoteChatCard chat={chat} activePath={activePath} copy={copy} />}
           <WorkSessionCard workSession={chat?.work_session} copy={copy} />
           <ActionInspector projectConfig={projectConfig} power={power} />
@@ -2804,7 +2670,10 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
       {currentTab === "memory" && (
         <section>
           <h3>Workspace memory</h3>
-          <p className="muted">Profile memory, project notes, and chat summaries are available as explicit context when the workspace includes them.</p>
+          <div className="empty-action-state">
+            <p className="muted">Coming later: editable project memory and chat summaries.</p>
+            <span>Today AIWS uses explicit project goals, attached files, aiws.yaml context, and receipt records instead of hidden memory.</span>
+          </div>
         </section>
       )}
       {currentTab === "runs" && (
@@ -2837,7 +2706,7 @@ function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], p
           )}
         </section>
       )}
-      {operator && currentTab === "diagnostics" && (
+      {diagnosticsVisible && currentTab === "diagnostics" && (
         <section>
           <h3>{copy.inspector.tabs.diagnostics}</h3>
           <RuntimePanel runtime={runtime} />

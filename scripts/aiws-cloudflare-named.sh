@@ -15,12 +15,15 @@ TUNNEL_TOKEN="${AIWS_CLOUDFLARE_TUNNEL_TOKEN:-}"
 TUNNEL_TOKEN_FILE="${AIWS_CLOUDFLARE_TUNNEL_TOKEN_FILE:-}"
 LOG_DIR="${AIWS_LOG_DIR:-$WORKSPACE_ROOT/logs}"
 RUN_DIR="${AIWS_RUN_DIR:-$WORKSPACE_ROOT/run}"
+GENERATED_TOKEN_FILE="$RUN_DIR/cloudflare-named-token"
 SERVER_LOG="$LOG_DIR/aiws-cloudflare-named-server.log"
 TUNNEL_LOG="$LOG_DIR/cloudflared-named.log"
 SERVER_PID_FILE="$RUN_DIR/aiws-cloudflare-named-server.pid"
 TUNNEL_PID_FILE="$RUN_DIR/aiws-cloudflare-named.pid"
 URL_FILE="$RUN_DIR/cloudflare-named-url.txt"
 STATUS_FILE="${AIWS_STATUS_PATH:-$WORKSPACE_ROOT/runtime-status.json}"
+START_ADMIN_DASHBOARD="${AIWS_START_ADMIN_DASHBOARD:-true}"
+ADMIN_PORT="${AIWS_ADMIN_PORT:-8790}"
 
 mkdir -p "$LOG_DIR" "$RUN_DIR"
 
@@ -44,13 +47,13 @@ tunnel_pid() {
 }
 
 is_running() {
-  pid_alive "$(server_pid)" && pid_alive "$(tunnel_pid)"
+  lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 && pid_alive "$(tunnel_pid)"
 }
 
 write_status() {
   local status="$1"
   local message="${2:-}"
-  "$REPO_ROOT/.venv/bin/python" - "$STATUS_FILE" "$status" "$message" "$HOSTNAME" "$PORT" "$WORKSPACE_ROOT" "$(server_pid)" "$(tunnel_pid)" "$SERVER_LOG" "$TUNNEL_LOG" <<'PY'
+  "$REPO_ROOT/.venv/bin/python" - "$STATUS_FILE" "$status" "$message" "$HOSTNAME" "$PORT" "$WORKSPACE_ROOT" "$(server_pid)" "$(tunnel_pid)" "$SERVER_LOG" "$TUNNEL_LOG" "$ADMIN_PORT" <<'PY'
 import json
 import sys
 import time
@@ -60,7 +63,7 @@ path = Path(sys.argv[1]).expanduser()
 status, message, hostname, port, workspace = sys.argv[2:7]
 server_pid = sys.argv[7] or None
 tunnel_pid = sys.argv[8] or None
-server_log, tunnel_log = sys.argv[9:11]
+server_log, tunnel_log, admin_port = sys.argv[9:12]
 
 payload = {
     "status": status,
@@ -78,6 +81,7 @@ payload = {
         "server": server_log,
         "cloudflared": tunnel_log,
     },
+    "admin_url": f"http://127.0.0.1:{admin_port}",
 }
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -143,14 +147,46 @@ start() {
     exit 1
   fi
 
-  if [[ -n "$TUNNEL_TOKEN_FILE" ]]; then
-    cloudflared tunnel run --token-file "$TUNNEL_TOKEN_FILE" >"$TUNNEL_LOG" 2>&1 &
-  elif [[ -n "$TUNNEL_TOKEN" ]]; then
-    cloudflared tunnel run --token "$TUNNEL_TOKEN" >"$TUNNEL_LOG" 2>&1 &
-  else
-    cloudflared tunnel --config "$TUNNEL_CONFIG" run "$TUNNEL_NAME" >"$TUNNEL_LOG" 2>&1 &
+  if [[ "$START_ADMIN_DASHBOARD" != "0" && "$START_ADMIN_DASHBOARD" != "false" && "$START_ADMIN_DASHBOARD" != "no" ]]; then
+    "$REPO_ROOT/scripts/aiws-admin-dashboard.sh" start >/dev/null 2>&1 || true
   fi
-  echo "$!" > "$TUNNEL_PID_FILE"
+
+  local token_file=""
+  if [[ -n "$TUNNEL_TOKEN_FILE" ]]; then
+    token_file="$TUNNEL_TOKEN_FILE"
+  elif [[ -n "$TUNNEL_TOKEN" ]]; then
+    printf '%s' "$TUNNEL_TOKEN" > "$GENERATED_TOKEN_FILE"
+    chmod 600 "$GENERATED_TOKEN_FILE"
+    token_file="$GENERATED_TOKEN_FILE"
+  fi
+
+  "$REPO_ROOT/.venv/bin/python" - "$token_file" "$TUNNEL_LOG" "$TUNNEL_PID_FILE" "$TUNNEL_CONFIG" "$TUNNEL_NAME" "${AIWS_CLOUDFLARED_PROTOCOL:-http2}" <<'PY'
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+token_file, log_path, pid_path, config_path, tunnel_name, protocol = sys.argv[1:7]
+if token_file:
+    command = ["cloudflared", "tunnel", "run", "--protocol", protocol, "--token-file", token_file]
+else:
+    command = ["cloudflared", "tunnel", "--config", config_path, "run", tunnel_name]
+
+env = os.environ.copy()
+env.pop("AIWS_CLOUDFLARE_TUNNEL_TOKEN", None)
+Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+log = Path(log_path).open("ab", buffering=0)
+process = subprocess.Popen(
+    command,
+    stdout=log,
+    stderr=subprocess.STDOUT,
+    stdin=subprocess.DEVNULL,
+    start_new_session=True,
+    close_fds=True,
+    env=env,
+)
+Path(pid_path).write_text(str(process.pid) + "\n", encoding="utf-8")
+PY
   echo "https://$HOSTNAME" > "$URL_FILE"
 
   echo "Starting Cloudflare named tunnel for https://$HOSTNAME..."
@@ -180,7 +216,10 @@ stop() {
     fi
   done
   pkill -f "cloudflared tunnel --config .* run $TUNNEL_NAME" 2>/dev/null || true
+  pkill -f "cloudflared tunnel run --token" 2>/dev/null || true
+  pkill -f "cloudflared tunnel run --token-file" 2>/dev/null || true
   rm -f "$TUNNEL_PID_FILE" "$SERVER_PID_FILE" "$URL_FILE"
+  "$REPO_ROOT/scripts/aiws-admin-dashboard.sh" stop >/dev/null 2>&1 || true
   write_status "stopped" "Cloudflare named tunnel stopped."
   echo "Stopped AIWS Cloudflare named tunnel."
 }
@@ -193,6 +232,7 @@ status() {
     echo "stopped"
   fi
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN || true
+  "$REPO_ROOT/scripts/aiws-admin-dashboard.sh" status || true
 }
 
 url() {

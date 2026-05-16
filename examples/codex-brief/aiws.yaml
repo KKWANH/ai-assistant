@@ -1,0 +1,24 @@
+version: 1
+name: Codex Brief
+description: Turn project goals into structured implementation prompts.
+root: .
+
+context:
+  include:
+    - README.md
+    - src/**/*.py
+    - tests/**/*.py
+  exclude:
+    - .env
+    - secrets/**
+    - keys/**
+    - .git/**
+    - node_modules/**
+
+commands:
+  write_codex_brief:
+    kind: codex_prompt
+    label: Write Codex brief
+    description: Create a precise task prompt with constraints and acceptance criteria.
+    outputs:
+      - artifacts/codex-prompt.md

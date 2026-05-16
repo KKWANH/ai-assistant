@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from aiws import attachments, automations, runner, storage
-from aiws.ui import AIWSHandler, validate_ui_options
+from aiws.app.routes import runtime as runtime_routes
+from aiws.ui import AIWSHandler, attachment_view, validate_ui_options
 
 
 def test_local_mode_binds_loopback_without_auth():
@@ -118,7 +119,7 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "Project actions" in bundle_text
         assert "Suggested next actions" in bundle_text
         assert "User approval required" in bundle_text
-        assert "Investment Rebalancer" in bundle_text
+        assert "Investment Advisor" in bundle_text
         assert "AI Workbench Studio" in bundle_text
         assert "Quick Actions" in bundle_text
         assert "Create from one input" in bundle_text
@@ -215,12 +216,14 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
                     "is_image": False,
                     "is_pdf": False,
                     "delivery": "Sent as text context",
-                    "text_available": True,
-                    "extraction_status": "success",
-                    "extraction_error": "",
-                }
-            ]
-        },
+                        "text_available": True,
+                        "extraction_status": "success",
+                        "extraction_error": "",
+                        "text_preview": "file body",
+                        "table_preview": {},
+                    }
+                ]
+            },
         "provider_attachments": [],
     }
 
@@ -315,6 +318,11 @@ def test_home_starter_action_creates_run_and_artifact(tmp_path):
 
         assert payload["run"]["status"] == "completed"
         assert payload["run"]["execution_plan"]["intent"] == "document_summary"
+        assert payload["run"]["workspace_id"] == "home:local"
+        assert payload["run"]["session_id"] is None
+        assert payload["run"]["action_label"] == "Summarize document"
+        assert payload["run"]["model"] == {"provider": "ollama", "id": "qwen3:8b", "local": True}
+        assert payload["run"]["context_receipt"]["privacy_mode"] == "local"
         assert artifact_path.endswith("summary.md")
 
         detail = json.loads(request.urlopen(f"{base_url}/api/home-run?run_id={parse.quote(run_id)}", timeout=5).read().decode("utf-8"))
@@ -329,6 +337,136 @@ def test_home_starter_action_creates_run_and_artifact(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_runtime_public_payload_hides_operator_details(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    workspace = storage.workspace_path(root)
+    run_dir = workspace / "run"
+    run_dir.mkdir(parents=True)
+    status_path = workspace / "runtime-status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "port": 8789,
+                "server_pid": 123,
+                "cloudflared_pid": 456,
+                "log": "/tmp/aiws.log",
+                "command": "scripts/aiws-admin-dashboard.sh",
+                "local_url": "http://127.0.0.1:8789/",
+                "public_url": "https://ai.example.test",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AIWS_STATUS_PATH", str(status_path))
+    monkeypatch.setenv("AIWS_RUN_DIR", str(run_dir))
+
+    payload = runtime_routes.runtime_payload(root, 8789, public_view=True)
+    runtime = payload["runtime"]
+
+    assert runtime == {
+        "status": "running",
+        "cloudflare_url": "https://ai.example.test",
+        "public_url": "https://ai.example.test",
+        "public_view": True,
+        "diagnostics_visible": False,
+    }
+
+
+def test_csv_attachment_view_includes_table_preview(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Tables")
+    storage.create_session(root, "tables", "Review")
+
+    metadata = attachments.save_attachment(
+        root,
+        "tables",
+        "review",
+        "holdings.csv",
+        b"symbol,value\nVT,12000\nBND,3000\n",
+    )
+    view = attachment_view("tables", "review", metadata)
+
+    assert view["table_preview"]["columns"] == ["symbol", "value"]
+    assert view["table_preview"]["rows"][0]["symbol"] == "VT"
+    assert view["table_preview"]["row_count"] == 2
+
+
+def test_api_ask_accepts_multiple_attachments(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Files")
+    storage.create_session(root, "files", "Multi")
+    calls = {}
+
+    def fake_ask(
+        root_arg,
+        project_path,
+        session_slug,
+        *,
+        provider,
+        model,
+        content,
+        actor=None,
+        search_mode="off",
+        user_metadata=None,
+        stored_content=None,
+        provider_attachments=None,
+        allow_remote=False,
+        allow_network=False,
+        confirm_cost=False,
+    ):
+        calls["content"] = content
+        calls["user_metadata"] = user_metadata
+        calls["provider_attachments"] = provider_attachments
+        return "ok"
+
+    monkeypatch.setattr(runner, "ask", fake_ask)
+    handler = partial(AIWSHandler, root=str(root), require_auth=False, password=None)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        boundary = "----aiws-multi-boundary"
+        multipart_body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="provider"\r\n\r\n'
+            "ollama\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="model"\r\n\r\n'
+            "qwen3:8b\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="content"\r\n\r\n'
+            "Read these files\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="attachment"; filename="one.txt"\r\n'
+            "Content-Type: text/plain\r\n\r\n"
+            "first body\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="attachment"; filename="two.txt"\r\n'
+            "Content-Type: text/plain\r\n\r\n"
+            "second body\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("utf-8")
+        req = request.Request(
+            f"{base_url}/api/ask/files/multi",
+            data=multipart_body,
+            method="POST",
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Accept": "application/json"},
+        )
+        response = request.urlopen(req, timeout=5)
+        assert response.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert "Attached file: one.txt" in calls["content"]
+    assert "Attached file: two.txt" in calls["content"]
+    assert len(calls["user_metadata"]["attachments"]) == 2
+    assert calls["provider_attachments"] == []
 
 
 def test_login_uses_react_shell_and_public_assets_when_auth_required(tmp_path):

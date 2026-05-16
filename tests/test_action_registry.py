@@ -456,6 +456,25 @@ def test_suggest_actions_matches_recent_chat_text(tmp_path):
     assert suggestions[0]["kind"] == "python"
 
 
+def test_investment_advisor_template_runs_deterministic_actions(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Advisor")
+    config = action_registry.import_template(root, "advisor", "investment-advisor")
+
+    assert config["name"] == "Investment Advisor Workbench"
+    assert "market_research" in config["commands"]
+    preview = action_registry.preview_action(root, "advisor", "market_research")
+    assert preview["capabilities"]["allow_network"] is True
+
+    rebalance = action_registry.run_action(root, "advisor", "rebalance_plan", confirmed=True)
+    report = action_registry.run_action(root, "advisor", "advisor_report", confirmed=True)
+
+    assert rebalance["status"] == "completed"
+    assert report["status"] == "completed"
+    artifact_names = {Path(item["path"]).name for item in report["artifacts"]}
+    assert "advisor-report.md" in artifact_names
+
+
 def test_home_csv_analysis_creates_stats_artifacts(tmp_path):
     root = tmp_path / "workspace"
     storage.init_workspace(root)

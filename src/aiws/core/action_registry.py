@@ -447,6 +447,7 @@ def run_action(
         outputs={"expected_files": preview.get("expected_output_files", [])},
         stdout=stdout,
         stderr=stderr,
+        workspace_id=f"project:{project_path}",
         error=str(result.get("error", "")),
     )
     run["run_dir"] = str(run_path)

@@ -1,0 +1,29 @@
+version: 1
+name: Document Review
+description: Review local notes and documents into traceable summaries.
+root: .
+
+context:
+  include:
+    - notes/**/*.md
+    - docs/**/*.txt
+    - papers/**/*.pdf
+  exclude:
+    - .env
+    - secrets/**
+    - keys/**
+    - .git/**
+
+commands:
+  summarize_docs:
+    kind: prompt_recipe
+    label: Summarize documents
+    description: Create a structured markdown summary from local review notes.
+    prompt: |
+      Review the included notes and documents.
+      Write a markdown summary with:
+      - key points
+      - unresolved questions
+      - recommended next actions
+    outputs:
+      - artifacts/document-summary.md

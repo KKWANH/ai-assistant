@@ -1,384 +1,261 @@
-# AI Workbench Studio (AIWS)
+# AI Workbench Studio
 
-**Local-first AI cockpit for projects, files, and agent runs.**
-
-Not another ChatGPT clone. AI Workbench Studio turns a project folder into a configurable AI cockpit for chats, files, actions, run logs, artifacts, model routing, and diagnostics.
-
-AIWS organizes conversations, project files, goals, prompt recipes, and local command runs around your own folders. It is designed for a Mac mini or similar personal machine first, with optional family access through a private tunnel and bring-your-own-key cloud models.
-
-This MVP focuses on a reliable file-based foundation:
-
-- CLI mode for fully local terminal workflows.
-- Local UI mode bound to `127.0.0.1`.
-- Server UI mode bound to `0.0.0.0` with required password authentication.
-- Two-level project hierarchy: `project` or `project/subproject`.
-- JSONL and Markdown archives for every session.
-- Reusable project skills with parent-to-subproject inheritance.
-- `aiws.yaml` project commands for prompt recipes, shell scripts, Python scripts, file indexing, Codex prompts, and optional OpenClaw status checks.
-- Context & Files inspector for attached files, context manifests, runs, artifacts, and diagnostics.
-- Experimental Agent Plan preview for controlled Planner -> Execute -> Analyze -> Report workflows.
-
-## Core Idea
+AI Workbench Studio is a local-first AI cockpit that turns your project folder into a traceable workspace for chats, files, model runs, actions, and artifacts.
 
 ```text
-local folder + aiws.yaml + files + scripts + chat = customizable AI workspace
+Folder -> aiws.yaml -> Context -> Actions -> Runs -> Artifacts -> Reports
 ```
 
-Examples:
+AIWS is built for people who want AI help on local projects without losing sight of what files were used, what model was selected, what left the machine, and what output was created.
 
-- Investment rebalancing workspace with CSV/YAML inputs and Python reports.
-- Paper review workspace with PDF files, review criteria, and prompt recipes.
-- Development workspace with goals, files, test commands, and Codex-ready prompts.
-- Family document workspace for receipts, schedules, travel docs, and explanations.
+## Why AIWS?
 
-## Architecture
+Most AI tools start from a blank chat. AIWS starts from your folder.
+
+- Keep project chats, files, goals, runs, and artifacts together.
+- Use local Ollama models first, with optional BYOK cloud providers.
+- Inspect context receipts after model calls.
+- Run repeatable `aiws.yaml` actions.
+- Keep storage file-based and easy to back up.
+- Host locally, then optionally expose through Tailscale or Cloudflare Tunnel.
+
+## What Makes It Different?
+
+- **Folder-native workspace**: projects live under a local workspace root.
+- **Configurable actions**: `aiws.yaml` defines prompt recipes, file indexes, Codex briefs, shell/Python actions, and expected artifacts.
+- **Inspectable AI runs**: action runs produce `run.json`, `run.md`, logs, and artifacts.
+- **Context receipt**: every meaningful model call can show model, provider, local/cloud mode, estimated cost, files used, exclusions, chunks, and network mode.
+- **Local-first model routing**: Qwen/Ollama by default; Gemini, Kimi, OpenAI, and ERNIE through your own API keys.
+- **Public tunnel awareness**: diagnostics and local implementation details are kept away from non-admin/public views.
+
+## Quickstart
+
+```bash
+git clone https://github.com/KKWANH/ai-assistant.git
+cd ai-assistant
+./scripts/install.sh
+./scripts/start.sh
+```
+
+Then open:
 
 ```text
-React UI
-  -> Python HTTP server
-    -> file-based workspace storage
-    -> provider registry: Ollama, Kimi, Gemini, OpenAI
-    -> action registry: prompt_recipe, shell, python, file_index, codex_prompt, openclaw_status
-    -> local run artifacts under project/runs/{run_id}/
+http://127.0.0.1:8765
 ```
 
-Screenshots:
-
-- `docs/screenshots/login.png` placeholder
-- `docs/screenshots/chat.png` placeholder
-- `docs/screenshots/model-picker.png` placeholder
-- `docs/screenshots/project-commands.png` placeholder
-
-## Install For Local Development
+If you prefer manual setup:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-```
-
-## Test
-
-```bash
-python -m pytest
-```
-
-For the React web UI bundle:
-
-```bash
-cd web
-npm install
-npm run build
-```
-
-## CLI Example
-
-```bash
+cd web && npm install && npm run build && cd ..
 aiws init --root ~/.ai-workspace
-aiws skills list --root ~/.ai-workspace
-
-aiws account create kwanho \
-  --root ~/.ai-workspace \
-  --password "change-this" \
-  --admin
-
-aiws account create parent \
-  --root ~/.ai-workspace \
-  --password "change-this-too"
-
-aiws project create "AI System" \
-  --root ~/.ai-workspace \
-  --owner kwanho \
-  --visibility private \
-  --skills andrej-karpathy-skills \
-  --notes "Local-first AI gateway for Mac mini."
-
-aiws project create "Local Runner" \
-  --root ~/.ai-workspace \
-  --parent ai-system
-
-aiws session create ai-system/local-runner "Ollama MVP" \
-  --root ~/.ai-workspace
-
-aiws session append ai-system/local-runner ollama-mvp \
-  --root ~/.ai-workspace \
-  --role user \
-  --content "How should we implement the Ollama runner?"
-
-aiws prompt ai-system/local-runner ollama-mvp \
-  --root ~/.ai-workspace
+aiws run --root ~/.ai-workspace --mode local --port 8765 --models ollama
 ```
 
-## Accounts And Project Visibility
+## Local Model Setup
 
-AIWS uses a file-based MVP account store at:
-
-```text
-workspace_root/users.json
-```
-
-Passwords are hashed with PBKDF2-SHA256. Projects can be:
-
-- `private`: visible to the owner and admin accounts.
-- `public`: visible to every logged-in account.
-
-Admin accounts can list every project and inspect per-account usage counters.
-
-```bash
-aiws account list --root ~/.ai-workspace
-aiws project list --root ~/.ai-workspace --user kwanho
-```
-
-Accounts also have profile context used for conversations:
-
-```bash
-aiws account update kwanho \
-  --root ~/.ai-workspace \
-  --name "Kwanho Kim" \
-  --age "40" \
-  --job "Engineer" \
-  --situation "Building a local-first AI workspace." \
-  --language ko \
-  --memory "Prefers concise Korean answers."
-```
-
-The UI profile page supports language selection and image-only avatar upload.
-
-This is intentionally simple for the MVP. For broader internet exposure, keep AIWS behind Cloudflare Tunnel or Tailscale and avoid exposing the raw port directly.
-
-## Ask With Ollama
-
-Install and run Ollama separately, then pull a model:
+Install Ollama and pull a local model:
 
 ```bash
 ollama serve
-ollama pull qwen3:0.6b
+ollama pull qwen3:8b
 ```
 
-Ask stores both the user message and assistant response in the session:
+AIWS defaults to local Ollama for private short text. Cloud models are optional and require your own API keys in `.env`.
 
-```bash
-aiws ask ai-system/local-runner ollama-mvp \
-  --root ~/.ai-workspace \
-  --provider ollama \
-  --model qwen3:0.6b \
-  --content "What should we implement next?"
-```
+## Example Workflows
 
-For better local quality on a 24GB Mac, try `qwen3:8b` after the smoke test works.
+### 1. Summarize Documents
 
-Kimi uses Moonshot's OpenAI-compatible API. Set one of:
+Use `examples/document-review/` to review local notes and documents into a markdown artifact.
 
-```bash
-cp .env.example .env
-# then set AIWS_KIMI_API_KEY=... or MOONSHOT_API_KEY=...
-```
+### 2. Analyze CSV
 
-Then run:
+Use `examples/csv-analysis/` or attach a CSV/XLS/XLSX file from Home. AIWS profiles tables deterministically before asking a model to summarize the computed profile.
 
-```bash
-aiws ask ai-system/local-runner ollama-mvp \
-  --root ~/.ai-workspace \
-  --provider kimi \
-  --model kimi-k2.5 \
-  --search-mode auto \
-  --content "What is the latest context I should consider?"
-```
+### 3. Create A Codex Task Prompt
 
-Model cost estimates:
+Use `examples/codex-brief/` or the Home Workbench action to turn a goal into an implementation brief.
 
-```bash
-aiws models costs --root ~/.ai-workspace
-```
+### 4. Build A Project Workspace
 
-Search modes:
+Create a folder with `aiws.yaml`, include local notes/data/scripts, and let AIWS track context, runs, and artifacts.
 
-- `off`: local project/session/file context only.
-- `auto`: currently still local-only; reserved for future web search.
-- `always`: currently disabled until a real search provider is configured.
+### 5. Investment Advisor Workbench
 
-AIWS does not pretend to browse the web yet. The current search module records intent and has a provider boundary; a real web-search provider is a future increment.
+Use `examples/investment-advisor/` or import the `investment-advisor` template into a project. It shows how to build a custom AIWS app with portfolio CSVs, ETF/stock watchlists, target-allocation scenarios, network-approved market snapshots, deterministic rebalance math, and Markdown report artifacts. It is educational scaffolding, not financial advice.
 
-## Attachments
+## `aiws.yaml`
 
-The web UI can upload session attachments:
-
-- text: `.txt`, `.md`
-- documents: `.pdf`, `.docx`
-- images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
-
-Text extraction is lightweight and intentionally conservative. Full OCR and rich PDF parsing are future modules.
-
-## Custom Project Commands
-
-Projects can include an `aiws.yaml` file:
+`aiws.yaml` is the project control file.
 
 ```yaml
-name: Investment Rebalancer
-description: Local portfolio rebalancing workspace
+version: 1
+name: Research Workspace
+description: Local AI workbench for document review and notes.
 root: .
-permissions:
-  file_read: true
-  file_write: confirm
-  shell: confirm
-  network: false
+
 context:
   include:
-    - files/*.csv
-    - files/*.yaml
-    - files/*.md
+    - notes/**/*.md
+    - data/**/*.csv
   exclude:
     - .env
-    - secrets/*
+    - secrets/**
+    - keys/**
+    - .git/**
+
 commands:
-  summarize_portfolio:
+  summarize_docs:
     kind: prompt_recipe
-    label: 현재 포트폴리오 요약
+    label: Summarize documents
     prompt: |
-      files/portfolio.csv와 목표 비중을 읽고 현재 포트폴리오를 요약해줘.
-  rebalance_plan:
-    kind: python
-    label: 리밸런싱 계산
-    script: scripts/calculate_rebalance.py
-    args:
-      - files/portfolio.csv
-      - files/target_allocation.yaml
-      - artifacts/rebalance-table.csv
+      Review the included notes and write a markdown summary.
+    outputs:
+      - artifacts/summary.md
 ```
 
-Every command run writes:
+See [docs/aiws-yaml.md](docs/aiws-yaml.md).
+
+## Context Receipt
+
+A context receipt answers:
+
+- Which provider/model was used?
+- Was it local, cloud, or network-assisted?
+- What was the estimated cost?
+- Which files and chunks were used?
+- Which files were excluded?
+- Was raw file text sent, or only a computed profile?
+- Was web/network access allowed?
+
+Receipt title pattern:
+
+```text
+Context receipt · local · 1 file · 0 USD
+```
+
+## Runs And Artifacts
+
+Action runs are saved as inspectable records:
 
 ```text
 projects/<project>/runs/<run_id>/
+  run.json
   run.md
+  result.json
   stdout.txt
   stderr.txt
-  result.json
+  artifacts/
 ```
 
-The bundled example is in `templates/investment-rebalancer/`.
+Home starter actions use:
 
-## Runtime Launcher
-
-Run AIWS and local model services together:
-
-```bash
-aiws run \
-  --root ~/.ai-workspace \
-  --mode local \
-  --port 8765 \
-  --models ollama \
-  --idle-timeout 1800 \
-  --status-path ~/.ai-workspace/runtime-status.json
+```text
+users/<username>/home/runs/
+users/<username>/home/artifacts/
 ```
 
-`aiws run` starts the UI, starts `ollama serve` when requested, writes a JSON status file, and stops the owned Ollama process after the workspace has been idle for the configured timeout. Use `--models none` to run only the UI.
+Artifacts are treated as work products, not just attachments. The UI shows type, source run, size, and open/download/copy actions where available.
 
-The older generic supervisor remains available for arbitrary commands:
+## Security Model
+
+AIWS is local-first, but server mode and public tunnels still need care.
+
+- Local mode binds to `127.0.0.1`.
+- Server mode binds to `0.0.0.0` and requires authentication.
+- Public tunnel/domain access should use accounts and strong passwords.
+- API key values are never sent to the frontend.
+- Common secret paths are excluded from context.
+- Diagnostics, local paths, admin scripts, and localhost URLs are hidden from non-admin/public views.
+
+Recommended public-demo flags:
 
 ```bash
-aiws supervise --status-path /tmp/aiws-status.json -- aiws ui start --root ~/.ai-workspace --mode local --port 8765
+AIWS_PUBLIC_DEMO=true
+AIWS_SHOW_DIAGNOSTICS=false
+AIWS_ALLOW_ADMIN_LINKS=false
 ```
 
-## Local UI
+See [SECURITY.md](SECURITY.md).
+
+## Cloudflare / Tailscale Access
+
+For family/browser access, prefer a tunnel rather than exposing a raw port.
+
+- Tailscale: private network access.
+- Cloudflare quick tunnel: temporary testing URL.
+- Cloudflare named tunnel: stable custom domain such as `ai.kwanho.dev`.
+
+See:
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/HOSTING_RUNBOOK.md](docs/HOSTING_RUNBOOK.md)
+- [docs/CLOUDFLARE_CUSTOM_DOMAIN.md](docs/CLOUDFLARE_CUSTOM_DOMAIN.md)
+- [docs/HOME_DEPLOYMENT_CHECKLIST.md](docs/HOME_DEPLOYMENT_CHECKLIST.md)
+
+## Useful Commands
 
 ```bash
-aiws run \
-  --root ~/.ai-workspace \
-  --mode local \
-  --port 8765 \
-  --models ollama
+./scripts/install.sh
+./scripts/start.sh
+./scripts/dev.sh
+./scripts/lint.sh
+./scripts/test.sh
+./scripts/build.sh
+./scripts/doctor.sh
+./scripts/aiws-doctor.sh
 ```
 
-Open `http://127.0.0.1:8765`.
-
-## Server UI
+Direct Python commands:
 
 ```bash
-aiws run \
-  --root ~/.ai-workspace \
-  --mode server \
-  --port 8765 \
-  --models ollama
-```
-
-Server mode binds to `0.0.0.0` and refuses to start without a password. Put it behind Cloudflare Tunnel, Tailscale, or a trusted reverse proxy before exposing it outside your network.
-
-If accounts already exist in the workspace, server mode can use account login instead of the legacy `--password` bootstrap guard.
-
-## Hosting Recommendation
-
-For this product, the recommended low-cost path is:
-
-1. Run AIWS on the Mac mini.
-2. Keep the canonical files on the Mac mini.
-3. Use Tailscale for private family access first.
-4. Use Cloudflare Tunnel later if browser-only public-domain access is needed.
-
-Vercel is not the first choice for AIWS because the app needs local file storage, local Ollama, and long-running local services. A serverless deployment would either lose the local-first storage advantage or require moving state/model calls elsewhere.
-
-Detailed docs:
-
-- [Hosting Runbook](docs/HOSTING_RUNBOOK.md)
-- [Security Test Plan](docs/SECURITY_TEST_PLAN.md)
-- [Safe Home Deployment Checklist](docs/HOME_DEPLOYMENT_CHECKLIST.md)
-
-## Mac Mini Self-Host Checklist
-
-1. Install Python dependencies with `pip install -e ".[dev]"`.
-2. Build the UI once with `cd web && npm install && npm run build`.
-3. Initialize the workspace with `aiws init --root ~/.ai-workspace`.
-4. Create one admin account and one family test account.
-5. Keep projects `private` by default; use `public` only for family-shared material.
-6. Start local use with `aiws run --root ~/.ai-workspace --mode local --port 8765 --models ollama`.
-7. Start browser access with `aiws-cloudflare start`, then open the URL from `aiws-cloudflare status`.
-   For a stable custom domain such as `ai.kwanho.dev`, use a named Cloudflare Tunnel.
-   See [Cloudflare Custom Domain Runbook](docs/CLOUDFLARE_CUSTOM_DOMAIN.md).
-8. Add Kimi by copying `.env.example` to `.env` and setting `AIWS_KIMI_API_KEY` or `MOONSHOT_API_KEY`.
-9. Create regular backups:
-
-```bash
-aiws backup create --root ~/.ai-workspace --output ~/aiws-workspace-backup
-```
-
-Restore test:
-
-```bash
-aiws backup restore ~/aiws-workspace-backup.tar.gz --root ~/.ai-workspace-restored
-aiws project list --root ~/.ai-workspace-restored
+source .venv/bin/activate
+python -m pytest
+python -m ruff check src tests
+cd web && npm run build
 ```
 
 ## Storage Layout
 
 ```text
 workspace_root/
+  users.json
   projects/
-    ai-system/
+    project/
       project.json
+      aiws.yaml
+      goal.json
       sessions/
-        ollama-mvp/
+        session/
           session.json
           messages.jsonl
           session.md
-      local-runner/
-        project.json
-        sessions/
-          ...
-  skills/
-    andrej-karpathy-skills/
-      CLAUDE.md
+          attachments/
+          context_receipts.jsonl
+      runs/
+  users/<username>/home/
+    runs/
+    artifacts/
+  usage/model_usage.jsonl
 ```
 
 ## Roadmap
 
-Implemented foundations include Ollama, Kimi, Gemini, OpenAI-compatible providers, account login, project visibility, file attachments, cost estimates, Cloudflare launcher support, goals, and project command recipes.
+- Stronger component split in `web/src`.
+- More deterministic parsers for PDFs and Office files.
+- Richer artifact viewer.
+- Optional Playwright smoke tests.
+- Docker support: planned, but local Mac/Linux install is the recommended first path.
 
-Still planned:
+## Contributing
 
-- richer PDF parsing with `pypdf` and optional OCR
-- real web search provider integration
-- vector/RAG indexing over selected project files
-- stronger project memory summarization
-- richer artifacts panel
-- Playwright E2E coverage
-- component-level frontend refactor beyond the action panel split
+Keep changes boring and inspectable:
+
+- Preserve file-based storage.
+- Keep project depth to `project` or `project/subproject`.
+- Add tests for behavior changes.
+- Do not log secrets.
+- Do not expose diagnostics in public views.

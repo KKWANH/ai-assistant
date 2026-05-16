@@ -54,7 +54,7 @@ export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig
     setError("");
     const payload = await fetchJson(`/api/project-config/${activePath.projectPath}/import`, {
       method: "POST",
-      body: new URLSearchParams({ template: "investment-rebalancer" }),
+      body: new URLSearchParams({ template: "investment-advisor" }),
     });
     onProjectConfig?.({ config: payload.config, runs: [] });
   }
@@ -103,7 +103,7 @@ export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig
       {commands.length === 0 ? (
         <div className="empty-actions">
           <p className="muted">No project recipes yet.</p>
-          <button type="button" onClick={importTemplate}>Import Investment Rebalancer template</button>
+          <button type="button" onClick={importTemplate}>Import Investment Advisor template</button>
         </div>
       ) : (
         commands.map(([name, command]) => (

@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from aiws import costs
+from aiws.env import load_env
 from aiws.core import home_workbench, model_capabilities
 
 
@@ -125,6 +126,7 @@ MODEL_UI = {
 
 
 def api_key_map() -> dict[str, bool]:
+    load_env()
     return {
         "ollama": True,
         "kimi": bool(os.environ.get("AIWS_KIMI_API_KEY") or os.environ.get("MOONSHOT_API_KEY")),

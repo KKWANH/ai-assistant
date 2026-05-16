@@ -1,0 +1,141 @@
+name: Investment Advisor Workbench
+description: Educational portfolio research workspace for CSV holdings, ETF/stock interests, market snapshots, rebalance deltas, and target-price scenarios.
+root: .
+
+permissions:
+  file_read: true
+  file_write: confirm
+  shell: false
+  network: confirm
+
+context:
+  include:
+    - files/*.csv
+    - files/*.yaml
+    - files/*.md
+    - artifacts/*.csv
+    - artifacts/*.json
+    - artifacts/*.md
+  exclude:
+    - .env
+    - secrets/**
+    - keys/**
+    - credentials/**
+
+panels:
+  - files
+  - commands
+  - runs
+  - artifacts
+
+views:
+  - id: advisor
+    title: Investment Advisor Cockpit
+    layout: dashboard
+    panels:
+      - id: portfolio
+        type: tableViewer
+        title: Portfolio CSV
+        source: files/portfolio.example.csv
+        actions: [rebalance_plan]
+      - id: research
+        type: reportBuilder
+        title: Research And Targets
+        source: artifacts/advisor-report.md
+        actions: [market_research, advisor_report]
+      - id: run-history
+        type: runTimeline
+        title: Advisor Runs
+        source: runs
+
+commands:
+  profile_portfolio:
+    kind: prompt_recipe
+    status: partial
+    output_type: chat_prompt
+    label: Profile portfolio
+    description: Summarize holdings, concentration, target policy, and missing assumptions from local files only.
+    prompt: |
+      Use files/portfolio.example.csv, files/target_allocation.example.yaml, and files/investment_interests.example.md.
+      Summarize the current portfolio structure, concentration risks, and missing data.
+      Do not provide financial advice. Separate facts, assumptions, scenarios, and questions.
+
+  market_research:
+    kind: python
+    status: ready
+    output_type: artifact
+    label: Fetch market snapshot
+    description: Fetch public quote snapshots for listed symbols and write a JSON artifact. Requires network approval.
+    permission: confirm-network
+    permissions:
+      file_read: true
+      file_write: true
+      python: true
+      network: true
+    allow_network: true
+    cwd: .
+    script: scripts/fetch_market_snapshot.py
+    args:
+      - files/watchlist.example.csv
+      - artifacts/market-snapshot.json
+    outputs:
+      - artifacts/market-snapshot.json
+
+  rebalance_plan:
+    kind: python
+    status: ready
+    output_type: artifact
+    label: Calculate rebalance deltas
+    description: Calculate deterministic current/target allocation gaps from portfolio CSV and target YAML.
+    permissions:
+      file_read: true
+      file_write: true
+      python: true
+    cwd: .
+    script: scripts/calculate_advisor.py
+    args:
+      - files/portfolio.example.csv
+      - files/target_allocation.example.yaml
+      - artifacts/rebalance-table.csv
+      - artifacts/target-scenarios.csv
+    outputs:
+      - artifacts/rebalance-table.csv
+      - artifacts/target-scenarios.csv
+
+  advisor_report:
+    kind: python
+    status: ready
+    output_type: artifact
+    label: Build advisor report
+    description: Combine deterministic allocation math, interests, and market snapshots into an educational Markdown report.
+    permissions:
+      file_read: true
+      file_write: true
+      python: true
+    cwd: .
+    script: scripts/build_advisor_report.py
+    args:
+      - files/portfolio.example.csv
+      - files/investment_interests.example.md
+      - artifacts/rebalance-table.csv
+      - artifacts/market-snapshot.json
+      - artifacts/advisor-report.md
+    outputs:
+      - artifacts/advisor-report.md
+
+  company_research_prompt:
+    kind: prompt_recipe
+    status: partial
+    output_type: chat_prompt
+    label: Company vision research prompt
+    description: Create a BYOK cloud/search prompt for company vision, risks, and target-price assumptions.
+    prompt: |
+      Use artifacts/market-snapshot.json and files/investment_interests.example.md.
+      Draft a research checklist for each ticker:
+      - business model and moat
+      - management/strategy signals
+      - revenue drivers
+      - valuation assumptions
+      - downside risks
+      - what would change the target-price scenario
+      Do not provide direct buy/sell advice. Show assumptions and confidence.

@@ -16,6 +16,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   const context = config.context || {};
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
   const chatInsights = useMemo(() => summarizeProjectChats(project), [project]);
+  const isInvestmentAdvisor = /investment advisor|investment rebalancer|portfolio/i.test(`${config.name || ""} ${config.description || ""}`);
 
   async function openRun(run) {
     setModalError("");
@@ -58,7 +59,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
 
       <div className="dashboard-grid">
         <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} />
-        <AgentPlanFoundationCard />
+        {isInvestmentAdvisor ? <InvestmentAdvisorCard actions={actions} runs={runs} artifacts={artifacts} /> : <AgentPlanFoundationCard />}
       </div>
 
       <section className="dashboard-card project-chat-overview">
@@ -210,6 +211,44 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
       {runDetail && <RunDetailModal detail={runDetail} power={power} onClose={() => setRunDetail(null)} onOpenArtifact={openArtifact} />}
       {artifact && <ArtifactViewer artifact={artifact} onClose={() => setArtifact(null)} />}
     </div>
+  );
+}
+
+function InvestmentAdvisorCard({ actions, runs, artifacts }) {
+  const latestMarketRun = runs.find((run) => run.command === "market_research" || run.action_id === "market_research");
+  const hasReport = artifacts.some((artifact) => String(artifact.path || "").endsWith("advisor-report.md"));
+  return (
+    <section className="dashboard-card investment-advisor-card">
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">Custom App</p>
+          <h2>Investment advisor workbench</h2>
+        </div>
+        <span className="soft-pill">education only</span>
+      </div>
+      <p className="muted">Upload portfolio CSV files, define ETF/stock interests, fetch market snapshots when approved, and generate a traceable rebalance research report. This is not financial advice.</p>
+      <div className="advisor-flow">
+        <span>1. Portfolio CSV</span>
+        <span>2. Target allocation</span>
+        <span>3. Market snapshot</span>
+        <span>4. Rebalance deltas</span>
+        <span>5. Research report</span>
+      </div>
+      <div className="advisor-metrics">
+        <MetricTile label="Advisor actions" value={actions.length} />
+        <MetricTile label="Market snapshot" value={latestMarketRun ? latestMarketRun.status : "not run"} />
+        <MetricTile label="Report" value={hasReport ? "ready" : "pending"} />
+      </div>
+      <details className="advisor-tips">
+        <summary>Tips for building custom actions like this</summary>
+        <ul>
+          <li>Keep deterministic math in Python scripts and use LLMs only to explain computed facts.</li>
+          <li>Put market/network steps behind confirmation and write raw responses as artifacts.</li>
+          <li>Declare expected files and outputs in `aiws.yaml` so the UI can show what will run.</li>
+          <li>Separate “research summary” from “decision”; AIWS should show scenarios, risks, and assumptions.</li>
+        </ul>
+      </details>
+    </section>
   );
 }
 
