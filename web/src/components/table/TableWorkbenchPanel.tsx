@@ -1,18 +1,32 @@
 import React, { useState } from "react";
-import { MarkdownRenderer } from "../markdown/MarkdownRenderer.jsx";
+import { MarkdownRenderer } from "../markdown/MarkdownRenderer";
 import { COPY } from "../../shared/copy/copy";
-import { looksLikePastedTable } from "../../lib/table.js";
+import { looksLikePastedTable } from "../../lib/table";
+import type { ArtifactRecord } from "../../shared/contracts/workbench";
 
-export function TableWorkbenchPanel({ open, file, rows, running, onClose, onChooseFile, onSetText, onDropFile, onRun, copy = COPY }) {
+type TableWorkbenchPanelProps = {
+  open: boolean;
+  file?: File | null;
+  rows: string[][];
+  running?: boolean;
+  onClose: () => void;
+  onChooseFile: () => void;
+  onSetText?: (text: string) => void;
+  onDropFile?: (files: File[]) => void;
+  onRun: () => void;
+  copy?: typeof COPY;
+};
+
+export function TableWorkbenchPanel({ open, file, rows, running = false, onClose, onChooseFile, onSetText, onDropFile, onRun, copy = COPY }: TableWorkbenchPanelProps) {
   const [text, setText] = useState("");
   const tableCopy = copy.table || COPY.table;
   if (!open) return null;
-  function drop(event) {
+  function drop(event: React.DragEvent<HTMLElement>) {
     event.preventDefault();
     const dropped = Array.from(event.dataTransfer?.files || []);
     if (dropped.length) onDropFile?.(dropped);
   }
-  function paste(event) {
+  function paste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
     const value = event.clipboardData?.getData("text/plain") || "";
     if (!value.trim()) return;
     event.preventDefault();
@@ -48,7 +62,7 @@ export function TableWorkbenchPanel({ open, file, rows, running, onClose, onChoo
   );
 }
 
-function TablePreview({ rows }) {
+function TablePreview({ rows }: { rows: string[][] }) {
   return (
     <div className="artifact-table-wrap live-table-preview">
       <table className="artifact-table">
@@ -64,11 +78,11 @@ function TablePreview({ rows }) {
   );
 }
 
-export function HomeArtifactContent({ artifact }) {
+export function HomeArtifactContent({ artifact }: { artifact: ArtifactRecord & { kind?: string; content?: string } }) {
   const kind = artifact.type || artifact.kind;
   const content = artifact.content || "";
   if (kind === "csv") {
-    const rows = content.trim().split(/\r?\n/).slice(0, 80).map((line) => line.split(","));
+    const rows = content.trim().split(/\r?\n/).slice(0, 80).map((line: string) => line.split(","));
     return (
       <div className="artifact-table-wrap">
         <table className="artifact-table"><tbody>{rows.map((row, rowIndex) => <tr key={`${rowIndex}-${row.join("|")}`}>{row.map((cell, cellIndex) => rowIndex === 0 ? <th key={cellIndex}>{cell}</th> : <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>
@@ -82,7 +96,7 @@ export function HomeArtifactContent({ artifact }) {
   return <pre>{content}</pre>;
 }
 
-function formatJson(content) {
+function formatJson(content: string) {
   try {
     return JSON.stringify(JSON.parse(content), null, 2);
   } catch {

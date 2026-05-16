@@ -69,6 +69,59 @@
   display: none;
 }
 
+.home-launch-panel {
+  width: min(680px, 100%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.home-launch-panel button {
+  min-height: 112px;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid rgba(143, 192, 255, .22);
+  border-radius: 18px;
+  color: var(--text);
+  text-align: left;
+  background: linear-gradient(160deg, rgba(20, 38, 63, .88), rgba(7, 13, 23, .9));
+  box-shadow: var(--shadow-low), var(--inset);
+}
+
+.home-launch-panel button:hover,
+.home-launch-panel button:focus-visible {
+  border-color: rgba(93, 183, 255, .65);
+  transform: translateY(-1px);
+}
+
+.home-launch-panel strong {
+  font-size: 16px;
+}
+
+.home-launch-panel span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.home-launch-primary {
+  background:
+    linear-gradient(160deg, rgba(38, 104, 214, .52), rgba(9, 19, 34, .94)),
+    radial-gradient(circle at 16% 10%, rgba(106, 210, 255, .28), transparent 14rem) !important;
+}
+
+.home-recent-artifacts {
+  width: min(680px, 100%);
+  display: grid;
+  gap: 10px;
+}
+
+.artifact-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .simple-tool-grid-label {
   justify-self: start;
   color: var(--muted);

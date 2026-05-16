@@ -1,6 +1,23 @@
 import React from "react";
+import type { ModelMode } from "../../lib/modelModes";
 
-export function SelectedAttachmentList({ files, previewUrl, previewUrls = [], selectedMode, onRemove, copy = {} }) {
+type AttachmentCopy = {
+  sentImage?: string;
+  needsVision?: string;
+  readText?: string;
+  remove?: string;
+};
+
+type SelectedAttachmentListProps = {
+  files: File[];
+  previewUrl: string;
+  previewUrls?: string[];
+  selectedMode: ModelMode;
+  onRemove: (index: number) => void;
+  copy?: AttachmentCopy;
+};
+
+export function SelectedAttachmentList({ files, previewUrl, previewUrls = [], selectedMode, onRemove, copy = {} }: SelectedAttachmentListProps) {
   if (!files.length) return null;
   const labels = {
     sentImage: "Sent as image input",

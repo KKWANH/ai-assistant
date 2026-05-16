@@ -1,9 +1,46 @@
 import React from "react";
-import { getCookie } from "./api.js";
+import { getCookie } from "./api";
 
 export const DEFAULT_MODEL = "qwen3:8b";
 
-export const MODEL_MODES = [
+export type ModelMode = {
+  value: string;
+  group: string;
+  label: string;
+  legacyLabel?: string;
+  short: string;
+  provider: string;
+  model: string;
+  cloud: boolean;
+  inputPrice: number;
+  outputPrice: number;
+  agentCalls?: number;
+  cost: string;
+  easyPrice: string;
+  privacy: string;
+  bestFor: string;
+  recommendedUse: string;
+  supportsText: boolean;
+  supportsImage: boolean;
+  supportsFileText: boolean;
+  supportsWebSearch: boolean;
+  version: string;
+  api_key_configured?: boolean;
+};
+
+type ModelCatalogInput = Partial<ModelMode> & {
+  legacy_label?: string;
+  input_per_million?: number;
+  output_per_million?: number;
+  recommended_use?: string;
+  supports_text?: boolean;
+  supports_image?: boolean;
+  supports_file_text?: boolean;
+  supports_web_search?: boolean;
+  note?: string;
+};
+
+export const MODEL_MODES: ModelMode[] = [
   {
     value: "local-small",
     group: "local",
@@ -202,11 +239,11 @@ export function savedSearchMode() {
   return SEARCH_OPTIONS.some((item) => item.value === value) ? value : "auto";
 }
 
-export function fileNeedsVisionModel(file, mode, models = MODEL_MODES) {
+export function fileNeedsVisionModel(file: File | undefined | null, mode: string, models: ModelMode[] = MODEL_MODES): boolean {
   return Boolean(file?.type?.startsWith("image/") && !["kimi", "gemini"].includes(modelMode(mode, models).provider));
 }
 
-export function estimateCurrentCost(mode, content, hasFile, calls = 1) {
+export function estimateCurrentCost(mode: ModelMode, content: string, hasFile: boolean, calls = 1): string {
   if (!mode.cloud) return "$0";
   if (!(mode.inputPrice > 0) && !(mode.outputPrice > 0)) return "Verify pricing";
   const inputTokens = Math.max(120, Math.ceil(String(content || "").length / 3) + (hasFile ? 3000 : 0));
@@ -215,7 +252,7 @@ export function estimateCurrentCost(mode, content, hasFile, calls = 1) {
   return `~$${estimated.toFixed(5)}`;
 }
 
-export function ModePrice({ mode, field = false, power = false }) {
+export function ModePrice({ mode, field = false, power = false }: { mode: ModelMode; field?: boolean; power?: boolean }) {
   return (
     <div className={`mode-detail mode-price ${field ? "field-like" : ""}`}>
       <strong>{mode.label}</strong>
@@ -226,25 +263,28 @@ export function ModePrice({ mode, field = false, power = false }) {
   );
 }
 
-export function modelLabel(model, models = MODEL_MODES) {
+export function modelLabel(model: string, models: ModelMode[] = MODEL_MODES): string {
   return normalizeModelCatalog(models).find((item) => item.model === model)?.label || model;
 }
 
-export function modelMode(value, models = MODEL_MODES) {
+export function modelMode(value: string, models: ModelMode[] = MODEL_MODES): ModelMode {
   const normalized = normalizeModelCatalog(models);
   return normalized.find((item) => item.value === value) || normalized.find((item) => item.value === "local") || normalized[0] || MODEL_MODES[0];
 }
 
-export function normalizeModelCatalog(models = []) {
+export function normalizeModelCatalog(models: ModelCatalogInput[] = []): ModelMode[] {
   if (!Array.isArray(models) || models.length === 0) return MODEL_MODES;
-  return models.map((item) => ({
-    value: item.value,
+  return models.map((item) => {
+    const model = item.model || item.value || "unknown";
+    const provider = item.provider || (item.cloud ? "cloud" : "ollama");
+    return {
+    value: item.value || model,
     group: item.group || (item.privacy === "local" ? "local" : "cloud"),
-    label: item.label || item.model,
+    label: item.label || model,
     legacyLabel: item.legacyLabel || item.legacy_label || "",
-    short: item.short || item.model,
-    provider: item.provider,
-    model: item.model,
+    short: item.short || model,
+    provider,
+    model,
     cloud: Boolean(item.cloud ?? item.privacy === "cloud"),
     inputPrice: Number(item.inputPrice ?? item.input_per_million ?? 0),
     outputPrice: Number(item.outputPrice ?? item.output_per_million ?? 0),
@@ -258,7 +298,8 @@ export function normalizeModelCatalog(models = []) {
     supportsImage: Boolean(item.supportsImage ?? item.supports_image),
     supportsFileText: Boolean(item.supportsFileText ?? item.supports_file_text ?? true),
     supportsWebSearch: Boolean(item.supportsWebSearch ?? item.supports_web_search),
-    version: item.version || item.model,
+    version: item.version || model,
     api_key_configured: Boolean(item.api_key_configured),
-  })).filter((item) => item.value && item.provider && item.model);
+    };
+  }).filter((item) => item.value && item.provider && item.model);
 }

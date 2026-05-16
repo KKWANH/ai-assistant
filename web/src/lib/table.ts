@@ -1,9 +1,9 @@
-export function looksLikePastedTable(value) {
+export function looksLikePastedTable(value: unknown): boolean {
   const lines = String(value || "").trim().split(/\r?\n/).filter(Boolean);
   return lines.length >= 2 && lines.some((line) => line.includes("\t"));
 }
 
-export function pastedTableToCsv(value) {
+export function pastedTableToCsv(value: unknown): string {
   return String(value || "")
     .trim()
     .split(/\r?\n/)
@@ -11,12 +11,12 @@ export function pastedTableToCsv(value) {
     .join("\n") + "\n";
 }
 
-export function parseCsvRows(value) {
+export function parseCsvRows(value: unknown): string[][] {
   return String(value || "").trim().split(/\r?\n/).filter(Boolean).map(parseCsvLine);
 }
 
-function parseCsvLine(line) {
-  const cells = [];
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
   let cell = "";
   let quoted = false;
   for (let index = 0; index < line.length; index += 1) {
@@ -37,7 +37,7 @@ function parseCsvLine(line) {
   return cells;
 }
 
-function csvCell(value) {
+function csvCell(value: unknown): string {
   const text = String(value ?? "").trim();
   if (/[",\n]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
   return text;

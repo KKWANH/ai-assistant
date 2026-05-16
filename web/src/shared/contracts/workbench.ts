@@ -80,7 +80,7 @@ export type ProjectLink = {
 };
 
 export type ResourceExport = {
-  projectId: string;
+  projectId?: string;
   resourceType: string;
   artifactPattern: string;
   schemaVersion: string;

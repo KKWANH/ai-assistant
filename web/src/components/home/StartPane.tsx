@@ -1,12 +1,12 @@
 import React, { type ChangeEvent, useEffect, useState } from "react";
 import { Composer } from "../chat/Composer";
-import { HomeArtifactContent } from "../table/TableWorkbenchPanel.jsx";
+import { HomeArtifactContent } from "../table/TableWorkbenchPanel";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";
 import {
   MODEL_MODES,
   normalizeModelCatalog,
-} from "../../lib/modelModes.jsx";
+} from "../../lib/modelModes";
 import type { AccountLike, ChatUpdater, HomeAction, HomePayload, RunDetail } from "../../shared/contracts/runtime";
 import type { ArtifactRecord, ModelCatalogItem, RunRecord } from "../../shared/contracts/workbench";
 
@@ -277,7 +277,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
   const [homeError, setHomeError] = useState("");
   const [composerDraft, setComposerDraft] = useState("");
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
-  const [composerAttachmentSignal, setComposerAttachmentSignal] = useState(0);
+  const [composerAttachmentSignal] = useState(0);
   const [toolPanelAction, setToolPanelAction] = useState<HomeAction | null>(null);
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
@@ -291,20 +291,13 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     const rawAction = STARTER_ACTIONS.find((item) => item.id === starterId);
     const action = rawAction ? localizeStarterAction(rawAction, copy) : null;
     if (action && !action.disabled) {
-      setComposerDraft(action.prompt || action.label || "");
-      setComposerFocusSignal((value) => value + 1);
-      if (action.wantsFile) setComposerAttachmentSignal((value) => value + 1);
+      setToolPanelAction(action);
     }
     window.history.replaceState({}, "", window.location.pathname);
   }, [copy, isHomeWorkbench]);
 
   function clearFile() {
     // Shared Composer owns home chat attachments.
-  }
-
-  function startAction(action: HomeAction) {
-    if (action.disabled) return;
-    setToolPanelAction(action);
   }
 
   async function runHomeAction(action: HomeAction, options: { files?: File[]; content?: string } = {}) {
@@ -369,29 +362,78 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     }
   }
 
+  async function startNewChat() {
+    const payload = await fetchJson<{ project_path: string; session: { slug: string } }>("/api/chats", {
+      method: "POST",
+      body: new URLSearchParams({ title: "" }),
+    });
+    refreshWorkspace?.();
+    navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
+  }
+
+  const recentArtifacts = (home?.runs || [])
+    .flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })))
+    .slice(0, 4);
+
   const contentNode = (
     <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
       {!isHomeWorkbench && <div className="home-hero"><h1>{copy.chat.emptyTitle}</h1></div>}
-      <div className="start-composer-shell" data-context-note="AIWS prioritizes saved chats, project context, and attached files.">
-        <Composer
-          activePath={{ projectPath, sessionSlug: "" }}
-          onAsk={onAsk}
-          account={account}
-          power={power}
-          models={modelModes}
-          initialContent={composerDraft}
-          focusSignal={composerFocusSignal}
-          openAttachmentSignal={composerAttachmentSignal}
-          onSessionCreated={(session) => {
-            const targetProject = session.project_path || projectPath;
-            if (targetProject && session.slug) navigate(`/chat/${targetProject}/${session.slug}`);
-            refreshWorkspace?.();
-          }}
-        />
-      </div>
+      {!isHomeWorkbench && (
+        <div className="start-composer-shell" data-context-note="AIWS prioritizes saved chats, project context, and attached files.">
+          <Composer
+            activePath={{ projectPath, sessionSlug: "" }}
+            onAsk={onAsk}
+            account={account}
+            power={power}
+            models={modelModes}
+            initialContent={composerDraft}
+            focusSignal={composerFocusSignal}
+            openAttachmentSignal={composerAttachmentSignal}
+            onSessionCreated={(session) => {
+              const targetProject = session.project_path || projectPath;
+              if (targetProject && session.slug) navigate(`/chat/${targetProject}/${session.slug}`);
+              refreshWorkspace?.();
+            }}
+          />
+        </div>
+      )}
       {isHomeWorkbench ? (
         <>
-          <StarterActionsGrid actions={home?.actions} onStart={startAction} running={homeRunning} hasFile={false} copy={copy} />
+          <section className="home-launch-panel" aria-label="AIWS home launcher">
+            <button type="button" className="home-launch-primary" onClick={startNewChat}>
+              <strong>새 대화 시작</strong>
+              <span>질문은 전용 채팅 화면에서 입력함.</span>
+            </button>
+            <button type="button" onClick={() => window.dispatchEvent(new Event("aiws:new-project"))}>
+              <strong>프로젝트 만들기</strong>
+              <span>파일, Workflow App, 산출물을 한 곳에 묶음.</span>
+            </button>
+            <button type="button" onClick={() => navigate("/apps-tools")}>
+              <strong>Workflow Apps</strong>
+              <span>도구와 반복 앱을 고름.</span>
+            </button>
+          </section>
+          {recentArtifacts.length > 0 && (
+            <section className="home-recent-artifacts" aria-label="Recent artifacts">
+              <div className="section-row">
+                <p className="eyebrow">Recent artifacts</p>
+                <span className="soft-pill">{recentArtifacts.length}</span>
+              </div>
+              <div className="artifact-grid compact">
+                {recentArtifacts.map((artifact) => (
+                  <button
+                    type="button"
+                    key={`${artifact.run.run_id}-${artifact.path}`}
+                    className="artifact-tile clickable-row"
+                    onClick={() => openHomeArtifact(artifact)}
+                  >
+                    <strong>{artifact.path.split("/").pop()}</strong>
+                    <small>{artifact.viewer_type || artifact.type || "artifact"}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           <ToolRunPanel action={toolPanelAction} running={homeRunning} onClose={() => setToolPanelAction(null)} onRun={runHomeAction} copy={copy} />
         </>
       ) : (

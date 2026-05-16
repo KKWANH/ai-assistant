@@ -8,6 +8,7 @@ import mimetypes
 import os
 import re
 import zipfile
+from dataclasses import dataclass
 from io import BytesIO, StringIO
 from pathlib import Path
 from xml.etree import ElementTree
@@ -39,6 +40,14 @@ SECRET_TEXT_PATTERNS = (
     re.compile(r"\b(?:api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?[^'\"\s]{12,}", re.IGNORECASE),
     re.compile(r"\b(?:sk|ghp|github_pat)_[A-Za-z0-9_]{20,}"),
 )
+
+
+@dataclass(frozen=True)
+class TextExtraction:
+    text: str
+    status: str = "success"
+    method: str = ""
+    error: str = ""
 
 
 def max_attachment_bytes() -> int:
@@ -167,12 +176,15 @@ def save_attachment(
             ]
             extracted = csv_profile.model_context_from_profile(profile)
         else:
-            extracted = extract_text(destination, ext)
+            extraction = extract_text_result(destination, ext)
+            extracted = extraction.text
+            if extraction.error:
+                extraction_error = extraction.error
             raw_text_sent_to_model = ext in SUPPORTED_TEXT_EXTENSIONS
     except Exception as exc:
         extracted = ""
         extraction_error = friendly_extraction_error(ext, exc)
-    extraction_status = extraction_status_for(ext, extracted, extraction_error)
+    extraction_status = extraction.status if "extraction" in locals() and extraction.status else extraction_status_for(ext, extracted, extraction_error)
     resolved_delivery = delivery
     if not resolved_delivery:
         if is_image_extension(ext):
@@ -192,6 +204,7 @@ def save_attachment(
         "text": extracted,
         "text_available": bool(extracted.strip()) and not is_image_extension(ext),
         "extraction_status": extraction_status,
+        "extraction_method": extraction.method if "extraction" in locals() else "",
         "extraction_error": extraction_error or default_extraction_error(ext, extraction_status),
         "delivery": resolved_delivery,
         "raw_text_sent_to_model": raw_text_sent_to_model,
@@ -259,10 +272,12 @@ def extraction_status_for(extension: str, extracted: str, extraction_error: str 
 
 
 def default_extraction_error(extension: str, status: str) -> str:
-    if status != "failed":
+    if status not in {"failed", "ocr_required"}:
         return ""
     ext = extension.lower()
     if ext == ".pdf":
+        if status == "ocr_required":
+            return "PDF text extraction quality was too low. OCR is required; install pytesseract and the Tesseract system package to enable fallback OCR."
         return "PDF text extraction failed. The file may be scanned, encrypted, or image-only."
     if ext == ".docx":
         return "DOCX text extraction failed. The document may be malformed or unsupported."
@@ -278,23 +293,27 @@ def friendly_extraction_error(extension: str, exc: Exception) -> str:
 
 
 def extract_text(path: Path, extension: str) -> str:
+    return extract_text_result(path, extension).text
+
+
+def extract_text_result(path: Path, extension: str) -> TextExtraction:
     if extension in SUPPORTED_TEXT_EXTENSIONS:
-        return path.read_text(encoding="utf-8", errors="replace")[:50_000]
+        return TextExtraction(path.read_text(encoding="utf-8", errors="replace")[:50_000], method="plain_text")
     if extension == ".docx":
-        return extract_docx_text(path)[:50_000]
+        return TextExtraction(extract_docx_text(path)[:50_000], method="docx_xml")
     if extension == ".pptx":
-        return extract_pptx_text(path)[:50_000]
+        return TextExtraction(extract_pptx_text(path)[:50_000], method="pptx_xml")
     if extension == ".ppt":
-        return extract_ppt_text(path)[:50_000]
+        return TextExtraction(extract_ppt_text(path)[:50_000], method="ppt_text")
     if extension == ".xls":
-        return extract_xls_profile_text(path)[:50_000]
+        return TextExtraction(extract_xls_profile_text(path)[:50_000], method="xls_profile")
     if extension == ".xlsx":
-        return extract_xlsx_profile_text(path)[:50_000]
+        return TextExtraction(extract_xlsx_profile_text(path)[:50_000], method="xlsx_profile")
     if extension == ".pdf":
-        return extract_pdf_text(path.read_bytes())[:50_000]
+        return extract_pdf_text_result(path.read_bytes())
     if extension in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-        return f"Image attachment: {path.name}"
-    return ""
+        return TextExtraction(f"Image attachment: {path.name}", status="stored", method="image_placeholder")
+    return TextExtraction("", status="stored")
 
 
 def scan_for_secret_patterns(text: str) -> list[dict[str, object]]:
@@ -477,20 +496,32 @@ def xlsx_column_index(reference: str) -> int:
 
 
 def extract_pdf_text(content: bytes) -> str:
-    extractors = (extract_pdf_text_pymupdf, extract_pdf_text_pypdf, extract_pdf_literal_strings)
+    return extract_pdf_text_result(content).text
+
+
+def extract_pdf_text_result(content: bytes) -> TextExtraction:
+    extractors = (
+        ("pymupdf_blocks", extract_pdf_text_pymupdf),
+        ("pypdf_layout", extract_pdf_text_pypdf),
+        ("tesseract_ocr", extract_pdf_text_ocr),
+        ("literal_strings", extract_pdf_literal_strings),
+    )
     last_error = ""
-    for extractor in extractors:
+    for method, extractor in extractors:
         try:
             text = extractor(content)
         except Exception as exc:  # Optional parser failures should fall through to the next tier.
             last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             continue
         if pdf_text_quality_ok(text):
-            return text[:50_000]
+            return TextExtraction(text[:50_000], status="ocr" if method == "tesseract_ocr" else "success", method=method)
         if text.strip():
-            last_error = f"{extractor.__name__} returned low-quality text."
-    raise storage.WorkspaceError(
-        f"PDF text extraction failed or quality is too low. OCR may be required.{f' Last extractor: {last_error}' if last_error else ''}"
+            last_error = f"{method} returned low-quality text."
+    return TextExtraction(
+        "",
+        status="ocr_required",
+        method="none",
+        error=f"PDF text extraction failed or quality is too low. OCR is required.{f' Last extractor: {last_error}' if last_error else ''}",
     )
 
 
@@ -522,6 +553,26 @@ def extract_pdf_text_pypdf(content: bytes) -> str:
         except TypeError:
             texts.append(page.extract_text() or "")
     return "\n\n".join(item.strip() for item in texts if item.strip())
+
+
+def extract_pdf_text_ocr(content: bytes) -> str:
+    try:
+        import pymupdf  # type: ignore[import-not-found]
+    except ImportError:
+        import fitz as pymupdf  # type: ignore[import-not-found]
+    try:
+        import pytesseract  # type: ignore[import-not-found]
+        from PIL import Image  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise RuntimeError("pytesseract and Pillow are not installed") from exc
+    language = os.environ.get("AIWS_TESSERACT_LANG", "kor+eng")
+    pages: list[str] = []
+    with pymupdf.open(stream=content, filetype="pdf") as document:
+        for page in list(document)[: int(os.environ.get("AIWS_OCR_MAX_PAGES", "5"))]:
+            pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
+            image = Image.open(BytesIO(pixmap.tobytes("png")))
+            pages.append(str(pytesseract.image_to_string(image, lang=language)).strip())
+    return "\n\n".join(item for item in pages if item)
 
 
 def extract_pdf_literal_strings(content: bytes) -> str:

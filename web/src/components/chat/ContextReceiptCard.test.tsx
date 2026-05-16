@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ContextReceiptCard } from "./ContextReceiptCard.jsx";
+import { ContextReceiptCard } from "./ContextReceiptCard";
 
 describe("ContextReceiptCard", () => {
   it("summarizes model, files, cost, and CSV parser facts", () => {

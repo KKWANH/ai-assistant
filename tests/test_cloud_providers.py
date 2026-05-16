@@ -94,6 +94,39 @@ def test_gemini_chat_can_send_inline_file_data(monkeypatch):
     assert parts[1]["inlineData"]["data"] == "JVBERi0x"
 
 
+def test_gemini_extracts_text_from_multiple_candidates():
+    payload = {
+        "candidates": [
+            {"content": {"parts": [{"inlineData": {"mimeType": "image/png"}}]}, "finishReason": "STOP"},
+            {"content": {"parts": [{"text": "second "}, {"text": "candidate"}]}, "finishReason": "STOP"},
+        ]
+    }
+
+    assert gemini.extract_gemini_text(payload) == "second candidate"
+
+
+def test_gemini_extracts_legacy_content_fallback():
+    assert gemini.extract_gemini_text({"content": "fallback content"}) == "fallback content"
+    assert gemini.extract_gemini_text({"message": "fallback message"}) == "fallback message"
+
+
+def test_gemini_empty_text_error_includes_finish_reason(monkeypatch):
+    class EmptyTextResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps({"candidates": [{"content": {"parts": [{"functionCall": {"name": "tool"}}]}, "finishReason": "MAX_TOKENS"}]}).encode("utf-8")
+
+    monkeypatch.setattr(gemini.request, "urlopen", lambda req, timeout: EmptyTextResponse())
+
+    with pytest.raises(storage.WorkspaceError, match="finishReason=MAX_TOKENS"):
+        gemini.GeminiProvider(api_key="test-key").chat(model="gemini-2.5-flash-lite", system="sys", content="hello")
+
+
 def test_openai_requires_api_key(monkeypatch):
     monkeypatch.setattr(openai, "load_env", lambda *args, **kwargs: None)
     monkeypatch.delenv("AIWS_OPENAI_API_KEY", raising=False)

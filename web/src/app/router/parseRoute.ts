@@ -1,7 +1,8 @@
 export type ActivePath = {
-  view?: "login" | "apps-tools" | "actions" | "home";
+  view?: "login" | "apps-tools" | "actions" | "home" | "workflow-app";
   projectPath: string;
   sessionSlug: string;
+  appId?: string;
 };
 
 export function parseRoute(path = window.location.pathname): ActivePath {
@@ -22,7 +23,13 @@ export function parseRoute(path = window.location.pathname): ActivePath {
     return { projectPath: parts.slice(0, -1).join("/"), sessionSlug: parts.at(-1) || "" };
   }
   if (path.startsWith("/project/")) {
-    return { projectPath: path.replace("/project/", ""), sessionSlug: "" };
+    const route = path.replace("/project/", "");
+    const appMarker = "/app/";
+    if (route.includes(appMarker)) {
+      const [projectPath, appId] = route.split(appMarker);
+      return { view: "workflow-app", projectPath, sessionSlug: "", appId: appId || "" };
+    }
+    return { projectPath: route, sessionSlug: "" };
   }
   return { projectPath: "", sessionSlug: "" };
 }

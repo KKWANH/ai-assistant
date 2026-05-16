@@ -48,6 +48,12 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
     await onRefresh?.();
   }
 
+  useEffect(() => {
+    const openProjectModal = () => setProjectOpen(true);
+    window.addEventListener("aiws:new-project", openProjectModal);
+    return () => window.removeEventListener("aiws:new-project", openProjectModal);
+  }, []);
+
   async function moveSession(projectPath: string, sessionSlug: string, targetProjectPath: string) {
     const payload = await fetchJson<{ project_path: string; session: { slug: string } }>(`/api/move-chat/${projectPath}/${sessionSlug}`, {
       method: "POST",
@@ -84,6 +90,7 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
         <NewGeneralChatForm onCreated={(path) => navigate(path)} copy={copy} />
         <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>{copy.nav.newProject}</button>
         <button className={`secondary-action ${activePath.view === "apps-tools" || activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/apps-tools")}>{copy.nav.actions}</button>
+        <button className="secondary-action" type="button" onClick={() => setSettingsOpen(true)}>{copy.nav.settings || "Settings"}</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>

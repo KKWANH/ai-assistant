@@ -11,8 +11,14 @@ type ChartDatum = {
 type ChartSpec = {
   version?: 1;
   title?: string;
-  kind: ChartKind;
+  kind?: ChartKind;
+  mark?: ChartKind | { type?: ChartKind };
   data: ChartDatum[];
+  encoding?: {
+    x?: string | { field?: string };
+    y?: string | { field?: string };
+    color?: string | { field?: string };
+  };
   xLabel?: string;
   yLabel?: string;
 };
@@ -108,10 +114,7 @@ function parseChartSpec(content?: string): ChartSpec | null {
   try {
     const parsed = JSON.parse(content || "{}") as unknown;
     if (!isChartSpec(parsed)) return null;
-    return {
-      ...parsed,
-      data: parsed.data.slice(0, 200).map((item) => ({ label: String(item.label), value: Number(item.value) })),
-    };
+    return normalizeChartSpec(parsed);
   } catch {
     return null;
   }
@@ -119,15 +122,33 @@ function parseChartSpec(content?: string): ChartSpec | null {
 
 function isChartSpec(value: unknown): value is ChartSpec {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as { kind?: unknown; data?: unknown };
-  if (candidate.kind !== "bar" && candidate.kind !== "line" && candidate.kind !== "pie") return false;
+  const candidate = value as { kind?: unknown; mark?: unknown; data?: unknown; encoding?: unknown };
+  const mark = typeof candidate.mark === "object" && candidate.mark ? (candidate.mark as { type?: unknown }).type : candidate.mark;
+  if (candidate.kind !== "bar" && candidate.kind !== "line" && candidate.kind !== "pie" && mark !== "bar" && mark !== "line" && mark !== "pie") return false;
   if (!Array.isArray(candidate.data)) return false;
-  return candidate.data.every((item) => (
-    item
-      && typeof item === "object"
-      && typeof (item as { label?: unknown }).label === "string"
-      && Number.isFinite(Number((item as { value?: unknown }).value))
-  ));
+  return candidate.data.length === 0 || candidate.data.every((item) => item && typeof item === "object");
+}
+
+function normalizeChartSpec(spec: ChartSpec): ChartSpec {
+  const mark = typeof spec.mark === "object" && spec.mark ? spec.mark.type : spec.mark;
+  const kind = spec.kind || mark || "bar";
+  const xField = fieldName(spec.encoding?.x) || "label";
+  const yField = fieldName(spec.encoding?.y) || "value";
+  return {
+    ...spec,
+    kind,
+    data: spec.data.slice(0, 200).map((item) => {
+      const source = item as ChartDatum & Record<string, unknown>;
+      return {
+        label: String(source.label ?? source[xField] ?? ""),
+        value: Number(source.value ?? source[yField] ?? 0),
+      };
+    }).filter((item) => item.label && Number.isFinite(item.value)),
+  };
+}
+
+function fieldName(value: string | { field?: string } | undefined) {
+  return typeof value === "string" ? value : value?.field;
 }
 
 function formatValue(value: number) {

@@ -123,7 +123,7 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "AI Workbench Studio" in bundle_text
         assert "Chat Tools" in bundle_text
         assert "Use a one-off Chat Tool" in bundle_text
-        assert "Apps & Tools" in bundle_text
+        assert "Workflow Apps" in bundle_text
         assert "Summarize document" in bundle_text
         assert "Kwanho Kim" in bundle_text
         assert "Chungja Byun" in bundle_text

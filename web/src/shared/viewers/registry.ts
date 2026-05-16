@@ -1,32 +1,11 @@
 import { ChartViewer, validateChartArtifact } from "./chartViewer";
+import { CodeEditorViewer } from "./codeEditorViewer";
 import { JsonViewer } from "./jsonViewer";
 import { MarkdownViewer } from "./markdownViewer";
 import { ReportViewer } from "./reportViewer";
 import { TableViewer } from "./tableViewer";
-import type { ComponentType } from "react";
-
-export type ViewerArtifact = {
-  path?: string;
-  type?: string;
-  mime?: string;
-  viewer_id?: string;
-  viewer_type?: string;
-  content?: string;
-  [key: string]: unknown;
-};
-
-export type ViewerPlugin<TInput extends ViewerArtifact = ViewerArtifact, TConfig = Record<string, unknown>> = {
-  id: string;
-  label: string;
-  accepts: {
-    mime?: string[];
-    extensions?: string[];
-    artifactTypes?: string[];
-  };
-  configSchema?: TConfig;
-  render: ComponentType<{ artifact: TInput; config?: TConfig }>;
-  validateArtifact: (artifact: ViewerArtifact) => artifact is TInput;
-};
+import type { ViewerArtifact, ViewerPlugin } from "../contracts/viewer";
+export type { ViewerArtifact, ViewerPlugin } from "../contracts/viewer";
 
 function extension(path = "") {
   return path.includes(".") ? `.${path.split(".").pop()?.toLowerCase()}` : "";
@@ -36,17 +15,18 @@ export function viewerAccepts(plugin: Pick<ViewerPlugin, "accepts">, artifact: V
   const ext = extension(artifact.path || "");
   const type = artifact.type || "";
   const mime = artifact.mime || "";
+  const mimeTypes = plugin.accepts.mimeTypes || plugin.accepts.mime || [];
   return Boolean(
     (ext && plugin.accepts.extensions?.includes(ext))
       || (type && plugin.accepts.artifactTypes?.includes(type))
-      || (mime && plugin.accepts.mime?.includes(mime)),
+      || (mime && mimeTypes.includes(mime)),
   );
 }
 
 const tableViewerPlugin: ViewerPlugin = {
   id: "tableViewer",
   label: "Table",
-  accepts: { extensions: [".csv", ".tsv"], artifactTypes: ["csv", "table"], mime: ["text/csv", "text/tab-separated-values"] },
+  accepts: { extensions: [".csv", ".tsv"], artifactTypes: ["csv", "table"], mimeTypes: ["text/csv", "text/tab-separated-values"] },
   render: TableViewer,
   validateArtifact: (artifact): artifact is ViewerArtifact => viewerAccepts(tableViewerPlugin, artifact),
 };
@@ -54,7 +34,7 @@ const tableViewerPlugin: ViewerPlugin = {
 const markdownViewerPlugin: ViewerPlugin = {
   id: "markdownViewer",
   label: "Markdown",
-  accepts: { extensions: [".md", ".markdown"], artifactTypes: ["md", "markdown"], mime: ["text/markdown"] },
+  accepts: { extensions: [".md", ".markdown"], artifactTypes: ["md", "markdown"], mimeTypes: ["text/markdown"] },
   render: MarkdownViewer,
   validateArtifact: (artifact): artifact is ViewerArtifact => viewerAccepts(markdownViewerPlugin, artifact) || typeof artifact.content === "string",
 };
@@ -62,7 +42,7 @@ const markdownViewerPlugin: ViewerPlugin = {
 const jsonViewerPlugin: ViewerPlugin = {
   id: "jsonViewer",
   label: "JSON",
-  accepts: { extensions: [".json"], artifactTypes: ["json"], mime: ["application/json"] },
+  accepts: { extensions: [".json"], artifactTypes: ["json"], mimeTypes: ["application/json"] },
   render: JsonViewer,
   validateArtifact: (artifact): artifact is ViewerArtifact => viewerAccepts(jsonViewerPlugin, artifact),
 };
@@ -78,7 +58,7 @@ const chartViewerPlugin: ViewerPlugin = {
 const reportViewerPlugin: ViewerPlugin = {
   id: "reportViewer",
   label: "Report",
-  accepts: { extensions: [".md", ".markdown"], artifactTypes: ["report", "markdown"], mime: ["text/markdown"] },
+  accepts: { extensions: [".md", ".markdown"], artifactTypes: ["report", "markdown"], mimeTypes: ["text/markdown"] },
   render: ReportViewer,
   validateArtifact: (artifact): artifact is ViewerArtifact => viewerAccepts(reportViewerPlugin, artifact) || typeof artifact.content === "string",
 };
@@ -86,7 +66,7 @@ const reportViewerPlugin: ViewerPlugin = {
 const textViewerPlugin: ViewerPlugin = {
   id: "textViewer",
   label: "Text",
-  accepts: { extensions: [".txt", ".log"], artifactTypes: ["text", "log"], mime: ["text/plain"] },
+  accepts: { extensions: [".txt", ".log"], artifactTypes: ["text", "log"], mimeTypes: ["text/plain"] },
   render: MarkdownViewer,
   validateArtifact: (artifact): artifact is ViewerArtifact => typeof artifact.content === "string",
 };
@@ -94,8 +74,8 @@ const textViewerPlugin: ViewerPlugin = {
 const codeEditorPlugin: ViewerPlugin = {
   id: "codeEditor",
   label: "Code",
-  accepts: { extensions: [".py", ".js", ".jsx", ".ts", ".tsx", ".css", ".html", ".sh", ".yaml", ".yml"], artifactTypes: ["code", "yaml"] },
-  render: JsonViewer,
+  accepts: { extensions: [".py", ".js", ".ts", ".tsx", ".css", ".html", ".sh", ".yaml", ".yml"], artifactTypes: ["code", "yaml"] },
+  render: CodeEditorViewer,
   validateArtifact: (artifact): artifact is ViewerArtifact => viewerAccepts(codeEditorPlugin, artifact) || typeof artifact.content === "string",
 };
 

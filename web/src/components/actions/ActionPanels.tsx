@@ -62,7 +62,7 @@ export function AutomationPanel({ projects = [], onAutomations, fetchJson, forma
   );
 }
 
-export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact, onRunComplete }: { activePath: ActivePath; projectConfig?: ProjectConfigPayload | null; onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigPayload | null>>; power?: boolean; fetchJson: FetchJson; onOpenArtifact?: (artifact: ArtifactRecord) => void; onRunComplete?: () => void }) {
+export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact, onRunComplete, activeAppId, navigate }: { activePath: ActivePath; projectConfig?: ProjectConfigPayload | null; onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigPayload | null>>; power?: boolean; fetchJson: FetchJson; onOpenArtifact?: (artifact: ArtifactRecord) => void; onRunComplete?: () => void; activeAppId?: string; navigate?: (path: string) => void }) {
   const { error, preview, result, running, importTemplate, previewCommand, runCommand } = useProjectActionRuntime({
     activePath,
     fetchJson,
@@ -70,7 +70,8 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
     onRunComplete,
   });
   const config = projectConfig?.config || {};
-  const commands = Object.entries((config.commands || {}) as Record<string, CommandDefinition>);
+  const commands = Object.entries((config.commands || {}) as Record<string, CommandDefinition>)
+    .filter(([name]) => !activeAppId || name === activeAppId);
   if (!activePath.projectPath) {
     return null;
   }
@@ -90,8 +91,10 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
               key={name}
               app={app}
               running={running === name}
+              error={error}
+              latestRun={result?.command_id === name || result?.action_id === name ? result : null}
               onPreview={() => previewCommand(name)}
-              onRun={() => runCommand(name, { command })}
+              onRun={(values) => runCommand(name, { command, values })}
               projectPath={activePath?.projectPath}
               power={power}
               artifacts={result?.command_id === name || result?.action_id === name ? result.artifacts || [] : []}
@@ -101,6 +104,7 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
                 <span>{actionOutputLabel(command)}</span>
                 <span>{actionStatus(command)}</span>
                 {power && <span>{command.permission || "read-only"}</span>}
+                {!activeAppId && <button type="button" onClick={() => navigate?.(`/project/${activePath.projectPath}/app/${name}`)}>Open app page</button>}
               </div>
             </WorkflowAppShell>
           );

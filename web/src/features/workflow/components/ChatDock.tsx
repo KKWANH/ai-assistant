@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { DockedChatComposer } from "../../../components/chat/DockedChatComposer";
-import type { AccountLike, ChatPayload, ModelMode } from "../../../components/chat/Composer";
+import { fetchJson } from "../../../lib/api";
+import type { AccountLike, ChatPayload } from "../../../components/chat/Composer";
+import type { ModelMode } from "../../../lib/modelModes";
 
 type DockContext = {
   kind: "artifact" | "run" | "resource" | "workflow" | "workflow_step";
@@ -24,6 +26,7 @@ type ChatDockProps = {
 export function ChatDock({ projectPath, context, account, power, models, navigate }: ChatDockProps) {
   const [sessionSlug, setSessionSlug] = useState("");
   const [chat, setChat] = useState<ChatPayload>({ messages: [] });
+  const [rerunStatus, setRerunStatus] = useState("");
   const badge = useMemo(() => {
     if (context.path) return context.path;
     if (context.runId) return context.runId;
@@ -33,6 +36,25 @@ export function ChatDock({ projectPath, context, account, power, models, navigat
 
   if (!projectPath) {
     return null;
+  }
+
+  async function rerunScopedStep() {
+    if (!context.runId) return;
+    setRerunStatus("Rerunning scoped step...");
+    try {
+      const body = new URLSearchParams({
+        project: projectPath || "",
+        run_id: context.runId,
+        step_id: context.viewerSlotId || context.kind,
+      });
+      const payload = await fetchJson<{ run?: { run_id?: string; status?: string } }>("/api/project-run/rerun-step", {
+        method: "POST",
+        body,
+      });
+      setRerunStatus(`Rerun created: ${payload.run?.run_id || "new run"} · ${payload.run?.status || "queued"}`);
+    } catch (err) {
+      setRerunStatus(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
@@ -62,6 +84,12 @@ export function ChatDock({ projectPath, context, account, power, models, navigat
       >
         Open full chat session
       </button>
+      {context.runId && (
+        <button type="button" className="secondary-button" onClick={rerunScopedStep}>
+          Rerun scoped step
+        </button>
+      )}
+      {rerunStatus && <p className="muted">{rerunStatus}</p>}
       {Array.isArray(chat.messages) && chat.messages.length > 0 && (
         <div className="dock-message-list">
           {(chat.messages as Array<{ role?: string; content?: string; pending?: boolean }>).slice(-4).map((message, index) => (

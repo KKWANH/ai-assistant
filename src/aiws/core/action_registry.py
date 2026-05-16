@@ -445,6 +445,8 @@ def run_action(
     actor: str | None = None,
     confirmed: bool = False,
     resolved_imports: list[dict[str, Any]] | None = None,
+    workflow_inputs: dict[str, Any] | None = None,
+    workflow_files: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     preview = preview_action(root, project_path, command_name)
     config = load_config(root, project_path)
@@ -465,6 +467,8 @@ def run_action(
         ),
     ]
     resolved_imports = resolved_imports or []
+    workflow_inputs = workflow_inputs or {}
+    workflow_files = workflow_files or []
     import_env = resolved_import_env(root, resolved_imports)
     resolved_inputs = resolved_import_input_map(command, resolved_imports)
     if resolved_imports:
@@ -572,6 +576,8 @@ def run_action(
             "expected_files": preview.get("expected_input_files", []),
             "resolved_imports": resolved_imports,
             "resolved_input_resources": resolved_inputs,
+            "workflow_inputs": workflow_inputs,
+            "workflow_files": workflow_files,
             "resolved_import_env_keys": sorted(import_env),
             "cwd": preview.get("cwd", ""),
             "command_line": preview.get("command_line", ""),
@@ -592,6 +598,8 @@ def run_action(
     write_run_artifacts(run_path, run, stdout, stderr, result)
     if resolved_imports:
         storage.write_json(run_path / "imports.json", redaction.redact_value({"imports": resolved_imports, "env": import_env}))
+    if workflow_inputs or workflow_files:
+        storage.write_json(run_path / "workflow-inputs.json", redaction.redact_value({"inputs": workflow_inputs, "files": workflow_files}))
     return run | {"stdout": stdout, "stderr": stderr, "result": result}
 
 

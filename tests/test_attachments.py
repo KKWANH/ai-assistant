@@ -137,8 +137,21 @@ def test_pdf_without_extractable_text_is_kept_with_failed_status(tmp_path):
     assert result["text"] == ""
     assert result["delivery"] == "stored_only"
     assert result["text_available"] is False
-    assert result["extraction_status"] == "failed"
-    assert "PDF text extraction failed" in result["extraction_error"]
+    assert result["extraction_status"] == "ocr_required"
+    assert result["extraction_method"] == "none"
+    assert "OCR is required" in result["extraction_error"]
+
+
+def test_pdf_uses_ocr_when_text_extractors_are_low_quality(monkeypatch):
+    monkeypatch.setattr(attachments, "extract_pdf_text_pymupdf", lambda content: "%%%%")
+    monkeypatch.setattr(attachments, "extract_pdf_text_pypdf", lambda content: "")
+    monkeypatch.setattr(attachments, "extract_pdf_text_ocr", lambda content: "한글 문서 요약 OCR text")
+
+    result = attachments.extract_pdf_text_result(b"%PDF-1.7")
+
+    assert result.status == "ocr"
+    assert result.method == "tesseract_ocr"
+    assert "OCR text" in result.text
 
 
 def test_docx_attachment_extracts_document_text(tmp_path):

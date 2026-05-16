@@ -32,6 +32,8 @@ describe("WorkflowAppShell", () => {
     expect(screen.getByText("Investment Rebalancer")).toBeInTheDocument();
     expect(screen.getByText("reportViewer")).toBeInTheDocument();
     expect(screen.getByText("Chat Dock")).toBeInTheDocument();
+    await userEvent.upload(screen.getByLabelText(/portfolio csv/i), new File(["symbol,value\nVOO,100"], "portfolio.csv", { type: "text/csv" }));
+    await userEvent.click(screen.getByLabelText(/confirmed/i));
     await userEvent.click(screen.getByRole("button", { name: /run app/i }));
     expect(onRun).toHaveBeenCalledOnce();
   });

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fileNeedsVisionModel } from "../lib/modelModes.jsx";
+import { fileNeedsVisionModel, type ModelMode } from "../lib/modelModes";
 
 export function useAttachments() {
-  const [files, setFiles] = useState([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [previewUrls, setPreviewUrls] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const primaryFile = files[0] || null;
 
   useEffect(() => {
@@ -16,19 +16,19 @@ export function useAttachments() {
     });
   }, [files]);
 
-  const addFiles = useCallback((nextFiles) => {
+  const addFiles = useCallback((nextFiles?: File[] | FileList | null) => {
     const list = Array.from(nextFiles || []).filter(Boolean);
     if (list.length) setFiles((current) => [...current, ...list]);
     return list;
   }, []);
 
-  const removeFile = useCallback((index) => {
+  const removeFile = useCallback((index: number) => {
     setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }, []);
 
   const clearFiles = useCallback(() => setFiles([]), []);
 
-  const hasVisionOnlyFiles = useCallback((mode, models) => files.some((item) => fileNeedsVisionModel(item, mode, models)), [files]);
+  const hasVisionOnlyFiles = useCallback((mode: string, models?: ModelMode[]) => files.some((item) => fileNeedsVisionModel(item, mode, models)), [files]);
 
   return useMemo(() => ({
     files,

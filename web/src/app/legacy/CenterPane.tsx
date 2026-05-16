@@ -1,16 +1,16 @@
 import React, { type FormEvent, useEffect, useRef, useState } from "react";
 import { TaskSuggestionsPanel, type CommandDefinition } from "../../components/actions/ActionPanels";
-import { AttachmentList } from "../../components/chat/AttachmentList.jsx";
+import { AttachmentList } from "../../components/chat/AttachmentList";
 import { Composer } from "../../components/chat/Composer";
-import { ContextReceiptCard } from "../../components/chat/ContextReceiptCard.jsx";
-import { WaitingNotice } from "../../components/chat/WaitingNotice.jsx";
-import { MarkdownRenderer } from "../../components/markdown/MarkdownRenderer.jsx";
+import { ContextReceiptCard } from "../../components/chat/ContextReceiptCard";
+import { WaitingNotice } from "../../components/chat/WaitingNotice";
+import { MarkdownRenderer } from "../../components/markdown/MarkdownRenderer";
 import { StartPane } from "../../components/home/StartPane";
 import { ProjectDashboard } from "../../components/project/ProjectDashboard";
 import { AppsToolsCatalogPage } from "../../pages/AppsToolsCatalogPage";
 import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";
-import { DEFAULT_MODEL, modelLabel, normalizeModelCatalog } from "../../lib/modelModes.jsx";
+import { DEFAULT_MODEL, modelLabel, normalizeModelCatalog } from "../../lib/modelModes";
 import type { AccountSummary } from "../../entities/workspace/types";
 import type { ProjectSummary } from "../../entities/project/types";
 import type { ChatMessage } from "../../shared/contracts/workbench";
@@ -63,19 +63,22 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
           project={project}
           power={power}
           copy={copy}
+          activeAppId={activePath.view === "workflow-app" ? activePath.appId : undefined}
           onProjectConfig={onProjectConfig}
           navigate={navigate}
         />
-        <StartPane
-          error={error}
-          navigate={navigate}
-          refreshWorkspace={refreshWorkspace}
-          onAsk={onAsk}
-          account={account}
-          models={models}
-          projectPath={activePath.projectPath}
-          embedded
-        />
+        {activePath.view !== "workflow-app" && (
+          <StartPane
+            error={error}
+            navigate={navigate}
+            refreshWorkspace={refreshWorkspace}
+            onAsk={onAsk}
+            account={account}
+            models={models}
+            projectPath={activePath.projectPath}
+            embedded
+          />
+        )}
       </section>
     );
   }

@@ -1,16 +1,24 @@
 import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ConnectionsTab } from "./ConnectionsTab.jsx";
+import { ConnectionsTab } from "./ConnectionsTab";
+
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 describe("ConnectionsTab", () => {
   it("requests explicit project resource links", async () => {
-    const fetchJson = vi.fn().mockResolvedValue({ connections: { connectedResources: [] } });
-    render(
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ connections: { projectId: "diet", exports: [], imports: [], incomingLinks: [], outgoingLinks: [], connectedResources: [], visibleSources: [] } }),
+    } as Response);
+    renderWithQuery(
       <ConnectionsTab
         activePath={{ projectPath: "diet" }}
-        fetchJson={fetchJson}
         connections={{
           projectId: "diet",
           exports: [],
@@ -24,14 +32,14 @@ describe("ConnectionsTab", () => {
     );
     await userEvent.click(screen.getByLabelText(/nutrition_snapshot/i));
     await userEvent.click(screen.getByRole("button", { name: /request connection/i }));
-    expect(fetchJson).toHaveBeenCalledWith("/api/project-connections/diet", expect.objectContaining({ method: "POST" }));
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/project-connections/diet", expect.objectContaining({ method: "POST" }));
+    vi.restoreAllMocks();
   });
 
   it("shows connected resources only from approved links", () => {
-    render(
+    renderWithQuery(
       <ConnectionsTab
         activePath={{ projectPath: "diet" }}
-        fetchJson={vi.fn()}
         connections={{
           projectId: "diet",
           exports: [],

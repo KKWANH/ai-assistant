@@ -1,7 +1,7 @@
 import React, { type FormEvent, useState } from "react";
 import { WorkflowAppInspector, AutomationPanel } from "../actions/ActionPanels";
-import { AttachmentList } from "../chat/AttachmentList.jsx";
-import { ContextReceiptCard } from "../chat/ContextReceiptCard.jsx";
+import { AttachmentList } from "../chat/AttachmentList";
+import { ContextReceiptCard } from "../chat/ContextReceiptCard";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
 import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";

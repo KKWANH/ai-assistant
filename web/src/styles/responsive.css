@@ -286,6 +286,8 @@
   }
 
   .starter-grid,
+  .home-launch-panel,
+  .artifact-grid.compact,
   .home-hints { grid-template-columns: 1fr; }
   .section-row { align-items: start; flex-direction: column; }
   .login-screen { grid-template-columns: 1fr; padding: 18px; }

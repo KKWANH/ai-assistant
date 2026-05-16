@@ -1,6 +1,46 @@
 import React from "react";
+import type { ContextReceipt } from "../../shared/contracts/workbench";
 
-export function ContextReceiptCard({ receipt, compact = false }) {
+type ReceiptFile = { filename?: string; path?: string };
+type ReceiptChunk = {
+  chunk_id?: string;
+  path?: string;
+  filename?: string;
+  reason?: string;
+  token_count?: number;
+  privacy?: string;
+};
+type ReceiptCsv = {
+  parser?: string;
+  rows?: number;
+  columns?: number;
+  missing_cells?: number;
+};
+type ReceiptArtifact = { filename?: string; path?: string };
+type ReceiptAnalysis = {
+  csv?: ReceiptCsv[];
+  artifacts?: ReceiptArtifact[];
+  computed_profile_sent_to_model?: boolean;
+  raw_text_sent_to_model?: boolean;
+};
+type ReceiptPrivacy = {
+  network_used?: boolean;
+  files_sent_to_cloud?: string[];
+};
+type ContextReceiptCardProps = {
+  receipt?: (Omit<ContextReceipt, "included_chunks"> & {
+    used_files?: ReceiptFile[];
+    unused_files?: ReceiptFile[];
+    excluded?: string[];
+    included_chunks?: ReceiptChunk[];
+    analysis?: ReceiptAnalysis;
+    privacy?: ReceiptPrivacy;
+    currency?: string;
+  }) | null;
+  compact?: boolean;
+};
+
+export function ContextReceiptCard({ receipt, compact = false }: ContextReceiptCardProps) {
   if (!receipt) return null;
   const used = Array.isArray(receipt.used_files) ? receipt.used_files : [];
   const unused = Array.isArray(receipt.unused_files) ? receipt.unused_files : [];

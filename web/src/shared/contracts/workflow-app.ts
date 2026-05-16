@@ -3,6 +3,7 @@ export type {
   OutputArtifactSpec,
   RunPolicy,
   ViewerSlot,
+  WorkflowPermissionValue,
   WorkflowAppDefinition,
 } from "../../entities/workflow-app/types";
 import type { WorkflowAppDefinition } from "../../entities/workflow-app/types";

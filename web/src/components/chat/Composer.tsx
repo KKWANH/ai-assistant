@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ModelPickerButton } from "../model/ModelPickerButton";
-import { SelectedAttachmentList } from "./SelectedAttachmentList.jsx";
-import { TableWorkbenchPanel } from "../table/TableWorkbenchPanel.jsx";
-import { useAttachments } from "../../hooks/useAttachments.js";
+import { SelectedAttachmentList } from "./SelectedAttachmentList";
+import { TableWorkbenchPanel } from "../table/TableWorkbenchPanel";
+import { useAttachments } from "../../hooks/useAttachments";
 import { copyForAccount } from "../../shared/copy/copy";
-import { getCookie, setCookie } from "../../lib/api.js";
-import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "../../lib/table.js";
+import { getCookie, setCookie } from "../../lib/api";
+import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "../../lib/table";
 import { useChatSubmit } from "./useChatSubmit";
 import {
   estimateCurrentCost,
@@ -14,7 +14,8 @@ import {
   normalizeModelCatalog,
   savedModelMode,
   savedSearchMode,
-} from "../../lib/modelModes.jsx";
+} from "../../lib/modelModes";
+import type { ModelMode } from "../../lib/modelModes";
 import type { ChatState } from "../../shared/contracts/runtime";
 
 export type ComposerMode = "normalChat" | "dockedContextChat" | "workflowStepChat";
@@ -31,16 +32,6 @@ export type DockContext = {
 export type ChatSession = { slug?: string; title?: string; project_path?: string };
 export type ChatPayload = ChatState;
 export type AccountLike = { username?: string; nickname?: string; display_name?: string; profile?: Record<string, unknown> } | null | undefined;
-export type ModelMode = {
-  value?: string;
-  label?: string;
-  provider: string;
-  model: string;
-  cloud?: boolean;
-  supportsImage?: boolean;
-  [key: string]: unknown;
-};
-
 export type ComposerProps = {
   activePath: ActiveChatPath;
   onAsk: (next: ChatPayload | ((current: ChatPayload | null) => ChatPayload)) => void;
@@ -138,6 +129,7 @@ export function Composer({
   account,
   power,
   models = MODEL_MODES as ModelMode[],
+  modeKind,
   docked = false,
   dockContext = null,
   onSessionCreated,
@@ -170,7 +162,7 @@ export function Composer({
   };
   const { sending, submitChat, stop } = useChatSubmit(onAsk);
   const modelModes = normalizeModelCatalog(models) as ModelMode[];
-  const selectedMode = modelMode(mode, modelModes as never[]) as ModelMode;
+  const selectedMode = modelMode(mode, modelModes);
   const copy = copyForAccount(account);
 
   useEffect(() => {
@@ -270,7 +262,7 @@ export function Composer({
     let submitMode = selectedMode;
     if (hasVisionOnlyFiles(mode, modelModes)) {
       setMode("cheap");
-      submitMode = modelMode("cheap", modelModes as never[]) as ModelMode;
+      submitMode = modelMode("cheap", modelModes);
     }
     if (submitMode.cloud && !cloudConfirmed(mode)) {
       setCloudPrompt(true);
@@ -319,7 +311,7 @@ export function Composer({
         files,
         model: submitMode,
         searchMode,
-        mode: docked ? "dockedContextChat" : "normalChat",
+        mode: modeKind || (docked ? "dockedContextChat" : "normalChat"),
         dockContext,
         allowNetwork: searchMode === "always",
         allowRemote: Boolean(submitMode.cloud),
@@ -369,7 +361,7 @@ export function Composer({
         onKeyDown={keyDown}
         placeholder={copy.chat.placeholder}
       />
-      {!docked && <SelectedAttachmentList files={files as never[]} previewUrl={previewUrl} previewUrls={previewUrls as never[]} selectedMode={selectedMode} onRemove={removeAttachment} copy={copy.attachments} />}
+      {!docked && <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} onRemove={removeAttachment} copy={copy.attachments} />}
       {primaryFile?.type?.startsWith("image/") && !selectedMode.supportsImage && (
         <div className="system-note compact-warning">{copy.chat.visionSwitch}</div>
       )}
@@ -411,7 +403,7 @@ export function Composer({
           content={content}
           hasFile={files.length > 0}
           power={power}
-          modelCatalog={modelModes as never[]}
+          modelCatalog={modelModes}
         />
         {sending ? (
           <button className="send-key stop" type="button" onClick={stopThinking}>{copy.chat.stop}</button>

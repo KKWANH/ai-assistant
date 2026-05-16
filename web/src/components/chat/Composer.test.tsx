@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Composer } from "./Composer";
+import { buildScopedContextManifest } from "./useChatSubmit";
 
 describe("Composer", () => {
   it("opens the tool picker and exposes table input", async () => {
@@ -16,5 +17,25 @@ describe("Composer", () => {
     await userEvent.click(screen.getByRole("button", { name: /open input tools/i }));
     expect(screen.getByText("Add photos or files")).toBeInTheDocument();
     expect(screen.getByText("Add table")).toBeInTheDocument();
+  });
+
+  it("builds a scoped manifest for workflow docked chat", () => {
+    expect(buildScopedContextManifest({
+      mode: "dockedContextChat",
+      dockContext: {
+        kind: "workflow",
+        label: "Investment Rebalancer",
+        runId: "run-123",
+        workflowAppId: "investment_rebalancer",
+        viewerSlotId: "report",
+        resourceType: "portfolio",
+      },
+    })).toMatchObject({
+      scope: "dockedContextChat",
+      run_id: "run-123",
+      workflow_app_id: "investment_rebalancer",
+      viewer_slot_id: "report",
+      resource_type: "portfolio",
+    });
   });
 });

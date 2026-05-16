@@ -479,6 +479,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     command,
                     actor=self.current_username(),
                     confirmed=data.get("confirm") in {"1", "true", "yes"},
+                    workflow_inputs=parse_json_object(data.get("workflow_inputs", "")),
+                    workflow_files=[
+                        {"field": data.get(f"workflow_file_field:{filename}", ""), "filename": filename, "size": len(content)}
+                        for filename, content in self.multipart_files("workflow_file")
+                    ],
                 )
                 message_json = None
                 session_slug = str(data.get("session_slug", "")).strip()
@@ -509,6 +514,26 @@ class AIWSHandler(BaseHTTPRequestHandler):
                         "message": message_json,
                     }
                 )
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/project-run/rerun-step":
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                project_path = str(data.get("project", "")).strip()
+                run_id = str(data.get("run_id", "")).strip()
+                step_id = str(data.get("step_id", "")).strip()
+                self.require_project_access(project_path, "owner")
+                run = action_runs.rerun_project_step(
+                    self.root,
+                    project_path,
+                    run_id,
+                    actor=self.current_username(),
+                    step_id=step_id,
+                )
+                self.send_json({"run": run, "config": action_registry.load_config(self.root, project_path)})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -1048,6 +1073,16 @@ class AIWSHandler(BaseHTTPRequestHandler):
         title_source = visible_content
         provider_name = data.get("provider", "ollama")
         attachment_type = ""
+        scoped_context = parse_json_object(data.get("context_manifest", ""))
+        if scoped_context:
+            user_metadata["context_manifest"] = scoped_context
+            user_metadata["scoped_chat"] = {
+                "mode": scoped_context.get("scope", ""),
+                "run_id": scoped_context.get("run_id", ""),
+                "viewer_slot_id": scoped_context.get("viewer_slot_id", ""),
+                "workflow_app_id": scoped_context.get("workflow_app_id", ""),
+                "artifact_path": scoped_context.get("artifact_path", ""),
+            }
         if uploads:
             attachment_contexts: list[str] = []
             attachment_views: list[dict[str, object]] = []
@@ -2754,6 +2789,18 @@ def re_search_header_value(headers: bytes, marker: bytes) -> str | None:
     if end == -1:
         return None
     return headers[start:end].decode("utf-8", errors="ignore")
+
+
+def parse_json_object(value: str) -> dict[str, object]:
+    if not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise storage.WorkspaceError("Workflow App inputs must be valid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise storage.WorkspaceError("Workflow App inputs must be a JSON object.")
+    return parsed
 
 
 def start_ui(root: str, *, mode: str, port: int, password: str | None = None) -> None:

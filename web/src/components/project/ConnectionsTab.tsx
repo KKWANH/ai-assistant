@@ -1,43 +1,58 @@
 import React, { useEffect, useMemo, useState } from "react";
 import styles from "./ProjectDashboard.module.css";
+import type { ProjectConnectionsPayload, ProjectLink } from "../../shared/contracts/workbench";
+import { useProjectConnections, useProjectLinkMutations } from "../../shared/hooks/useProjectConnections";
 
-export function ConnectionsTab({ activePath, connections, fetchJson, onConnections }) {
+type ActiveProjectPath = { projectPath: string };
+type ConnectionAction = "request" | "approve" | "revoke";
+type LinkActionLabel = string | ((link: ProjectLink) => string);
+type ConnectionsTabProps = {
+  activePath: ActiveProjectPath;
+  connections?: ProjectConnectionsPayload | null;
+  fetchJson?: (url: string, init?: RequestInit) => Promise<{ connections?: ProjectConnectionsPayload }>;
+  onConnections?: (connections: ProjectConnectionsPayload) => void;
+};
+
+export function ConnectionsTab({ activePath, connections, onConnections }: ConnectionsTabProps) {
   const [sourceProject, setSourceProject] = useState("");
-  const [resourceTypes, setResourceTypes] = useState([]);
+  const [resourceTypes, setResourceTypes] = useState<string[]>([]);
   const [mode, setMode] = useState("read");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const sources = useMemo(() => connections?.visibleSources || [], [connections?.visibleSources]);
+  const connectionQuery = useProjectConnections(activePath.projectPath, connections);
+  const mutations = useProjectLinkMutations(activePath.projectPath, onConnections);
+  const currentConnections = connectionQuery.data || connections;
+  const sources = useMemo(() => currentConnections?.visibleSources || [], [currentConnections?.visibleSources]);
   const selectedSource = sources.find((item) => item.projectId === sourceProject);
-  const exportsList = connections?.exports || [];
-  const incoming = connections?.incomingLinks || [];
-  const outgoing = connections?.outgoingLinks || [];
-  const connected = connections?.connectedResources || [];
-  const resolved = connections?.resolvedImports || [];
+  const exportsList = currentConnections?.exports || [];
+  const incoming = currentConnections?.incomingLinks || [];
+  const outgoing = currentConnections?.outgoingLinks || [];
+  const connected = currentConnections?.connectedResources || [];
+  const resolved = currentConnections?.resolvedImports || [];
   const availableTypes = selectedSource?.exports || [];
 
   useEffect(() => {
     if (!sourceProject && sources[0]) setSourceProject(sources[0].projectId);
   }, [sourceProject, sources]);
 
-  function toggleType(type) {
+  function toggleType(type: string) {
     setResourceTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]);
   }
 
-  async function submit(action, extra = {}) {
+  async function submit(action: ConnectionAction, extra: Record<string, string> = {}) {
     setBusy(action);
     setError("");
     try {
       const body = new URLSearchParams({ action, ...extra });
       if (action === "request") {
-        body.set("source_project", sourceProject);
-        body.set("resource_types", resourceTypes.join(","));
-        body.set("mode", mode);
+        await mutations.request.mutateAsync({ sourceProject, resourceTypes, mode });
+      } else if (action === "approve") {
+        await mutations.approve.mutateAsync(body.get("link_id") || "");
+      } else if (action === "revoke") {
+        await mutations.revoke.mutateAsync(body.get("link_id") || "");
       }
-      const payload = await fetchJson(`/api/project-connections/${activePath.projectPath}`, { method: "POST", body });
-      onConnections?.(payload.connections);
     } catch (err) {
-      setError(err.message || "Connection request failed.");
+      setError(err instanceof Error ? err.message : "Connection request failed.");
     } finally {
       setBusy("");
     }
@@ -52,6 +67,7 @@ export function ConnectionsTab({ activePath, connections, fetchJson, onConnectio
         </div>
         <span className="soft-pill">{connected.length} connected resources</span>
       </div>
+      {connectionQuery.isFetching && <p className="muted">Refreshing connections...</p>}
       <p className="muted">
         Projects do not inherit data from each other. Connect exported resources with an approved link instead of adding deeper nested projects.
       </p>
@@ -151,7 +167,21 @@ export function ConnectionsTab({ activePath, connections, fetchJson, onConnectio
   );
 }
 
-function LinkList({ title, empty, links, busy, onAction, actionLabel }) {
+function LinkList({
+  title,
+  empty,
+  links,
+  busy,
+  onAction,
+  actionLabel,
+}: {
+  title: string;
+  empty: string;
+  links: ProjectLink[];
+  busy: string;
+  onAction: (link: ProjectLink) => void;
+  actionLabel: LinkActionLabel;
+}) {
   return (
     <div className="connection-panel">
       <h3>{title}</h3>

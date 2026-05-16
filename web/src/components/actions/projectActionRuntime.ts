@@ -4,6 +4,7 @@ import type { ActivePath } from "../../app/router/parseRoute";
 import type { WorkflowAppDefinition } from "../../entities/workflow-app/types";
 import { queryKeys, type ProjectConfigPayload } from "../../shared/api/client";
 import type { ChatState } from "../../shared/contracts/runtime";
+import type { WorkflowRunInputValues } from "../../shared/contracts/workflow";
 import type { ArtifactRecord, ChatMessage, RunRecord } from "../../shared/contracts/workbench";
 
 type JsonMap = Record<string, unknown>;
@@ -98,7 +99,7 @@ export function useProjectActionRuntime({
   });
 
   const runMutation = useMutation({
-    mutationFn: async ({ name, options }: { name: string; options: { label?: string; command?: CommandDefinition; sessionSlug?: string; attachMessageToChat?: boolean } }) => {
+    mutationFn: async ({ name, options }: { name: string; options: { label?: string; command?: CommandDefinition; sessionSlug?: string; attachMessageToChat?: boolean; values?: WorkflowRunInputValues } }) => {
       if (!activePath.projectPath) return null;
       const previewPayload = await fetchJson<ProjectActionPreviewPayload>(`/api/project-actions/${activePath.projectPath}/${name}/preview`, {
         method: "POST",
@@ -106,8 +107,19 @@ export function useProjectActionRuntime({
       });
       const confirmRun = !previewPayload.preview.requires_confirmation || globalThis.confirm(`Run ${options.command?.label || options.label || name}?`);
       if (!confirmRun) return null;
-      const body = new URLSearchParams({ confirm: previewPayload.preview.requires_confirmation ? "1" : "0" });
+      const body = new FormData();
+      body.set("confirm", previewPayload.preview.requires_confirmation ? "1" : "0");
       if (options.sessionSlug) body.set("session_slug", options.sessionSlug);
+      const serializableInputs: Record<string, string | number | boolean | null> = {};
+      Object.entries(options.values || {}).forEach(([key, value]) => {
+        if (value instanceof File) {
+          body.append("workflow_file", value, value.name);
+          body.append(`workflow_file_field:${value.name}`, key);
+        } else {
+          serializableInputs[key] = value;
+        }
+      });
+      body.set("workflow_inputs", JSON.stringify(serializableInputs));
       const payload = await fetchJson<ProjectActionRunPayload>(`/api/project-actions/${activePath.projectPath}/${name}/run`, {
         method: "POST",
         body,
@@ -147,7 +159,7 @@ export function useProjectActionRuntime({
     await previewMutation.mutateAsync(name).catch(() => undefined);
   }
 
-  async function runCommand(name: string, options: { label?: string; command?: CommandDefinition; sessionSlug?: string; attachMessageToChat?: boolean } = {}) {
+  async function runCommand(name: string, options: { label?: string; command?: CommandDefinition; sessionSlug?: string; attachMessageToChat?: boolean; values?: WorkflowRunInputValues } = {}) {
     if (!activePath.projectPath) return;
     setError("");
     setResult(null);

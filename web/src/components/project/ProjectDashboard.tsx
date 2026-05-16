@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { actionStatus, ProjectWorkflowAppsPanel } from "../actions/ActionPanels";
-import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
-import { ConnectionsTab } from "./ConnectionsTab.jsx";
+import { ArchitectureDiagram } from "./ArchitectureDiagram";
+import { ConnectionsTab } from "./ConnectionsTab";
 import styles from "./ProjectDashboard.module.css";
 import { COPY } from "../../shared/copy/copy";
-import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts.js";
+import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts";
 import { ViewerPane } from "../../features/workflow/components/ViewerPane";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
 import { fetchJson } from "../../lib/api";
@@ -37,16 +37,17 @@ type ProjectDashboardProps = {
   projectConfig: ProjectConfigState;
   project?: ProjectSummary;
   power: boolean;
+  activeAppId?: string;
   onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigState>>;
   navigate?: (path: string) => void;
   copy?: CopyShape;
 };
 
-export function ProjectDashboard({ activePath, projectConfig, project, power, onProjectConfig, navigate, copy = COPY }: ProjectDashboardProps) {
+export function ProjectDashboard({ activePath, projectConfig, project, power, activeAppId, onProjectConfig, navigate, copy = COPY }: ProjectDashboardProps) {
   const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
   const [artifact, setArtifact] = useState<ArtifactPayload | null>(null);
   const [modalError, setModalError] = useState("");
-  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
+  const [activeTab, setActiveTab] = useState(() => activeAppId ? "apps" : new URLSearchParams(window.location.search).get("tab") || "overview");
   const investmentDashboardRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
   const [connections, setConnections] = useState<ProjectConnectionsPayload | null>(projectConfig?.connections || null);
@@ -95,6 +96,14 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
     setLocalOnly(Boolean(record.security?.local_only));
   }, [projectConfig?.project, project]);
 
+  useEffect(() => {
+    if (activeTab === "runs") setActiveTab("artifacts");
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeAppId) setActiveTab("apps");
+  }, [activeAppId]);
+
   async function openRun(run: RunRecord) {
     setModalError("");
     try {
@@ -135,18 +144,24 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
       </section>
 
       <div className={cx("project-tabbar")} role="tablist" aria-label="Project dashboard sections">
-        {[
+        {!activeAppId && [
           ["overview", "Overview"],
+          ["chats", "Chats"],
+          ["files", "Files"],
           ["apps", "Workflow Apps"],
-          ["connections", "Connections"],
-          ["runs", "Runs"],
           ["artifacts", "Artifacts"],
+          ["connections", "Linked Resources"],
           ["settings", "Settings"],
         ].map(([id, label]) => (
           <button key={id} type="button" className={activeTab === id ? cx("active") : ""} onClick={() => setActiveTab(id)}>
             {label}
           </button>
         ))}
+        {activeAppId && (
+          <button type="button" className={cx("active")} onClick={() => navigate?.(`/project/${activePath.projectPath}`)}>
+            Workflow App · {activeAppId}
+          </button>
+        )}
       </div>
 
       {activeTab === "connections" && (
@@ -166,7 +181,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         {isInvestmentAdvisor ? <InvestmentAdvisorCard activePath={activePath} actions={actions} runs={runs} artifacts={artifacts} copy={copy} dashboardRef={investmentDashboardRef} /> : <AgentPlanFoundationCard copy={copy} />}
       </div>}
 
-      {activeTab === "overview" && <section className={cx("dashboard-card", "project-chat-overview")}>
+      {activeTab === "chats" && <section className={cx("dashboard-card", "project-chat-overview")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{text.memoryEyebrow}</p>
@@ -199,6 +214,20 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         )}
       </section>}
 
+      {activeTab === "files" && <section className={cx("dashboard-card")}>
+        <div className="section-row">
+          <div>
+            <p className="eyebrow">Project files</p>
+            <h2>Context include / exclude</h2>
+          </div>
+          <span className="soft-pill">aiws.yaml</span>
+        </div>
+        <div className={cx("dashboard-grid", "file-policy-grid")}>
+          <FilePolicyList title="Included" items={toStringList(context.include)} empty="No include patterns yet." />
+          <FilePolicyList title="Excluded" items={toStringList(context.exclude)} empty="No exclude patterns yet." />
+        </div>
+      </section>}
+
       {activeTab === "apps" && isInvestmentAdvisor && (
         <InvestmentAdvisorCard
           activePath={activePath}
@@ -226,6 +255,8 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
           fetchJson={fetchJson}
           onOpenArtifact={openArtifact}
           onRunComplete={isInvestmentAdvisor ? focusInvestmentDashboard : undefined}
+          activeAppId={activeAppId}
+          navigate={navigate}
         />
       </section>}
 
@@ -269,19 +300,17 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         <ArchitectureDiagram />
       </section>}
 
-      {activeTab === "runs" && <section className={cx("dashboard-card")}>
+      {activeTab === "artifacts" && <section className={cx("dashboard-card")}>
         <div className="section-row">
           <div>
-            <p className="eyebrow">{text.recentRuns}</p>
-            <h2>{text.runHistory}</h2>
+            <p className="eyebrow">{COPY.project.artifacts}</p>
+            <h2>{text.generatedOutputs}</h2>
           </div>
-          <span className="soft-pill">{runs.length}</span>
+          <span className="soft-pill">{artifacts.length} artifacts · {runs.length} runs</span>
         </div>
-        {runs.length === 0 ? (
-          <p className="muted">{text.noRuns}</p>
-        ) : (
-          <div className={cx("run-list")}>
-            {runs.slice(0, 5).map((run) => (
+        {runs.length > 0 && (
+          <div className={cx("run-list", "artifact-run-strip")}>
+            {runs.slice(0, 4).map((run) => (
               <button className={cx("run-row", "clickable-row")} type="button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => openRun(run)}>
                 <strong>{run.label || run.command}</strong>
                 <span>{run.status}</span>
@@ -290,16 +319,6 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
             ))}
           </div>
         )}
-      </section>}
-
-      {activeTab === "artifacts" && <section className={cx("dashboard-card")}>
-        <div className="section-row">
-          <div>
-            <p className="eyebrow">{COPY.project.artifacts}</p>
-            <h2>{text.generatedOutputs}</h2>
-          </div>
-          <span className="soft-pill">{artifacts.length}</span>
-        </div>
         {artifacts.length === 0 ? (
           <p className="muted">{text.noArtifacts}</p>
         ) : (
@@ -411,6 +430,30 @@ function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, dashboard
         </ul>
       </details>
     </section>
+  );
+}
+
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function FilePolicyList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+  return (
+    <div className={cx("dashboard-card", "passive-card")}>
+      <div className="section-row">
+        <strong>{title}</strong>
+        <span className="soft-pill">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="muted">{empty}</p>
+      ) : (
+        <ul className={cx("manifest-list")}>
+          {items.map((item) => <li key={item}><code>{item}</code></li>)}
+        </ul>
+      )}
+    </div>
   );
 }
 

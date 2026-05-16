@@ -1,31 +1,79 @@
 # AIWS Product Model
 
-AIWS is a local-first workflow app platform for project folders, not a generic chat surface.
+AIWS is a local-first Workflow App studio for project folders. It is not a generic chatbot shell.
+
+```mermaid
+flowchart LR
+  Chat[Chat] -->|promote useful work| Project[Project]
+  Project --> App[Workflow App]
+  App --> Run[Execution / Run]
+  Run --> Artifact[Artifact]
+  Artifact --> Viewer[Viewer]
+  Project --> Link[Linked Resource]
+  Link --> App
+```
 
 ## Chat
 
-A lightweight conversation. Chats can attach files, create context receipts, and save useful answers as artifacts. A chat can be promoted into a project when it becomes durable work.
+Global conversation for quick questions, file inspection, and short-lived work.
+
+- Input: free text, files, pasted tables, optional web approval.
+- Output: assistant message, context receipt, optional artifact.
+- Use when: the work is exploratory or one-off.
 
 ## Project
 
-A bounded local workspace with files, chats, workflow apps, artifacts, and explicit linked resources. Project nesting remains shallow: root project plus one optional subproject level.
+Bounded local workspace for durable work.
+
+- Contains chats, files, `aiws.yaml`, Workflow Apps, runs, artifacts, and linked resources.
+- Project depth stays shallow: `project` or `project/subproject`.
+- Project boundaries are explicit. Another project cannot read data unless a link is approved.
 
 ## Workflow App
 
-A repeatable project app with typed inputs, typed outputs, run policy, permissions, and viewer slots. It is the user-facing replacement for vague "Action" language.
+Repeatable project app. This is the user-facing replacement for vague "Action" language.
+
+- Defines typed inputs: file, text, select, number, boolean, linked resource.
+- Defines typed outputs: markdown, csv, json, chart, report, text.
+- Declares a run policy: local-only, confirmation required, network/cloud/file-write rules.
+- Declares viewer slots so outputs render as a dashboard, not only a chat answer.
+
+Internal backend routes may still contain `project-actions` for compatibility. User-facing UI should say Workflow App.
 
 ## Execution / Run
 
-A traceable execution record. Runs contain inputs, steps, receipts, logs, model calls, artifacts, status, and errors. Internal backend code may still use `action` as an execution concept.
+Traceable event created when a Workflow App runs.
+
+- Records status, actor, input summary, resolved imports, approval, logs, output files, and errors.
+- Stored as a run record so users can inspect what happened later.
 
 ## Artifact
 
-A reusable output file, such as Markdown reports, CSV tables, JSON profiles, chart specs, logs, or images. Artifacts are rendered through allowlisted viewer plugins.
+Reusable output file from a run.
+
+- Examples: `summary.md`, `csv-profile.json`, `rebalance-suggestions.csv`, chart specs, logs.
+- Artifacts can become linked resources for another project.
 
 ## Viewer
 
-A safe frontend renderer selected by `viewer_id`. Viewers are registry plugins, not arbitrary project code. Workspace files cannot inject new browser modules.
+Frontend renderer for artifacts.
+
+- Selected by `viewer_id`.
+- Examples: table viewer, chart viewer, markdown/report viewer, JSON viewer.
+- Viewers are allowlisted or trusted local viewers. Project data should not inject arbitrary browser code by default.
 
 ## Linked Resource
 
-A typed artifact or resource that one project explicitly exports and another project explicitly imports through an approved `ProjectLink`. Cross-project access is deny-by-default.
+Explicit project-to-project resource grant.
+
+- Source project exports a typed resource.
+- Target project requests/imports it under a local alias.
+- Approved links can be used as Workflow App inputs.
+- Revoked or pending links are hidden from execution.
+
+## Navigation Model
+
+- **Chat**: global one-off work.
+- **Projects**: durable folders and workspaces.
+- **Workflow Apps**: catalog of one-off Chat Tools and repeatable project apps.
+- **Settings**: account, language, model/API status, local/server preferences.

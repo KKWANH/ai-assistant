@@ -6,12 +6,12 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
-function safeLinkProps(href = "") {
+function safeLinkProps(href = ""): { href: string; target?: string; rel?: string } {
   if (!/^https?:\/\//i.test(href)) return { href: "" };
   return { href, target: "_blank", rel: "noreferrer" };
 }
 
-export function MarkdownRenderer({ children }) {
+export function MarkdownRenderer({ children }: { children?: React.ReactNode }) {
   return (
     <div className="message-text" data-markdown-renderer>
       <ReactMarkdown

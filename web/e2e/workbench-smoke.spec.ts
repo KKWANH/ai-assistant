@@ -88,8 +88,8 @@ test.beforeEach(async ({ page }) => {
 
 test("home loads", async ({ page }) => {
   await page.goto("/home");
-  await expect(page.getByPlaceholder("Ask anything")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Chat Tools" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "AIWS home launcher" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /새 대화 시작/ })).toBeVisible();
 });
 
 test("apps and tools catalog navigation loads", async ({ page }) => {
@@ -101,7 +101,7 @@ test("apps and tools catalog navigation loads", async ({ page }) => {
 test("project dashboard opens and investment app can launch chat dock", async ({ page }) => {
   await page.goto("/project/demo");
   await expect(page.getByText("Demo Project").first()).toBeVisible();
-  await page.getByRole("button", { name: "Workflow Apps" }).click();
+  await page.getByLabel("Project dashboard sections").getByRole("button", { name: "Workflow Apps" }).click();
   await expect(page.locator(".project-actions-panel").getByText("Investment Rebalancer")).toBeVisible();
   await expect(page.locator(".project-actions-panel").getByText("Chat Dock")).toBeVisible();
   const dock = page.locator(".project-actions-panel .chat-dock").first();
@@ -110,9 +110,16 @@ test("project dashboard opens and investment app can launch chat dock", async ({
   await expect(page.getByText("Scoped answer saved with receipt.")).toBeVisible();
 });
 
+test("workflow app direct route renders only the selected app shell", async ({ page }) => {
+  await page.goto("/project/demo/app/investment_rebalancer");
+  await expect(page.getByRole("button", { name: /Workflow App · investment_rebalancer/ })).toBeVisible();
+  await expect(page.locator(".project-actions-panel").getByText("Investment Rebalancer")).toBeVisible();
+  await expect(page.getByText("Run Receipt")).toBeVisible();
+});
+
 test("unauthorized linked resource access is blocked", async ({ page }) => {
   await page.goto("/project/demo");
-  await page.getByRole("button", { name: "Connections" }).click();
+  await page.getByRole("button", { name: "Linked Resources" }).click();
   await page.getByLabel(/nutrition_snapshot/).click();
   await page.getByRole("button", { name: "Request connection" }).click();
   await expect(page.getByText(/Account cannot access project: food/)).toBeVisible();

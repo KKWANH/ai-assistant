@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { fetchJson } from "../../lib/api";
 import { queryKeys } from "../../shared/api/client";
-import type { ActiveChatPath, ChatPayload, ChatSession, DockContext, ModelMode } from "./Composer";
+import type { ActiveChatPath, ChatPayload, ChatSession, DockContext } from "./Composer";
+import type { ModelMode } from "../../lib/modelModes";
 
 export type ChatSubmitMode = "normalChat" | "dockedContextChat" | "workflowStepChat";
 
@@ -18,6 +19,21 @@ export type ChatSubmitInput = {
   allowNetwork?: boolean;
   onSessionCreated?: (session: ChatSession) => void;
 };
+
+export function buildScopedContextManifest(input: Pick<ChatSubmitInput, "mode" | "dockContext">) {
+  if (input.mode === "normalChat" || !input.dockContext) return null;
+  const context = input.dockContext;
+  return {
+    scope: input.mode,
+    kind: context.kind,
+    label: context.label,
+    artifact_path: context.path || "",
+    run_id: context.runId || "",
+    workflow_app_id: context.workflowAppId || "",
+    viewer_slot_id: context.viewerSlotId || "",
+    resource_type: context.resourceType || "",
+  };
+}
 
 export function useChatSubmit(onAsk: (next: ChatPayload | ((current: ChatPayload | null) => ChatPayload)) => void) {
   const queryClient = useQueryClient();
@@ -64,6 +80,13 @@ export function useChatSubmit(onAsk: (next: ChatPayload | ((current: ChatPayload
       form.set("provider", input.model.provider);
       form.set("model", input.model.model);
       form.set("search_mode", input.searchMode);
+      const scopedManifest = buildScopedContextManifest(input);
+      if (scopedManifest) {
+        form.set("context_manifest", JSON.stringify(scopedManifest));
+        form.set("run_id", scopedManifest.run_id);
+        form.set("viewer_slot_id", scopedManifest.viewer_slot_id);
+        form.set("workflow_app_id", scopedManifest.workflow_app_id);
+      }
       if (input.allowNetwork) form.set("allow_network", "1");
       if (input.allowRemote) {
         form.set("allow_remote", "1");

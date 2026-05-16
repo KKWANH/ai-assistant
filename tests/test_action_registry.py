@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from aiws import storage
-from aiws.core import action_registry, context_manifest, home_workbench
+from aiws.core import action_registry, action_runs, context_manifest, home_workbench
 
 
 def write_project_config(root: Path, project_path: str, body: str) -> None:
@@ -39,6 +39,39 @@ commands:
     assert preview["output_type"] == "chat_prompt"
     assert preview["expected_output_files"] == []
     assert "Summarize them." in preview["prompt"]
+
+
+def test_rerun_project_step_reuses_previous_workflow_inputs(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Investment")
+    write_project_config(
+        root,
+        "investment",
+        """
+name: Investment
+root: .
+commands:
+  summarize:
+    kind: prompt_recipe
+    label: Summarize
+    prompt: Summarize local files.
+""",
+    )
+
+    first = action_runs.run_project(
+        root,
+        "investment",
+        "summarize",
+        actor="kwanho",
+        workflow_inputs={"portfolio": "files/portfolio.csv"},
+    )
+    second = action_runs.rerun_project_step(root, "investment", first["run_id"], actor="kwanho", step_id="execute")
+
+    assert second["command_id"] == "summarize"
+    assert second["run_id"] != first["run_id"]
+    assert second["inputs"]["workflow_inputs"]["portfolio"] == "files/portfolio.csv"
+    assert second["inputs"]["workflow_inputs"]["_rerun"]["source_run_id"] == first["run_id"]
+    assert second["inputs"]["workflow_inputs"]["_rerun"]["step_id"] == "execute"
 
 
 def test_versioned_aiws_yaml_actions_alias_and_permissions(tmp_path):

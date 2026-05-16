@@ -3,7 +3,7 @@ import { ViewerPane } from "../../features/workflow/components/ViewerPane";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
 import type { ActivePath } from "../router/parseRoute";
 import type { ArtifactRecord, RunRecord } from "../../shared/contracts/workbench";
-import type { ModelMode } from "../../components/chat/Composer";
+import type { ModelMode } from "../../lib/modelModes";
 
 type AccountLike = Record<string, unknown> | null | undefined;
 type OverlayArtifact = ArtifactRecord & { kind?: string; content?: string; viewer_type?: string };

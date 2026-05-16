@@ -1,6 +1,9 @@
 import React from "react";
 import type { WorkflowAppDefinition } from "../../../entities/workflow-app/types";
-import type { AccountLike, ModelMode } from "../../../components/chat/Composer";
+import type { AccountLike } from "../../../components/chat/Composer";
+import type { ModelMode } from "../../../lib/modelModes";
+import type { RunRecord } from "../../../shared/contracts/workbench";
+import type { WorkflowRunInputValues } from "../../../shared/contracts/workflow";
 import { AppLauncher } from "./AppLauncher";
 import { ChatDock } from "./ChatDock";
 import { ViewerPane } from "./ViewerPane";
@@ -18,6 +21,8 @@ type WorkflowArtifact = {
 export function WorkflowAppShell({
   app,
   running,
+  error,
+  latestRun,
   onPreview,
   onRun,
   projectPath,
@@ -30,8 +35,10 @@ export function WorkflowAppShell({
 }: {
   app: WorkflowAppDefinition;
   running?: boolean;
+  error?: string;
+  latestRun?: RunRecord | null;
   onPreview?: () => void;
-  onRun?: () => void;
+  onRun?: (values: WorkflowRunInputValues) => void;
   projectPath?: string;
   account?: AccountLike;
   power?: boolean;
@@ -42,7 +49,8 @@ export function WorkflowAppShell({
 }) {
   return (
     <section className="workflow-app-shell">
-      <AppLauncher app={app} running={running} onPreview={onPreview} onRun={onRun} />
+      <AppLauncher app={app} running={running} error={error} onPreview={onPreview} onRun={onRun} />
+      <RunReceipt run={latestRun} running={running} />
       <div className="workflow-viewer-layout">
         {app.defaultViewerLayout.map((slot) => (
           <div className={`workflow-viewer-slot ${slot.position}`} key={slot.id}>
@@ -58,7 +66,14 @@ export function WorkflowAppShell({
       </div>
       <ChatDock
         projectPath={projectPath}
-        context={{ kind: "workflow", label: app.title, resourceType: app.supportedResources[0] || app.id }}
+        context={{
+          kind: "workflow",
+          label: app.title,
+          runId: latestRun?.run_id,
+          workflowAppId: app.id,
+          viewerSlotId: app.defaultViewerLayout[0]?.id,
+          resourceType: app.supportedResources[0] || app.id,
+        }}
         account={account}
         power={power}
         models={models}
@@ -66,6 +81,23 @@ export function WorkflowAppShell({
       />
       {children}
     </section>
+  );
+}
+
+function RunReceipt({ run, running }: { run?: RunRecord | null; running?: boolean }) {
+  if (running) {
+    return <div className="workflow-run-receipt"><strong>Run Receipt</strong><span>실행 중. 입력 확인 → 실행 → 산출물 수집.</span></div>;
+  }
+  if (!run) {
+    return <div className="workflow-run-receipt"><strong>Run Receipt</strong><span>아직 실행 없음.</span></div>;
+  }
+  return (
+    <div className={`workflow-run-receipt ${run.status === "failed" ? "failed" : ""}`}>
+      <strong>Run Receipt</strong>
+      <span>{run.status} · {run.run_id}</span>
+      <span>{(run.artifacts || []).length} artifacts</span>
+      {run.error && <small className="error-text">{run.error}</small>}
+    </div>
   );
 }
 

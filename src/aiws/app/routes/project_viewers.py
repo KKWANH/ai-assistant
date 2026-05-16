@@ -146,11 +146,24 @@ def build_viewer_asset(base: Path, build_dir: Path, viewer: dict[str, Any], proj
     wrapper.write_text(
         "\n".join(
             [
-                'import React from "react";',
+                'import React, { useEffect, useState } from "react";',
                 'import { createRoot } from "react-dom/client";',
                 f'import Viewer from {json.dumps(entry.as_posix())};',
                 f'const endpoint = {json.dumps(payload_url)};',
-                'createRoot(document.getElementById("root")!).render(<Viewer endpoint={endpoint} />);',
+                'function AIWSViewerHost() {',
+                '  const [payload, setPayload] = useState<any>(null);',
+                '  const [error, setError] = useState("");',
+                '  useEffect(() => {',
+                '    fetch(endpoint, { credentials: "include" })',
+                '      .then((response) => { if (!response.ok) throw new Error(`viewer payload ${response.status}`); return response.json(); })',
+                '      .then(setPayload)',
+                '      .catch((err) => setError(String(err)));',
+                '  }, []);',
+                '  if (error) return <pre>{error}</pre>;',
+                '  if (!payload) return <p>Loading viewer payload...</p>;',
+                '  return <Viewer endpoint={endpoint} payload={payload} />;',
+                '}',
+                'createRoot(document.getElementById("root")!).render(<AIWSViewerHost />);',
                 "",
             ]
         ),

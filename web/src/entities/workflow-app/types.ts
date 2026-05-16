@@ -40,6 +40,8 @@ export type ViewerSlot = {
   position: "left" | "center" | "right" | "full";
 };
 
+export type WorkflowPermissionValue = boolean | string | number;
+
 export type WorkflowAppDefinition = {
   id: string;
   title: string;
@@ -50,5 +52,5 @@ export type WorkflowAppDefinition = {
   runPolicy: RunPolicy;
   defaultViewerLayout: ViewerSlot[];
   supportedResources: string[];
-  permissions: Record<string, boolean | string>;
+  permissions: Record<string, WorkflowPermissionValue>;
 };
