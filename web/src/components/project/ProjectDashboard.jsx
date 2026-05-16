@@ -11,7 +11,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   const [runDetail, setRunDetail] = useState(null);
   const [artifact, setArtifact] = useState(null);
   const [modalError, setModalError] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
   const [connections, setConnections] = useState(projectConfig?.connections || null);
   const projectRecord = projectConfig?.project || project || {};
   const [localOnly, setLocalOnly] = useState(Boolean(projectRecord?.security?.local_only));
@@ -290,6 +290,8 @@ function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
   const text = copy.projectDashboard || COPY.projectDashboard;
   const latestMarketRun = runs.find((run) => run.command === "market_research" || run.action_id === "market_research");
   const hasReport = artifacts.some((artifact) => String(artifact.path || "").endsWith("advisor-report.md"));
+  const growthChart = artifacts.find((artifact) => String(artifact.path || "").endsWith("portfolio-growth-chart.json"));
+  const monthlyTable = artifacts.find((artifact) => String(artifact.path || "").endsWith("monthly-performance.csv"));
   return (
     <section className="dashboard-card investment-advisor-card">
       <div className="section-row">
@@ -300,6 +302,11 @@ function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
         <span className="soft-pill">{text.educationOnly}</span>
       </div>
       <p className="muted">{text.investmentBody}</p>
+      <div className="advisor-autoload-note">
+        <strong>기본 입력 자동 사용</strong>
+        <span>files/portfolio.example.csv · files/target_allocation.example.yaml</span>
+        <small>실제 파일로 바꾸려면 프로젝트 files/ 안의 샘플 파일만 교체하면 됨.</small>
+      </div>
       <div className="advisor-flow">
         {text.investmentFlow.map((item) => <span key={item}>{item}</span>)}
       </div>
@@ -307,6 +314,16 @@ function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
         <MetricTile label={text.advisorActions} value={actions.length} />
         <MetricTile label={text.marketSnapshot} value={latestMarketRun ? latestMarketRun.status : text.notRun} />
         <MetricTile label={text.report} value={hasReport ? text.ready : text.pending} />
+      </div>
+      <div className="advisor-viewer-grid">
+        <div>
+          <strong>월별 총자산</strong>
+          {growthChart ? <ViewerPane artifact={{ ...growthChart, viewer_id: "chartViewer", type: "chart" }} /> : <p className="muted">rebalance_plan 실행 후 그래프 표시됨.</p>}
+        </div>
+        <div>
+          <strong>수익률/벤치마크 차이</strong>
+          {monthlyTable ? <ViewerPane artifact={{ ...monthlyTable, viewer_id: "tableViewer", type: "csv" }} /> : <p className="muted">monthly-performance.csv 생성 대기.</p>}
+        </div>
       </div>
       <details className="advisor-tips">
         <summary>{text.customTips}</summary>

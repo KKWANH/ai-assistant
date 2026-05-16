@@ -88,12 +88,15 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
                 contracts.output_artifact_spec("artifacts/rebalance-suggestions.csv", "csv", "tableViewer"),
                 contracts.output_artifact_spec("artifacts/rebalance-report.md", "markdown", "reportViewer"),
                 contracts.output_artifact_spec("artifacts/rebalance-chart.json", "chart", "chartViewer"),
+                contracts.output_artifact_spec("artifacts/monthly-performance.csv", "csv", "tableViewer"),
+                contracts.output_artifact_spec("artifacts/portfolio-growth-chart.json", "chart", "chartViewer"),
             ],
             run_policy_value=contracts.run_policy(),
             viewer_layout=[
                 contracts.viewer_slot("tables", "Input / output tables", "tableViewer", artifact="artifacts/rebalance-suggestions.csv", position="left"),
                 contracts.viewer_slot("report", "Report", "reportViewer", artifact="artifacts/rebalance-report.md", position="center"),
                 contracts.viewer_slot("chart", "Chart", "chartViewer", artifact="artifacts/rebalance-chart.json", position="right"),
+                contracts.viewer_slot("growth", "Portfolio growth", "chartViewer", artifact="artifacts/portfolio-growth-chart.json", position="right"),
             ],
             supported_resources=["csv", "yaml", "json", "markdown", "chart"],
             permissions={"file_read": True, "file_write": "artifacts_only", "python": True, "network": "approval_required"},
@@ -474,13 +477,14 @@ def input_text(content: str, saved_file: dict[str, Any] | None) -> str:
 
 def document_summary_markdown(text: str, saved_file: dict[str, Any] | None) -> str:
     source = saved_file["filename"] if saved_file else "typed input"
-    status = "success" if text.strip() else "no readable text"
+    readable = clean_readable_excerpt(text)
+    status = "success" if readable.strip() else "no readable text"
     limitation = (
         "This local starter uses extracted text and simple structure; ask a model for deeper interpretation."
-        if text.strip()
+        if readable.strip()
         else "No text was extracted from the input."
     )
-    excerpt = text[:2400].strip() or "(no extracted text)"
+    excerpt = readable[:2400].strip() or "(no extracted text)"
     return f"""# Document Summary
 
 - Source: `{source}`
@@ -603,6 +607,19 @@ def bulletize(text: str) -> str:
     if not lines:
         return "- No readable text was extracted."
     return "\n".join(f"- {line[:220]}" for line in lines[:8])
+
+
+def clean_readable_excerpt(text: str) -> str:
+    lines: list[str] = []
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        if len(line) < 2:
+            continue
+        printable = sum(1 for char in line if char.isprintable() and (char.isalnum() or char.isspace() or char in ".,;:!?()[]{}<>/%+-_=#'\"`~·•"))
+        ratio = printable / max(len(line), 1)
+        if ratio >= 0.72:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 def build_plan(action_id: str, *, has_file: bool) -> dict[str, Any]:

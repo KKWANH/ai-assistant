@@ -36,13 +36,20 @@ export function useChatSubmit(onAsk: (next: ChatPayload | ((current: ChatPayload
 
   const submitChat = useCallback(async (input: ChatSubmitInput) => {
     let targetPath = input.activePath;
-    if (input.mode !== "normalChat" && input.activePath.projectPath && !input.activePath.sessionSlug) {
-      const sessionPayload = await fetchJson(`/api/sessions/${input.activePath.projectPath}`, {
+    if (!input.activePath.sessionSlug) {
+      const createUrl = input.activePath.projectPath ? `/api/sessions/${input.activePath.projectPath}` : "/api/chats";
+      const title = input.mode === "normalChat" ? "" : `Dock: ${input.dockContext?.label || "Workflow context"}`;
+      const sessionPayload = await fetchJson(createUrl, {
         method: "POST",
-        body: new URLSearchParams({ title: `Dock: ${input.dockContext?.label || "Workflow context"}` }),
-      }) as { session?: ChatSession };
-      targetPath = { ...input.activePath, sessionSlug: sessionPayload.session?.slug || "" };
-      if (sessionPayload.session) input.onSessionCreated?.(sessionPayload.session);
+        body: new URLSearchParams({ title }),
+      }) as { project_path?: string; session?: ChatSession };
+      targetPath = {
+        projectPath: input.activePath.projectPath || sessionPayload.project_path || "",
+        sessionSlug: sessionPayload.session?.slug || "",
+      };
+      if (sessionPayload.session) {
+        input.onSessionCreated?.({ ...sessionPayload.session, project_path: targetPath.projectPath });
+      }
     }
     if (!targetPath.projectPath || !targetPath.sessionSlug) return null;
     const form = new FormData();

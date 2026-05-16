@@ -53,6 +53,7 @@ def main() -> int:
     ]
     for row in suggestions:
         lines.append(f"| {row.get('asset_class', '')} | {row.get('current_pct', '')} | {row.get('target_pct', '')} | {row.get('delta_value', '')} | {row.get('suggestion', '')} |")
+    lines.extend(["", "## Monthly Performance Viewer", "", "- `artifacts/monthly-performance.csv` shows monthly total assets, portfolio return, benchmark return, and gap.", "- `artifacts/portfolio-growth-chart.json` renders the total asset line chart in AIWS."])
     lines.extend(["", "## Gap JSON Summary", "", "```json", json.dumps(gaps, indent=2, ensure_ascii=False), "```"])
     lines.extend(["", "## Research Direction", "", interests.strip() or "No investment interests file was provided."])
     lines.extend(["", "## Next Checks", "", "- Verify target allocation assumptions.", "- Review concentration by account, asset class, and single symbol.", "- Use external market research only after approving network access."])

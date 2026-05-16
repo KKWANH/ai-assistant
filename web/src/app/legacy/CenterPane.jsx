@@ -16,8 +16,10 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
   const models = normalizeModelCatalog(account?.model_catalog);
+  const [composerDraft, setComposerDraft] = useState("");
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   if (activePath.view === "actions") {
-    return <AppsToolsCatalogPage navigate={navigate} copy={copy} home={home} projects={projects} />;
+    return <AppsToolsCatalogPage navigate={navigate} copy={copy} home={home} onHome={onHome} projects={projects} />;
   }
   if (activePath.projectPath && !activePath.sessionSlug) {
     const project = projects.find((item) => item.path === activePath.projectPath);
@@ -79,7 +81,13 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
           <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? copy.chatHeader.close : copy.inspector.title}</button>
         </div>
       </div>
-      <MessageTimeline messages={chat?.messages || []} onPreview={onPreview} activePath={activePath} onChat={onAsk} />
+      <MessageTimeline
+        messages={chat?.messages || []}
+        onPreview={onPreview}
+        activePath={activePath}
+        onEdit={(message, index) => editFromMessage(message, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal)}
+        onRetry={(index) => retryFromMessage(chat?.messages || [], index, activePath, onAsk, setComposerDraft, setComposerFocusSignal)}
+      />
       <TaskSuggestionsPanel
         activePath={activePath}
         suggestions={chat?.task_suggestions || []}
@@ -88,7 +96,15 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
         power={power}
         fetchJson={fetchJson}
       />
-      <Composer activePath={activePath} onAsk={onAsk} account={account} power={power} models={models} />
+      <Composer
+        activePath={activePath}
+        onAsk={onAsk}
+        account={account}
+        power={power}
+        models={models}
+        initialContent={composerDraft}
+        focusSignal={composerFocusSignal}
+      />
     </section>
   );
 }
@@ -155,7 +171,7 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
   );
 }
 
-function MessageTimeline({ messages, onPreview, activePath, onChat }) {
+function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }) {
   const endRef = useRef(null);
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages.length]);
@@ -172,14 +188,14 @@ function MessageTimeline({ messages, onPreview, activePath, onChat }) {
   return (
     <div className="messages">
       {messages.map((message, index) => (
-        <MessageCard key={`${index}-${message.role}`} message={message} onPreview={onPreview} activePath={activePath} onChat={onChat} />
+        <MessageCard key={`${index}-${message.role}`} message={message} index={index} onPreview={onPreview} activePath={activePath} onEdit={onEdit} onRetry={onRetry} />
       ))}
       <div ref={endRef} />
     </div>
   );
 }
 
-function MessageCard({ message, onPreview, activePath, onChat }) {
+function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry }) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
@@ -189,9 +205,9 @@ function MessageCard({ message, onPreview, activePath, onChat }) {
         {message.provider && <span>{message.provider} {message.model}</span>}
         {message.estimated_cost !== null && message.estimated_cost !== undefined && <span>USD {message.estimated_cost}</span>}
       </div>
-      {message.pending ? <WaitingNotice label={copy.chat.assistantThinking} compact /> : <MarkdownRenderer>{message.content || ""}</MarkdownRenderer>}
-      {message.role === "assistant" && !message.pending && activePath?.projectPath && (
-        <MessageActions activePath={activePath} onChat={onChat} copy={copy} />
+      {message.pending ? <WaitingNotice label={pendingStepLabel(message, copy)} compact /> : <MarkdownRenderer>{message.content || ""}</MarkdownRenderer>}
+      {!message.pending && activePath?.projectPath && (
+        <MessageActions message={message} index={index} copy={copy} onEdit={onEdit} onRetry={onRetry} />
       )}
       {message.context_receipt && <ContextReceiptCard receipt={message.context_receipt} compact />}
       {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
@@ -200,41 +216,50 @@ function MessageCard({ message, onPreview, activePath, onChat }) {
   );
 }
 
-function MessageActions({ activePath, onChat, copy = COPY }) {
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
-  async function saveArtifact() {
-    if (!activePath?.projectPath || !activePath?.sessionSlug) return;
-    setSaving(true);
-    setError("");
-    try {
-      const payload = await fetchJson(`/api/chat-artifact/${activePath.projectPath}/${activePath.sessionSlug}`, {
-        method: "POST",
-        body: new URLSearchParams({ title: "Assistant Answer" }),
-      });
-      onChat((current) => ({
-        ...(current || {}),
-        work_session: {
-          ...(current?.work_session || {}),
-          artifacts: [...(current?.work_session?.artifacts || []), payload.artifact],
-        },
-      }));
-      setSaved(true);
-    } catch (err) {
-      setError(err.message || "Save failed");
-    } finally {
-      setSaving(false);
-    }
+function MessageActions({ message, index, copy = COPY, onEdit, onRetry }) {
+  function downloadAnswer() {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
+    const blob = new window.Blob([String(message?.content || "")], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aiws-answer-${stamp}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
   return (
     <div className="message-actions">
-      <button type="button" onClick={saveArtifact} disabled={saving || saved}>
-        {saving ? copy.messageActions.saving : saved ? copy.messageActions.saved : copy.messageActions.saveArtifact}
-      </button>
-      {error && <small className="error-text">{error}</small>}
+      {message.role === "user" && <button type="button" onClick={() => onEdit?.(message, index)}>수정</button>}
+      {message.role === "assistant" && <button type="button" onClick={() => onRetry?.(index)}>다시 시도</button>}
+      {message.role === "assistant" && <span className="message-variant-nav">‹ 1 / 1 ›</span>}
+      <button type="button" onClick={downloadAnswer}>{copy.messageActions.download || "Download"}</button>
     </div>
   );
+}
+
+async function editFromMessage(message, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal) {
+  if (!activePath?.projectPath || !activePath?.sessionSlug) return;
+  const payload = await fetchJson(`/api/session-truncate/${activePath.projectPath}/${activePath.sessionSlug}`, {
+    method: "POST",
+    body: new URLSearchParams({ keep: String(index) }),
+  });
+  onAsk((current) => ({ ...(current || {}), messages: payload.messages || [] }));
+  setComposerDraft(message.content || "");
+  setComposerFocusSignal((value) => value + 1);
+}
+
+async function retryFromMessage(messages, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal) {
+  const userIndex = messages.slice(0, index).map((message, itemIndex) => ({ message, itemIndex })).reverse().find((item) => item.message.role === "user")?.itemIndex;
+  if (userIndex === undefined) return;
+  await editFromMessage(messages[userIndex], userIndex, activePath, onAsk, setComposerDraft, setComposerFocusSignal);
+}
+
+function pendingStepLabel(message, copy) {
+  const steps = Array.isArray(message?.execution_plan?.steps) ? message.execution_plan.steps : [];
+  const active = steps.find((step) => step.status === "running") || steps.find((step) => step.status === "pending");
+  return active?.title || copy.chat.assistantThinking;
 }
 
 function PlannerTraceSummary({ plan }) {

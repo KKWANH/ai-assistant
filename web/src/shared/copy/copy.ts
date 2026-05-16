@@ -154,6 +154,7 @@ export const COPY_EN = {
     saveArtifact: "Save as artifact",
     saving: "Saving...",
     saved: "Saved",
+    download: "Download answer",
   },
   settings: {
     title: "Workspace Settings",
@@ -516,6 +517,7 @@ export const COPY_KO = {
     saveArtifact: "결과물로 저장",
     saving: "저장 중...",
     saved: "저장됨",
+    download: "답변 다운로드",
   },
   settings: {
     title: "작업실 설정",
@@ -582,7 +584,7 @@ export const COPY_KO = {
       addTable: "표 추가",
       cancel: "취소",
     },
-    quickPrompts: ["이미지 설명하기", "문서 요약하기", "할 일 정리하기", "글쓰기 도와줘"],
+    quickPrompts: ["이미지 설명", "문서 요약", "할 일 정리", "글쓰기 돕기"],
   },
   chatHeader: {
     chats: "대화",
@@ -696,19 +698,19 @@ export const COPY_KO = {
   },
   starterActions: {
     document_summary: {
-      label: "문서 요약하기",
+      label: "문서 요약",
       category: "Chat Tool",
       description: "PDF, DOCX, TXT, MD 파일을 읽고 구조화된 요약을 만듭니다.",
       prompt: "첨부한 문서를 구조적으로 요약해줘. 핵심 주장, 중요한 근거, 후속 질문을 나눠서 정리해줘.",
     },
     image_explain: {
-      label: "이미지 설명하기",
+      label: "이미지 설명",
       category: "Chat Tool",
       description: "이미지를 첨부하면 보이는 내용과 확인할 점을 정리합니다.",
       prompt: "첨부한 이미지를 설명해줘. 보이는 요소, 중요한 맥락, 사람이 확인해야 할 점을 나눠서 정리해줘.",
     },
     csv_analysis: {
-      label: "표 분석하기",
+      label: "표 분석",
       category: "Chat Tool",
       description: "CSV, Excel, 붙여넣은 표의 컬럼, 주요 숫자, 결측치와 다음 분석 방향을 확인합니다.",
       prompt: "이 표를 deterministic profile로 분석하고 컬럼 구조, 주요 수치, 결측치, 이상치 가능성, 다음 분석 단계를 정리해줘.",

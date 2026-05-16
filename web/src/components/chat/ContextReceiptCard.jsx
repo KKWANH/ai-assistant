@@ -12,10 +12,13 @@ export function ContextReceiptCard({ receipt, compact = false }) {
   const artifacts = Array.isArray(analysis.artifacts) ? analysis.artifacts : [];
   const mode = receipt.privacy_mode === "local" ? "local" : receipt.privacy_mode === "network" ? "local + network" : "cloud";
   const cost = `${receipt.estimated_cost ?? 0} ${receipt.currency || "USD"}`;
+  const fileLabel = `${used.length} file${used.length === 1 ? "" : "s"}`;
 
   return (
     <details className={`context-receipt ${compact ? "compact" : ""}`}>
-      <summary>Context receipt · {mode} · {used.length} file{used.length === 1 ? "" : "s"} · {cost}</summary>
+      <summary>
+        <span>Context receipt · {mode} · {fileLabel} · {cost}</span>
+      </summary>
       <div className="receipt-grid">
         <span><strong>Model</strong><small>{receipt.provider} {receipt.model}</small></span>
         <span><strong>Cost</strong><small>{receipt.estimated_cost ?? 0} {receipt.currency || "USD"}</small></span>

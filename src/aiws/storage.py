@@ -1327,6 +1327,20 @@ def read_messages(root: str | Path, project_path: str, session_slug: str) -> lis
     return messages
 
 
+def truncate_messages(root: str | Path, project_path: str, session_slug: str, keep_count: int) -> list[dict[str, Any]]:
+    """Keep only the first keep_count messages in a session."""
+    messages = read_messages(root, project_path, session_slug)
+    count = max(0, min(int(keep_count), len(messages)))
+    kept = messages[:count]
+    messages_path = session_dir(root, project_path, session_slug) / "messages.jsonl"
+    file_store.atomic_write_text(
+        messages_path,
+        "".join(json.dumps(message, ensure_ascii=False) + "\n" for message in kept),
+    )
+    regenerate_session_markdown(root, project_path, session_slug)
+    return kept
+
+
 def regenerate_session_markdown(root: str | Path, project_path: str, session_slug: str) -> None:
     session = load_session(root, project_path, session_slug)
     messages_path = session_dir(root, project_path, session_slug) / "messages.jsonl"

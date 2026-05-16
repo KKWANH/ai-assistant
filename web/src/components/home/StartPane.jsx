@@ -1,22 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
-import { AttachmentPicker } from "../chat/AttachmentPicker.jsx";
-import { SelectedAttachmentList } from "../chat/SelectedAttachmentList.jsx";
-import { WaitingNotice } from "../chat/WaitingNotice.jsx";
-import { ModelPickerButton } from "../model/ModelPickerButton.jsx";
-import { HomeArtifactContent, TableWorkbenchPanel } from "../table/TableWorkbenchPanel.jsx";
-import { useAttachments } from "../../hooks/useAttachments.js";
+import React, { useEffect, useState } from "react";
+import { Composer } from "../chat/Composer";
+import { HomeArtifactContent } from "../table/TableWorkbenchPanel.jsx";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
-import { fetchJson, setCookie } from "../../lib/api.js";
-import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "../../lib/table.js";
+import { fetchJson } from "../../lib/api.js";
 import {
-  estimateCurrentCost,
-  fileNeedsVisionModel,
   MODEL_MODES,
-  modelMode,
   normalizeModelCatalog,
-  savedModelMode,
-  savedSearchMode,
-  SEARCH_OPTIONS,
 } from "../../lib/modelModes.jsx";
 
 export const STARTER_ACTIONS = [
@@ -73,54 +62,11 @@ export const STARTER_ACTIONS = [
   },
 ];
 
-function displayNameForId(id) {
-  const map = {
-    local: "Kwanho Kim",
-    kwanho: "Kwanho Kim",
-    kwanho0096: "Kwanho Kim",
-    benetea: "Chungja Byun",
-    dosadol: "Gunwoo Kim",
-  };
-  return map[id || "local"] || id || "Kwanho Kim";
-}
-
-function accountDisplayName(account) {
-  return account?.nickname || account?.display_name || displayNameForId(account?.username);
-}
-
 function isPowerMode(account) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-function confirmCloudOnce(key) {
-  sessionStorage.setItem(`aiws_cloud_once_${key}`, "1");
-}
-
-function confirmCloudAlways(key) {
-  setCookie(`aiws_cloud_ok_${key}`, "1");
-}
-
-function CloudConfirm({ mode, hasFile, onUseOnce, onUseAlways, onCancel }) {
-  return (
-    <div className="cloud-confirm" role="alert">
-      <strong>{mode.label} is a cloud AI model.</strong>
-      <p>The privacy manifest for this request will record exactly what leaves AIWS before the cloud call completes.</p>
-      <ul>
-        <li>Provider/model: {mode.provider} · {mode.model}</li>
-        <li>User message: included</li>
-        <li>Attached file: {hasFile ? "computed file context or vision/file input" : "none"}</li>
-        <li>Estimated cost: {estimateCurrentCost(mode, "", hasFile)}</li>
-      </ul>
-      <div>
-        <button type="button" onClick={onUseOnce}>Use once</button>
-        <button type="button" onClick={onUseAlways}>Keep using this model</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-export function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false, onOpenTable, copy = COPY }) {
+export function StarterActionsGrid({ actions, onStart, running = "", hasFile = false, copy = COPY }) {
   const allowedToolIds = new Set(STARTER_ACTIONS.map((action) => action.id));
   const sourceActions = actions?.length ? actions.filter((action) => allowedToolIds.has(action.id)) : STARTER_ACTIONS;
   const items = sourceActions.map((action) => ({
@@ -141,45 +87,23 @@ export function StarterActionsGrid({ actions, onStart, onRun, running = "", hasF
   };
   return (
     <section className="starter-actions" aria-label={copy.home.quickActions}>
-      <div className="section-row">
-        <div className="panel-title-stack">
-          <p className="eyebrow">{copy.home.quickActions}</p>
-          <h2>{copy.home.runBeforeProject}</h2>
-        </div>
-        <span className="soft-pill">{copy.home.workbenchOutputs}</span>
-      </div>
+      <div className="simple-tool-grid-label">{copy.home.quickActions}</div>
       <div className="starter-grid">
         {localizedItems.map((action) => {
           const state = actionState(action);
           return (
-            <article className={`starter-card ${action.disabled ? "is-disabled" : ""}`} key={action.id}>
-              <div className="starter-card-head">
-                <span className="starter-category">{action.category}</span>
-                <span className={`status-badge ${state.value}`}>{state.label}</span>
-              </div>
-              <h3>{action.label}</h3>
-              <p>{action.description}</p>
-              <div className="starter-meta">
-                <span>{copy.catalog.input}: {action.inputs}</span>
-                <span>{copy.catalog.output}: {action.output}</span>
-                <span>{copy.catalog.scope}: {action.scope || copy.catalog.oneOffTool}</span>
-                <span>{copy.catalog.viewer}: {action.viewer || copy.catalog.answerViewer}</span>
-              </div>
-              <div className="starter-actions-row">
-                <button type="button" onClick={() => action.id === "csv_analysis" ? onOpenTable?.() : onStart?.(action)} disabled={action.disabled}>
-                  {action.disabled ? copy.home.notAvailable : action.id === "csv_analysis" ? copy.home.openTable : action.wantsBrief ? copy.home.prepareBrief : hasFile ? copy.home.useInput : copy.home.configure}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRun?.(action)}
-                  disabled={action.disabled || running === action.id || (action.wantsFile && !hasFile)}
-                  title={action.wantsFile && !hasFile ? copy.home.attachRequired : action.disabled ? copy.home.notAvailable : action.wantsBrief ? copy.home.createPrompt : copy.home.createArtifact}
-                >
-                  {running === action.id ? copy.home.creating : action.wantsBrief ? copy.home.createPrompt : copy.home.createArtifact}
-                </button>
-              </div>
-              <small className="action-requirement">{state.helper}</small>
-            </article>
+            <button
+              className={`starter-card simple-tool-card ${action.disabled ? "is-disabled" : ""}`}
+              key={action.id}
+              type="button"
+              onClick={() => onStart?.(action)}
+              disabled={action.disabled}
+              title={state.helper}
+            >
+              <strong>{action.label}</strong>
+              <span>[{copy.chat.attachFile}] → [{running === action.id ? copy.home.creating : copy.chat.send}]</span>
+              <small>{action.inputs}</small>
+            </button>
           );
         })}
       </div>
@@ -187,34 +111,81 @@ export function StarterActionsGrid({ actions, onStart, onRun, running = "", hasF
   );
 }
 
+export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }) {
+  const [files, setFiles] = useState([]);
+  const [notes, setNotes] = useState("");
+  const inputId = `home-tool-file-${action?.id || "tool"}`;
+  if (!action) return null;
+  const localized = localizeStarterAction(action, copy);
+  const canRun = !localized.wantsFile || files.length > 0;
+
+  function addFiles(nextFiles) {
+    const next = Array.from(nextFiles || []);
+    setFiles((current) => [...current, ...next]);
+  }
+
+  function removeFile(index) {
+    setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  return (
+    <section
+      className="tool-run-panel"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        addFiles(event.dataTransfer?.files);
+      }}
+    >
+      <div className="tool-run-panel-head">
+        <div>
+          <small>{localized.category || copy.catalog?.oneOffTool || "Chat Tool"}</small>
+          <strong>{localized.label}</strong>
+        </div>
+        <button type="button" onClick={onClose}>{copy.common?.close || "닫기"}</button>
+      </div>
+      <p>{localized.inputs} → {localized.output || "answer"}</p>
+      <div className="tool-run-drop">
+        <input
+          id={inputId}
+          type="file"
+          multiple
+          onChange={(event) => addFiles(event.target.files)}
+          accept=".txt,.md,.csv,.xls,.xlsx,.json,.yaml,.yml,.pdf,.docx,.ppt,.pptx,image/png,image/jpeg,image/gif,image/webp"
+        />
+        <label htmlFor={inputId}>{files.length ? "파일 더 추가" : "파일 선택 / 끌어놓기"}</label>
+        {files.length > 0 && (
+          <div className="tool-run-files">
+            {files.map((file, index) => (
+              <span key={`${file.name}-${index}`}>{file.name}<button type="button" onClick={() => removeFile(index)}>×</button></span>
+            ))}
+          </div>
+        )}
+      </div>
+      <textarea
+        value={notes}
+        onChange={(event) => setNotes(event.target.value)}
+        placeholder="추가 지시. 예: 표는 월별 변화 중심, 문서는 핵심 근거만."
+      />
+      <div className="tool-run-actions">
+        <button type="button" onClick={onClose}>취소</button>
+        <button
+          type="button"
+          className="primary"
+          disabled={!canRun || running === localized.id}
+          onClick={() => onRun(localized, { files, content: notes })}
+        >
+          {running === localized.id ? copy.home.creating : "실행"}
+        </button>
+      </div>
+      {!canRun && <small className="tool-run-hint">{copy.home.attachRequired}</small>}
+    </section>
+  );
+}
+
 function localizeStarterAction(action, copy) {
   const localized = copy.starterActions?.[action.id];
   return localized ? { ...action, ...localized } : action;
-}
-
-function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact, copy = COPY }) {
-  const runs = home?.runs || [];
-  const artifacts = home?.artifacts || [];
-  return (
-    <section className="home-object-panels" aria-label="Recent runs and artifacts">
-      <div className="dashboard-card">
-        <div className="section-row"><div className="panel-title-stack"><p className="eyebrow">{copy.home.recentRuns}</p><h2>{copy.home.runHistory}</h2></div><span className="soft-pill">{runs.length}</span></div>
-        {runs.length === 0 ? <div className="empty-action-state"><p className="muted">{copy.home.starterEmpty}</p><span>{copy.home.starterEmptyAction}</span></div> : (
-          <div className="run-list">
-            {runs.slice(0, 6).map((run) => <button className="run-row clickable-row" type="button" key={run.run_id || run.id} onClick={() => onOpenRun?.(run)}><strong>{run.label}</strong><span>{run.status}</span><small>{power ? run.action_id : run.created_at}</small></button>)}
-          </div>
-        )}
-      </div>
-      <div className="dashboard-card">
-        <div className="section-row"><div className="panel-title-stack"><p className="eyebrow">{copy.home.recentArtifacts}</p><h2>{copy.home.artifacts}</h2></div><span className="soft-pill">{artifacts.length}</span></div>
-        {artifacts.length === 0 ? <div className="empty-action-state"><p className="muted">{copy.home.artifactEmpty}</p><span>{copy.home.artifactEmptyAction}</span></div> : (
-          <div className="artifact-grid">
-            {artifacts.slice(0, 8).map((artifact) => <button className="artifact-tile clickable-row" type="button" key={artifact.id || artifact.path} onClick={() => onOpenArtifact?.(artifact)}><strong>{artifact.path.split("/").pop()}</strong><span>{artifact.viewer_type || artifact.type}</span><small>{artifact.summary || artifact.run?.label}</small></button>)}
-          </div>
-        )}
-      </div>
-    </section>
-  );
 }
 
 function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
@@ -265,27 +236,17 @@ function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
 }
 
 export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome }) {
-  const [content, setContent] = useState("");
-  const [mode, setMode] = useState(savedModelMode);
-  const [searchMode, setSearchMode] = useState(savedSearchMode);
-  const [dragging, setDragging] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [cloudPrompt, setCloudPrompt] = useState(false);
   const [homeRunning, setHomeRunning] = useState("");
   const [homeRunDetail, setHomeRunDetail] = useState(null);
   const [homeArtifact, setHomeArtifact] = useState(null);
   const [homeError, setHomeError] = useState("");
-  const [tableOpen, setTableOpen] = useState(false);
-  const [tablePreview, setTablePreview] = useState([]);
-  const inputRef = useRef(null);
-  const formRef = useRef(null);
-  const { files, primaryFile: file, previewUrl, previewUrls, addFiles, removeFile, clearFiles } = useAttachments();
+  const [composerDraft, setComposerDraft] = useState("");
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
+  const [composerAttachmentSignal, setComposerAttachmentSignal] = useState(0);
+  const [toolPanelAction, setToolPanelAction] = useState(null);
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
   const modelModes = normalizeModelCatalog(models);
-  const selectedMode = modelMode(mode, modelModes);
   const isHomeWorkbench = !embedded && !projectPath;
 
   useEffect(() => {
@@ -295,80 +256,32 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     const rawAction = STARTER_ACTIONS.find((item) => item.id === starterId);
     const action = rawAction ? localizeStarterAction(rawAction, copy) : null;
     if (action && !action.disabled) {
-      setContent(action.prompt || action.label);
-      if (action.wantsFile) window.setTimeout(() => inputRef.current?.click(), 50);
+      setComposerDraft(action.prompt || action.label);
+      setComposerFocusSignal((value) => value + 1);
+      if (action.wantsFile) setComposerAttachmentSignal((value) => value + 1);
     }
     window.history.replaceState({}, "", window.location.pathname);
   }, [copy, isHomeWorkbench]);
 
-  useEffect(() => setCookie("aiws_model_mode", mode), [mode]);
-  useEffect(() => setCookie("aiws_search_mode", searchMode), [searchMode]);
-
   function clearFile() {
-    clearFiles();
-    setTablePreview([]);
-    if (inputRef.current) inputRef.current.value = "";
-  }
-
-  function pickDroppedFile(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    setDragging(false);
-    const dropped = Array.from(event.dataTransfer?.files || []);
-    if (dropped.length) {
-      addFiles(dropped);
-      updateTablePreviewFromFile(dropped[0]);
-    }
-  }
-
-  function pasteTable(event) {
-    const pasted = event.clipboardData?.getData("text/plain") || "";
-    if (!looksLikePastedTable(pasted)) return;
-    event.preventDefault();
-    const csv = pastedTableToCsv(pasted);
-    const nextFile = new File([csv], `pasted-table-${Date.now()}.csv`, { type: "text/csv" });
-    addFiles([nextFile]);
-    setTablePreview(parseCsvRows(csv).slice(0, 30));
-    setTableOpen(true);
-    setContent((current) => current || "Analyze this pasted table.");
+    // Shared Composer owns home chat attachments.
   }
 
   function startAction(action) {
     if (action.disabled) return;
-    setContent(action.prompt || action.label);
-    if (action.id === "csv_analysis") {
-      setTableOpen(true);
-      return;
-    }
-    if (action.wantsFile) window.setTimeout(() => inputRef.current?.click(), 30);
+    setToolPanelAction(action);
   }
 
-  async function updateTablePreviewFromFile(nextFile) {
-    const name = nextFile?.name || "";
-    if (!/\.(csv|txt)$/i.test(name)) {
-      setTablePreview([]);
-      return;
-    }
-    const text = await nextFile.text();
-    setTablePreview(parseCsvRows(text).slice(0, 30));
-  }
-
-  function setTableFromText(value) {
-    const csv = looksLikePastedTable(value) ? pastedTableToCsv(value) : value;
-    const nextFile = new File([csv], `pasted-table-${Date.now()}.csv`, { type: "text/csv" });
-    addFiles([nextFile]);
-    setContent((current) => current || "Analyze this pasted table.");
-    setTablePreview(parseCsvRows(csv).slice(0, 30));
-  }
-
-  async function runHomeAction(action) {
+  async function runHomeAction(action, options = {}) {
     if (!isHomeWorkbench || homeRunning || action.disabled || String(action.status).toLowerCase() === "planned") return;
-    if (action.wantsFile && !file) {
+    const actionFiles = Array.from(options.files || []);
+    const actionContent = String(options.content || "").trim();
+    if (action.wantsFile && actionFiles.length === 0) {
       setHomeError(copy.home.attachRequired);
-      inputRef.current?.click();
+      setToolPanelAction(action);
       return;
     }
-    if (action.id === "codex_task_prompt" && !content.trim()) {
+    if (action.id === "codex_task_prompt" && !actionContent && !composerDraft.trim()) {
       setHomeError(copy.home.codexBriefRequired);
       return;
     }
@@ -376,29 +289,21 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     setHomeError("");
     try {
       const form = new FormData();
-      form.set("content", content.trim() || action.prompt || action.label || action.title || "");
-      form.set("provider", selectedMode.provider);
-      form.set("model", selectedMode.model);
-      files.forEach((item) => form.append("attachment", item));
+      form.set("content", actionContent || composerDraft.trim() || action.prompt || action.label || action.title || "");
+      form.set("provider", "ollama");
+      form.set("model", "qwen3:8b");
+      actionFiles.forEach((file) => form.append("attachment", file));
       const payload = await fetchJson(`/api/home-actions/${action.id}/run`, { method: "POST", body: form });
       onHome?.(payload.home);
       const firstArtifact = payload.run?.artifacts?.[0];
-      if (firstArtifact) await openHomeArtifact(firstArtifact);
+      if (firstArtifact) await askAboutHomeArtifact(firstArtifact);
       else setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
       clearFile();
+      setToolPanelAction(null);
     } catch (err) {
       setHomeError(err.message || "Could not run Chat Tool.");
     } finally {
       setHomeRunning("");
-    }
-  }
-
-  async function openHomeRun(run) {
-    setHomeError("");
-    try {
-      setHomeRunDetail(await fetchJson(`/api/home-run?run_id=${encodeURIComponent(run.run_id || run.id)}`));
-    } catch (err) {
-      setHomeError(err.message);
     }
   }
 
@@ -429,134 +334,34 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     }
   }
 
-  async function submit(event) {
-    event.preventDefault();
-    if (starting || (!content.trim() && files.length === 0)) return;
-    let submitMode = selectedMode;
-    if (files.some((item) => fileNeedsVisionModel(item, mode, modelModes))) {
-      setMode("cheap");
-      submitMode = modelMode("cheap", modelModes);
-    }
-    setStarting(true);
-    setStartError("");
-    try {
-      const createForm = new URLSearchParams({ title: "" });
-      const created = projectPath
-        ? await fetchJson(`/api/sessions/${projectPath}`, { method: "POST", body: createForm })
-        : await fetchJson("/api/chats", { method: "POST", body: createForm });
-      const createdProjectPath = projectPath || created.project_path;
-      const createdSession = created.session;
-      navigate(`/chat/${createdProjectPath}/${createdSession.slug}`);
-      refreshWorkspace().catch(() => {});
-      if (content.trim() || files.length) {
-        onAsk({
-          project: { path: createdProjectPath, title: projectPath ? "Project" : "General chats", hidden: !projectPath },
-          session: createdSession,
-          messages: [
-            {
-              role: "user",
-              actor_display: accountDisplayName(account),
-              content: content.trim() || `Attached ${files.length} file${files.length === 1 ? "" : "s"}`,
-              attachments: files.map((item, index) => ({ filename: item.name, url: previewUrls[index] || "", is_image: item.type.startsWith("image/"), is_pdf: item.type === "application/pdf" })),
-            },
-            { role: "assistant", pending: true, content: "", attachments: [] },
-          ],
-          skills: [],
-          attachments: [],
-          goal: {},
-          codex_prompt: "",
-          latest: {},
-        });
-        const askForm = new FormData();
-        askForm.set("content", content.trim());
-        askForm.set("provider", submitMode.provider);
-        askForm.set("model", submitMode.model);
-        askForm.set("search_mode", searchMode);
-        if (searchMode === "always") askForm.set("allow_network", "1");
-        if (submitMode.cloud) {
-          askForm.set("allow_remote", "1");
-          askForm.set("confirm_cost", "1");
-        }
-        files.forEach((item) => askForm.append("attachment", item));
-        const payload = await fetchJson(`/api/ask/${createdProjectPath}/${createdSession.slug}`, { method: "POST", body: askForm });
-        onAsk(payload);
-      }
-      setContent("");
-      clearFile();
-    } catch (err) {
-      setStartError(err.message || "Could not start chat.");
-    } finally {
-      setStarting(false);
-    }
-  }
-
-  function keyDown(event) {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      event.currentTarget.form?.requestSubmit();
-    }
-  }
-
   const contentNode = (
     <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
-      <div className={isHomeWorkbench ? "home-hero" : ""}>
-        {isHomeWorkbench && <p className="eyebrow">{copy.home.title}</p>}
-        <h1>{isHomeWorkbench ? copy.home.askTitle : copy.chat.emptyTitle}</h1>
-        <p className="start-subtitle">{projectPath ? copy.home.projectStartHint : copy.home.askSubtitle}</p>
+      {!isHomeWorkbench && <div className="home-hero"><h1>{copy.chat.emptyTitle}</h1></div>}
+      <div className="start-composer-shell" data-context-note="AIWS prioritizes saved chats, project context, and attached files.">
+        <Composer
+          activePath={{ projectPath, sessionSlug: "" }}
+          onAsk={onAsk}
+          account={account}
+          power={power}
+          models={modelModes}
+          initialContent={composerDraft}
+          focusSignal={composerFocusSignal}
+          openAttachmentSignal={composerAttachmentSignal}
+          onSessionCreated={(session) => {
+            const targetProject = session.project_path || projectPath;
+            if (targetProject && session.slug) navigate(`/chat/${targetProject}/${session.slug}`);
+            refreshWorkspace?.();
+          }}
+        />
       </div>
-      <form
-        ref={formRef}
-        className={`start-composer ${dragging ? "dragging" : ""}`}
-        onSubmit={submit}
-        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
-        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
-        onDrop={pickDroppedFile}
-      >
-        {dragging && <div className="drop-hint">Drop files to attach them to the first message.</div>}
-        <textarea value={content} onChange={(event) => setContent(event.target.value)} onPaste={pasteTable} onKeyDown={keyDown} placeholder={copy.chat.placeholder} rows={1} />
-        <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} copy={copy.attachments} onRemove={(index) => { removeFile(index); if (inputRef.current && files.length <= 1) inputRef.current.value = ""; }} />
-        {file?.type?.startsWith("image/") && !selectedMode.supportsImage && <div className="system-note compact-warning">{copy.chat.visionSwitch}</div>}
-        <div className={`composer-toolbar ${power ? "start-toolbar" : ""}`}>
-          <AttachmentPicker inputRef={inputRef} label={copy.chat.attachFile} onFiles={(nextFiles) => { addFiles(nextFiles); if (nextFiles[0]) updateTablePreviewFromFile(nextFiles[0]); }} />
-          <ModelPickerButton open={pickerOpen} setOpen={setPickerOpen} selectedKey={mode} onSelect={setMode} content={content} hasFile={Boolean(file)} power={power} modelCatalog={modelModes} />
-          <select className="search-select" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
-            {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
-          </select>
-          <button className="send-key" type="submit" disabled={starting}>{starting ? <span className="typing" /> : "Send"}</button>
-        </div>
-        {cloudPrompt && (
-          <CloudConfirm
-            mode={selectedMode}
-            hasFile={Boolean(file)}
-            onCancel={() => setCloudPrompt(false)}
-            onUseOnce={() => { confirmCloudOnce(mode); setCloudPrompt(false); formRef.current?.requestSubmit(); }}
-            onUseAlways={() => { confirmCloudAlways(mode); setCloudPrompt(false); formRef.current?.requestSubmit(); }}
-          />
-        )}
-      </form>
-      {starting && <WaitingNotice label={copy.chat.preparing} />}
       {isHomeWorkbench ? (
         <>
-          <TableWorkbenchPanel
-            open={tableOpen}
-            file={file}
-            rows={tablePreview}
-            running={homeRunning === "csv_analysis"}
-            onClose={() => setTableOpen(false)}
-            onChooseFile={() => inputRef.current?.click()}
-            onSetText={setTableFromText}
-            onDropFile={(nextFiles) => { addFiles(nextFiles); updateTablePreviewFromFile(nextFiles[0]); }}
-            onRun={() => runHomeAction(localizeStarterAction((home?.actions || STARTER_ACTIONS).find((item) => item.id === "csv_analysis") || STARTER_ACTIONS.find((item) => item.id === "csv_analysis"), copy))}
-            copy={copy}
-          />
-          <StarterActionsGrid actions={home?.actions} onStart={startAction} onRun={runHomeAction} running={homeRunning} hasFile={Boolean(file)} onOpenTable={() => setTableOpen(true)} copy={copy} />
-          <HomeWorkbenchPanels home={home} power={power} copy={copy} onOpenRun={openHomeRun} onOpenArtifact={openHomeArtifact} />
+          <StarterActionsGrid actions={home?.actions} onStart={startAction} running={homeRunning} hasFile={false} copy={copy} />
+          <ToolRunPanel action={toolPanelAction} running={homeRunning} onClose={() => setToolPanelAction(null)} onRun={runHomeAction} copy={copy} />
         </>
       ) : (
-        <div className="quick-actions">{copy.chat.quickPrompts.map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}</div>
+        <div className="quick-actions">{copy.chat.quickPrompts.map((item) => <button type="button" key={item} onClick={() => { setComposerDraft(item); setComposerFocusSignal((value) => value + 1); }}>{item}</button>)}</div>
       )}
-      {startError && <div className="system-note">{startError}</div>}
       {homeError && <div className="system-note">{homeError}</div>}
       {error && <div className="system-note">{error}</div>}
       {homeRunDetail && <HomeRunDetailModal detail={homeRunDetail} power={power} onClose={() => setHomeRunDetail(null)} onOpenArtifact={openHomeArtifact} />}

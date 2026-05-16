@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { copyForLocale } from "../../shared/copy/copy";
 
 const MODEL_GROUPS = [
-  { value: "recommended", label: "Recommended", match: () => true },
+  { value: "recommended", label: "Recommended", match: (model, recommendations) => recommendations?.some((entry) => model.value === entry.model.value) },
   { value: "local", label: "Local", match: (model) => !model.cloud },
   { value: "cheap", label: "Cheap", match: (model) => !model.cloud || Number(model.inputPrice || 0) <= 0.3 },
   { value: "long", label: "Long context", match: (model) => /kimi|pro/i.test(`${model.provider} ${model.model} ${model.group}`) },
@@ -18,8 +18,9 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
   const [group, setGroup] = useState("recommended");
   const wrapRef = useRef(null);
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
-  const recommendation = recommendModel(models, { content, hasFile });
-  const visibleModels = models.filter((item) => (MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0]).match(item));
+  const recommendations = recommendModels(models, { content, hasFile }).slice(0, 4);
+  const groupDef = MODEL_GROUPS.find((entry) => entry.value === group) || MODEL_GROUPS[0];
+  const visibleModels = models.filter((item) => groupDef.match(item, recommendations));
 
   useEffect(() => {
     if (!open) return undefined;
@@ -65,13 +66,13 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
             ))}
           </div>
           <div className="model-recommendation">
-            <strong>AIWS recommends {recommendation.model.label}</strong>
-            <small>{recommendation.reason}</small>
+            <strong>추천 모델 {Math.min(recommendations.length, 4)}개</strong>
+            <small>작업 종류별 추천. 실제 비용은 provider billing 기준, 여기는 토큰 단가 기반 예측.</small>
           </div>
           <div className="model-grid">
             {visibleModels.map((item) => {
               const selected = item.value === selectedKey;
-              const recommended = item.value === recommendation.model.value;
+              const recommended = recommendations.some((entry) => item.value === entry.model.value);
               const singleEstimate = estimateCurrentCost(item, content, hasFile);
               const agentCalls = item.agentCalls || (item.cloud ? 2 : 1);
               const agentEstimate = estimateCurrentCost(item, content, hasFile, agentCalls);
@@ -92,7 +93,7 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
                   }}
                 >
                   <span className="model-card-title">{item.label}</span>
-                  {recommended && <span className="model-key-status">Recommended</span>}
+                  {recommended && <span className="model-key-status">{recommendations.find((entry) => item.value === entry.model.value)?.label || "Recommended"}</span>}
                   <span className="model-card-version">{item.version || item.model}</span>
                   <span className="model-card-privacy">{item.cloud ? "Cloud AI" : "Local Mac"}</span>
                   <span>{item.recommendedUse || item.bestFor}</span>
@@ -133,20 +134,30 @@ function estimateCurrentCost(mode, content, hasFile, calls = 1) {
   return `~$${estimated.toFixed(5)}`;
 }
 
-function recommendModel(models, { content = "", hasFile = false } = {}) {
-  const local = models.find((item) => !item.cloud) || models[0] || {};
+function recommendModels(models, { content = "", hasFile = false } = {}) {
+  const local8b = models.find((item) => item.provider === "ollama" && /8b/i.test(item.model || item.label || ""));
+  const local = local8b || models.find((item) => !item.cloud) || models[0] || {};
+  const localSmall = models.find((item) => !item.cloud && item.value !== local.value);
   const flash = models.find((item) => item.provider === "gemini" && item.model.includes("flash"));
   const pro = models.find((item) => item.provider === "gemini" && item.model.includes("pro"));
+  const kimi = models.find((item) => item.provider === "kimi");
   const codex = models.find((item) => item.provider === "openai" || item.group === "coding");
   const text = String(content || "").toLowerCase();
+  const picks = [
+    { model: local, label: "기본 로컬", reason: "Private local work. No API cost." },
+  ];
   if (hasFile) {
-    return { model: flash || local, reason: flash ? "File/image work benefits from a low-cost file-capable model when cloud is allowed. CSV/XLSX still runs deterministic profiling first." : "File work will use local deterministic preprocessing first." };
+    picks.push({ model: flash || local, label: "파일/이미지", reason: "Low-cost file or vision work when cloud is allowed." });
   }
   if (/(code|bug|test|refactor|codex|파일|코드|버그|테스트)/.test(text) && codex) {
-    return { model: codex, reason: "This looks like a coding task, so a code-oriented model is the strongest match." };
+    picks.push({ model: codex, label: "코드", reason: "Code-oriented model." });
   }
   if (content.length > 8000 && pro) {
-    return { model: pro, reason: "Long context or higher reasoning requests fit a larger cloud model when cloud is allowed." };
+    picks.push({ model: pro, label: "긴 문서", reason: "Long context cloud model." });
   }
-  return { model: local, reason: "Private short text defaults to local Qwen for zero API cost." };
+  if (pro) picks.push({ model: pro, label: "고품질", reason: "Higher quality cloud answer." });
+  if (kimi) picks.push({ model: kimi, label: "긴 컨텍스트", reason: "Long-context option." });
+  if (localSmall) picks.push({ model: localSmall, label: "빠른 로컬", reason: "Small local fallback." });
+  const seen = new Set();
+  return picks.filter((item) => item.model?.value && !seen.has(item.model.value) && seen.add(item.model.value)).slice(0, 4);
 }

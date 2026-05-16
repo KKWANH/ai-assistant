@@ -1,6 +1,7 @@
-import React from "react";
-import { STARTER_ACTIONS } from "../components/home/StartPane.jsx";
+import React, { useState } from "react";
+import { STARTER_ACTIONS, ToolRunPanel } from "../components/home/StartPane.jsx";
 import { COPY } from "../shared/copy/copy";
+import { fetchJson } from "../lib/api.js";
 
 const WORKFLOW_APPS = [
   {
@@ -23,13 +24,61 @@ const WORKFLOW_APPS = [
   },
 ];
 
-export function AppsToolsCatalogPage({ navigate, copy = COPY, home, projects = [] }) {
+export function AppsToolsCatalogPage({ navigate, copy = COPY, home, onHome }) {
   const text = copy.catalog || COPY.catalog;
   const runs = home?.runs || [];
-  const recommendedProjects = projects.filter((project) => !project.hidden).slice(0, 4);
+  const [toolPanelAction, setToolPanelAction] = useState(null);
+  const [running, setRunning] = useState("");
+  const [error, setError] = useState("");
+
+  async function runTool(action, options = {}) {
+    if (running) return;
+    const files = Array.from(options.files || []);
+    if (action.wantsFile && files.length === 0) {
+      setError(copy.home?.attachRequired || "파일 필요.");
+      return;
+    }
+    setRunning(action.id);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("content", String(options.content || action.prompt || action.label || ""));
+      form.set("provider", "ollama");
+      form.set("model", "qwen3:8b");
+      files.forEach((file) => form.append("attachment", file));
+      const payload = await fetchJson(`/api/home-actions/${action.id}/run`, { method: "POST", body: form });
+      onHome?.(payload.home);
+      const firstArtifact = payload.run?.artifacts?.[0];
+      if (firstArtifact?.path) {
+        const chatPayload = await fetchJson("/api/home-artifact/ask", {
+          method: "POST",
+          body: new URLSearchParams({ path: firstArtifact.path }),
+        });
+        navigate(`/chat/${chatPayload.project_path}/${chatPayload.session.slug}`);
+      }
+      setToolPanelAction(null);
+    } catch (err) {
+      setError(err.message || "도구 실행 실패.");
+    } finally {
+      setRunning("");
+    }
+  }
+
+  async function openWorkflowApp(app) {
+    if (app.id !== "investment_rebalancer") return;
+    try {
+      const payload = await fetchJson("/api/projects/import-template", {
+        method: "POST",
+        body: new URLSearchParams({ template: "investment-advisor" }),
+      });
+      navigate(`/project/${payload.project?.path || "investment-advisor"}?tab=apps`);
+    } catch {
+      navigate("/project/investment-advisor?tab=apps");
+    }
+  }
   return (
     <section className="center-pane action-library-page apps-tools-page">
-      <div className="home-workbench">
+      <div className="home-workbench catalog-workbench">
         <div className="home-hero">
           <p className="eyebrow">{text.eyebrow}</p>
           <h1>{text.title}</h1>
@@ -53,11 +102,13 @@ export function AppsToolsCatalogPage({ navigate, copy = COPY, home, projects = [
                     <span>{text.output}: {tool.output}</span>
                     <span>{text.viewer}: {tool.viewer || text.answerViewer}</span>
                   </div>
-                  <button type="button" onClick={() => navigate("/")}>{text.openTool}</button>
+                  <button type="button" onClick={() => setToolPanelAction(localized)}>{text.openTool}</button>
                 </article>
               );
             })}
           </div>
+          <ToolRunPanel action={toolPanelAction} running={running} onClose={() => setToolPanelAction(null)} onRun={runTool} copy={copy} />
+          {error && <div className="system-note">{error}</div>}
         </CatalogSection>
 
         <CatalogSection title={text.apps} body={text.appsBody}>
@@ -75,7 +126,7 @@ export function AppsToolsCatalogPage({ navigate, copy = COPY, home, projects = [
                   <span>{text.output}: {app.output}</span>
                   <span>{text.viewer}: {app.viewer}</span>
                 </div>
-                <button type="button" onClick={() => navigate("/project/investment-advisor")} disabled={app.status === "planned"}>
+                <button type="button" onClick={() => openWorkflowApp(app)} disabled={app.status === "planned"}>
                   {text.connectProject}
                 </button>
               </article>
@@ -83,42 +134,19 @@ export function AppsToolsCatalogPage({ navigate, copy = COPY, home, projects = [
           </div>
         </CatalogSection>
 
-        <section className="home-object-panels" aria-label={text.recentRuns}>
-          <div className="dashboard-card">
-            <div className="section-row">
-              <div className="panel-title-stack"><p className="eyebrow">{text.recentRuns}</p><h2>{text.dataResourceTitle}</h2></div>
-              <span className="soft-pill">{runs.length}</span>
-            </div>
-            {runs.length === 0 ? (
-              <div className="empty-action-state"><p className="muted">{text.noRuns}</p><span>{text.dataResourceBody}</span></div>
-            ) : (
-              <div className="run-list">
-                {runs.slice(0, 6).map((run) => (
-                  <div className="run-row" key={run.run_id || run.id}>
-                    <strong>{run.label || run.action_id}</strong>
-                    <span>{run.status}</span>
-                    <small>{run.created_at}</small>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="dashboard-card">
-            <div className="section-row">
-              <div className="panel-title-stack"><p className="eyebrow">{text.recommendedProjects}</p><h2>{text.apps}</h2></div>
-              <span className="soft-pill">{recommendedProjects.length}</span>
-            </div>
-            <div className="artifact-grid">
-              {recommendedProjects.map((project) => (
-                <button className="artifact-tile clickable-row" type="button" key={project.path} onClick={() => navigate(`/project/${project.path}`)}>
-                  <strong>{project.title}</strong>
-                  <span>{text.workflowApp}</span>
-                  <small>{project.sessions?.length || 0} chats</small>
-                </button>
+        {runs.length > 0 && (
+          <CatalogSection title={text.recentRuns} body={text.dataResourceBody}>
+            <div className="run-list compact-catalog-runs">
+              {runs.slice(0, 4).map((run) => (
+                <div className="run-row" key={run.run_id || run.id}>
+                  <strong>{run.label || run.action_id}</strong>
+                  <span>{run.status}</span>
+                  <small>{run.created_at}</small>
+                </div>
               ))}
             </div>
-          </div>
-        </section>
+          </CatalogSection>
+        )}
       </div>
     </section>
   );

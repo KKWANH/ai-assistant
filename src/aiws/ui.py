@@ -557,6 +557,26 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, status=400)
             return
 
+        if parsed.path.startswith("/api/session-truncate/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            parts = unquote(parsed.path.removeprefix("/api/session-truncate/")).split("/")
+            if len(parts) < 2:
+                self.send_json({"error": "Invalid chat path."}, status=404)
+                return
+            session_slug = parts[-1]
+            project_path = "/".join(parts[:-1])
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.require_project_access(project_path, "write")
+                kept = storage.truncate_messages(self.root, project_path, session_slug, int(data.get("keep", "0")))
+                self.send_json({"messages": [self.message_json(message) for message in kept]})
+            except (ValueError, storage.WorkspaceError) as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
         if parsed.path.startswith("/api/move-chat/"):
             if self.require_auth and not self.is_authenticated():
                 self.send_json({"error": "Authentication required."}, status=401)

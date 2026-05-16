@@ -100,11 +100,15 @@ commands:
       - artifacts/target-gap.json
       - artifacts/rebalance-suggestions.csv
       - artifacts/rebalance-chart.json
+      - artifacts/monthly-performance.csv
+      - artifacts/portfolio-growth-chart.json
     outputs:
       - artifacts/current-weights.json
       - artifacts/target-gap.json
       - artifacts/rebalance-suggestions.csv
       - artifacts/rebalance-chart.json
+      - artifacts/monthly-performance.csv
+      - artifacts/portfolio-growth-chart.json
 
   advisor_report:
     kind: python

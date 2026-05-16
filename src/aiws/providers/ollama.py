@@ -32,6 +32,11 @@ class OllamaProvider:
         payload = {
             "model": model,
             "stream": False,
+            "options": {
+                "temperature": float(os.environ.get("AIWS_OLLAMA_TEMPERATURE", "0.25")),
+                "top_p": float(os.environ.get("AIWS_OLLAMA_TOP_P", "0.9")),
+                "num_predict": int(os.environ.get("AIWS_OLLAMA_NUM_PREDICT", "1536")),
+            },
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": content},

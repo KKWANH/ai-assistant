@@ -1,7 +1,10 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 
 function safeLinkProps(href = "") {
   if (!/^https?:\/\//i.test(href)) return { href: "" };
@@ -12,8 +15,8 @@ export function MarkdownRenderer({ children }) {
   return (
     <div className="message-text" data-markdown-renderer>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSanitize]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex, rehypeSanitize]}
         components={{
           a({ href, children: linkChildren }) {
             return <a {...safeLinkProps(href)}>{linkChildren}</a>;

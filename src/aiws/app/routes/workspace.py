@@ -52,6 +52,9 @@ def account_payload(root: str | Path, username: str | None) -> dict[str, object]
             account["cost_usage"] = {
                 "day_usd": usage_domain.model_total_usd(root, username, period="day"),
                 "month_usd": usage_domain.model_total_usd(root, username, period="month"),
+                "all_day_usd": usage_domain.model_total_usd(root, None, period="day") if account.get("admin") else None,
+                "all_month_usd": usage_domain.model_total_usd(root, None, period="month") if account.get("admin") else None,
+                "basis": "estimated token cost from AIWS model catalog; provider billing remains source of truth",
             }
             account["model_catalog"] = model_catalog()
             return account

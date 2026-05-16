@@ -114,6 +114,17 @@ wait_for_port() {
   return 1
 }
 
+rotate_logs() {
+  local stamp
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  for file in "$SERVER_LOG" "$TUNNEL_LOG"; do
+    if [[ -s "$file" ]]; then
+      mv "$file" "$file.$stamp"
+    fi
+    : > "$file"
+  done
+}
+
 start() {
   require_ready
   if is_running; then
@@ -124,6 +135,7 @@ start() {
 
   stop >/dev/null 2>&1 || true
   "$REPO_ROOT/scripts/aiws-stop.sh" >/dev/null 2>&1 || true
+  rotate_logs
   rm -f "$URL_FILE"
 
   (

@@ -14,7 +14,6 @@ import {
   normalizeModelCatalog,
   savedModelMode,
   savedSearchMode,
-  SEARCH_OPTIONS,
 } from "../../lib/modelModes.jsx";
 
 export type ComposerMode = "normalChat" | "dockedContextChat" | "workflowStepChat";
@@ -28,7 +27,7 @@ export type DockContext = {
   viewerSlotId?: string;
   resourceType?: string;
 };
-export type ChatSession = { slug?: string; title?: string };
+export type ChatSession = { slug?: string; title?: string; project_path?: string };
 // Chat payloads still mirror mixed legacy JSON until the remaining shell is typed.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ChatPayload = { messages?: Array<Record<string, any>>; [key: string]: any };
@@ -55,6 +54,10 @@ export type ComposerProps = {
   docked?: boolean;
   dockContext?: DockContext | null;
   onSessionCreated?: (session: ChatSession) => void;
+  initialContent?: string;
+  focusSignal?: number;
+  openAttachmentSignal?: number;
+  openTableSignal?: number;
 };
 
 function errorMessage(error: unknown): string {
@@ -132,7 +135,20 @@ function CloudConfirm({
   );
 }
 
-export function Composer({ activePath, onAsk, account, power, models = MODEL_MODES as ModelMode[], docked = false, dockContext = null, onSessionCreated }: ComposerProps) {
+export function Composer({
+  activePath,
+  onAsk,
+  account,
+  power,
+  models = MODEL_MODES as ModelMode[],
+  docked = false,
+  dockContext = null,
+  onSessionCreated,
+  initialContent = "",
+  focusSignal = 0,
+  openAttachmentSignal = 0,
+  openTableSignal = 0,
+}: ComposerProps) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -173,6 +189,27 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
     textRef.current.style.height = "auto";
     textRef.current.style.height = `${Math.min(textRef.current.scrollHeight, 120)}px`;
   }, [content]);
+
+  useEffect(() => {
+    if (!initialContent) return;
+    setContent(initialContent);
+    window.setTimeout(() => textRef.current?.focus(), 30);
+  }, [initialContent]);
+
+  useEffect(() => {
+    if (focusSignal) window.setTimeout(() => textRef.current?.focus(), 30);
+  }, [focusSignal]);
+
+  useEffect(() => {
+    if (openAttachmentSignal) window.setTimeout(() => inputRef.current?.click(), 30);
+  }, [openAttachmentSignal]);
+
+  useEffect(() => {
+    if (openTableSignal) {
+      setToolsOpen(false);
+      setTableOpen(true);
+    }
+  }, [openTableSignal]);
 
   function resetFiles() {
     clearFiles();
@@ -233,8 +270,6 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (sending || (!content.trim() && files.length === 0)) return;
-    if (!activePath?.projectPath) return;
-    if (!docked && !activePath?.sessionSlug) return;
     let submitMode = selectedMode;
     if (hasVisionOnlyFiles(mode, modelModes)) {
       setMode("cheap");
@@ -270,10 +305,10 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
           attachments: [],
           execution_plan: {
             steps: [
-              { id: "accepted", status: "completed", title: "Request accepted" },
-              { id: "context", status: "running", title: `${files.length} file${files.length === 1 ? "" : "s"} and chat context prepared` },
+              { id: "accepted", status: "completed", title: "요청 받음" },
+              { id: "context", status: "running", title: files.length ? `${files.length}개 파일 읽는 중` : "대화 맥락 확인 중" },
               { id: "model", status: "pending", title: `${submitMode.provider} · ${submitMode.model}` },
-              { id: "receipt", status: "pending", title: "Context receipt and answer will be saved" },
+              { id: "receipt", status: "pending", title: "답변/기록 저장 대기" },
             ],
             estimated_model_calls: 1,
           },
@@ -358,7 +393,14 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
               <span className="composer-tool-heading">{copy.catalog?.tools || "Chat Tools"}</span>
               {!docked && <button type="button" onClick={() => inputRef.current?.click()}><b>{copy.chat.tools.attach}</b><small>.pdf .docx .csv .xlsx images</small></button>}
               <button type="button" onClick={() => { setTableOpen(true); setToolsOpen(false); }}><b>{copy.chat.tools.table}</b><small>{copy.catalog?.oneOffTool || "One-off tool"} · {copy.catalog?.viewer || "Viewer"}</small></button>
-              <button type="button" onClick={() => setSearchMode("always")}><b>{copy.chat.tools.web}</b><small>{copy.catalog?.output || "Output"}: research notes</small></button>
+              <button
+                type="button"
+                className={`web-tool-toggle ${searchMode === "always" ? "is-active" : ""}`}
+                onClick={() => setSearchMode((value) => value === "always" ? "auto" : "always")}
+              >
+                <i aria-hidden="true">{searchMode === "always" ? "✓" : ""}</i>
+                <span><b>{copy.chat.tools.web}</b><small>{searchMode === "always" ? "켬 · 웹 확인 포함" : "꺼짐 · 누르면 켬"}</small></span>
+              </button>
               <button type="button" disabled><b>{copy.chat.tools.image}</b><small>{copy.catalog?.apps || "Workflow Apps"} later</small></button>
               <button type="button" disabled><b>{copy.chat.tools.more}</b><small>{copy.catalog?.dataResourceTitle || "Data Resource"}</small></button>
             </div>
@@ -374,9 +416,6 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
           power={power}
           modelCatalog={modelModes as never[]}
         />
-        {!docked && <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
-          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{(copy.search as Record<string, string>)[item.value] || item.label}</option>)}
-        </select>}
         {sending ? (
           <button className="send-key stop" type="button" onClick={stopThinking}>{copy.chat.stop}</button>
         ) : (

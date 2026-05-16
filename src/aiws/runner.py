@@ -85,8 +85,16 @@ def ask(
         resolved_results = search.web_search(content)
     active_files = context_receipts.current_attachment_filenames(user_metadata)
     include_prior_files = context_receipts.should_include_prior_files(content, has_current_file=bool(active_files))
+    answer_policy = (
+        "AIWS answer policy:\n"
+        "- Answer in the user's language.\n"
+        "- Be concise and direct. Avoid filler, apologies, and repeated obvious caveats.\n"
+        "- For Korean UI/chat, prefer short engineering style endings such as '함', '됨', '필요함' when natural.\n"
+        "- If the question is simple, give the answer first.\n\n"
+    )
     prompt_context = (
-        server_time_context()
+        answer_policy
+        + server_time_context()
         + account_context
         + search.format_search_context(resolved_results)
         + storage.build_prompt_context(

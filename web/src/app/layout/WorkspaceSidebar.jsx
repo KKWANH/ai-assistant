@@ -508,7 +508,14 @@ function SettingsModal({ account, onClose, onSaved }) {
             <strong>${Number(costUsage.month_usd || 0).toFixed(4)}</strong>
             <span>{copy.settings.monthlyApiCost}</span>
           </div>
+          {account.admin && (
+            <div>
+              <strong>${Number(costUsage.all_month_usd || 0).toFixed(4)}</strong>
+              <span>전체 계정 월 예측</span>
+            </div>
+          )}
         </section>
+        <p className="muted cost-note">{costUsage.basis || "Estimated token cost. Provider billing is source of truth."}</p>
         <form onSubmit={submit}>
           <fieldset>
             <legend>{copy.settings.profile}</legend>
