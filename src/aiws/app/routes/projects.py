@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aiws.core import action_registry
+from aiws.core import action_registry, project_connections
 from aiws.domain import goals as goal_domain
 
 
@@ -15,11 +15,16 @@ def goal_payload(root: str | Path, project_path: str) -> dict[str, object]:
     }
 
 
-def config_payload(root: str | Path, project_path: str) -> dict[str, object]:
+def config_payload(root: str | Path, project_path: str, username: str | None = None) -> dict[str, object]:
     return {
         "config": action_registry.load_config(root, project_path),
         "runs": action_registry.latest_runs(root, project_path),
+        "connections": project_connections.payload(root, project_path, username),
     }
+
+
+def connections_payload(root: str | Path, project_path: str, username: str | None) -> dict[str, object]:
+    return {"connections": project_connections.payload(root, project_path, username)}
 
 
 def run_payload(root: str | Path, project_path: str, run_id: str) -> dict[str, object]:

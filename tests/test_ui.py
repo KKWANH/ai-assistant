@@ -116,14 +116,14 @@ def test_project_page_exposes_ask_form_and_posts_to_runner(tmp_path, monkeypatch
         assert "data-copy-codex-prompt" in bundle_text
         assert "data-pdf-preview" in bundle_text
         assert "data-markdown-renderer" in bundle_text
-        assert "Project actions" in bundle_text
-        assert "Suggested next actions" in bundle_text
+        assert "Project Workflow Apps" in bundle_text
+        assert "Suggested next steps" in bundle_text
         assert "User approval required" in bundle_text
         assert "Investment Advisor" in bundle_text
         assert "AI Workbench Studio" in bundle_text
-        assert "Quick Actions" in bundle_text
-        assert "Create from one input" in bundle_text
-        assert "Action Library" in bundle_text
+        assert "Chat Tools" in bundle_text
+        assert "Use a one-off Chat Tool" in bundle_text
+        assert "Apps & Tools" in bundle_text
         assert "Summarize document" in bundle_text
         assert "Kwanho Kim" in bundle_text
         assert "Chungja Byun" in bundle_text

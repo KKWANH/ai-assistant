@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Calculate deterministic portfolio allocation and target-price scenarios."""
+"""Calculate deterministic portfolio allocation and rebalance artifacts."""
 
 from __future__ import annotations
 
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -23,14 +24,21 @@ def load_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(file))
 
 
+def write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def main() -> int:
-    if len(sys.argv) != 5:
-        print("usage: calculate_advisor.py portfolio.csv target.yaml rebalance.csv scenarios.csv", file=sys.stderr)
+    if len(sys.argv) != 7:
+        print("usage: calculate_advisor.py portfolio.csv target.yaml weights.json gap.json suggestions.csv chart.json", file=sys.stderr)
         return 2
     portfolio_path = Path(sys.argv[1])
     target_path = Path(sys.argv[2])
-    rebalance_path = Path(sys.argv[3])
-    scenarios_path = Path(sys.argv[4])
+    weights_path = Path(sys.argv[3])
+    gap_path = Path(sys.argv[4])
+    suggestions_path = Path(sys.argv[5])
+    chart_path = Path(sys.argv[6])
     rows = load_rows(portfolio_path)
     targets = load_targets(target_path)
     totals: dict[str, float] = {}
@@ -41,27 +49,29 @@ def main() -> int:
         totals[asset_class] = totals.get(asset_class, 0.0) + value
         total_value += value
 
-    rebalance_path.parent.mkdir(parents=True, exist_ok=True)
-    with rebalance_path.open("w", newline="", encoding="utf-8") as file:
+    weights = [
+        {"asset_class": asset_class, "value": round(value, 2), "current_pct": round((value / total_value * 100.0) if total_value else 0.0, 2)}
+        for asset_class, value in sorted(totals.items())
+    ]
+    gaps = []
+    suggestions_path.parent.mkdir(parents=True, exist_ok=True)
+    with suggestions_path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(["asset_class", "current_value", "current_pct", "target_pct", "delta_value"])
+        writer.writerow(["asset_class", "current_value", "current_pct", "target_pct", "delta_value", "suggestion"])
         for asset_class in sorted(set(totals) | set(targets)):
             current = totals.get(asset_class, 0.0)
             current_pct = (current / total_value * 100.0) if total_value else 0.0
             target_pct = targets.get(asset_class, 0.0)
             target_value = total_value * target_pct / 100.0
-            writer.writerow([asset_class, round(current, 2), round(current_pct, 2), round(target_pct, 2), round(target_value - current, 2)])
+            delta = target_value - current
+            suggestion = "add" if delta > 0 else "trim" if delta < 0 else "hold"
+            writer.writerow([asset_class, round(current, 2), round(current_pct, 2), round(target_pct, 2), round(delta, 2), suggestion])
+            gaps.append({"asset_class": asset_class, "current_pct": round(current_pct, 2), "target_pct": round(target_pct, 2), "delta_value": round(delta, 2), "suggestion": suggestion})
 
-    with scenarios_path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(["symbol", "name", "current_value", "target_price", "scenario_note"])
-        for row in rows:
-            value = float(row.get("value") or 0)
-            target_price = row.get("target_price", "")
-            note = "target price supplied by user; verify independently" if target_price else "no target price supplied"
-            writer.writerow([row.get("symbol", ""), row.get("name", ""), round(value, 2), target_price, note])
-
-    print(f"Wrote {rebalance_path} and {scenarios_path}")
+    write_json(weights_path, {"total_value": round(total_value, 2), "weights": weights})
+    write_json(gap_path, {"gaps": gaps})
+    write_json(chart_path, {"title": "Allocation gap", "series": [{"label": item["asset_class"], "value": abs(float(item["delta_value"]))} for item in gaps]})
+    print(f"Wrote {weights_path}, {gap_path}, {suggestions_path}, and {chart_path}")
     return 0
 
 

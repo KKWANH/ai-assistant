@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { copyForLocale } from "../../copy.js";
+import { copyForLocale } from "../../shared/copy/copy";
 
 const MODEL_GROUPS = [
   { value: "recommended", label: "Recommended", match: () => true },

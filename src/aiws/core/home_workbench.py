@@ -24,6 +24,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "status": "ready",
         "requires_confirmation": False,
         "expected_output_artifacts": ["summary.md"],
+        "resource_type": "chat_tool",
     },
     "image_explain": {
         "id": "image_explain",
@@ -35,6 +36,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "status": "ready",
         "requires_confirmation": False,
         "expected_output_artifacts": ["image-notes.md"],
+        "resource_type": "chat_tool",
     },
     "csv_analysis": {
         "id": "csv_analysis",
@@ -46,6 +48,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "status": "ready",
         "requires_confirmation": False,
         "expected_output_artifacts": ["csv-profile.json", "csv-preview.csv", "csv-summary.md", "missing-values.csv", "numeric-stats.csv"],
+        "resource_type": "chat_tool",
     },
     "codex_task_prompt": {
         "id": "codex_task_prompt",
@@ -57,6 +60,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "status": "ready",
         "requires_confirmation": False,
         "expected_output_artifacts": ["codex-prompt.md"],
+        "resource_type": "chat_tool",
     },
     "investment_rebalancer": {
         "id": "investment_rebalancer",
@@ -68,6 +72,32 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "status": "ready",
         "requires_confirmation": False,
         "expected_output_artifacts": ["investment-workflow.md"],
+        "resource_type": "workflow_app",
+        "workflow_app": contracts.workflow_app_definition(
+            app_id="investment_rebalancer",
+            title="Investment Rebalancer",
+            description="Repeatable portfolio rebalance app for project workspaces.",
+            category="Finance",
+            input_schema=[
+                contracts.input_schema_field("portfolio", "portfolio.csv", "file", required=True, accept=[".csv"]),
+                contracts.input_schema_field("target_allocation", "target-allocation.yaml", "file", required=True, accept=[".yaml", ".yml"]),
+            ],
+            output_schema=[
+                contracts.output_artifact_spec("artifacts/current-weights.json", "json", "jsonViewer"),
+                contracts.output_artifact_spec("artifacts/target-gap.json", "json", "jsonViewer"),
+                contracts.output_artifact_spec("artifacts/rebalance-suggestions.csv", "csv", "tableViewer"),
+                contracts.output_artifact_spec("artifacts/rebalance-report.md", "markdown", "reportViewer"),
+                contracts.output_artifact_spec("artifacts/rebalance-chart.json", "chart", "chartViewer"),
+            ],
+            run_policy_value=contracts.run_policy(),
+            viewer_layout=[
+                contracts.viewer_slot("tables", "Input / output tables", "tableViewer", artifact="artifacts/rebalance-suggestions.csv", position="left"),
+                contracts.viewer_slot("report", "Report", "reportViewer", artifact="artifacts/rebalance-report.md", position="center"),
+                contracts.viewer_slot("chart", "Chart", "chartViewer", artifact="artifacts/rebalance-chart.json", position="right"),
+            ],
+            supported_resources=["csv", "yaml", "json", "markdown", "chart"],
+            permissions={"file_read": True, "file_write": "artifacts_only", "python": True, "network": "approval_required"},
+        ),
     },
     "folder_index": {
         "id": "folder_index",
@@ -79,6 +109,7 @@ HOME_ACTIONS: dict[str, dict[str, Any]] = {
         "status": "planned",
         "requires_confirmation": False,
         "expected_output_artifacts": [],
+        "resource_type": "workflow_app",
     },
 }
 
@@ -110,6 +141,9 @@ def action_contract(action: dict[str, Any]) -> dict[str, Any]:
         "requires_confirmation": action["requires_confirmation"],
         "suggested_panels": ["runTimeline", "artifactGallery", "plannerTrace"],
         "status": action["status"],
+        "resource_type": action.get("resource_type", "chat_tool"),
+        "tool_type": "chat_tool" if action.get("resource_type") == "chat_tool" else "workflow_app",
+        "workflow_app": action.get("workflow_app"),
     }
 
 

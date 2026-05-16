@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ModelPickerButton } from "../model/ModelPickerButton.jsx";
-import { AttachmentPicker } from "./AttachmentPicker.jsx";
 import { SelectedAttachmentList } from "./SelectedAttachmentList.jsx";
+import { TableWorkbenchPanel } from "../table/TableWorkbenchPanel.jsx";
 import { useAttachments } from "../../hooks/useAttachments.js";
-import { copyForAccount } from "../../copy.js";
+import { copyForAccount } from "../../shared/copy/copy";
 import { fetchJson, getCookie, setCookie } from "../../lib/api.js";
-import { looksLikePastedTable, pastedTableToCsv } from "../../lib/table.js";
+import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "../../lib/table.js";
 import {
   estimateCurrentCost,
   MODEL_MODES,
@@ -43,27 +43,28 @@ function confirmCloudAlways(key) {
   setCookie(`aiws_cloud_ok_${key}`, "1");
 }
 
-function CloudConfirm({ mode, hasFile, onUseOnce, onUseAlways, onCancel }) {
+function CloudConfirm({ mode, hasFile, copy, onUseOnce, onUseAlways, onCancel }) {
+  const text = copy.cloudConfirm;
   return (
     <div className="cloud-confirm" role="alert">
-      <strong>{mode.label} is a cloud AI model.</strong>
-      <p>The privacy manifest for this request will record exactly what leaves AIWS before the cloud call completes.</p>
+      <strong>{mode.label} {text.titleSuffix}</strong>
+      <p>{text.body}</p>
       <ul>
-        <li>Provider/model: {mode.provider} · {mode.model}</li>
-        <li>User message: included</li>
-        <li>Attached file: {hasFile ? "computed file context or vision/file input" : "none"}</li>
-        <li>Estimated cost: {estimateCurrentCost(mode, "", hasFile)}</li>
+        <li>{text.providerModel}: {mode.provider} · {mode.model}</li>
+        <li>{text.userMessage}: {text.included}</li>
+        <li>{text.attachedFile}: {hasFile ? text.fileIncluded : text.none}</li>
+        <li>{text.estimatedCost}: {estimateCurrentCost(mode, "", hasFile)}</li>
       </ul>
       <div>
-        <button type="button" onClick={onUseOnce}>Use once</button>
-        <button type="button" onClick={onUseAlways}>Keep using this model</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" onClick={onUseOnce}>{text.useOnce}</button>
+        <button type="button" onClick={onUseAlways}>{text.keepUsing}</button>
+        <button type="button" onClick={onCancel}>{text.cancel}</button>
       </div>
     </div>
   );
 }
 
-export function Composer({ activePath, onAsk, account, power, models = MODEL_MODES }) {
+export function Composer({ activePath, onAsk, account, power, models = MODEL_MODES, docked = false, dockContext = null, onSessionCreated }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -71,6 +72,9 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
   const [dragging, setDragging] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cloudPrompt, setCloudPrompt] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
+  const [tablePreview, setTablePreview] = useState([]);
   const inputRef = useRef(null);
   const textRef = useRef(null);
   const formRef = useRef(null);
@@ -96,6 +100,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
 
   function resetFiles() {
     clearFiles();
+    setTablePreview([]);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -103,16 +108,41 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
     event.preventDefault();
     event.stopPropagation();
     setDragging(false);
-    addFiles(event.dataTransfer?.files || []);
+    const dropped = addFiles(event.dataTransfer?.files || []);
+    if (dropped[0]) updateTablePreviewFromFile(dropped[0]);
   }
 
   function pasteTable(event) {
     const pasted = event.clipboardData?.getData("text/plain") || "";
     if (!looksLikePastedTable(pasted)) return;
     event.preventDefault();
-    const csv = pastedTableToCsv(pasted);
+    addTableText(pasted);
+  }
+
+  function handleFiles(nextFiles) {
+    const added = addFiles(nextFiles);
+    if (added[0]) updateTablePreviewFromFile(added[0]);
+  }
+
+  function addTableText(value) {
+    const clean = String(value || "").trim();
+    if (!clean) return;
+    const csv = looksLikePastedTable(clean) ? pastedTableToCsv(clean) : clean;
     addFiles([new File([csv], `pasted-table-${Date.now()}.csv`, { type: "text/csv" })]);
-    setContent((current) => current || "Analyze this pasted table.");
+    setContent((current) => current || copy.chat.tablePrompt);
+    setTablePreview(parseCsvRows(csv).slice(0, 30));
+    setToolsOpen(false);
+    setTableOpen(true);
+  }
+
+  async function updateTablePreviewFromFile(nextFile) {
+    const name = nextFile?.name || "";
+    if (!/\.(csv|txt)$/i.test(name)) {
+      setTablePreview([]);
+      return;
+    }
+    const text = await nextFile.text();
+    setTablePreview(parseCsvRows(text).slice(0, 30));
   }
 
   function removeAttachment(index) {
@@ -136,6 +166,16 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
   async function submit(event) {
     event.preventDefault();
     if (sending || (!content.trim() && files.length === 0)) return;
+    let targetPath = activePath;
+    if (docked && activePath?.projectPath && !activePath?.sessionSlug) {
+      const sessionPayload = await fetchJson(`/api/sessions/${activePath.projectPath}`, {
+        method: "POST",
+        body: new URLSearchParams({ title: `Dock: ${dockContext?.label || "Workflow context"}` }),
+      });
+      targetPath = { ...activePath, sessionSlug: sessionPayload.session?.slug || "" };
+      onSessionCreated?.(sessionPayload.session);
+    }
+    if (!targetPath?.projectPath || !targetPath?.sessionSlug) return;
     let submitMode = selectedMode;
     if (hasVisionOnlyFiles(mode, modelModes)) {
       setMode("cheap");
@@ -146,7 +186,10 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
       return;
     }
     const form = new FormData();
-    form.set("content", content);
+    const dockPrefix = docked && dockContext
+      ? `Scoped context: ${dockContext.kind} · ${dockContext.path || dockContext.runId || dockContext.resourceType || dockContext.label}\n\n`
+      : "";
+    form.set("content", `${dockPrefix}${content}`);
     form.set("provider", submitMode.provider);
     form.set("model", submitMode.model);
     form.set("search_mode", searchMode);
@@ -196,7 +239,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
       ],
     }));
     try {
-      const payload = await fetchJson(`/api/ask/${activePath.projectPath}/${activePath.sessionSlug}`, {
+      const payload = await fetchJson(`/api/ask/${targetPath.projectPath}/${targetPath.sessionSlug}`, {
         method: "POST",
         body: form,
         signal: controller.signal,
@@ -228,8 +271,8 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
   return (
     <form
       ref={formRef}
-      className={`composer ${dragging ? "dragging" : ""}`}
-      data-api-action={`/api/ask/${activePath.projectPath}/${activePath.sessionSlug}`}
+      className={`composer ${dragging ? "dragging" : ""} ${docked ? "docked-mini" : ""}`}
+      data-api-action={`/api/ask/${activePath.projectPath}/${activePath.sessionSlug || ""}`}
       encType="multipart/form-data"
       onSubmit={submit}
       onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
@@ -239,7 +282,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
       }}
       onDrop={pickDroppedFile}
     >
-      {dragging && <div className="drop-hint">Drop a file to attach it to this message.</div>}
+      {dragging && <div className="drop-hint">{copy.chat.dropFiles}</div>}
       <textarea
         ref={textRef}
         value={content}
@@ -248,12 +291,33 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
         onKeyDown={keyDown}
         placeholder={copy.chat.placeholder}
       />
-      <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} onRemove={removeAttachment} />
+      {!docked && <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} onRemove={removeAttachment} copy={copy.attachments} />}
       {primaryFile?.type?.startsWith("image/") && !selectedMode.supportsImage && (
-        <div className="system-note compact-warning">This image needs a vision model. AIWS will switch to Gemini Flash-Lite before sending.</div>
+        <div className="system-note compact-warning">{copy.chat.visionSwitch}</div>
       )}
       <div className="composer-toolbar">
-        <AttachmentPicker inputRef={inputRef} label={copy.chat.attachFile} onFiles={addFiles} />
+        {!docked && <div className="composer-plus-wrap">
+          <button className="composer-plus-button" type="button" onClick={() => setToolsOpen((value) => !value)} aria-label={copy.chat.openTools} aria-expanded={toolsOpen}>+</button>
+          {!docked && <input
+            ref={inputRef}
+            data-attachment-input
+            className="hidden-attachment-input"
+            type="file"
+            multiple
+            onChange={(event) => handleFiles(Array.from(event.target.files || []))}
+            accept=".txt,.md,.csv,.xls,.xlsx,.json,.yaml,.yml,.pdf,.docx,.ppt,.pptx,image/png,image/jpeg,image/gif,image/webp"
+          />}
+          {toolsOpen && (
+            <div className="composer-plus-menu" role="menu">
+              <span className="composer-tool-heading">{copy.catalog?.tools || "Chat Tools"}</span>
+              {!docked && <button type="button" onClick={() => inputRef.current?.click()}><b>{copy.chat.tools.attach}</b><small>.pdf .docx .csv .xlsx images</small></button>}
+              <button type="button" onClick={() => { setTableOpen(true); setToolsOpen(false); }}><b>{copy.chat.tools.table}</b><small>{copy.catalog?.oneOffTool || "One-off tool"} · {copy.catalog?.viewer || "Viewer"}</small></button>
+              <button type="button" onClick={() => setSearchMode("always")}><b>{copy.chat.tools.web}</b><small>{copy.catalog?.output || "Output"}: research notes</small></button>
+              <button type="button" disabled><b>{copy.chat.tools.image}</b><small>{copy.catalog?.apps || "Workflow Apps"} later</small></button>
+              <button type="button" disabled><b>{copy.chat.tools.more}</b><small>{copy.catalog?.dataResourceTitle || "Data Resource"}</small></button>
+            </div>
+          )}
+        </div>}
         <ModelPickerButton
           open={pickerOpen}
           setOpen={setPickerOpen}
@@ -264,18 +328,19 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
           power={power}
           modelCatalog={modelModes}
         />
-        <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
+        {!docked && <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
           {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
-        </select>
+        </select>}
         {sending ? (
-          <button className="send-key stop" type="button" onClick={stopThinking}>Stop</button>
+          <button className="send-key stop" type="button" onClick={stopThinking}>{copy.chat.stop}</button>
         ) : (
-          <button className="send-key" type="submit">Send</button>
+          <button className="send-key" type="submit">{copy.chat.send}</button>
         )}
       </div>
       {cloudPrompt && (
         <CloudConfirm
           mode={selectedMode}
+          copy={copy}
           hasFile={files.length > 0}
           onCancel={() => setCloudPrompt(false)}
           onUseOnce={() => {
@@ -290,6 +355,21 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
           }}
         />
       )}
+      {!docked && <TableWorkbenchPanel
+        open={tableOpen}
+        file={primaryFile}
+        rows={tablePreview}
+        running={sending}
+        onClose={() => setTableOpen(false)}
+        onChooseFile={() => inputRef.current?.click()}
+        onSetText={addTableText}
+        onDropFile={handleFiles}
+        onRun={() => {
+          setTableOpen(false);
+          formRef.current?.requestSubmit();
+        }}
+        copy={copy}
+      />}
     </form>
   );
 }

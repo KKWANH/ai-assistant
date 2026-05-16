@@ -135,8 +135,10 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
         normalized["permissions"] = normalize_action_permissions(kind, normalized.get("permissions"))
         normalized["output_type"] = normalize_output_type(normalized)
         normalized["outputs"] = normalize_outputs(normalized)
+        normalized["resource_type"] = str(normalized.get("resource_type") or "workflow_app")
         assert_no_secret_references(workspace_root, normalized)
         normalized_commands[str(name)] = normalized
+    workflow_apps = normalize_workflow_apps(config, normalized_commands)
     context = config.get("context") if isinstance(config.get("context"), dict) else {}
     permissions = config.get("permissions") if isinstance(config.get("permissions"), dict) else {}
     return {
@@ -157,9 +159,60 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
         },
         "panels": list(config.get("panels") or ["files", "memory", "commands", "runs", "artifacts"]),
         "views": normalize_views(config),
+        "resource_exports": list(config.get("resource_exports") or []),
+        "resource_imports": list(config.get("resource_imports") or []),
+        "workflow_apps": workflow_apps,
         "actions": normalized_commands,
         "commands": normalized_commands,
     }
+
+
+def normalize_workflow_apps(config: dict[str, Any], commands: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = config.get("workflow_apps")
+    apps: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                app = dict(item)
+                app.setdefault("id", storage.slugify(str(app.get("title") or "workflow_app")))
+                apps.append(app)
+    haystack = f"{config.get('name', '')} {config.get('description', '')} {' '.join(commands)}".lower()
+    if "investment" in haystack or "portfolio" in haystack or "rebalance" in haystack:
+        investment = investment_rebalancer_app_definition()
+        if not any(item.get("id") == investment["id"] for item in apps):
+            apps.insert(0, investment)
+        for command in commands.values():
+            command.setdefault("workflow_app_id", investment["id"])
+            command.setdefault("workflow_app", investment)
+    return apps
+
+
+def investment_rebalancer_app_definition() -> dict[str, Any]:
+    return contracts.workflow_app_definition(
+        app_id="investment_rebalancer",
+        title="Investment Rebalancer",
+        description="Deterministic portfolio weights, target gaps, rebalance suggestions, and educational report outputs.",
+        category="Finance",
+        input_schema=[
+            contracts.input_schema_field("portfolio", "portfolio.csv", "file", required=True, accept=[".csv"], help_text="Holdings with account, symbol, asset_class, and value."),
+            contracts.input_schema_field("target_allocation", "target-allocation.yaml", "file", required=True, accept=[".yaml", ".yml"], help_text="Target asset-class percentages."),
+        ],
+        output_schema=[
+            contracts.output_artifact_spec("artifacts/current-weights.json", "json", "jsonViewer", "Computed current weights by asset class."),
+            contracts.output_artifact_spec("artifacts/target-gap.json", "json", "jsonViewer", "Current vs target allocation gap."),
+            contracts.output_artifact_spec("artifacts/rebalance-suggestions.csv", "csv", "tableViewer", "Rebalance rows for review."),
+            contracts.output_artifact_spec("artifacts/rebalance-report.md", "markdown", "reportViewer", "Educational rebalance research report."),
+            contracts.output_artifact_spec("artifacts/rebalance-chart.json", "chart", "chartViewer", "Chart specification for allocation gaps."),
+        ],
+        run_policy_value=contracts.run_policy(mode="approval_required", requires_confirmation=True, network="approval_required", file_write="artifacts_only", cloud="blocked"),
+        viewer_layout=[
+            contracts.viewer_slot("tables", "Input / output tables", "tableViewer", artifact="artifacts/rebalance-suggestions.csv", position="left"),
+            contracts.viewer_slot("report", "Rebalance report", "reportViewer", artifact="artifacts/rebalance-report.md", position="center"),
+            contracts.viewer_slot("chart", "Allocation chart", "chartViewer", artifact="artifacts/rebalance-chart.json", position="right"),
+        ],
+        supported_resources=["csv", "yaml", "json", "markdown", "chart"],
+        permissions={"file_read": True, "file_write": "artifacts_only", "python": True, "network": "approval_required", "cloud": False},
+    )
 
 
 def normalize_action_permissions(kind: str, value: object) -> dict[str, bool]:

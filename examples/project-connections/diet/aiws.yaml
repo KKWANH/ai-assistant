@@ -1,0 +1,13 @@
+version: 1
+name: Diet
+description: Diet planning workspace that imports nutrition snapshots.
+resource_imports:
+  - sourceProjectId: food
+    acceptedResourceType: nutrition_snapshot
+    localAlias: food_nutrition
+resource_exports:
+  - resourceType: meal_log
+    artifactPattern: artifacts/meal-log.json
+    schemaVersion: "1"
+    label: Meal log
+commands:

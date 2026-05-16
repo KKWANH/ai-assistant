@@ -41,7 +41,7 @@ views:
       - id: research
         type: reportBuilder
         title: Research And Targets
-        source: artifacts/advisor-report.md
+        source: artifacts/rebalance-report.md
         actions: [market_research, advisor_report]
       - id: run-history
         type: runTimeline
@@ -96,11 +96,15 @@ commands:
     args:
       - files/portfolio.example.csv
       - files/target_allocation.example.yaml
-      - artifacts/rebalance-table.csv
-      - artifacts/target-scenarios.csv
+      - artifacts/current-weights.json
+      - artifacts/target-gap.json
+      - artifacts/rebalance-suggestions.csv
+      - artifacts/rebalance-chart.json
     outputs:
-      - artifacts/rebalance-table.csv
-      - artifacts/target-scenarios.csv
+      - artifacts/current-weights.json
+      - artifacts/target-gap.json
+      - artifacts/rebalance-suggestions.csv
+      - artifacts/rebalance-chart.json
 
   advisor_report:
     kind: python
@@ -115,13 +119,13 @@ commands:
     cwd: .
     script: scripts/build_advisor_report.py
     args:
-      - files/portfolio.example.csv
+      - artifacts/current-weights.json
+      - artifacts/target-gap.json
+      - artifacts/rebalance-suggestions.csv
       - files/investment_interests.example.md
-      - artifacts/rebalance-table.csv
-      - artifacts/market-snapshot.json
-      - artifacts/advisor-report.md
+      - artifacts/rebalance-report.md
     outputs:
-      - artifacts/advisor-report.md
+      - artifacts/rebalance-report.md
 
   company_research_prompt:
     kind: prompt_recipe

@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { AttachmentPicker } from "../chat/AttachmentPicker.jsx";
 import { SelectedAttachmentList } from "../chat/SelectedAttachmentList.jsx";
 import { WaitingNotice } from "../chat/WaitingNotice.jsx";
-import { MarkdownRenderer } from "../markdown/MarkdownRenderer.jsx";
 import { ModelPickerButton } from "../model/ModelPickerButton.jsx";
+import { HomeArtifactContent, TableWorkbenchPanel } from "../table/TableWorkbenchPanel.jsx";
 import { useAttachments } from "../../hooks/useAttachments.js";
-import { COPY, copyForAccount } from "../../copy.js";
+import { COPY, copyForAccount } from "../../shared/copy/copy";
 import { fetchJson, setCookie } from "../../lib/api.js";
 import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "../../lib/table.js";
 import {
@@ -23,68 +23,53 @@ export const STARTER_ACTIONS = [
   {
     id: "document_summary",
     label: "Summarize document",
-    category: "Document",
+    category: "Chat Tool",
     status: "Ready",
     description: "Read a PDF, DOCX, TXT, or MD file and start a structured summary.",
     inputs: ".pdf · .docx · .txt · .md",
-    output: "Chat answer + Markdown",
+    output: "summary answer · optional Markdown artifact",
+    scope: "One-off tool",
+    viewer: "Markdown viewer",
     prompt: "Summarize the attached document structurally. Separate core claims, important evidence, and follow-up questions.",
     wantsFile: true,
   },
   {
     id: "image_explain",
     label: "Describe image",
-    category: "Image",
+    category: "Chat Tool",
     status: "Ready",
     description: "Attach an image and ask the workspace to describe or compare what it sees.",
     inputs: ".png · .jpg · .webp",
-    output: "Chat answer",
+    output: "visual explanation answer",
+    scope: "One-off tool",
+    viewer: "Image preview",
     prompt: "Describe the attached image. Split visible elements, important context, and things I should verify.",
     wantsFile: true,
   },
   {
     id: "csv_analysis",
     label: "Analyze table",
-    category: "Data",
+    category: "Chat Tool",
     status: "Ready",
     description: "Inspect CSV, Excel, or pasted table structure, key figures, and possible outliers.",
     inputs: ".csv · .xls · .xlsx · pasted table",
-    output: "Table preview + Summary",
+    output: "table preview · profile summary",
+    scope: "One-off tool",
+    viewer: "Table viewer",
     prompt: "Profile this table deterministically and summarize the column structure, key figures, possible outliers, and next analysis steps.",
     wantsFile: true,
   },
   {
-    id: "codex_task_prompt",
-    label: "Create Codex task prompt",
-    category: "Code",
+    id: "deep_research",
+    label: "Deep Research",
+    category: "Chat Tool",
     status: "Ready",
-    description: "Turn a goal and constraints into an execution-ready Codex prompt.",
-    inputs: "goal · files",
-    output: "Codex prompt",
-    prompt: "Turn the goal below into a Codex task prompt. Include repo context, constraints, test commands, and acceptance criteria.",
-    wantsBrief: true,
-  },
-  {
-    id: "investment_rebalancer",
-    label: "Investment rebalancer",
-    category: "Investment",
-    status: "Ready",
-    description: "Start a rebalancing workspace from CSV/YAML inputs.",
-    inputs: ".csv · .yaml",
-    output: "CSV artifact + Report",
-    prompt: "Use the portfolio CSV and target allocation YAML to summarize current weights, target gaps, and rebalance candidates.",
-    wantsFile: true,
-  },
-  {
-    id: "folder_index",
-    label: "Read folder structure",
-    category: "Files",
-    status: "Planned",
-    description: "Plan a file index for turning a local folder into an AIWS project.",
-    inputs: "folder",
-    output: "File index",
-    prompt: "Propose file grouping and a workspace plan for turning this folder structure into an AIWS project.",
-    disabled: true,
+    description: "Start a research pass that separates local context, web search intent, citations, and follow-up questions.",
+    inputs: "question · optional files · web approval",
+    output: "research brief · cited notes",
+    scope: "One-off tool",
+    viewer: "Research brief",
+    prompt: "Research this question carefully. Separate what came from local files, what needs web verification, sources to check, risks, and next questions.",
   },
 ];
 
@@ -136,7 +121,9 @@ function CloudConfirm({ mode, hasFile, onUseOnce, onUseAlways, onCancel }) {
 }
 
 export function StarterActionsGrid({ actions, onStart, onRun, running = "", hasFile = false, onOpenTable, copy = COPY }) {
-  const items = actions?.length ? actions.map((action) => ({
+  const allowedToolIds = new Set(STARTER_ACTIONS.map((action) => action.id));
+  const sourceActions = actions?.length ? actions.filter((action) => allowedToolIds.has(action.id)) : STARTER_ACTIONS;
+  const items = sourceActions.map((action) => ({
     ...action,
     label: action.label || action.title,
     inputs: Array.isArray(action.inputs) ? action.inputs.join(" · ") : action.inputs,
@@ -144,7 +131,7 @@ export function StarterActionsGrid({ actions, onStart, onRun, running = "", hasF
     disabled: String(action.status).toLowerCase() === "planned",
     wantsFile: Array.isArray(action.inputs) && action.inputs.some((item) => String(item).startsWith(".")),
     wantsBrief: action.id === "codex_task_prompt",
-  })) : STARTER_ACTIONS;
+  }));
   const localizedItems = items.map((action) => localizeStarterAction(action, copy));
   const actionState = (action) => {
     if (action.disabled) return { value: "planned", label: copy.home.notAvailable, helper: copy.home.notAvailable };
@@ -173,8 +160,10 @@ export function StarterActionsGrid({ actions, onStart, onRun, running = "", hasF
               <h3>{action.label}</h3>
               <p>{action.description}</p>
               <div className="starter-meta">
-                <span>Input: {action.inputs}</span>
-                <span>Output: {action.output}</span>
+                <span>{copy.catalog.input}: {action.inputs}</span>
+                <span>{copy.catalog.output}: {action.output}</span>
+                <span>{copy.catalog.scope}: {action.scope || copy.catalog.oneOffTool}</span>
+                <span>{copy.catalog.viewer}: {action.viewer || copy.catalog.answerViewer}</span>
               </div>
               <div className="starter-actions-row">
                 <button type="button" onClick={() => action.id === "csv_analysis" ? onOpenTable?.() : onStart?.(action)} disabled={action.disabled}>
@@ -210,67 +199,6 @@ function HomeWorkbenchHints({ copy = COPY }) {
       <article className="home-hint-card"><span>2</span><strong>{copy.home.hintInspectTitle}</strong><p>{copy.home.hintInspectBody}</p></article>
       <article className="home-hint-card"><span>3</span><strong>{copy.home.hintPromoteTitle}</strong><p>{copy.home.hintPromoteBody}</p></article>
     </section>
-  );
-}
-
-function TableWorkbenchPanel({ open, file, rows, running, onClose, onChooseFile, onSetText, onDropFile, onRun, copy = COPY }) {
-  const [text, setText] = useState("");
-  const tableCopy = copy.table || COPY.table;
-  if (!open) return null;
-  function drop(event) {
-    event.preventDefault();
-    const dropped = Array.from(event.dataTransfer?.files || []);
-    if (dropped.length) onDropFile?.(dropped);
-  }
-  function paste(event) {
-    const value = event.clipboardData?.getData("text/plain") || "";
-    if (!value.trim()) return;
-    event.preventDefault();
-    setText(value);
-    onSetText?.(value);
-  }
-  return (
-    <section className="table-workbench" onDragOver={(event) => event.preventDefault()} onDrop={drop}>
-      <div className="section-row">
-        <div className="panel-title-stack"><p className="eyebrow">{tableCopy.eyebrow}</p><h2>{tableCopy.title}</h2></div>
-        <button type="button" onClick={onClose}>{tableCopy.close}</button>
-      </div>
-      <div className="table-drop-zone">
-        <strong>{file ? file.name : tableCopy.emptyDrop}</strong>
-        <span>{tableCopy.pastedHint}</span>
-        <div className="table-actions">
-          <button type="button" onClick={onChooseFile}>{tableCopy.chooseFile}</button>
-          <button type="button" onClick={onRun} disabled={!file || running}>{running ? tableCopy.analyzing : tableCopy.analyze}</button>
-        </div>
-      </div>
-      <textarea
-        className="table-paste-box"
-        value={text}
-        onChange={(event) => {
-          setText(event.target.value);
-          if (looksLikePastedTable(event.target.value)) onSetText?.(event.target.value);
-        }}
-        onPaste={paste}
-        placeholder={tableCopy.pastePlaceholder}
-      />
-      {rows.length > 0 ? <TablePreview rows={rows} /> : <div className="empty-action-state"><p className="muted">{tableCopy.noPreview}</p><span>{tableCopy.noPreviewHint}</span></div>}
-    </section>
-  );
-}
-
-function TablePreview({ rows }) {
-  return (
-    <div className="artifact-table-wrap live-table-preview">
-      <table className="artifact-table">
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={`${rowIndex}-${row.join("|")}`}>
-              {row.map((cell, cellIndex) => rowIndex === 0 ? <th key={cellIndex}>{cell}</th> : <td key={cellIndex}>{cell}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
@@ -330,7 +258,7 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
         <button type="button" className="viewer-close" onClick={onClose}>Close</button>
         <p className="eyebrow">Work Detail</p>
         <h2>{run.label || run.action_id || "Workbench output"}</h2>
-        <div className="run-meta-grid"><span>Status: {run.status}</span><span>Action: {run.action_id}</span><span>{run.created_at}</span></div>
+        <div className="run-meta-grid"><span>Status: {run.status}</span><span>Tool/App: {run.action_id}</span><span>{run.created_at}</span></div>
         {run.artifacts?.length > 0 && <div className="artifact-list"><strong>Artifacts</strong>{run.artifacts.map((item) => <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>{item.path.split("/").pop()} · {item.viewer_type}</button>)}</div>}
         {steps.length > 0 && <div className="run-step-list"><strong>Steps</strong>{steps.map((step) => <span key={step.id || step.type}><b>{step.id || step.type}</b><small>{step.output || step.status || "done"}</small></span>)}</div>}
         <details className="run-log-details" open={power}>
@@ -367,29 +295,7 @@ function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
   );
 }
 
-function HomeArtifactContent({ artifact }) {
-  const kind = artifact.type || artifact.kind;
-  const content = artifact.content || "";
-  if (kind === "csv") {
-    const rows = content.trim().split(/\r?\n/).slice(0, 80).map((line) => line.split(","));
-    return (
-      <div className="artifact-table-wrap">
-        <table className="artifact-table"><tbody>{rows.map((row, rowIndex) => <tr key={`${rowIndex}-${row.join("|")}`}>{row.map((cell, cellIndex) => rowIndex === 0 ? <th key={cellIndex}>{cell}</th> : <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table>
-      </div>
-    );
-  }
-  if (kind === "json") {
-    try {
-      return <pre>{JSON.stringify(JSON.parse(content), null, 2)}</pre>;
-    } catch {
-      return <pre>{content}</pre>;
-    }
-  }
-  if (kind === "md" || kind === "markdown") return <MarkdownRenderer>{content}</MarkdownRenderer>;
-  return <pre>{content}</pre>;
-}
-
-export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome, refreshHome }) {
+export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome }) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
@@ -512,7 +418,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       else setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
       clearFile();
     } catch (err) {
-      setHomeError(err.message || "Could not run Starter Action.");
+      setHomeError(err.message || "Could not run Chat Tool.");
     } finally {
       setHomeRunning("");
     }
@@ -641,8 +547,8 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       >
         {dragging && <div className="drop-hint">Drop files to attach them to the first message.</div>}
         <textarea value={content} onChange={(event) => setContent(event.target.value)} onPaste={pasteTable} onKeyDown={keyDown} placeholder={copy.chat.placeholder} rows={1} />
-        <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} onRemove={(index) => { removeFile(index); if (inputRef.current && files.length <= 1) inputRef.current.value = ""; }} />
-        {file?.type?.startsWith("image/") && !selectedMode.supportsImage && <div className="system-note compact-warning">This image needs a vision model. AIWS will switch to Gemini Flash-Lite before sending.</div>}
+        <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} copy={copy.attachments} onRemove={(index) => { removeFile(index); if (inputRef.current && files.length <= 1) inputRef.current.value = ""; }} />
+        {file?.type?.startsWith("image/") && !selectedMode.supportsImage && <div className="system-note compact-warning">{copy.chat.visionSwitch}</div>}
         <div className={`composer-toolbar ${power ? "start-toolbar" : ""}`}>
           <AttachmentPicker inputRef={inputRef} label={copy.chat.attachFile} onFiles={(nextFiles) => { addFiles(nextFiles); if (nextFiles[0]) updateTablePreviewFromFile(nextFiles[0]); }} />
           <ModelPickerButton open={pickerOpen} setOpen={setPickerOpen} selectedKey={mode} onSelect={setMode} content={content} hasFile={Boolean(file)} power={power} modelCatalog={modelModes} />

@@ -16,54 +16,46 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(file))
 
 
+def read_json(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     if len(sys.argv) != 6:
-        print("usage: build_advisor_report.py portfolio.csv interests.md rebalance.csv market.json output.md", file=sys.stderr)
+        print("usage: build_advisor_report.py weights.json gap.json suggestions.csv interests.md output.md", file=sys.stderr)
         return 2
-    portfolio_path = Path(sys.argv[1])
-    interests_path = Path(sys.argv[2])
-    rebalance_path = Path(sys.argv[3])
-    market_path = Path(sys.argv[4])
+    weights_path = Path(sys.argv[1])
+    gap_path = Path(sys.argv[2])
+    suggestions_path = Path(sys.argv[3])
+    interests_path = Path(sys.argv[4])
     output_path = Path(sys.argv[5])
-    portfolio = read_csv(portfolio_path)
-    rebalance = read_csv(rebalance_path)
+    weights = read_json(weights_path)
+    gaps = read_json(gap_path)
+    suggestions = read_csv(suggestions_path)
     interests = interests_path.read_text(encoding="utf-8") if interests_path.exists() else ""
-    market = json.loads(market_path.read_text(encoding="utf-8")) if market_path.exists() else {"symbols": []}
 
     lines = [
-        "# Investment Advisor Report",
+        "# Investment Rebalance Report",
         "",
         "> Educational research scaffold only. This is not financial advice.",
         "",
-        "## Inputs",
+        "## Portfolio Snapshot",
         "",
-        f"- Holdings rows: {len(portfolio)}",
-        f"- Market snapshots: {len(market.get('symbols', []))}",
+        f"- Total value: {weights.get('total_value', 0)}",
+        f"- Asset classes: {len(weights.get('weights', [])) if isinstance(weights.get('weights'), list) else 0}",
         "",
-        "## Rebalance Deltas",
+        "## Rebalance Suggestions",
         "",
-        "| Asset class | Current % | Target % | Delta value |",
-        "| --- | ---: | ---: | ---: |",
+        "| Asset class | Current % | Target % | Delta value | Suggestion |",
+        "| --- | ---: | ---: | ---: | --- |",
     ]
-    for row in rebalance:
-        lines.append(f"| {row.get('asset_class', '')} | {row.get('current_pct', '')} | {row.get('target_pct', '')} | {row.get('delta_value', '')} |")
-    lines.extend(["", "## Market Snapshot", ""])
-    for item in market.get("symbols", []):
-        if item.get("ok"):
-            lines.append(f"- {item.get('symbol')}: {item.get('regular_market_price')} {item.get('currency')} on {item.get('exchange')}")
-        else:
-            lines.append(f"- {item.get('symbol')}: unavailable ({item.get('error')})")
+    for row in suggestions:
+        lines.append(f"| {row.get('asset_class', '')} | {row.get('current_pct', '')} | {row.get('target_pct', '')} | {row.get('delta_value', '')} | {row.get('suggestion', '')} |")
+    lines.extend(["", "## Gap JSON Summary", "", "```json", json.dumps(gaps, indent=2, ensure_ascii=False), "```"])
     lines.extend(["", "## Research Direction", "", interests.strip() or "No investment interests file was provided."])
-    lines.extend(
-        [
-            "",
-            "## Next Checks",
-            "",
-            "- Verify market data source and timestamps.",
-            "- Review concentration by account, asset class, and single symbol.",
-            "- For target-price scenarios, state assumptions and downside cases before any decision.",
-        ]
-    )
+    lines.extend(["", "## Next Checks", "", "- Verify target allocation assumptions.", "- Review concentration by account, asset class, and single symbol.", "- Use external market research only after approving network access."])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote {output_path}")

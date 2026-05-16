@@ -34,24 +34,178 @@ PANEL_TYPES = {
     "reportBuilder",
 }
 
+VIEWER_IDS = {
+    "tableViewer",
+    "chartViewer",
+    "markdownViewer",
+    "jsonViewer",
+    "jsonTree",
+    "reportViewer",
+    "textViewer",
+    "codeEditor",
+}
+
 
 def viewer_type(path: str, mime: str = "") -> str:
     suffix = Path(path).suffix.lower()
+    name = Path(path).name.lower()
     if suffix == ".csv":
         return "tableViewer"
     if suffix in {".md", ".markdown"}:
-        return "markdownViewer"
+        return "reportViewer" if "report" in name else "markdownViewer"
     if suffix == ".pdf":
         return "pdfViewer"
     if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
         return "imageViewer"
     if suffix == ".json":
-        return "jsonTree"
+        return "chartViewer" if "chart" in name else "jsonViewer"
     if suffix in {".py", ".js", ".jsx", ".ts", ".tsx", ".css", ".html", ".sh", ".yaml", ".yml"}:
         return "codeEditor"
     if mime.startswith("image/"):
         return "imageViewer"
     return "textViewer"
+
+
+def safe_viewer_id(value: str) -> str:
+    return value if value in VIEWER_IDS else "textViewer"
+
+
+def input_schema_field(
+    field_id: str,
+    label: str,
+    field_type: str,
+    *,
+    required: bool = False,
+    accept: list[str] | None = None,
+    help_text: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": field_id,
+        "label": label,
+        "type": field_type if field_type in {"file", "text", "select", "number", "boolean"} else "text",
+        "required": required,
+        "accept": accept or [],
+        "help": help_text,
+    }
+
+
+def output_artifact_spec(path: str, artifact_type: str, viewer_id: str, description: str = "") -> dict[str, Any]:
+    return {
+        "id": Path(path).stem,
+        "path": path,
+        "type": artifact_type,
+        "viewer_id": safe_viewer_id(viewer_id),
+        "description": description,
+    }
+
+
+def viewer_slot(slot_id: str, title: str, viewer_id: str, *, artifact: str = "", position: str = "center") -> dict[str, Any]:
+    return {
+        "id": slot_id,
+        "title": title,
+        "viewer_id": safe_viewer_id(viewer_id),
+        "artifact": artifact,
+        "position": position if position in {"left", "center", "right", "full"} else "center",
+    }
+
+
+def run_policy(
+    *,
+    mode: str = "approval_required",
+    requires_confirmation: bool = True,
+    network: str = "approval_required",
+    file_write: str = "artifacts_only",
+    cloud: str = "blocked",
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "requiresConfirmation": requires_confirmation,
+        "network": network,
+        "fileWrite": file_write,
+        "cloud": cloud,
+    }
+
+
+def workflow_app_definition(
+    *,
+    app_id: str,
+    title: str,
+    description: str,
+    category: str,
+    input_schema: list[dict[str, Any]],
+    output_schema: list[dict[str, Any]],
+    run_policy_value: dict[str, Any],
+    viewer_layout: list[dict[str, Any]],
+    supported_resources: list[str],
+    permissions: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "id": app_id,
+        "title": title,
+        "description": description,
+        "category": category,
+        "inputSchema": input_schema,
+        "outputSchema": output_schema,
+        "runPolicy": run_policy_value,
+        "defaultViewerLayout": viewer_layout,
+        "supportedResources": supported_resources,
+        "permissions": permissions,
+    }
+
+
+def project_link_contract(
+    *,
+    link_id: str,
+    from_project: str,
+    to_project: str,
+    allowed_resource_types: list[str],
+    mode: str = "read",
+    granted_by: str = "",
+    created_at: str = "",
+    status: str = "pending",
+) -> dict[str, Any]:
+    return {
+        "linkId": link_id,
+        "fromProject": from_project,
+        "toProject": to_project,
+        "allowedResourceTypes": [str(item) for item in allowed_resource_types if str(item).strip()],
+        "mode": mode if mode in {"read", "append", "compute"} else "read",
+        "grantedBy": granted_by,
+        "createdAt": created_at,
+        "status": status if status in {"pending", "approved", "revoked"} else "pending",
+    }
+
+
+def resource_export_contract(
+    *,
+    project_id: str,
+    resource_type: str,
+    artifact_pattern: str,
+    schema_version: str = "1",
+    label: str = "",
+) -> dict[str, Any]:
+    return {
+        "projectId": project_id,
+        "resourceType": resource_type,
+        "artifactPattern": artifact_pattern,
+        "schemaVersion": schema_version,
+        "label": label or resource_type.replace("_", " ").title(),
+    }
+
+
+def resource_import_contract(
+    *,
+    source_project_id: str,
+    accepted_resource_type: str,
+    local_alias: str,
+    status: str = "pending",
+) -> dict[str, Any]:
+    return {
+        "sourceProjectId": source_project_id,
+        "acceptedResourceType": accepted_resource_type,
+        "localAlias": local_alias,
+        "status": status if status in {"pending", "approved", "revoked"} else "pending",
+    }
 
 
 def artifact_contract(
@@ -71,6 +225,7 @@ def artifact_contract(
         "size": size,
         "source_run": source_run,
         "viewer_type": viewer_type(path, mime),
+        "viewer_id": safe_viewer_id(viewer_type(path, mime)),
         "summary": summary,
         "available_actions": [
             "open",

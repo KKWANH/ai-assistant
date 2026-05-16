@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fileNeedsVisionModel } from "../lib/modelModes.jsx";
 
 export function useAttachments() {
@@ -16,19 +16,19 @@ export function useAttachments() {
     });
   }, [files]);
 
-  const addFiles = (nextFiles) => {
+  const addFiles = useCallback((nextFiles) => {
     const list = Array.from(nextFiles || []).filter(Boolean);
     if (list.length) setFiles((current) => [...current, ...list]);
     return list;
-  };
+  }, []);
 
-  const removeFile = (index) => {
+  const removeFile = useCallback((index) => {
     setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
-  };
+  }, []);
 
-  const clearFiles = () => setFiles([]);
+  const clearFiles = useCallback(() => setFiles([]), []);
 
-  const hasVisionOnlyFiles = (mode, models) => files.some((item) => fileNeedsVisionModel(item, mode, models));
+  const hasVisionOnlyFiles = useCallback((mode, models) => files.some((item) => fileNeedsVisionModel(item, mode, models)), [files]);
 
   return useMemo(() => ({
     files,
@@ -40,5 +40,5 @@ export function useAttachments() {
     clearFiles,
     hasVisionOnlyFiles,
     setFiles,
-  }), [files, primaryFile, previewUrl, previewUrls]);
+  }), [files, primaryFile, previewUrl, previewUrls, addFiles, removeFile, clearFiles, hasVisionOnlyFiles]);
 }

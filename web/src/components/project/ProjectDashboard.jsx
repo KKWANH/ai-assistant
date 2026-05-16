@@ -1,13 +1,18 @@
-import React, { useMemo, useState } from "react";
-import { actionStatus, ProjectActionsPanel } from "../actions/ActionPanels.jsx";
+import React, { useEffect, useMemo, useState } from "react";
+import { actionStatus, ProjectWorkflowAppsPanel } from "../actions/ActionPanels.jsx";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
-import { COPY } from "../../copy.js";
+import { ConnectionsTab } from "./ConnectionsTab.jsx";
+import { COPY } from "../../shared/copy/copy";
 import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts.js";
+import { ViewerPane } from "../../features/workflow/components/ViewerPane";
+import { ChatDock } from "../../features/workflow/components/ChatDock";
 
-export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig, navigate }) {
+export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig, navigate, copy = COPY }) {
   const [runDetail, setRunDetail] = useState(null);
   const [artifact, setArtifact] = useState(null);
   const [modalError, setModalError] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [connections, setConnections] = useState(projectConfig?.connections || null);
   const config = projectConfig?.config || {};
   const runs = projectConfig?.runs || [];
   const commands = Object.entries(config.commands || {});
@@ -17,6 +22,11 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
   const chatInsights = useMemo(() => summarizeProjectChats(project), [project]);
   const isInvestmentAdvisor = /investment advisor|investment rebalancer|portfolio/i.test(`${config.name || ""} ${config.description || ""}`);
+  const text = copy.projectDashboard || COPY.projectDashboard;
+
+  useEffect(() => {
+    setConnections(projectConfig?.connections || null);
+  }, [projectConfig?.connections]);
 
   async function openRun(run) {
     setModalError("");
@@ -41,34 +51,60 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   return (
     <div className="project-dashboard">
       <div className="project-dashboard-hero">
-        <p className="eyebrow">Project Workbench</p>
+        <p className="eyebrow">{text.eyebrow}</p>
         <h1>{config.name || project?.title || activePath.projectPath}</h1>
         <p>{config.description || project?.notes || COPY.tagline}</p>
       </div>
 
       <section className="dashboard-card workbench-operating-model">
         <div>
-          <p className="eyebrow">Operating Model</p>
-          <h2>Folder to Manifest to Actions to Runs to Artifacts</h2>
-          <p className="muted">This project is treated as a configurable workbench, not a chat folder. aiws.yaml decides which files are context, which actions can run, and which panels explain the outputs.</p>
+          <p className="eyebrow">{text.operatingEyebrow}</p>
+          <h2>{text.operatingTitle}</h2>
+          <p className="muted">{text.operatingBody}</p>
         </div>
         <div className="operating-steps" aria-label="AIWS operating loop">
-          {["Project folder", "aiws.yaml", "Action registry", "Run timeline", "Artifacts"].map((item) => <span key={item}>{item}</span>)}
+          {text.operatingSteps.map((item) => <span key={item}>{item}</span>)}
         </div>
       </section>
 
-      <div className="dashboard-grid">
-        <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} />
-        {isInvestmentAdvisor ? <InvestmentAdvisorCard actions={actions} runs={runs} artifacts={artifacts} /> : <AgentPlanFoundationCard />}
+      <div className="project-tabbar" role="tablist" aria-label="Project dashboard sections">
+        {[
+          ["overview", "Overview"],
+          ["apps", "Workflow Apps"],
+          ["connections", "Connections"],
+          ["runs", "Runs"],
+          ["artifacts", "Artifacts"],
+        ].map(([id, label]) => (
+          <button key={id} type="button" className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>
+            {label}
+          </button>
+        ))}
       </div>
 
-      <section className="dashboard-card project-chat-overview">
+      {activeTab === "connections" && (
+        <ConnectionsTab
+          activePath={activePath}
+          connections={connections}
+          fetchJson={fetchJson}
+          onConnections={(next) => {
+            setConnections(next);
+            onProjectConfig?.((current) => ({ ...(current || {}), connections: next }));
+          }}
+        />
+      )}
+
+      {activeTab === "overview" && <div className="dashboard-grid">
+        <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} copy={copy} />
+        {isInvestmentAdvisor ? <InvestmentAdvisorCard actions={actions} runs={runs} artifacts={artifacts} copy={copy} /> : <AgentPlanFoundationCard copy={copy} />}
+      </div>}
+
+      {activeTab === "overview" && <section className="dashboard-card project-chat-overview">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Project Memory</p>
-            <h2>Project chat history</h2>
+            <p className="eyebrow">{text.memoryEyebrow}</p>
+            <h2>{text.chatHistory}</h2>
           </div>
-          <span className="soft-pill">{project?.sessions?.length || 0} chats</span>
+          <span className="soft-pill">{project?.sessions?.length || 0} {text.chats}</span>
         </div>
         <p className="project-chat-summary">{chatInsights.summary}</p>
         {chatInsights.topics.length > 0 && (
@@ -91,19 +127,19 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
             ))}
           </div>
         ) : (
-          <p className="muted">No chats in this project yet. Start a project chat below and it will appear here.</p>
+          <p className="muted">{text.noChats}</p>
         )}
-      </section>
+      </section>}
 
-      <section className="dashboard-card dashboard-actions">
+      {activeTab === "apps" && <section className="dashboard-card dashboard-actions">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Actions</p>
-            <h2>Project actions</h2>
+            <p className="eyebrow">{text.actionsEyebrow}</p>
+            <h2>{text.projectActions}</h2>
           </div>
           {power && <span className="soft-pill">aiws.yaml</span>}
         </div>
-        <ProjectActionsPanel
+        <ProjectWorkflowAppsPanel
           activePath={activePath}
           projectConfig={projectConfig}
           onProjectConfig={onProjectConfig}
@@ -111,23 +147,23 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
           fetchJson={fetchJson}
           onOpenArtifact={openArtifact}
         />
-      </section>
+      </section>}
 
-      <div className="dashboard-grid">
-        <RegistryPreviewCard title="Panel Registry" items={PANEL_TYPES} active={panels.map((panel) => panel.type)} />
-        <RegistryPreviewCard title="Action Kinds" items={ACTION_KINDS} active={actions.map((action) => action.kind)} />
-      </div>
+      {activeTab === "overview" && <div className="dashboard-grid">
+        <RegistryPreviewCard title={text.panelRegistry} items={PANEL_TYPES} active={panels.map((panel) => panel.type)} />
+        <RegistryPreviewCard title={text.actionKinds} items={ACTION_KINDS} active={actions.map((action) => action.kind)} />
+      </div>}
 
-      <section className="dashboard-card">
+      {activeTab === "overview" && <section className="dashboard-card">
         <div className="section-row">
           <div>
             <p className="eyebrow">{COPY.project.recipeStatus}</p>
-            <h2>Ready and planned recipes</h2>
+            <h2>{text.recipesTitle}</h2>
           </div>
           <span className="soft-pill">{commands.length}</span>
         </div>
         {commands.length === 0 ? (
-          <p className="muted">Import aiws.yaml to show each command as Ready, Partial, Planned, or Broken.</p>
+          <p className="muted">{text.noRecipes}</p>
         ) : (
           <div className="recipe-status-grid">
             {commands.map(([name, command]) => (
@@ -139,30 +175,30 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="dashboard-card dashboard-architecture passive-card">
+      {activeTab === "overview" && <section className="dashboard-card dashboard-architecture passive-card">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Configurable Cockpit</p>
-            <h2>AIWS architecture</h2>
+            <p className="eyebrow">{text.architectureEyebrow}</p>
+            <h2>{text.architectureTitle}</h2>
           </div>
-          <span className="soft-pill">Architecture preview</span>
+          <span className="soft-pill">{text.architecturePreview}</span>
         </div>
-        <p className="muted">This diagram is secondary. Runtime truth should come from real run records, logs, artifacts, and planner events.</p>
+        <p className="muted">{text.architectureBody}</p>
         <ArchitectureDiagram />
-      </section>
+      </section>}
 
-      <section className="dashboard-card">
+      {activeTab === "runs" && <section className="dashboard-card">
         <div className="section-row">
           <div>
-            <p className="eyebrow">Recent Runs</p>
-            <h2>Run history</h2>
+            <p className="eyebrow">{text.recentRuns}</p>
+            <h2>{text.runHistory}</h2>
           </div>
           <span className="soft-pill">{runs.length}</span>
         </div>
         {runs.length === 0 ? (
-          <p className="muted">No run records yet. Execute a project action to leave logs and artifacts here.</p>
+          <p className="muted">{text.noRuns}</p>
         ) : (
           <div className="run-list">
             {runs.slice(0, 5).map((run) => (
@@ -174,18 +210,18 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="dashboard-card">
+      {activeTab === "artifacts" && <section className="dashboard-card">
         <div className="section-row">
           <div>
             <p className="eyebrow">{COPY.project.artifacts}</p>
-            <h2>Generated outputs</h2>
+            <h2>{text.generatedOutputs}</h2>
           </div>
           <span className="soft-pill">{artifacts.length}</span>
         </div>
         {artifacts.length === 0 ? (
-          <p className="muted">Generated reports, data files, and script outputs are inspectable here.</p>
+          <p className="muted">{text.noArtifacts}</p>
         ) : (
           <div className="artifact-grid">
             {artifacts.slice(0, 8).map((artifact) => (
@@ -197,62 +233,57 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
       {modalError && (
         <div className="viewer-modal" role="dialog" aria-modal="true">
           <div className="viewer-card">
-            <button type="button" className="viewer-close" onClick={() => setModalError("")}>Close</button>
-            <h2>Could not open</h2>
+            <button type="button" className="viewer-close" onClick={() => setModalError("")}>{text.close}</button>
+            <h2>{text.couldNotOpen}</h2>
             <p className="error-text">{modalError}</p>
           </div>
         </div>
       )}
-      {runDetail && <RunDetailModal detail={runDetail} power={power} onClose={() => setRunDetail(null)} onOpenArtifact={openArtifact} />}
-      {artifact && <ArtifactViewer artifact={artifact} onClose={() => setArtifact(null)} />}
+      {runDetail && <RunDetailModal detail={runDetail} power={power} activePath={activePath} onClose={() => setRunDetail(null)} onOpenArtifact={openArtifact} />}
+      {artifact && <ArtifactViewer artifact={artifact} activePath={activePath} onClose={() => setArtifact(null)} />}
     </div>
   );
 }
 
-function InvestmentAdvisorCard({ actions, runs, artifacts }) {
+function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
+  const text = copy.projectDashboard || COPY.projectDashboard;
   const latestMarketRun = runs.find((run) => run.command === "market_research" || run.action_id === "market_research");
   const hasReport = artifacts.some((artifact) => String(artifact.path || "").endsWith("advisor-report.md"));
   return (
     <section className="dashboard-card investment-advisor-card">
       <div className="section-row">
         <div>
-          <p className="eyebrow">Custom App</p>
-          <h2>Investment advisor workbench</h2>
+          <p className="eyebrow">{text.customApp}</p>
+          <h2>{text.investmentTitle}</h2>
         </div>
-        <span className="soft-pill">education only</span>
+        <span className="soft-pill">{text.educationOnly}</span>
       </div>
-      <p className="muted">Upload portfolio CSV files, define ETF/stock interests, fetch market snapshots when approved, and generate a traceable rebalance research report. This is not financial advice.</p>
+      <p className="muted">{text.investmentBody}</p>
       <div className="advisor-flow">
-        <span>1. Portfolio CSV</span>
-        <span>2. Target allocation</span>
-        <span>3. Market snapshot</span>
-        <span>4. Rebalance deltas</span>
-        <span>5. Research report</span>
+        {text.investmentFlow.map((item) => <span key={item}>{item}</span>)}
       </div>
       <div className="advisor-metrics">
-        <MetricTile label="Advisor actions" value={actions.length} />
-        <MetricTile label="Market snapshot" value={latestMarketRun ? latestMarketRun.status : "not run"} />
-        <MetricTile label="Report" value={hasReport ? "ready" : "pending"} />
+        <MetricTile label={text.advisorActions} value={actions.length} />
+        <MetricTile label={text.marketSnapshot} value={latestMarketRun ? latestMarketRun.status : text.notRun} />
+        <MetricTile label={text.report} value={hasReport ? text.ready : text.pending} />
       </div>
       <details className="advisor-tips">
-        <summary>Tips for building custom actions like this</summary>
+        <summary>{text.customTips}</summary>
         <ul>
-          <li>Keep deterministic math in Python scripts and use LLMs only to explain computed facts.</li>
-          <li>Put market/network steps behind confirmation and write raw responses as artifacts.</li>
-          <li>Declare expected files and outputs in `aiws.yaml` so the UI can show what will run.</li>
-          <li>Separate “research summary” from “decision”; AIWS should show scenarios, risks, and assumptions.</li>
+          {text.customTipItems.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </details>
     </section>
   );
 }
 
-function ManifestSummaryCard({ config, context, panels, actions, runs }) {
+function ManifestSummaryCard({ config, context, panels, actions, runs, copy = COPY }) {
+  const text = copy.projectDashboard || COPY.projectDashboard;
   const include = context.include || [];
   const exclude = context.exclude || [];
   const views = config.views || [];
@@ -260,58 +291,59 @@ function ManifestSummaryCard({ config, context, panels, actions, runs }) {
     <section className="dashboard-card manifest-summary-card">
       <div className="section-row">
         <div>
-          <p className="eyebrow">aiws.yaml Manifest</p>
-          <h2>Configurable workbench contract</h2>
+          <p className="eyebrow">{text.manifestEyebrow}</p>
+          <h2>{text.manifestTitle}</h2>
         </div>
-        <span className="soft-pill">{config.name ? "loaded" : "template-ready"}</span>
+        <span className="soft-pill">{config.name ? text.loaded : text.templateReady}</span>
       </div>
       <div className="manifest-summary-grid">
-        <MetricTile label="Actions" value={actions.length} />
-        <MetricTile label="Panels" value={panels.length} />
-        <MetricTile label="Views" value={views.length} />
-        <MetricTile label="Runs" value={runs.length} />
+        <MetricTile label={text.actions} value={actions.length} />
+        <MetricTile label={text.panels} value={panels.length} />
+        <MetricTile label={text.views} value={views.length} />
+        <MetricTile label={text.runs} value={runs.length} />
       </div>
       <div className="manifest-section">
-        <strong>Context include</strong>
-        <p>{include.length ? include.slice(0, 4).join(", ") : "No include patterns yet. Add files/**/*.md, data/**/*.csv, or notes/**/*.txt."}</p>
+        <strong>{text.contextInclude}</strong>
+        <p>{include.length ? include.slice(0, 4).join(", ") : text.noInclude}</p>
       </div>
       <div className="manifest-section security">
-        <strong>Security exclusions</strong>
-        <p>{exclude.length ? exclude.slice(0, 4).join(", ") : ".env, secrets/**, keys/**, browser profiles, and SSH folders stay out of context by policy."}</p>
+        <strong>{text.securityExclusions}</strong>
+        <p>{exclude.length ? exclude.slice(0, 4).join(", ") : text.defaultExclusions}</p>
       </div>
       <pre className="manifest-code">{sampleManifest(config, panels, actions)}</pre>
     </section>
   );
 }
 
-function AgentPlanFoundationCard() {
+function AgentPlanFoundationCard({ copy = COPY }) {
+  const text = copy.projectDashboard || COPY.projectDashboard;
   const steps = [
-    ["read_file", "Inspect selected project files", false],
-    ["llm", "Create a plan and identify missing context", false],
-    ["search", "Search external context when allowed", true],
-    ["python", "Run analysis script in a controlled step", true],
-    ["report", "Write report artifact and summarize next actions", false],
+    ["read_file", text.agentStepRead, false],
+    ["llm", text.agentStepPlan, false],
+    ["search", text.agentStepSearch, true],
+    ["python", text.agentStepPython, true],
+    ["report", text.agentStepReport, false],
   ];
   return (
     <section className="dashboard-card agent-plan-card">
       <div className="section-row">
         <div>
-          <p className="eyebrow">Agent Plan Foundation</p>
-          <h2>Controlled automation, not blind execution</h2>
+          <p className="eyebrow">{text.agentEyebrow}</p>
+          <h2>{text.agentTitle}</h2>
         </div>
-        <span className="soft-pill">experimental</span>
+        <span className="soft-pill">{text.experimental}</span>
       </div>
-      <p className="muted">General chat should evolve into a visible plan: goal, approval gates, step events, costs, artifacts, and final report.</p>
+      <p className="muted">{text.agentBody}</p>
       <div className="agent-step-list">
         {steps.map(([kind, title, approval], index) => (
           <div key={title} className={approval ? "needs-approval" : ""}>
             <span>{index + 1}</span>
             <strong>{title}</strong>
-            <small>{AGENT_STEP_KINDS.includes(kind) ? kind : "llm"}{approval ? " · approval required" : ""}</small>
+            <small>{AGENT_STEP_KINDS.includes(kind) ? kind : "llm"}{approval ? ` · ${text.approvalRequired}` : ""}</small>
           </div>
         ))}
       </div>
-      <p className="warning-text">File writes, shell, Python, and network steps must remain approval-gated.</p>
+      <p className="warning-text">{text.agentWarning}</p>
     </section>
   );
 }
@@ -418,7 +450,7 @@ function extractTopics(titles) {
     .map(([token]) => token);
 }
 
-function RunDetailModal({ detail, power, onClose, onOpenArtifact }) {
+function RunDetailModal({ detail, power, activePath, onClose, onOpenArtifact }) {
   const run = detail.run || {};
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
@@ -451,12 +483,17 @@ function RunDetailModal({ detail, power, onClose, onOpenArtifact }) {
             <pre>{JSON.stringify(detail.result || {}, null, 2)}</pre>
           </>
         )}
+        <ChatDock
+          projectPath={activePath?.projectPath}
+          context={{ kind: "run", label: run.label || run.command || "Run", runId: run.run_id }}
+          power={power}
+        />
       </div>
     </div>
   );
 }
 
-function ArtifactViewer({ artifact, onClose }) {
+function ArtifactViewer({ artifact, activePath, onClose }) {
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
@@ -464,39 +501,12 @@ function ArtifactViewer({ artifact, onClose }) {
         <p className="eyebrow">Artifact Viewer</p>
         <h2>{artifact.path}</h2>
         <span className="soft-pill">{artifact.kind} · {artifact.size} bytes</span>
-        <ArtifactContent artifact={artifact} />
+        <ViewerPane artifact={artifact} />
+        <ChatDock
+          projectPath={activePath?.projectPath}
+          context={{ kind: "artifact", label: artifact.path, path: artifact.path }}
+        />
       </div>
     </div>
   );
-}
-
-function ArtifactContent({ artifact }) {
-  const kind = artifact.kind;
-  const content = artifact.content || "";
-  if (kind === "csv") {
-    const rows = content.trim().split(/\r?\n/).slice(0, 60).map((line) => line.split(","));
-    return (
-      <div className="artifact-table-wrap">
-        <table className="artifact-table">
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr key={`${rowIndex}-${row.join("|")}`}>
-                {row.map((cell, cellIndex) => rowIndex === 0
-                  ? <th key={cellIndex}>{cell}</th>
-                  : <td key={cellIndex}>{cell}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  if (kind === "json") {
-    try {
-      return <pre>{JSON.stringify(JSON.parse(content), null, 2)}</pre>;
-    } catch {
-      return <pre>{content}</pre>;
-    }
-  }
-  return <pre>{content}</pre>;
 }

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { WorkflowAppShell } from "../../features/workflow/components/WorkflowAppShell";
 
 export function AutomationPanel({ projects = [], onAutomations, fetchJson, formatDate }) {
   const [running, setRunning] = useState("");
@@ -19,7 +20,7 @@ export function AutomationPanel({ projects = [], onAutomations, fetchJson, forma
 
   return (
     <div className="runtime-card automation-card">
-      <strong>Automation Projects</strong>
+      <strong>Automation Apps</strong>
       <p>Repeatable local automation run records.</p>
       {projects.length === 0 && <p className="muted">No automation projects registered yet.</p>}
       {projects.map((project) => (
@@ -39,7 +40,7 @@ export function AutomationPanel({ projects = [], onAutomations, fetchJson, forma
   );
 }
 
-export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact }) {
+export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact }) {
   const [running, setRunning] = useState("");
   const [result, setResult] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -102,38 +103,37 @@ export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig
     <div className="project-actions-panel">
       {commands.length === 0 ? (
         <div className="empty-actions">
-          <p className="muted">No project recipes yet.</p>
+          <p className="muted">No project Workflow Apps yet.</p>
           <button type="button" onClick={importTemplate}>Import Investment Advisor template</button>
         </div>
       ) : (
-        commands.map(([name, command]) => (
-          <div className="action-card" key={name}>
-            <div>
-              <div className="action-title-row">
-                <strong>{command.label || name}</strong>
-                <span className={`status-badge ${actionStatus(command).toLowerCase()}`}>{actionStatus(command)}</span>
-              </div>
-              <p>{command.description || "A project action that uses files, context, and command definitions."}</p>
+        commands.map(([name, command]) => {
+          const app = workflowAppForCommand(name, command);
+          return (
+            <WorkflowAppShell
+              key={name}
+              app={app}
+              running={running === name}
+              onPreview={() => previewCommand(name)}
+              onRun={() => runCommand(name, command)}
+              projectPath={activePath?.projectPath}
+              power={power}
+            >
               <div className="action-badges">
                 <span>{actionKindLabel(command.kind)}</span>
                 <span>{actionOutputLabel(command)}</span>
+                <span>{actionStatus(command)}</span>
                 {power && <span>{command.permission || "read-only"}</span>}
               </div>
-            </div>
-            <div className="action-buttons">
-              <button type="button" onClick={() => previewCommand(name)}>{previewLabel(command.kind)}</button>
-              <button type="button" onClick={() => runCommand(name, command)} disabled={running === name}>
-                {running === name ? "Running" : executeLabel(command.kind)}
-              </button>
-            </div>
-          </div>
-        ))
+            </WorkflowAppShell>
+          );
+        })
       )}
       {preview && (
         <div className="run-result preview-result">
           <strong>Pre-run review</strong>
           <dl>
-            <div><dt>Action</dt><dd>{preview.label}</dd></div>
+            <div><dt>App</dt><dd>{preview.label}</dd></div>
             <div><dt>Kind</dt><dd>{actionKindLabel(preview.kind)}</dd></div>
             <div><dt>Permission</dt><dd>{preview.permission}</dd></div>
             {preview.cwd && <div><dt>Location</dt><dd><code>{preview.cwd}</code></dd></div>}
@@ -168,6 +168,45 @@ export function ProjectActionsPanel({ activePath, projectConfig, onProjectConfig
       {error && <small className="error-text">{error}</small>}
     </div>
   );
+}
+
+function workflowAppForCommand(name, command = {}) {
+  if (command.workflow_app) return command.workflow_app;
+  const outputs = Array.isArray(command.outputs) ? command.outputs : [];
+  return {
+    id: command.workflow_app_id || name,
+    title: command.label || name,
+    description: command.description || "A Workflow App that uses files, context, and command definitions.",
+    category: command.category || "Project",
+    inputSchema: (Array.isArray(command.inputs) ? command.inputs : Array.isArray(command.input) ? command.input : []).map((item) => ({
+      id: String(item).replace(/[^a-z0-9]+/gi, "_"),
+      label: String(item),
+      type: "file",
+      required: false,
+    })),
+    outputSchema: outputs.map((path) => ({
+      id: String(path).replace(/[^a-z0-9]+/gi, "_"),
+      path: String(path),
+      type: String(path).endsWith(".csv") ? "csv" : String(path).endsWith(".json") ? "json" : String(path).endsWith(".md") ? "markdown" : "text",
+      viewer_id: String(path).endsWith(".csv") ? "tableViewer" : String(path).endsWith(".json") ? "jsonViewer" : String(path).endsWith(".md") ? "markdownViewer" : "textViewer",
+    })),
+    runPolicy: {
+      mode: command.kind === "python" || command.kind === "shell" ? "approval_required" : "local_only",
+      requiresConfirmation: command.kind === "python" || command.kind === "shell",
+      network: command.permissions?.network ? "approval_required" : "blocked",
+      fileWrite: outputs.length ? "artifacts_only" : "blocked",
+      cloud: "blocked",
+    },
+    defaultViewerLayout: outputs.slice(0, 3).map((path, index) => ({
+      id: `slot_${index}`,
+      title: String(path).split("/").pop(),
+      viewer_id: String(path).endsWith(".csv") ? "tableViewer" : String(path).endsWith(".json") ? "jsonViewer" : String(path).endsWith(".md") ? "markdownViewer" : "textViewer",
+      artifact: String(path),
+      position: index === 0 ? "left" : index === 1 ? "center" : "right",
+    })),
+    supportedResources: ["csv", "json", "markdown", "text"],
+    permissions: command.permissions || {},
+  };
 }
 
 function ResultActions({ result, onOpenArtifact }) {
@@ -253,7 +292,7 @@ export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectCo
   return (
     <div className="task-suggestions-panel">
       <div className="suggestion-header">
-        <strong>Suggested next actions</strong>
+        <strong>Suggested next steps</strong>
         <span>User approval required</span>
       </div>
       {suggestions.map((item) => (
@@ -304,14 +343,14 @@ function kindLabel(kind) {
   }[kind] || kind;
 }
 
-export function ActionInspector({ projectConfig, power }) {
+export function WorkflowAppInspector({ projectConfig, power }) {
   const commands = Object.entries(projectConfig?.config?.commands || {});
   const runs = projectConfig?.runs || [];
   const command = commands[0]?.[1];
   if (!command) {
     return (
       <div className="action-inspector-card">
-        <strong>No action selected</strong>
+        <strong>No Workflow App selected</strong>
         <p className="muted">Import or run a recipe in the main workbench to inspect details here.</p>
       </div>
     );
@@ -320,8 +359,8 @@ export function ActionInspector({ projectConfig, power }) {
   return (
     <div className="action-inspector-card">
       <span className={`status-badge ${actionStatus(command).toLowerCase()}`}>{actionStatus(command)}</span>
-      <strong>{command.label || "Project action"}</strong>
-      <p>{command.description || "A project action that uses files, context, and command definitions."}</p>
+      <strong>{command.label || "Workflow App"}</strong>
+      <p>{command.description || "A Workflow App that uses files, context, and command definitions."}</p>
       <dl>
         <div><dt>Kind</dt><dd>{actionKindLabel(command.kind)}</dd></div>
         <div><dt>Output</dt><dd>{actionOutputLabel(command)}</dd></div>

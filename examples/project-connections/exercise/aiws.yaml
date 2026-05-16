@@ -1,0 +1,16 @@
+version: 1
+name: Exercise
+description: Exercise workspace that combines meal logs and activity logs.
+resource_imports:
+  - sourceProjectId: diet
+    acceptedResourceType: meal_log
+    localAlias: diet_meals
+resource_exports:
+  - resourceType: calorie_balance
+    artifactPattern: artifacts/calorie-balance.json
+    schemaVersion: "1"
+    label: Calorie balance
+context:
+  include:
+    - activity_log/**/*.csv
+commands:

@@ -12,13 +12,6 @@ AIWS keeps business logic in the core package and exposes it through:
 
 Core storage, skill resolution, prompt context generation, and project/session rules live in `src/aiws/storage.py`.
 
-## Do Not Overbuild
-
-- Prefer boring, readable Python.
-- Avoid speculative abstractions.
-- Do not add model providers, search, RAG, accounts, or deployment tooling until explicitly requested.
-- Keep changes surgical and tied to the task.
-
 ## Test Commands
 
 Use:
@@ -71,7 +64,6 @@ Reject invalid paths explicitly.
 
 ## Definition of Done
 
-- Behavior is implemented with minimal scope.
 - Tests cover behavior changes.
 - `python -m pytest` passes.
 - Existing storage invariants remain intact.

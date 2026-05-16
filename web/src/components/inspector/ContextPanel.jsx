@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { ActionInspector, AutomationPanel } from "../actions/ActionPanels.jsx";
+import { WorkflowAppInspector, AutomationPanel } from "../actions/ActionPanels.jsx";
 import { AttachmentList } from "../chat/AttachmentList.jsx";
 import { ContextReceiptCard } from "../chat/ContextReceiptCard.jsx";
-import { COPY, copyForAccount, copyForLocale } from "../../copy.js";
+import { ChatDock } from "../../features/workflow/components/ChatDock";
+import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api.js";
 
 function isPowerMode(account) {
@@ -15,7 +16,7 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
-export function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onProjectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }) {
+export function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }) {
   const power = isPowerMode(account);
   const operator = power && Boolean(account?.admin);
   const diagnosticsVisible = operator && runtime?.diagnostics_visible !== false;
@@ -31,7 +32,7 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
           <h3>{copy.inspector.currentContext}</h3>
           <p className="muted">{copy.inspector.emptyPurpose}</p>
         </section>
-        <ActionInspector projectConfig={projectConfig} power={power} />
+        <WorkflowAppInspector projectConfig={projectConfig} power={power} />
         {diagnosticsVisible && <RuntimePanel runtime={runtime} />}
         {diagnosticsVisible && <OpenClawPanel openclaw={openclaw} />}
         {diagnosticsVisible && <AutomationPanel projects={automations} onAutomations={onAutomations} fetchJson={fetchJson} formatDate={formatDate} />}
@@ -75,7 +76,18 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
           {latestReceipt ? <ContextReceiptCard receipt={latestReceipt} /> : <p className="muted">Send a message to create a receipt showing files, privacy mode, model, exclusions, and estimated cost.</p>}
           {chat?.project?.hidden && <PromoteChatCard chat={chat} activePath={activePath} copy={copy} />}
           <WorkSessionCard workSession={chat?.work_session} copy={copy} />
-          <ActionInspector projectConfig={projectConfig} power={power} />
+          <WorkflowAppInspector projectConfig={projectConfig} power={power} />
+          <ChatDock
+            projectPath={activePath.projectPath}
+            context={{
+              kind: artifacts[0] ? "artifact" : "resource",
+              label: artifacts[0]?.path || "Current project context",
+              path: artifacts[0]?.path,
+              resourceType: artifacts[0] ? undefined : "project_context",
+            }}
+            account={account}
+            power={power}
+          />
           <GoalPanel chat={chat} activePath={activePath} onChat={onChat} power={power} />
         </section>
       )}

@@ -5,23 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from aiws import costs, storage
+from aiws import storage
+from aiws.core import workbench_contracts
 from aiws.domain import chats as chat_domain
 from aiws.domain import projects as project_domain
 from aiws.domain import usage as usage_domain
 
 
 def model_catalog() -> list[dict[str, object]]:
-    return [
-        {
-            "provider": item.provider,
-            "model": item.model,
-            "input_per_million": item.input_per_million,
-            "output_per_million": item.output_per_million,
-            "note": item.note,
-        }
-        for item in costs.list_model_costs()
-    ]
+    return workbench_contracts.model_catalog()
 
 
 def project_payload(root: str | Path, project: dict[str, Any]) -> dict[str, object]:

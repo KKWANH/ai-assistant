@@ -471,8 +471,15 @@ def test_investment_advisor_template_runs_deterministic_actions(tmp_path):
 
     assert rebalance["status"] == "completed"
     assert report["status"] == "completed"
+    assert config["workflow_apps"][0]["id"] == "investment_rebalancer"
+    assert {Path(item["path"]).name for item in rebalance["artifacts"]} >= {
+        "current-weights.json",
+        "target-gap.json",
+        "rebalance-suggestions.csv",
+        "rebalance-chart.json",
+    }
     artifact_names = {Path(item["path"]).name for item in report["artifacts"]}
-    assert "advisor-report.md" in artifact_names
+    assert "rebalance-report.md" in artifact_names
 
 
 def test_home_csv_analysis_creates_stats_artifacts(tmp_path):

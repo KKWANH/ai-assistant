@@ -24,7 +24,7 @@ from .app.routes import chats as chat_routes
 from .app.routes import projects as project_routes
 from .app.routes import runtime as runtime_routes
 from .app.routes import workspace as workspace_routes
-from .core import action_registry, action_runs, chat_orchestrator, home_workbench, work_sessions
+from .core import action_registry, action_runs, chat_orchestrator, home_workbench, project_connections, work_sessions
 from .domain import accounts as account_domain
 from .domain import chats as chat_domain
 from .domain import goals as goal_domain
@@ -69,6 +69,35 @@ class AIWSHandler(BaseHTTPRequestHandler):
 
     def require_project_access(self, project_path: str, mode: request_context.ProjectAccessMode = "read") -> None:
         request_context.require_project_access(self.request_context(), project_path, mode)
+
+    def authorize_project_connection_request(
+        self,
+        current_project: str,
+        action: str,
+        *,
+        source_project: str = "",
+        link: dict[str, object] | None = None,
+    ) -> None:
+        """Deny-by-default authorization for project connection mutations."""
+        if action == "request":
+            self.require_project_access(current_project, "owner")
+            if not source_project:
+                raise storage.WorkspaceError("Source project is required.")
+            self.require_project_access(source_project, "read")
+            return
+        if action == "approve":
+            if not link:
+                raise storage.WorkspaceError("Project link is required.")
+            self.require_project_access(str(link.get("fromProject", "")), "owner")
+            return
+        if action == "revoke":
+            if not link:
+                raise storage.WorkspaceError("Project link is required.")
+            if current_project not in {link.get("fromProject"), link.get("toProject")}:
+                raise storage.WorkspaceError("This link does not belong to the current project.")
+            self.require_project_access(current_project, "owner")
+            return
+        raise storage.WorkspaceError("Unknown project connection action.")
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -117,6 +146,9 @@ class AIWSHandler(BaseHTTPRequestHandler):
             project_path = unquote((query.get("project") or [""])[0])
             artifact_path = unquote((query.get("path") or [""])[0])
             self.api_project_artifact(project_path, artifact_path)
+        elif path.startswith("/api/project-connections/"):
+            project_path = unquote(path.removeprefix("/api/project-connections/"))
+            self.api_project_connections(project_path)
         elif path.startswith("/api/project-config/"):
             project_path = unquote(path.removeprefix("/api/project-config/"))
             self.api_project_config(project_path)
@@ -326,6 +358,58 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 template = data.get("template", "investment-rebalancer")
                 config = action_registry.import_template(self.root, project_path, template)
                 self.send_json({"config": config})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-connections/"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/project-connections/"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                action = data.get("action", "request")
+                if action == "request":
+                    source_project = data.get("source_project", "").strip()
+                    self.authorize_project_connection_request(
+                        project_path,
+                        action,
+                        source_project=source_project,
+                    )
+                    allowed = [
+                        item.strip()
+                        for item in data.get("resource_types", "").replace("\n", ",").split(",")
+                        if item.strip()
+                    ]
+                    project_connections.request_link(
+                        self.root,
+                        source_project=source_project,
+                        target_project=project_path,
+                        allowed_resource_types=allowed,
+                        mode=data.get("mode", "read"),
+                        actor=self.current_username(),
+                    )
+                elif action == "approve":
+                    _, _, link = project_connections.find_link(self.root, data.get("link_id", ""))
+                    self.authorize_project_connection_request(project_path, action, link=link)
+                    project_connections.approve_link(
+                        self.root,
+                        link_id=data.get("link_id", ""),
+                        actor=self.current_username(),
+                    )
+                elif action == "revoke":
+                    _, _, link = project_connections.find_link(self.root, data.get("link_id", ""))
+                    self.authorize_project_connection_request(project_path, action, link=link)
+                    project_connections.revoke_link(
+                        self.root,
+                        link_id=data.get("link_id", ""),
+                        actor=self.current_username(),
+                    )
+                else:
+                    raise storage.WorkspaceError("Unknown project connection action.")
+                self.send_json(project_routes.connections_payload(self.root, project_path, self.current_username()))
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -1099,7 +1183,14 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def api_project_config(self, project_path: str) -> None:
         try:
             self.require_project_access(project_path, "read")
-            self.send_json(project_routes.config_payload(self.root, project_path))
+            self.send_json(project_routes.config_payload(self.root, project_path, self.current_username()))
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_project_connections(self, project_path: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            self.send_json(project_routes.connections_payload(self.root, project_path, self.current_username()))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
