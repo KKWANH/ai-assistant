@@ -8,7 +8,7 @@ import mimetypes
 import os
 import re
 import zipfile
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -61,7 +61,23 @@ def validate_attachment(filename: str, content: bytes) -> str:
         raise storage.WorkspaceError("Attachment is empty.")
     if len(content) > max_attachment_bytes():
         raise storage.WorkspaceError("Attachment is too large.")
+    if is_image_extension(ext) and not image_content_matches_extension(ext, content):
+        raise storage.WorkspaceError("Attachment content does not match the selected image extension.")
+    if ext in {".docx", ".xlsx", ".pptx"} and not zipfile.is_zipfile(BytesIO(content)):
+        raise storage.WorkspaceError("Office attachment content does not match the selected extension.")
+    if ext == ".pdf" and not content.startswith(b"%PDF"):
+        raise storage.WorkspaceError("PDF attachment content does not match the selected extension.")
     return ext
+
+
+def image_content_matches_extension(extension: str, content: bytes) -> bool:
+    return {
+        ".png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": content.startswith(b"\xff\xd8\xff"),
+        ".jpeg": content.startswith(b"\xff\xd8\xff"),
+        ".gif": content.startswith((b"GIF87a", b"GIF89a")),
+        ".webp": content.startswith(b"RIFF") and content[8:12] == b"WEBP",
+    }.get(extension.lower(), True)
 
 
 def attachment_usage_bytes(root: str | Path) -> int:

@@ -6,6 +6,7 @@ import type { WorkflowAppDefinition } from "../contracts/workflow-app";
 import { parseProjectConnections, parseWorkflowApps } from "../contracts/guards";
 
 export type ProjectConfigPayload = {
+  project?: Record<string, unknown>;
   config: {
     name?: string;
     description?: string;
@@ -57,6 +58,7 @@ export function parseProjectConfigPayload(value: unknown): ProjectConfigPayload 
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const config = source.config && typeof source.config === "object" ? source.config as Record<string, unknown> : {};
   return {
+    project: source.project && typeof source.project === "object" ? source.project as Record<string, unknown> : undefined,
     config: {
       ...config,
       workflow_apps: parseWorkflowApps(config.workflow_apps),

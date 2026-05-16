@@ -402,6 +402,28 @@ def test_remote_provider_logs_model_usage(tmp_path, monkeypatch):
     assert usage[0]["actual_usd"] >= 0
 
 
+def test_local_only_project_blocks_cloud_provider(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_account(root, "Kwanho", "secret")
+    storage.create_project(root, "AI System", owner="kwanho")
+    storage.create_session(root, "ai-system", "Cloud")
+    storage.set_project_local_only(root, "ai-system", True)
+    monkeypatch.setenv("AIWS_DISABLE_REMOTE_BY_DEFAULT", "false")
+
+    with pytest.raises(storage.WorkspaceError, match="local-only"):
+        runner.ask(
+            str(root),
+            "ai-system",
+            "cloud",
+            provider="gemini",
+            model="gemini-2.5-flash-lite",
+            content="Hello",
+            actor="kwanho",
+            allow_remote=True,
+            confirm_cost=True,
+        )
+
+
 def test_remote_provider_logs_failed_usage_attempt(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     storage.create_account(root, "Kwanho", "secret")

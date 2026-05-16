@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { actionStatus, ProjectWorkflowAppsPanel } from "../actions/ActionPanels.jsx";
+import { actionStatus, ProjectWorkflowAppsPanel } from "../actions/ActionPanels";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
 import { ConnectionsTab } from "./ConnectionsTab.jsx";
 import { COPY } from "../../shared/copy/copy";
@@ -13,6 +13,8 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   const [modalError, setModalError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [connections, setConnections] = useState(projectConfig?.connections || null);
+  const projectRecord = projectConfig?.project || project || {};
+  const [localOnly, setLocalOnly] = useState(Boolean(projectRecord?.security?.local_only));
   const config = projectConfig?.config || {};
   const runs = projectConfig?.runs || [];
   const commands = Object.entries(config.commands || {});
@@ -27,6 +29,10 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   useEffect(() => {
     setConnections(projectConfig?.connections || null);
   }, [projectConfig?.connections]);
+
+  useEffect(() => {
+    setLocalOnly(Boolean((projectConfig?.project || project)?.security?.local_only));
+  }, [projectConfig?.project, project]);
 
   async function openRun(run) {
     setModalError("");
@@ -74,6 +80,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
           ["connections", "Connections"],
           ["runs", "Runs"],
           ["artifacts", "Artifacts"],
+          ["settings", "Settings"],
         ].map(([id, label]) => (
           <button key={id} type="button" className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>
             {label}
@@ -233,6 +240,35 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
             ))}
           </div>
         )}
+      </section>}
+
+      {activeTab === "settings" && <section className="dashboard-card">
+        <div className="section-row">
+          <div>
+            <p className="eyebrow">Project security</p>
+            <h2>Local-only lock</h2>
+          </div>
+          <span className={`status-badge ${localOnly ? "ready" : "planned"}`}>{localOnly ? "Cloud blocked" : "Cloud allowed with confirmation"}</span>
+        </div>
+        <p className="muted">When enabled, this project cannot call cloud model providers even if a user confirms remote execution.</p>
+        <button type="button" className="primary-action" onClick={async () => {
+          setModalError("");
+          try {
+            const body = new URLSearchParams();
+            body.set("local_only", localOnly ? "0" : "1");
+            const payload = await fetchJson(`/api/project-config/${activePath.projectPath}/security`, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body,
+            });
+            setLocalOnly(Boolean(payload.project?.security?.local_only));
+            onProjectConfig?.((current) => ({ ...(current || {}), project: payload.project }));
+          } catch (err) {
+            setModalError(err.message);
+          }
+        }}>
+          {localOnly ? "Allow cloud after confirmation" : "Lock this project to local only"}
+        </button>
       </section>}
 
       {modalError && (

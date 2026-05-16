@@ -19,6 +19,8 @@ missing
 
 Do not paste `.env` files, SSH keys, browser profiles, private key material, or credential folders into actions. Built-in exclusions block common secret paths, but users should still review context receipts.
 
+Logs and run records redact common API key, bearer token, password, and home-directory patterns before they are returned to the UI.
+
 ## Public Tunnel Rules
 
 When using a public domain or tunnel:
@@ -50,6 +52,14 @@ File APIs must resolve paths under the workspace/project roots. They must reject
 ## Action Execution
 
 `shell` and `python` actions execute local code and require explicit confirmation. Keep them disabled in untrusted public demos.
+
+## Viewer Plugins
+
+Workflow App viewers are selected only through the built-in `viewer_id` allowlist. Project folders cannot provide arbitrary frontend JavaScript, `eval`, `new Function`, or remote viewer code.
+
+## Local-Only Projects
+
+Projects may be locked to local-only execution. While locked, cloud model providers are blocked even when a request includes remote confirmation.
 
 ## Reporting A Vulnerability
 

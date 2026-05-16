@@ -10,6 +10,8 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
+from aiws.core import redaction
+
 
 PANEL_TYPES = {
     "fileExplorer",
@@ -89,14 +91,24 @@ def input_schema_field(
     }
 
 
-def output_artifact_spec(path: str, artifact_type: str, viewer_id: str, description: str = "") -> dict[str, Any]:
-    return {
+def output_artifact_spec(
+    path: str,
+    artifact_type: str,
+    viewer_id: str,
+    description: str = "",
+    *,
+    required_columns: list[str] | None = None,
+) -> dict[str, Any]:
+    spec = {
         "id": Path(path).stem,
         "path": path,
         "type": artifact_type,
         "viewer_id": safe_viewer_id(viewer_id),
         "description": description,
     }
+    if required_columns:
+        spec["requiredColumns"] = required_columns
+    return spec
 
 
 def viewer_slot(slot_id: str, title: str, viewer_id: str, *, artifact: str = "", position: str = "center") -> dict[str, Any]:
@@ -270,10 +282,13 @@ def run_contract(
     error: str = "",
 ) -> dict[str, Any]:
     finished_at = created_at if status in {"completed", "failed", "cancelled"} else ""
-    input_snapshot = inputs or {}
-    calls = model_calls or []
+    input_snapshot = redaction.redact_value(inputs or {})
+    calls = redaction.redact_value(model_calls or [])
     model_summary = model_contract(calls, input_snapshot)
     plan_steps = steps if steps is not None else plan.get("steps", []) if isinstance(plan, dict) else []
+    safe_stdout = redaction.redact_text(stdout)
+    safe_stderr = redaction.redact_text(stderr)
+    safe_errors = redaction.redact_value(errors or [])
     return {
         "id": run_id,
         "run_id": run_id,
@@ -299,20 +314,20 @@ def run_contract(
         "input_snapshot": input_snapshot,
         "inputs": input_snapshot,
         "outputs": outputs or {},
-        "execution_plan": plan,
-        "steps": plan_steps,
-        "logs": logs or [],
-        "stdout_tail": stdout[-4000:],
-        "stderr_tail": stderr[-4000:],
+        "execution_plan": redaction.redact_value(plan),
+        "steps": redaction.redact_value(plan_steps),
+        "logs": redaction.redact_value(logs or []),
+        "stdout_tail": safe_stdout[-4000:],
+        "stderr_tail": safe_stderr[-4000:],
         "costs": {"local": True, "api_usd": 0},
         "estimated_cost": estimated_cost,
         "actual_cost": actual_cost,
         "artifacts": artifacts or [],
         "model": model_summary,
         "model_calls": calls,
-        "context_receipt": context_receipt or {},
-        "errors": errors or [],
-        "error": error or ("\n".join(errors or []) if errors else ""),
+        "context_receipt": redaction.redact_value(context_receipt or {}),
+        "errors": safe_errors,
+        "error": redaction.redact_text(error or ("\n".join(errors or []) if errors else "")),
     }
 
 

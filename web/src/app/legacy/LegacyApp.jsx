@@ -6,7 +6,7 @@ import { TopBar } from "../layout/TopBar";
 import { WorkspaceSidebar } from "../layout/WorkspaceSidebar.jsx";
 import { parseRoute } from "../router/parseRoute";
 import { CenterPane } from "./CenterPane.jsx";
-import { AppOverlays } from "./Overlays.jsx";
+import { AppOverlays } from "./Overlays";
 import "../../styles.css";
 
 
@@ -149,6 +149,11 @@ export function LegacyApp() {
     });
   }
 
+  function closeSidebar() {
+    setSidebarOpen(false);
+    setCookie("aiws_sidebar_open", "0");
+  }
+
   if (isLogin) {
     return (
       <div className="app-shell auth-shell">
@@ -187,6 +192,7 @@ export function LegacyApp() {
           automations={automations}
           onAutomations={setAutomations}
         />
+        {sidebarOpen && <button type="button" className="mobile-sidebar-scrim" aria-label="Close sidebar" onClick={closeSidebar} />}
         <CenterPane
           chat={chat}
           activePath={activePath}

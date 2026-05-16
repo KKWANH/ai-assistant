@@ -13,6 +13,7 @@ describe("viewer registry", () => {
   it("does not expose arbitrary plugin code hooks", () => {
     expect(Object.keys(VIEWER_REGISTRY)).not.toContain("remote");
     expect(Object.keys(VIEWER_REGISTRY)).not.toContain("plugin");
-    expect(Object.values(VIEWER_REGISTRY).every((viewer) => typeof viewer === "function")).toBe(true);
+    expect(Object.values(VIEWER_REGISTRY).every((viewer) => typeof viewer.render === "function")).toBe(true);
+    expect(Object.values(VIEWER_REGISTRY).every((viewer) => typeof viewer.validateArtifact === "function")).toBe(true);
   });
 });

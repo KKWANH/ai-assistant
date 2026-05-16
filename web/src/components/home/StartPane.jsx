@@ -192,37 +192,6 @@ function localizeStarterAction(action, copy) {
   return localized ? { ...action, ...localized } : action;
 }
 
-function HomeWorkbenchHints({ copy = COPY }) {
-  return (
-    <section className="home-hints" aria-label="Home Workbench next steps">
-      <article className="home-hint-card"><span>1</span><strong>{copy.home.hintCreateTitle}</strong><p>{copy.home.hintCreateBody}</p></article>
-      <article className="home-hint-card"><span>2</span><strong>{copy.home.hintInspectTitle}</strong><p>{copy.home.hintInspectBody}</p></article>
-      <article className="home-hint-card"><span>3</span><strong>{copy.home.hintPromoteTitle}</strong><p>{copy.home.hintPromoteBody}</p></article>
-    </section>
-  );
-}
-
-function HomeWorkSessionOverview({ home, hasFile, onAttach, onCreateProject, copy = COPY }) {
-  const runCount = home?.runs?.length || 0;
-  const artifactCount = home?.artifacts?.length || 0;
-  const actionCount = home?.actions?.filter((action) => String(action.status || "").toLowerCase() !== "planned").length || STARTER_ACTIONS.length;
-  return (
-    <section className="work-session-overview" aria-label="Start a work session">
-      <div className="work-session-copy"><p className="eyebrow">{copy.home.workSessionEyebrow}</p><h2>{copy.home.workSessionTitle}</h2><p>{copy.home.workSessionBody}</p></div>
-      <div className="work-session-lanes">
-        <button type="button" className="work-lane" onClick={() => document.querySelector(".start-composer textarea")?.focus()}><strong>{copy.home.laneAsk}</strong><span>{copy.home.laneAskBody}</span></button>
-        <button type="button" className={`work-lane ${hasFile ? "ready" : ""}`} onClick={onAttach}><strong>{copy.home.laneFile}</strong><span>{hasFile ? copy.home.laneFileReady : copy.home.laneFileBody}</span></button>
-        <button type="button" className="work-lane" onClick={onCreateProject}><strong>{copy.home.laneProject}</strong><span>{copy.home.laneProjectBody}</span></button>
-      </div>
-      <div className="work-session-facts" aria-label="Persisted workbench facts">
-        <span><strong>{actionCount}</strong>{copy.home.factActions}</span>
-        <span><strong>{runCount}</strong>{copy.home.factRuns}</span>
-        <span><strong>{artifactCount}</strong>{copy.home.factArtifacts}</span>
-      </div>
-    </section>
-  );
-}
-
 function HomeWorkbenchPanels({ home, power, onOpenRun, onOpenArtifact, copy = COPY }) {
   const runs = home?.runs || [];
   const artifacts = home?.artifacts || [];
@@ -284,7 +253,7 @@ function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
         <div className="artifact-toolbar">
           <div className="next-actions">
             <button type="button" onClick={() => onAsk?.(artifact)}>Ask AI about this</button>
-            <button type="button" onClick={() => onReport?.(artifact)}>Generate report</button>
+            <button type="button" onClick={() => onReport?.(artifact)}>Save report</button>
             <a className="button-link" href={`/api/home-artifact?path=${encodeURIComponent(artifact.path)}`} target="_blank" rel="noreferrer">Open</a>
           </div>
           <span className="soft-pill">{artifact.viewer_type} · {artifact.size} bytes</span>
@@ -531,11 +500,10 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
   const contentNode = (
     <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
       <div className={isHomeWorkbench ? "home-hero" : ""}>
-        {isHomeWorkbench && <p className="eyebrow">Home Workbench</p>}
-        <h1>{isHomeWorkbench ? copy.home.workSessionTitle : copy.chat.emptyTitle}</h1>
-        <p className="start-subtitle">{projectPath ? "Your first message creates a saved chat inside this project." : copy.home.subtitle}</p>
+        {isHomeWorkbench && <p className="eyebrow">{copy.home.title}</p>}
+        <h1>{isHomeWorkbench ? copy.home.askTitle : copy.chat.emptyTitle}</h1>
+        <p className="start-subtitle">{projectPath ? copy.home.projectStartHint : copy.home.askSubtitle}</p>
       </div>
-      {isHomeWorkbench && <HomeWorkSessionOverview home={home} hasFile={Boolean(file)} onAttach={() => inputRef.current?.click()} onCreateProject={() => navigate("/projects/new")} copy={copy} />}
       <form
         ref={formRef}
         className={`start-composer ${dragging ? "dragging" : ""}`}
@@ -584,12 +552,10 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
           />
           <StarterActionsGrid actions={home?.actions} onStart={startAction} onRun={runHomeAction} running={homeRunning} hasFile={Boolean(file)} onOpenTable={() => setTableOpen(true)} copy={copy} />
           <HomeWorkbenchPanels home={home} power={power} copy={copy} onOpenRun={openHomeRun} onOpenArtifact={openHomeArtifact} />
-          <HomeWorkbenchHints copy={copy} />
         </>
       ) : (
         <div className="quick-actions">{copy.chat.quickPrompts.map((item) => <button type="button" key={item} onClick={() => setContent(item)}>{item}</button>)}</div>
       )}
-      <p className="honest-note">AIWS prioritizes saved chats, project context, and attached files. Agentic web/search execution is exposed through controlled actions and plan previews.</p>
       {startError && <div className="system-note">{startError}</div>}
       {homeError && <div className="system-note">{homeError}</div>}
       {error && <div className="system-note">{error}</div>}

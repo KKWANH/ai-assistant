@@ -373,6 +373,36 @@ def test_project_artifact_and_run_detail_readers(tmp_path):
     assert "asset_class,current_value" in artifact["content"]
 
 
+def test_run_detail_redacts_secret_like_output(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Tools")
+    project_root = storage.project_dir(root, "tools")
+    (project_root / "print_secret.py").write_text(
+        "print('Bearer sk-test-secret-token-abcdefghijklmnopqrstuvwxyz')\n",
+        encoding="utf-8",
+    )
+    write_project_config(
+        root,
+        "tools",
+        """
+name: Tools
+commands:
+  leak:
+    kind: python
+    label: Leak
+    script: print_secret.py
+    permissions:
+      python: true
+""",
+    )
+
+    run = action_registry.run_action(root, "tools", "leak", confirmed=True)
+    detail = action_registry.read_run_detail(root, "tools", run["run_id"])
+
+    assert "sk-test-secret" not in detail["stdout"]
+    assert "[REDACTED_SECRET]" in detail["stdout"]
+
+
 def test_recent_run_context_is_available_for_prompt_context(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "Investment")

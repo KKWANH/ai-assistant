@@ -24,7 +24,7 @@ from .app.routes import chats as chat_routes
 from .app.routes import projects as project_routes
 from .app.routes import runtime as runtime_routes
 from .app.routes import workspace as workspace_routes
-from .core import action_registry, action_runs, chat_orchestrator, home_workbench, project_connections, work_sessions
+from .core import action_registry, action_runs, chat_orchestrator, home_workbench, project_connections, redaction, work_sessions
 from .domain import accounts as account_domain
 from .domain import chats as chat_domain
 from .domain import goals as goal_domain
@@ -358,6 +358,21 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 template = data.get("template", "investment-rebalancer")
                 config = action_registry.import_template(self.root, project_path, template)
                 self.send_json({"config": config})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-config/") and parsed.path.endswith("/security"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/project-config/").removesuffix("/security"))
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.require_project_access(project_path, "owner")
+                project = storage.set_project_local_only(self.root, project_path, data.get("local_only") in {"1", "true", "yes"})
+                self.send_json({"project": project})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -1250,8 +1265,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
         log_dir = storage.workspace_path(self.root) / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         with (log_dir / "ui-errors.log").open("a", encoding="utf-8") as file:
-            file.write(f"[{storage.utc_now()}] {area}: {type(exc).__name__}: {exc}\n")
-            file.write(traceback.format_exc())
+            file.write(redaction.redact_text(f"[{storage.utc_now()}] {area}: {type(exc).__name__}: {exc}\n"))
+            file.write(redaction.redact_text(traceback.format_exc()))
             file.write("\n")
 
     def current_account_json(self) -> dict[str, object]:

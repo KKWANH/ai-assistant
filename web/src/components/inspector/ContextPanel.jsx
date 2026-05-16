@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { WorkflowAppInspector, AutomationPanel } from "../actions/ActionPanels.jsx";
+import { WorkflowAppInspector, AutomationPanel } from "../actions/ActionPanels";
 import { AttachmentList } from "../chat/AttachmentList.jsx";
 import { ContextReceiptCard } from "../chat/ContextReceiptCard.jsx";
 import { ChatDock } from "../../features/workflow/components/ChatDock";

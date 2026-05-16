@@ -8,6 +8,9 @@ This pass expands the frontend gate beyond `vite build` and fixes the highest-ri
 - viewer registry allowlist only
 - no arbitrary workspace plugin code execution path
 - frontend contract guards for workflow apps and project connections
+- redaction for secret-like logs/run payloads
+- project local-only lock blocking cloud providers
+- typed viewer plugin contracts with artifact validation
 - unit/component/e2e coverage for the new workbench surfaces
 
 ## Gates
@@ -44,7 +47,7 @@ The mutation path now goes through `authorize_project_connection_request()` befo
 
 ## Viewer Boundary
 
-Workflow apps may declare `viewer_id`, but the frontend resolves it through `VIEWER_REGISTRY` only. Unknown values fall back to `textViewer`.
+Workflow apps may declare `viewer_id`, but the frontend resolves it through a `ViewerPlugin` allowlist only. Unknown values fall back to `textViewer`, and every selected plugin must validate the artifact before rendering.
 
 There is no runtime path for:
 
@@ -80,6 +83,12 @@ Component:
 - ConnectionsTab
 - ContextReceiptCard
 
+Backend:
+
+- local-only projects block remote providers
+- run detail output redacts bearer/API-key-like values
+- upload content must match sensitive image/PDF/Office extensions
+
 E2E smoke:
 
 - home load
@@ -92,5 +101,6 @@ E2E smoke:
 ## Remaining Risk
 
 - The frontend still has legacy JS components under `allowJs`; lint/typecheck now gates them, but full TS conversion is still incremental.
+- Some legacy payloads are still broad JSON maps while backend contracts are being typed end-to-end.
 - Vite reports a large chunk warning. The next quality pass should code-split legacy shell, model picker, workflow viewers, and markdown rendering.
 - E2E smoke uses mocked API payloads. Backend API behavior is covered by pytest; a later integration suite can launch the Python server with a temporary workspace.

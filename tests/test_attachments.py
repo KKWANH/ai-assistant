@@ -45,6 +45,18 @@ def test_markdown_pdf_and_image_validation(tmp_path):
     assert attachments.is_image_extension(".png") is True
 
 
+def test_attachment_content_must_match_sensitive_extensions(tmp_path):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Attachments")
+
+    with pytest.raises(storage.WorkspaceError, match="image extension"):
+        attachments.save_attachment(root, "ai-system", "attachments", "photo.png", b"not an image")
+
+    with pytest.raises(storage.WorkspaceError, match="PDF attachment"):
+        attachments.save_attachment(root, "ai-system", "attachments", "paper.pdf", b"not a pdf")
+
+
 def test_structured_text_attachments_are_saved_and_extracted(tmp_path):
     root = tmp_path / "workspace"
     storage.create_project(root, "AI System")

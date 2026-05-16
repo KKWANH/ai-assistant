@@ -23,6 +23,7 @@ export type OutputArtifactSpec = {
   type: "json" | "csv" | "markdown" | "chart" | "report" | "text";
   viewer_id: string;
   description?: string;
+  requiredColumns?: string[];
 };
 
 export type ViewerSlot = {

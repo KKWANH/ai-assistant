@@ -1,18 +1,36 @@
 import React, { useState } from "react";
 import { WorkflowAppShell } from "../../features/workflow/components/WorkflowAppShell";
+import type { ArtifactRecord, RunRecord } from "../../shared/contracts/workbench";
+import type { WorkflowAppDefinition } from "../../entities/workflow-app/types";
+import type { ActivePath } from "../../app/router/parseRoute";
 
-export function AutomationPanel({ projects = [], onAutomations, fetchJson, formatDate }) {
+// Legacy project-action payloads are arbitrary JSON until the backend contract parser lands.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonMap = Record<string, any>;
+type FetchJson = (path: string, options?: RequestInit) => Promise<JsonMap>;
+type AutomationProject = { slug: string; title: string; kind: string; latest_run?: { status?: string; created_at?: string } };
+type CommandDefinition = JsonMap & { workflow_app?: WorkflowAppDefinition; outputs?: string[]; inputs?: unknown[]; input?: unknown[] };
+type ProjectConfigPayload = { config?: { commands?: Record<string, CommandDefinition> }; runs?: RunRecord[] };
+type PreviewRecord = JsonMap;
+type ActionRunRecord = RunRecord & JsonMap & { run_dir?: string; stdout?: string; stderr?: string; artifacts?: ArtifactRecord[] };
+type KindKey = "prompt_recipe" | "shell" | "python" | "file_index" | "codex_prompt" | "openclaw_status";
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || "Request failed.");
+}
+
+export function AutomationPanel({ projects = [], onAutomations, fetchJson, formatDate }: { projects?: AutomationProject[]; onAutomations?: (items: AutomationProject[]) => void; fetchJson: FetchJson; formatDate: (value?: string) => string }) {
   const [running, setRunning] = useState("");
   const [error, setError] = useState("");
 
-  async function run(slug) {
+  async function run(slug: string) {
     setRunning(slug);
     setError("");
     try {
       const payload = await fetchJson(`/api/automations/${slug}/run`, { method: "POST", body: new FormData() });
-      onAutomations?.(payload.projects || []);
+      onAutomations?.((payload.projects || []) as AutomationProject[]);
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
     } finally {
       setRunning("");
     }
@@ -40,13 +58,13 @@ export function AutomationPanel({ projects = [], onAutomations, fetchJson, forma
   );
 }
 
-export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact }) {
+export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectConfig, power, fetchJson, onOpenArtifact }: { activePath: ActivePath; projectConfig?: ProjectConfigPayload | null; onProjectConfig?: (next: ProjectConfigPayload | ((current: ProjectConfigPayload | null) => ProjectConfigPayload)) => void; power?: boolean; fetchJson: FetchJson; onOpenArtifact?: (artifact: ArtifactRecord) => void }) {
   const [running, setRunning] = useState("");
-  const [result, setResult] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [result, setResult] = useState<ActionRunRecord | null>(null);
+  const [preview, setPreview] = useState<PreviewRecord | null>(null);
   const [error, setError] = useState("");
   const config = projectConfig?.config || {};
-  const commands = Object.entries(config.commands || {});
+  const commands = Object.entries((config.commands || {}) as Record<string, CommandDefinition>);
   if (!activePath.projectPath) {
     return null;
   }
@@ -57,10 +75,10 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
       method: "POST",
       body: new URLSearchParams({ template: "investment-advisor" }),
     });
-    onProjectConfig?.({ config: payload.config, runs: [] });
+    onProjectConfig?.({ config: payload.config as ProjectConfigPayload["config"], runs: [] });
   }
 
-  async function previewCommand(name) {
+  async function previewCommand(name: string) {
     setError("");
     setPreview(null);
     setResult(null);
@@ -69,13 +87,13 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
         method: "POST",
         body: new URLSearchParams(),
       });
-      setPreview(payload.preview);
+      setPreview(payload.preview as PreviewRecord);
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
     }
   }
 
-  async function runCommand(name, command) {
+  async function runCommand(name: string, command: CommandDefinition) {
     setRunning(name);
     setError("");
     setResult(null);
@@ -90,10 +108,10 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
         method: "POST",
         body: new URLSearchParams({ confirm: preview.preview.requires_confirmation ? "1" : "0" }),
       });
-      setResult(payload.run);
+      setResult(payload.run as ActionRunRecord);
       onProjectConfig?.((current) => ({ ...(current || {}), config: payload.config, runs: [payload.run, ...((current?.runs || []).slice(0, 9))] }));
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
     } finally {
       setRunning("");
     }
@@ -118,6 +136,7 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
               onRun={() => runCommand(name, command)}
               projectPath={activePath?.projectPath}
               power={power}
+              artifacts={result?.command_id === name || result?.action_id === name ? result.artifacts || [] : []}
             >
               <div className="action-badges">
                 <span>{actionKindLabel(command.kind)}</span>
@@ -150,10 +169,10 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
           <strong>{resultTitle(result)}</strong>
           <p className="muted">{resultDescription(result)}</p>
           <code>{result.run_dir}</code>
-          {result.artifacts?.length > 0 && (
+          {(result.artifacts || []).length > 0 && (
             <div className="artifact-list">
               <strong>Artifacts</strong>
-              {result.artifacts.map((item) => (
+              {(result.artifacts || []).map((item: ArtifactRecord) => (
                 <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)} disabled={!item.exists}>
                   {item.path} · {item.exists ? `${item.size} bytes` : "not found"}
                 </button>
@@ -170,7 +189,7 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
   );
 }
 
-function workflowAppForCommand(name, command = {}) {
+function workflowAppForCommand(name: string, command: CommandDefinition = {}): WorkflowAppDefinition {
   if (command.workflow_app) return command.workflow_app;
   const outputs = Array.isArray(command.outputs) ? command.outputs : [];
   return {
@@ -184,7 +203,7 @@ function workflowAppForCommand(name, command = {}) {
       type: "file",
       required: false,
     })),
-    outputSchema: outputs.map((path) => ({
+    outputSchema: outputs.map((path: string) => ({
       id: String(path).replace(/[^a-z0-9]+/gi, "_"),
       path: String(path),
       type: String(path).endsWith(".csv") ? "csv" : String(path).endsWith(".json") ? "json" : String(path).endsWith(".md") ? "markdown" : "text",
@@ -197,9 +216,9 @@ function workflowAppForCommand(name, command = {}) {
       fileWrite: outputs.length ? "artifacts_only" : "blocked",
       cloud: "blocked",
     },
-    defaultViewerLayout: outputs.slice(0, 3).map((path, index) => ({
+    defaultViewerLayout: outputs.slice(0, 3).map((path: string, index: number) => ({
       id: `slot_${index}`,
-      title: String(path).split("/").pop(),
+      title: String(path).split("/").pop() || String(path),
       viewer_id: String(path).endsWith(".csv") ? "tableViewer" : String(path).endsWith(".json") ? "jsonViewer" : String(path).endsWith(".md") ? "markdownViewer" : "textViewer",
       artifact: String(path),
       position: index === 0 ? "left" : index === 1 ? "center" : "right",
@@ -209,9 +228,9 @@ function workflowAppForCommand(name, command = {}) {
   };
 }
 
-function ResultActions({ result, onOpenArtifact }) {
+function ResultActions({ result, onOpenArtifact }: { result: ActionRunRecord; onOpenArtifact?: (artifact: ArtifactRecord) => void }) {
   if (result.status !== "completed") return null;
-  const artifacts = (result.artifacts || []).filter((item) => item.exists);
+  const artifacts = (result.artifacts || []).filter((item: ArtifactRecord) => item.exists);
   if (result.kind === "prompt_recipe") {
     return (
       <div className="next-actions">
@@ -233,14 +252,14 @@ function ResultActions({ result, onOpenArtifact }) {
   return null;
 }
 
-export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectConfig, onChat, power, fetchJson }) {
+export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectConfig, onChat, power, fetchJson }: { activePath: ActivePath; suggestions?: CommandDefinition[]; onProjectConfig?: (next: (current: ProjectConfigPayload | null) => ProjectConfigPayload) => void; onChat?: (next: (current: JsonMap | null) => JsonMap) => void; power?: boolean; fetchJson: FetchJson }) {
   const [running, setRunning] = useState("");
-  const [preview, setPreview] = useState(null);
-  const [result, setResult] = useState(null);
+  const [preview, setPreview] = useState<PreviewRecord | null>(null);
+  const [result, setResult] = useState<ActionRunRecord | null>(null);
   const [error, setError] = useState("");
   if (!activePath.projectPath || suggestions.length === 0) return null;
 
-  async function previewCommand(name) {
+  async function previewCommand(name: string) {
     setError("");
     setPreview(null);
     setResult(null);
@@ -249,13 +268,13 @@ export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectCo
         method: "POST",
         body: new URLSearchParams(),
       });
-      setPreview(payload.preview);
+      setPreview(payload.preview as PreviewRecord);
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
     }
   }
 
-  async function runCommand(name, label) {
+  async function runCommand(name: string, label?: string) {
     setRunning(name);
     setError("");
     setResult(null);
@@ -273,7 +292,7 @@ export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectCo
           session_slug: activePath.sessionSlug || "",
         }),
       });
-      setResult(payload.run);
+      setResult(payload.run as ActionRunRecord);
       onProjectConfig?.((current) => ({ ...(current || {}), config: payload.config, runs: [payload.run, ...((current?.runs || []).slice(0, 9))] }));
       if (payload.message) {
         onChat?.((current) => ({
@@ -283,7 +302,7 @@ export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectCo
         }));
       }
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
     } finally {
       setRunning("");
     }
@@ -332,19 +351,20 @@ export function TaskSuggestionsPanel({ activePath, suggestions = [], onProjectCo
   );
 }
 
-function kindLabel(kind) {
-  return {
+function kindLabel(kind?: string) {
+  const labels: Record<KindKey, string> = {
     prompt_recipe: "Prompt",
     shell: "Shell",
     python: "Python",
     file_index: "Files",
     codex_prompt: "Codex",
     openclaw_status: "OpenClaw",
-  }[kind] || kind;
+  };
+  return kind && kind in labels ? labels[kind as KindKey] : kind;
 }
 
-export function WorkflowAppInspector({ projectConfig, power }) {
-  const commands = Object.entries(projectConfig?.config?.commands || {});
+export function WorkflowAppInspector({ projectConfig, power }: { projectConfig?: ProjectConfigPayload | null; power?: boolean }) {
+  const commands = Object.entries((projectConfig?.config?.commands || {}) as Record<string, CommandDefinition>);
   const runs = projectConfig?.runs || [];
   const command = commands[0]?.[1];
   if (!command) {
@@ -372,40 +392,43 @@ export function WorkflowAppInspector({ projectConfig, power }) {
   );
 }
 
-export function actionKindLabel(kind) {
-  return {
+export function actionKindLabel(kind?: string) {
+  const labels: Record<KindKey, string> = {
     prompt_recipe: "Prepare AI prompt",
     shell: "Run Script",
     python: "Run Script",
     file_index: "Open View",
     codex_prompt: "Generate Artifact",
     openclaw_status: "Open View",
-  }[kind] || kindLabel(kind);
+  };
+  return kind && kind in labels ? labels[kind as KindKey] : kindLabel(kind);
 }
 
-function previewLabel(kind) {
-  return {
+function previewLabel(kind?: string) {
+  const labels: Record<KindKey, string> = {
     prompt_recipe: "Preview Prompt",
     shell: "Preview Command",
     python: "Preview Script",
     file_index: "Preview Files",
     codex_prompt: "Preview Prompt",
     openclaw_status: "Preview View",
-  }[kind] || "Preview";
+  };
+  return kind && kind in labels ? labels[kind as KindKey] : "Preview";
 }
 
-function executeLabel(kind) {
-  return {
+function executeLabel(kind?: string) {
+  const labels: Record<KindKey, string> = {
     prompt_recipe: "Prepare Prompt",
     shell: "Run Script",
     python: "Run Script",
     file_index: "Open View",
     codex_prompt: "Generate Prompt",
     openclaw_status: "Check Status",
-  }[kind] || "Run";
+  };
+  return kind && kind in labels ? labels[kind as KindKey] : "Run";
 }
 
-export function actionStatus(command = {}) {
+export function actionStatus(command: CommandDefinition = {}) {
   const status = String(command.status || "").toLowerCase();
   if (["ready", "partial", "mock", "planned"].includes(status)) {
     return status[0].toUpperCase() + status.slice(1);
@@ -415,7 +438,7 @@ export function actionStatus(command = {}) {
   return "Ready";
 }
 
-function actionOutputLabel(command = {}) {
+function actionOutputLabel(command: CommandDefinition = {}) {
   if (command.output === "chat_prompt" || command.kind === "prompt_recipe") return "Prompt prepared";
   if (command.output === "artifact" || command.kind === "python" || command.kind === "shell") return "Files/logs";
   if (command.kind === "file_index") return "File list";
@@ -423,7 +446,7 @@ function actionOutputLabel(command = {}) {
   return "Run result";
 }
 
-function resultTitle(result = {}) {
+function resultTitle(result: Partial<ActionRunRecord> = {}) {
   if (result.status !== "completed") return "Run failed";
   if (result.kind === "prompt_recipe") return "Prompt recipe recorded";
   if (result.kind === "python") return "Python script completed";
@@ -433,11 +456,11 @@ function resultTitle(result = {}) {
   return "Run completed";
 }
 
-function resultDescription(result = {}) {
+function resultDescription(result: Partial<ActionRunRecord> = {}) {
   if (result.status !== "completed") return "Check stderr and result.json to trace the failure.";
   if (result.kind === "prompt_recipe") {
     return "This command does not modify files. It stores a prompt in the runs folder so you can continue with it in chat.";
   }
-  if (result.artifacts?.length > 0) return "Generated or verified files are listed below. The run is also stored in the project runs folder.";
+  if ((result.artifacts || []).length > 0) return "Generated or verified files are listed below. The run is also stored in the project runs folder.";
   return "Execution logs and result.json were stored in the project runs folder.";
 }

@@ -115,7 +115,15 @@ def ask(
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
     estimated = costs.estimate_cost(provider, model, input_tokens, max_output_tokens)
-    enforce_remote_guardrails(root, actor, provider, estimated, allow_remote=allow_remote, confirm_cost=confirm_cost)
+    enforce_remote_guardrails(
+        root,
+        project_path,
+        actor,
+        provider,
+        estimated,
+        allow_remote=allow_remote,
+        confirm_cost=confirm_cost,
+    )
     client = get_provider(provider)
     storage.append_message(
         root,
@@ -297,6 +305,7 @@ def next_actions_for_turn(*, active_files: set[str], provider: str) -> list[dict
 
 def enforce_remote_guardrails(
     root: str,
+    project_path: str,
     actor: str | None,
     provider: str,
     estimate: dict[str, object],
@@ -306,6 +315,8 @@ def enforce_remote_guardrails(
 ) -> None:
     if provider not in REMOTE_PROVIDERS:
         return
+    if storage.project_local_only(root, project_path):
+        raise storage.WorkspaceError("This project is locked to local-only execution. Cloud model calls are blocked.")
     if os.environ.get("AIWS_DISABLE_REMOTE_BY_DEFAULT", "true").lower() in {"1", "true", "yes"} and not allow_remote:
         raise storage.WorkspaceError("Remote model use is disabled by default. Confirm cloud use to continue.")
     estimated_usd = float(estimate.get("estimated_cost") or 0.0)

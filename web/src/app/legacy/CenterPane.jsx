@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { TaskSuggestionsPanel } from "../../components/actions/ActionPanels.jsx";
+import { TaskSuggestionsPanel } from "../../components/actions/ActionPanels";
 import { AttachmentList } from "../../components/chat/AttachmentList.jsx";
-import { Composer } from "../../components/chat/Composer.jsx";
+import { Composer } from "../../components/chat/Composer";
 import { ContextReceiptCard } from "../../components/chat/ContextReceiptCard.jsx";
 import { WaitingNotice } from "../../components/chat/WaitingNotice.jsx";
 import { MarkdownRenderer } from "../../components/markdown/MarkdownRenderer.jsx";
@@ -202,8 +202,12 @@ function MessageCard({ message, onPreview, activePath, onChat }) {
 
 function MessageActions({ activePath, onChat, copy = COPY }) {
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
   async function saveArtifact() {
+    if (!activePath?.projectPath || !activePath?.sessionSlug) return;
     setSaving(true);
+    setError("");
     try {
       const payload = await fetchJson(`/api/chat-artifact/${activePath.projectPath}/${activePath.sessionSlug}`, {
         method: "POST",
@@ -216,13 +220,19 @@ function MessageActions({ activePath, onChat, copy = COPY }) {
           artifacts: [...(current?.work_session?.artifacts || []), payload.artifact],
         },
       }));
+      setSaved(true);
+    } catch (err) {
+      setError(err.message || "Save failed");
     } finally {
       setSaving(false);
     }
   }
   return (
     <div className="message-actions">
-      <button type="button" onClick={saveArtifact} disabled={saving}>{saving ? copy.messageActions.saving : copy.messageActions.saveArtifact}</button>
+      <button type="button" onClick={saveArtifact} disabled={saving || saved}>
+        {saving ? copy.messageActions.saving : saved ? copy.messageActions.saved : copy.messageActions.saveArtifact}
+      </button>
+      {error && <small className="error-text">{error}</small>}
     </div>
   );
 }

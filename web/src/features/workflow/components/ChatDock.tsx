@@ -1,28 +1,29 @@
 import React, { useMemo, useState } from "react";
-import { Composer } from "../../../components/chat/Composer.jsx";
-
-const DockComposer = Composer as unknown as React.ComponentType<Record<string, unknown>>;
+import { DockedChatComposer } from "../../../components/chat/DockedChatComposer";
+import type { AccountLike, ChatPayload, ModelMode } from "../../../components/chat/Composer";
 
 type DockContext = {
-  kind: "artifact" | "run" | "resource" | "workflow";
+  kind: "artifact" | "run" | "resource" | "workflow" | "workflow_step";
   label: string;
   path?: string;
   runId?: string;
+  workflowAppId?: string;
+  viewerSlotId?: string;
   resourceType?: string;
 };
 
 type ChatDockProps = {
   projectPath?: string;
   context: DockContext;
-  account?: unknown;
+  account?: AccountLike;
   power?: boolean;
-  models?: unknown[];
+  models?: ModelMode[];
   navigate?: (path: string) => void;
 };
 
 export function ChatDock({ projectPath, context, account, power, models, navigate }: ChatDockProps) {
   const [sessionSlug, setSessionSlug] = useState("");
-  const [chat, setChat] = useState<Record<string, unknown>>({ messages: [] });
+  const [chat, setChat] = useState<ChatPayload>({ messages: [] });
   const badge = useMemo(() => {
     if (context.path) return context.path;
     if (context.runId) return context.runId;
@@ -44,13 +45,12 @@ export function ChatDock({ projectPath, context, account, power, models, navigat
         <span className="soft-pill">{badge}</span>
       </div>
       <p className="muted">Use a small scoped chat for interpretation, errors, or partial edits without rerunning the whole Workflow App.</p>
-      <DockComposer
+      <DockedChatComposer
         activePath={{ projectPath, sessionSlug }}
         onAsk={setChat}
         account={account}
         power={Boolean(power)}
         models={models}
-        docked
         dockContext={context}
         onSessionCreated={(session: { slug?: string }) => setSessionSlug(session.slug || "")}
       />

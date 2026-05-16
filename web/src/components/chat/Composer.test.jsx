@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { Composer } from "./Composer.jsx";
+import { Composer } from "./Composer";
 
 describe("Composer", () => {
   it("opens the tool picker and exposes table input", async () => {

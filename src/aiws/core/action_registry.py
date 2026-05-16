@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from aiws import openclaw, storage
-from aiws.core import contracts
+from aiws.core import contracts, redaction
 from aiws.infra import file_store
 from aiws.infra.paths import resolve_under_root
 from aiws.tools import python_script, shell
@@ -200,7 +200,13 @@ def investment_rebalancer_app_definition() -> dict[str, Any]:
         output_schema=[
             contracts.output_artifact_spec("artifacts/current-weights.json", "json", "jsonViewer", "Computed current weights by asset class."),
             contracts.output_artifact_spec("artifacts/target-gap.json", "json", "jsonViewer", "Current vs target allocation gap."),
-            contracts.output_artifact_spec("artifacts/rebalance-suggestions.csv", "csv", "tableViewer", "Rebalance rows for review."),
+            contracts.output_artifact_spec(
+                "artifacts/rebalance-suggestions.csv",
+                "csv",
+                "tableViewer",
+                "Rebalance rows for review.",
+                required_columns=["asset_class", "current_value", "target_value", "trade_value"],
+            ),
             contracts.output_artifact_spec("artifacts/rebalance-report.md", "markdown", "reportViewer", "Educational rebalance research report."),
             contracts.output_artifact_spec("artifacts/rebalance-chart.json", "chart", "chartViewer", "Chart specification for allocation gaps."),
         ],
@@ -462,6 +468,10 @@ def run_action(
     artifacts = collect_artifacts(project_root, preview, source_run=run_id)
     if artifacts:
         logs.append(log_event("artifact", "Collected expected artifacts.", {"count": len(artifacts)}))
+    stdout = redaction.redact_text(stdout)
+    stderr = redaction.redact_text(stderr)
+    result = redaction.redact_value(result)
+    logs = redaction.redact_value(logs)
     run = contracts.run_contract(
         run_id=run_id,
         action_id=command_name,
@@ -599,10 +609,10 @@ def read_run_detail(root: str | Path, project_path: str, run_id: str) -> dict[st
     return {
         "run": result.get("run", {}),
         "result": result,
-        "stdout": read_text_if_exists(run_path / "stdout.txt"),
-        "stderr": read_text_if_exists(run_path / "stderr.txt"),
-        "logs": read_jsonl_if_exists(run_path / "logs.jsonl"),
-        "markdown": read_text_if_exists(run_path / "run.md"),
+        "stdout": redaction.redact_text(read_text_if_exists(run_path / "stdout.txt")),
+        "stderr": redaction.redact_text(read_text_if_exists(run_path / "stderr.txt")),
+        "logs": redaction.redact_value(read_jsonl_if_exists(run_path / "logs.jsonl")),
+        "markdown": redaction.redact_text(read_text_if_exists(run_path / "run.md")),
     }
 
 

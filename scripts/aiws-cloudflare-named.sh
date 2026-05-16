@@ -134,7 +134,7 @@ start() {
       --port "$PORT" \
       --password "$AIWS_SERVER_PASSWORD" \
       --models "${AIWS_MODELS:-ollama}" \
-      --idle-timeout "${AIWS_MODEL_IDLE_TIMEOUT:-1800}" \
+      --idle-timeout "${AIWS_MODEL_IDLE_TIMEOUT:-0}" \
       --status-path "${AIWS_LOCAL_RUNTIME_STATUS_PATH:-$RUN_DIR/aiws-runtime-status.json}"
   ) >"$SERVER_LOG" 2>&1 &
   echo "$!" > "$SERVER_PID_FILE"

@@ -4,8 +4,9 @@ import { SelectedAttachmentList } from "./SelectedAttachmentList.jsx";
 import { TableWorkbenchPanel } from "../table/TableWorkbenchPanel.jsx";
 import { useAttachments } from "../../hooks/useAttachments.js";
 import { copyForAccount } from "../../shared/copy/copy";
-import { fetchJson, getCookie, setCookie } from "../../lib/api.js";
+import { getCookie, setCookie } from "../../lib/api.js";
 import { looksLikePastedTable, parseCsvRows, pastedTableToCsv } from "../../lib/table.js";
+import { useChatSubmit } from "./useChatSubmit";
 import {
   estimateCurrentCost,
   MODEL_MODES,
@@ -16,8 +17,52 @@ import {
   SEARCH_OPTIONS,
 } from "../../lib/modelModes.jsx";
 
-function displayNameForId(id) {
-  const map = {
+export type ComposerMode = "normalChat" | "dockedContextChat" | "workflowStepChat";
+export type ActiveChatPath = { projectPath: string; sessionSlug?: string };
+export type DockContext = {
+  kind: "artifact" | "run" | "resource" | "workflow" | "workflow_step";
+  label: string;
+  path?: string;
+  runId?: string;
+  workflowAppId?: string;
+  viewerSlotId?: string;
+  resourceType?: string;
+};
+export type ChatSession = { slug?: string; title?: string };
+// Chat payloads still mirror mixed legacy JSON until the remaining shell is typed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ChatPayload = { messages?: Array<Record<string, any>>; [key: string]: any };
+export type AccountLike = { username?: string; nickname?: string; display_name?: string; profile?: Record<string, unknown> } | null | undefined;
+export type ModelMode = {
+  value?: string;
+  label?: string;
+  provider: string;
+  model: string;
+  cloud?: boolean;
+  supportsImage?: boolean;
+  // Model catalog items carry provider-specific metadata.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+};
+
+export type ComposerProps = {
+  activePath: ActiveChatPath;
+  onAsk: (next: ChatPayload | ((current: ChatPayload | null) => ChatPayload)) => void;
+  account?: AccountLike;
+  power?: boolean;
+  models?: ModelMode[];
+  modeKind?: ComposerMode;
+  docked?: boolean;
+  dockContext?: DockContext | null;
+  onSessionCreated?: (session: ChatSession) => void;
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || "Request failed.");
+}
+
+function displayNameForId(id?: string) {
+  const map: Record<string, string> = {
     local: "Kwanho Kim",
     kwanho: "Kwanho Kim",
     kwanho0096: "Kwanho Kim",
@@ -27,32 +72,55 @@ function displayNameForId(id) {
   return map[id || "local"] || id || "Kwanho Kim";
 }
 
-function accountDisplayName(account) {
+function accountDisplayName(account?: AccountLike) {
   return account?.nickname || account?.display_name || displayNameForId(account?.username);
 }
 
-function cloudConfirmed(key) {
+function cloudConfirmed(key: string) {
   return getCookie(`aiws_cloud_ok_${key}`) === "1" || sessionStorage.getItem(`aiws_cloud_once_${key}`) === "1";
 }
 
-function confirmCloudOnce(key) {
+function confirmCloudOnce(key: string) {
   sessionStorage.setItem(`aiws_cloud_once_${key}`, "1");
 }
 
-function confirmCloudAlways(key) {
+function confirmCloudAlways(key: string) {
   setCookie(`aiws_cloud_ok_${key}`, "1");
 }
 
-function CloudConfirm({ mode, hasFile, copy, onUseOnce, onUseAlways, onCancel }) {
+function CloudConfirm({
+  mode,
+  files,
+  contentPreview,
+  searchMode,
+  copy,
+  onUseOnce,
+  onUseAlways,
+  onCancel,
+}: {
+  mode: ModelMode;
+  files: File[];
+  contentPreview: string;
+  searchMode: string;
+  copy: { cloudConfirm: Record<string, string> };
+  onUseOnce: () => void;
+  onUseAlways: () => void;
+  onCancel: () => void;
+}) {
   const text = copy.cloudConfirm;
+  const hasFile = files.length > 0;
   return (
     <div className="cloud-confirm" role="alert">
       <strong>{mode.label} {text.titleSuffix}</strong>
       <p>{text.body}</p>
+      <p className="eyebrow">What will be sent</p>
       <ul>
         <li>{text.providerModel}: {mode.provider} · {mode.model}</li>
         <li>{text.userMessage}: {text.included}</li>
-        <li>{text.attachedFile}: {hasFile ? text.fileIncluded : text.none}</li>
+        <li>Message preview: {contentPreview || text.none}</li>
+        <li>{text.attachedFile}: {hasFile ? files.map((file) => file.name).join(", ") : text.none}</li>
+        <li>Web/network: {searchMode === "off" ? "not included" : searchMode}</li>
+        <li>Excluded: local secret patterns, blocked paths, and files not attached to this request</li>
         <li>{text.estimatedCost}: {estimateCurrentCost(mode, "", hasFile)}</li>
       </ul>
       <div>
@@ -64,24 +132,32 @@ function CloudConfirm({ mode, hasFile, copy, onUseOnce, onUseAlways, onCancel })
   );
 }
 
-export function Composer({ activePath, onAsk, account, power, models = MODEL_MODES, docked = false, dockContext = null, onSessionCreated }) {
+export function Composer({ activePath, onAsk, account, power, models = MODEL_MODES as ModelMode[], docked = false, dockContext = null, onSessionCreated }: ComposerProps) {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState(savedModelMode);
   const [searchMode, setSearchMode] = useState(savedSearchMode);
-  const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cloudPrompt, setCloudPrompt] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
-  const [tablePreview, setTablePreview] = useState([]);
-  const inputRef = useRef(null);
-  const textRef = useRef(null);
-  const formRef = useRef(null);
-  const abortRef = useRef(null);
-  const { files, primaryFile, previewUrl, previewUrls, addFiles, removeFile, clearFiles, hasVisionOnlyFiles } = useAttachments();
-  const modelModes = normalizeModelCatalog(models);
-  const selectedMode = modelMode(mode, modelModes);
+  const [tablePreview, setTablePreview] = useState<string[][]>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const textRef = useRef<HTMLTextAreaElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const { files, primaryFile, previewUrl, previewUrls, addFiles, removeFile, clearFiles, hasVisionOnlyFiles } = useAttachments() as {
+    files: File[];
+    primaryFile: File | null;
+    previewUrl: string;
+    previewUrls: string[];
+    addFiles: (files: File[] | FileList) => File[];
+    removeFile: (index: number) => void;
+    clearFiles: () => void;
+    hasVisionOnlyFiles: (mode: string, models: ModelMode[]) => boolean;
+  };
+  const { sending, submitChat, stop } = useChatSubmit(onAsk);
+  const modelModes = normalizeModelCatalog(models) as ModelMode[];
+  const selectedMode = modelMode(mode, modelModes as never[]) as ModelMode;
   const copy = copyForAccount(account);
 
   useEffect(() => {
@@ -104,7 +180,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  function pickDroppedFile(event) {
+  function pickDroppedFile(event: React.DragEvent<HTMLFormElement>) {
     event.preventDefault();
     event.stopPropagation();
     setDragging(false);
@@ -112,19 +188,19 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
     if (dropped[0]) updateTablePreviewFromFile(dropped[0]);
   }
 
-  function pasteTable(event) {
+  function pasteTable(event: React.ClipboardEvent<HTMLTextAreaElement>) {
     const pasted = event.clipboardData?.getData("text/plain") || "";
     if (!looksLikePastedTable(pasted)) return;
     event.preventDefault();
     addTableText(pasted);
   }
 
-  function handleFiles(nextFiles) {
+  function handleFiles(nextFiles: File[] | FileList) {
     const added = addFiles(nextFiles);
     if (added[0]) updateTablePreviewFromFile(added[0]);
   }
 
-  function addTableText(value) {
+  function addTableText(value: string) {
     const clean = String(value || "").trim();
     if (!clean) return;
     const csv = looksLikePastedTable(clean) ? pastedTableToCsv(clean) : clean;
@@ -135,7 +211,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
     setTableOpen(true);
   }
 
-  async function updateTablePreviewFromFile(nextFile) {
+  async function updateTablePreviewFromFile(nextFile: File) {
     const name = nextFile?.name || "";
     if (!/\.(csv|txt)$/i.test(name)) {
       setTablePreview([]);
@@ -145,61 +221,29 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
     setTablePreview(parseCsvRows(text).slice(0, 30));
   }
 
-  function removeAttachment(index) {
+  function removeAttachment(index: number) {
     removeFile(index);
     if (inputRef.current && files.length <= 1) inputRef.current.value = "";
   }
 
   function stopThinking() {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setSending(false);
-    onAsk((current) => ({
-      ...(current || {}),
-      messages: [
-        ...(current?.messages || []).filter((message) => !message.pending),
-        { role: "system", content: "Request stopped before AIWS received a final answer.", attachments: [] },
-      ],
-    }));
+    stop();
   }
 
-  async function submit(event) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (sending || (!content.trim() && files.length === 0)) return;
-    let targetPath = activePath;
-    if (docked && activePath?.projectPath && !activePath?.sessionSlug) {
-      const sessionPayload = await fetchJson(`/api/sessions/${activePath.projectPath}`, {
-        method: "POST",
-        body: new URLSearchParams({ title: `Dock: ${dockContext?.label || "Workflow context"}` }),
-      });
-      targetPath = { ...activePath, sessionSlug: sessionPayload.session?.slug || "" };
-      onSessionCreated?.(sessionPayload.session);
-    }
-    if (!targetPath?.projectPath || !targetPath?.sessionSlug) return;
+    if (!activePath?.projectPath) return;
+    if (!docked && !activePath?.sessionSlug) return;
     let submitMode = selectedMode;
     if (hasVisionOnlyFiles(mode, modelModes)) {
       setMode("cheap");
-      submitMode = modelMode("cheap", modelModes);
+      submitMode = modelMode("cheap", modelModes as never[]) as ModelMode;
     }
     if (submitMode.cloud && !cloudConfirmed(mode)) {
       setCloudPrompt(true);
       return;
     }
-    const form = new FormData();
-    const dockPrefix = docked && dockContext
-      ? `Scoped context: ${dockContext.kind} · ${dockContext.path || dockContext.runId || dockContext.resourceType || dockContext.label}\n\n`
-      : "";
-    form.set("content", `${dockPrefix}${content}`);
-    form.set("provider", submitMode.provider);
-    form.set("model", submitMode.model);
-    form.set("search_mode", searchMode);
-    if (searchMode === "always") form.set("allow_network", "1");
-    if (submitMode.cloud) {
-      form.set("allow_remote", "1");
-      form.set("confirm_cost", "1");
-    }
-    files.forEach((item) => form.append("attachment", item));
-
     const optimistic = {
       role: "user",
       actor_display: accountDisplayName(account),
@@ -211,9 +255,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
       })),
     };
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setSending(true);
+    const outgoingContent = content;
     setContent("");
     resetFiles();
     onAsk((current) => ({
@@ -239,29 +281,33 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
       ],
     }));
     try {
-      const payload = await fetchJson(`/api/ask/${targetPath.projectPath}/${targetPath.sessionSlug}`, {
-        method: "POST",
-        body: form,
-        signal: controller.signal,
+      await submitChat({
+        activePath,
+        content: outgoingContent,
+        files,
+        model: submitMode,
+        searchMode,
+        mode: docked ? "dockedContextChat" : "normalChat",
+        dockContext,
+        allowNetwork: searchMode === "always",
+        allowRemote: Boolean(submitMode.cloud),
+        onSessionCreated,
       });
-      onAsk(payload);
     } catch (err) {
-      if (err.name === "AbortError") return;
+      if (err instanceof DOMException && err.name === "AbortError") return;
       onAsk((current) => ({
         ...(current || {}),
         messages: [
           ...(current?.messages || []).filter((message) => !message.pending),
-          { role: "system", content: err.message, attachments: [] },
+          { role: "system", content: errorMessage(err), attachments: [] },
         ],
       }));
     } finally {
-      setSending(false);
-      abortRef.current = null;
       textRef.current?.focus();
     }
   }
 
-  function keyDown(event) {
+  function keyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       event.currentTarget.form?.requestSubmit();
@@ -278,7 +324,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
       onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
       onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
       onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
       }}
       onDrop={pickDroppedFile}
     >
@@ -291,7 +337,7 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
         onKeyDown={keyDown}
         placeholder={copy.chat.placeholder}
       />
-      {!docked && <SelectedAttachmentList files={files} previewUrl={previewUrl} previewUrls={previewUrls} selectedMode={selectedMode} onRemove={removeAttachment} copy={copy.attachments} />}
+      {!docked && <SelectedAttachmentList files={files as never[]} previewUrl={previewUrl} previewUrls={previewUrls as never[]} selectedMode={selectedMode} onRemove={removeAttachment} copy={copy.attachments} />}
       {primaryFile?.type?.startsWith("image/") && !selectedMode.supportsImage && (
         <div className="system-note compact-warning">{copy.chat.visionSwitch}</div>
       )}
@@ -326,10 +372,10 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
           content={content}
           hasFile={files.length > 0}
           power={power}
-          modelCatalog={modelModes}
+          modelCatalog={modelModes as never[]}
         />
         {!docked && <select className="search-select" name="search_mode" value={searchMode} onChange={(event) => setSearchMode(event.target.value)} aria-label="Search mode">
-          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{copy.search[item.value] || item.label}</option>)}
+          {SEARCH_OPTIONS.map((item) => <option key={item.value} value={item.value}>{(copy.search as Record<string, string>)[item.value] || item.label}</option>)}
         </select>}
         {sending ? (
           <button className="send-key stop" type="button" onClick={stopThinking}>{copy.chat.stop}</button>
@@ -341,7 +387,9 @@ export function Composer({ activePath, onAsk, account, power, models = MODEL_MOD
         <CloudConfirm
           mode={selectedMode}
           copy={copy}
-          hasFile={files.length > 0}
+          files={files}
+          contentPreview={content.slice(0, 180)}
+          searchMode={searchMode}
           onCancel={() => setCloudPrompt(false)}
           onUseOnce={() => {
             confirmCloudOnce(mode);

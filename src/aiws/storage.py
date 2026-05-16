@@ -662,6 +662,7 @@ def create_project(
         "parent": parent,
         "owner": owner_slug,
         "visibility": visibility_value,
+        "security": {"local_only": False},
         "skills": selected_skills,
         "created_at": utc_now(),
     }
@@ -1024,6 +1025,21 @@ def update_project_title(root: str | Path, project_path: str, title: str) -> dic
     if not clean_title:
         raise WorkspaceError("Project title must not be empty.")
     project["title"] = clean_title
+    project["updated_at"] = utc_now()
+    write_json(project_json_path(root, project_path), project)
+    return project
+
+
+def project_local_only(root: str | Path, project_path: str) -> bool:
+    project = load_project(root, project_path)
+    security = project.get("security") if isinstance(project.get("security"), dict) else {}
+    return bool(security.get("local_only"))
+
+
+def set_project_local_only(root: str | Path, project_path: str, enabled: bool) -> dict[str, Any]:
+    project = load_project(root, project_path)
+    security = project.get("security") if isinstance(project.get("security"), dict) else {}
+    project["security"] = {**security, "local_only": bool(enabled)}
     project["updated_at"] = utc_now()
     write_json(project_json_path(root, project_path), project)
     return project
