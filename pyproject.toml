@@ -10,6 +10,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "olefile>=0.47",
+    "pypdf>=5.1",
+    "PyMuPDF>=1.24",
     "xlrd>=2.0",
 ]
 

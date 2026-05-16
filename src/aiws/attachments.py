@@ -477,9 +477,75 @@ def xlsx_column_index(reference: str) -> int:
 
 
 def extract_pdf_text(content: bytes) -> str:
-    # Lightweight fallback extraction. Full PDF parsing can be delegated later.
-    chunks = re.findall(rb"\(([^()]{0,4000})\)", content)
-    if not chunks:
-        chunks = re.findall(rb"\(([^()]*)\)", content)
-    decoded = [chunk.decode("latin-1", errors="ignore") for chunk in chunks]
-    return "\n".join(item for item in decoded if item.strip())
+    extractors = (extract_pdf_text_pymupdf, extract_pdf_text_pypdf, extract_pdf_literal_strings)
+    last_error = ""
+    for extractor in extractors:
+        try:
+            text = extractor(content)
+        except Exception as exc:  # Optional parser failures should fall through to the next tier.
+            last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
+            continue
+        if pdf_text_quality_ok(text):
+            return text[:50_000]
+        if text.strip():
+            last_error = f"{extractor.__name__} returned low-quality text."
+    raise storage.WorkspaceError(
+        f"PDF text extraction failed or quality is too low. OCR may be required.{f' Last extractor: {last_error}' if last_error else ''}"
+    )
+
+
+def extract_pdf_text_pymupdf(content: bytes) -> str:
+    try:
+        import pymupdf  # type: ignore[import-not-found]
+    except ImportError:
+        import fitz as pymupdf  # type: ignore[import-not-found]
+    blocks: list[str] = []
+    with pymupdf.open(stream=content, filetype="pdf") as document:
+        for page in document:
+            page_blocks = page.get_text("blocks", sort=True)
+            for block in page_blocks:
+                if len(block) >= 5:
+                    block_text = str(block[4]).strip()
+                    if block_text:
+                        blocks.append(block_text)
+    return "\n\n".join(blocks)
+
+
+def extract_pdf_text_pypdf(content: bytes) -> str:
+    from pypdf import PdfReader  # type: ignore[import-not-found]
+
+    reader = PdfReader(BytesIO(content))
+    texts = []
+    for page in reader.pages:
+        try:
+            texts.append(page.extract_text(extraction_mode="layout") or "")
+        except TypeError:
+            texts.append(page.extract_text() or "")
+    return "\n\n".join(item.strip() for item in texts if item.strip())
+
+
+def extract_pdf_literal_strings(content: bytes) -> str:
+    """Last-resort fallback for tiny/simple PDFs used in tests and hand-written samples."""
+    chunks = re.findall(rb"\(([^()]{1,4000})\)", content)
+    decoded = [chunk.decode("utf-8", errors="ignore").strip() for chunk in chunks]
+    return "\n".join(item for item in decoded if item)
+
+
+def pdf_text_quality_ok(text: str) -> bool:
+    clean = str(text or "").strip()
+    if len(clean) < 6:
+        return False
+    control_count = sum(1 for char in clean if ord(char) < 32 and char not in "\n\r\t")
+    if control_count / max(len(clean), 1) > 0.01:
+        return False
+    language_chars = sum(1 for char in clean if char.isalnum() or "\uac00" <= char <= "\ud7a3")
+    if language_chars / max(len(clean), 1) < 0.22:
+        return False
+    tokens = re.findall(r"[A-Za-z0-9가-힣]{2,}", clean)
+    if not tokens:
+        return False
+    long_weird_tokens = [token for token in tokens if len(token) > 60]
+    if len(long_weird_tokens) > max(2, len(tokens) // 8):
+        return False
+    printable = sum(1 for char in clean if char.isprintable() or char in "\n\r\t")
+    return printable / max(len(clean), 1) >= 0.93

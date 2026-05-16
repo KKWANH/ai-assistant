@@ -22,6 +22,7 @@ from .app import route_parser
 from .app.routes import actions as action_routes
 from .app.routes import chats as chat_routes
 from .app.routes import projects as project_routes
+from .app.routes import project_viewers as project_viewer_routes
 from .app.routes import runtime as runtime_routes
 from .app.routes import workspace as workspace_routes
 from .core import action_registry, action_runs, chat_orchestrator, home_workbench, project_connections, redaction, work_sessions
@@ -29,6 +30,7 @@ from .domain import accounts as account_domain
 from .domain import chats as chat_domain
 from .domain import goals as goal_domain
 from .domain import projects as project_domain
+from .domain import usage as usage_domain
 from .i18n import t
 from . import runner
 from . import storage
@@ -128,6 +130,8 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_models()
         elif path == "/api/workbench-contract":
             self.api_workbench_contract()
+        elif path == "/api/model-usage":
+            self.api_model_usage()
         elif path == "/api/home-run":
             query = parse_qs(parsed.query)
             run_id = unquote((query.get("run_id") or [""])[0])
@@ -149,6 +153,20 @@ class AIWSHandler(BaseHTTPRequestHandler):
         elif path.startswith("/api/project-connections/"):
             project_path = unquote(path.removeprefix("/api/project-connections/"))
             self.api_project_connections(project_path)
+        elif path.startswith("/api/project-viewers/") and path.endswith("/investment-rebalance"):
+            project_path = unquote(path.removeprefix("/api/project-viewers/").removesuffix("/investment-rebalance")).strip("/")
+            self.api_investment_viewer(project_path)
+        elif path.startswith("/api/project-viewers/") and path.endswith("/manifest"):
+            project_path = unquote(path.removeprefix("/api/project-viewers/").removesuffix("/manifest")).strip("/")
+            self.api_project_viewer_manifest(project_path)
+        elif path.startswith("/project-viewers/") and "/frame/" in path:
+            route = unquote(path.removeprefix("/project-viewers/"))
+            project_path, viewer_id = route.rsplit("/frame/", 1)
+            self.project_viewer_frame(project_path.strip("/"), viewer_id.strip("/"))
+        elif path.startswith("/project-viewers/") and "/asset/" in path:
+            route = unquote(path.removeprefix("/project-viewers/"))
+            project_path, asset_name = route.rsplit("/asset/", 1)
+            self.project_viewer_asset(project_path.strip("/"), asset_name.strip("/"))
         elif path.startswith("/api/project-config/"):
             project_path = unquote(path.removeprefix("/api/project-config/"))
             self.api_project_config(project_path)
@@ -169,7 +187,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.serve_spa()
         elif path == "/projects/new":
             self.serve_spa()
-        elif path in {"/home", "/actions", "/actions/new"}:
+        elif path in {"/home", "/apps-tools", "/actions", "/actions/new"}:
             self.serve_spa()
         elif path == "/profile":
             self.serve_spa()
@@ -491,6 +509,20 @@ class AIWSHandler(BaseHTTPRequestHandler):
                         "message": message_json,
                     }
                 )
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path.startswith("/api/project-viewers/") and parsed.path.endswith("/reload"):
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            project_path = unquote(parsed.path.removeprefix("/api/project-viewers/").removesuffix("/reload")).strip("/")
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                self.require_project_access(project_path, "owner")
+                self.send_json(project_viewer_routes.reload_trusted_viewers(self.root, project_path))
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -1241,6 +1273,56 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.require_project_access(project_path, "read")
             self.send_json(project_routes.artifact_payload(self.root, project_path, artifact_path))
         except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_model_usage(self) -> None:
+        try:
+            username = self.current_username()
+            include_all = False
+            if username and storage.has_accounts(self.root):
+                include_all = bool(storage.load_account(self.root, username).get("admin"))
+            self.send_json(usage_domain.monthly_summary(self.root, username, include_all=include_all))
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=400)
+
+    def api_investment_viewer(self, project_path: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            self.send_json(project_viewer_routes.investment_rebalance_payload(self.root, project_path))
+        except (json.JSONDecodeError, storage.WorkspaceError) as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_project_viewer_manifest(self, project_path: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            self.send_json(project_viewer_routes.trusted_viewer_manifest(self.root, project_path))
+        except (json.JSONDecodeError, storage.WorkspaceError) as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def project_viewer_frame(self, project_path: str, viewer_id: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            content = project_viewer_routes.trusted_viewer_frame_html(self.root, project_path, viewer_id).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; connect-src 'self'")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        except (json.JSONDecodeError, storage.WorkspaceError) as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def project_viewer_asset(self, project_path: str, asset_name: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            content = project_viewer_routes.trusted_viewer_asset(self.root, project_path, asset_name)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        except (json.JSONDecodeError, storage.WorkspaceError) as exc:
             self.send_json({"error": str(exc)}, status=404)
 
     def save_latest_answer_artifact(self, project_path: str, session_slug: str, title: str = "") -> dict[str, object]:

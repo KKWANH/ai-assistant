@@ -78,6 +78,21 @@ export function parseProjectConnections(value: unknown): ProjectConnectionsPaylo
         linkId: typeof item.linkId === "string" ? item.linkId : undefined,
       })).filter((item) => item.resourceType)
       : [],
+    resolvedImports: Array.isArray(source.resolvedImports)
+      ? source.resolvedImports.filter(isObject).map((item) => ({
+        sourceProjectId: String(item.sourceProjectId || ""),
+        resourceType: String(item.resourceType || ""),
+        localAlias: String(item.localAlias || item.resourceType || ""),
+        mode: typeof item.mode === "string" ? item.mode : undefined,
+        linkId: typeof item.linkId === "string" ? item.linkId : undefined,
+        artifactPattern: typeof item.artifactPattern === "string" ? item.artifactPattern : undefined,
+        latestArtifact: isObject(item.latestArtifact) ? {
+          path: String(item.latestArtifact.path || ""),
+          size: typeof item.latestArtifact.size === "number" ? item.latestArtifact.size : undefined,
+          updatedAt: typeof item.latestArtifact.updatedAt === "string" ? item.latestArtifact.updatedAt : undefined,
+        } : null,
+      })).filter((item) => item.sourceProjectId && item.resourceType)
+      : [],
     visibleSources: Array.isArray(source.visibleSources)
       ? source.visibleSources.filter(isObject).map((item) => ({
         projectId: String(item.projectId || ""),

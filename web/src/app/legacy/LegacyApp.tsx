@@ -1,47 +1,61 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from "react";
-import { ContextPanel } from "../../components/inspector/ContextPanel.jsx";
+import { ContextPanel } from "../../components/inspector/ContextPanel";
 import { copyForAccount, copyForLocale } from "../../shared/copy/copy";
-import { fetchJson, getCookie, setCookie } from "../../lib/api.js";
+import { fetchJson, getCookie, setCookie } from "../../lib/api";
+import {
+  useAutomationsQuery,
+  useHomeQuery,
+  useOpenClawQuery,
+  useRuntimeQuery,
+  useWorkspaceQuery,
+} from "../../shared/api/client";
 import { TopBar } from "../layout/TopBar";
-import { WorkspaceSidebar } from "../layout/WorkspaceSidebar.jsx";
+import { WorkspaceSidebar } from "../layout/WorkspaceSidebar";
 import { parseRoute } from "../router/parseRoute";
-import { CenterPane } from "./CenterPane.jsx";
+import { CenterPane } from "./CenterPane";
 import { AppOverlays } from "./Overlays";
 import "../../styles.css";
 
 
 export function LegacyApp() {
-  const [workspace, setWorkspace] = useState(null);
-  const [chat, setChat] = useState(null);
-  const [runtime, setRuntime] = useState(null);
-  const [home, setHome] = useState(null);
-  const [openclaw, setOpenclaw] = useState(null);
-  const [automations, setAutomations] = useState([]);
-  const [projectConfig, setProjectConfig] = useState(null);
-  const [projectRunDetail, setProjectRunDetail] = useState(null);
-  const [projectArtifact, setProjectArtifact] = useState(null);
+  const [workspace, setWorkspace] = useState<any>(null);
+  const [chat, setChat] = useState<any>(null);
+  const [runtime, setRuntime] = useState<any>(null);
+  const [home, setHome] = useState<any>(null);
+  const [openclaw, setOpenclaw] = useState<any>(null);
+  const [automations, setAutomations] = useState<any[]>([]);
+  const [projectConfig, setProjectConfig] = useState<any>(null);
+  const [projectRunDetail, setProjectRunDetail] = useState<any>(null);
+  const [projectArtifact, setProjectArtifact] = useState<any>(null);
   const [activePath, setActivePath] = useState(parseRoute());
-  const [lightbox, setLightbox] = useState(null);
+  const [lightbox, setLightbox] = useState<any>(null);
   const [error, setError] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => getCookie("aiws_sidebar_open") !== "0");
   const isLogin = activePath.view === "login";
+  const workspaceQuery = useWorkspaceQuery(!isLogin);
+  const homeQuery = useHomeQuery(!isLogin);
+  const runtimeQuery = useRuntimeQuery(!isLogin);
+  const openclawQuery = useOpenClawQuery(!isLogin);
+  const automationsQuery = useAutomationsQuery(!isLogin);
 
   async function refreshWorkspace() {
-    setWorkspace(await fetchJson("/api/workspace"));
+    const payload = await workspaceQuery.refetch();
+    if (payload.data) setWorkspace(payload.data);
   }
 
   async function refreshHome() {
-    const payload = await fetchJson("/api/home");
-    setHome(payload.home);
+    const payload = await homeQuery.refetch();
+    if (payload.data) setHome(payload.data.home);
   }
 
-  async function refreshChat(target = activePath) {
+  async function refreshChat(target: any = activePath) {
     if (!target.projectPath || !target.sessionSlug) {
       setChat(null);
       return;
     }
-    const payload = await fetchJson(`/api/chat/${target.projectPath}/${target.sessionSlug}`);
+    const payload = await fetchJson<any>(`/api/chat/${target.projectPath}/${target.sessionSlug}`);
     setChat((current) => {
       const sameThread = current?.project?.path === target.projectPath && current?.session?.slug === target.sessionSlug;
       const hasPending = (current?.messages || []).some((message) => message.pending);
@@ -52,58 +66,44 @@ export function LegacyApp() {
     });
   }
 
-  async function refreshRuntime() {
-    const payload = await fetchJson("/api/runtime");
-    setRuntime(payload.runtime);
-  }
-
-  async function refreshOpenclaw() {
-    const payload = await fetchJson("/api/openclaw");
-    setOpenclaw(payload.openclaw);
-  }
-
-  async function refreshAutomations() {
-    const payload = await fetchJson("/api/automations");
-    setAutomations(payload.projects || []);
-  }
-
-  async function refreshProjectConfig(target = activePath) {
+  async function refreshProjectConfig(target: any = activePath) {
     if (!target.projectPath) {
       setProjectConfig(null);
       return;
     }
-    const payload = await fetchJson(`/api/project-config/${target.projectPath}`);
+    const payload = await fetchJson<any>(`/api/project-config/${target.projectPath}`);
     setProjectConfig(payload);
   }
 
-  async function openProjectRun(run) {
+  async function openProjectRun(run: any) {
     if (!activePath.projectPath || !run?.run_id) return;
-    const payload = await fetchJson(`/api/project-run?project=${encodeURIComponent(activePath.projectPath)}&run_id=${encodeURIComponent(run.run_id)}`);
+    const payload = await fetchJson<any>(`/api/project-run?project=${encodeURIComponent(activePath.projectPath)}&run_id=${encodeURIComponent(run.run_id)}`);
     setProjectRunDetail(payload);
   }
 
-  async function openProjectArtifact(artifact) {
+  async function openProjectArtifact(artifact: any) {
     if (!activePath.projectPath || !artifact?.path) return;
-    const payload = await fetchJson(`/api/project-artifact?project=${encodeURIComponent(activePath.projectPath)}&path=${encodeURIComponent(artifact.path)}`);
+    const payload = await fetchJson<{ artifact: any }>(`/api/project-artifact?project=${encodeURIComponent(activePath.projectPath)}&path=${encodeURIComponent(artifact.path)}`);
     setProjectArtifact(payload.artifact);
   }
 
   useEffect(() => {
     if (isLogin) return;
-    refreshWorkspace().catch((err) => setError(err.message));
-    refreshHome().catch(() => {});
-    refreshRuntime().catch(() => {});
-    refreshOpenclaw().catch(() => {});
-    refreshAutomations().catch(() => {});
-    const id = window.setInterval(() => refreshRuntime().catch(() => {}), 15000);
-    const clawId = window.setInterval(() => refreshOpenclaw().catch(() => {}), 12000);
-    const automationId = window.setInterval(() => refreshAutomations().catch(() => {}), 20000);
-    return () => {
-      window.clearInterval(id);
-      window.clearInterval(clawId);
-      window.clearInterval(automationId);
-    };
-  }, [isLogin]);
+    if (workspaceQuery.data) setWorkspace(workspaceQuery.data);
+    if (homeQuery.data) setHome(homeQuery.data.home);
+    if (runtimeQuery.data) setRuntime(runtimeQuery.data.runtime);
+    if (openclawQuery.data) setOpenclaw(openclawQuery.data.openclaw);
+    if (automationsQuery.data) setAutomations((automationsQuery.data.projects || []) as any[]);
+    if (workspaceQuery.error) setError(workspaceQuery.error.message);
+  }, [
+    isLogin,
+    workspaceQuery.data,
+    homeQuery.data,
+    runtimeQuery.data,
+    openclawQuery.data,
+    automationsQuery.data,
+    workspaceQuery.error,
+  ]);
 
   useEffect(() => {
     if (isLogin) return;
@@ -126,12 +126,12 @@ export function LegacyApp() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  function navigate(path) {
+  function navigate(path: string) {
     window.history.pushState({}, "", path);
     setActivePath(parseRoute(path));
   }
 
-  async function afterAsk(payload) {
+  async function afterAsk(payload: any) {
     setChat((current) => (typeof payload === "function" ? payload(current) : payload));
     refreshWorkspace().catch(() => {});
     refreshHome().catch(() => {});
@@ -285,7 +285,7 @@ function LoginPage() {
   );
 }
 
-function isPowerMode(account) {
+function isPowerMode(account: any) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 

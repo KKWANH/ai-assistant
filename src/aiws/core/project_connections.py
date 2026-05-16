@@ -80,7 +80,61 @@ def payload(root: str | Path, project_path: str, username: str | None) -> dict[s
         "incomingLinks": incoming,
         "outgoingLinks": outgoing,
         "connectedResources": connected_resources,
+        "resolvedImports": resolved_imports(root, project_path, configured_imports, connected_resources),
         "visibleSources": visible_sources,
+    }
+
+
+def resolved_imports(
+    root: str | Path,
+    project_path: str,
+    configured_imports: list[dict[str, Any]],
+    connected_resources: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Resolve approved linked resources into local aliases usable by Workflow Apps."""
+    resolved: list[dict[str, Any]] = []
+    for item in configured_imports:
+        source_project = str(item.get("sourceProjectId") or "")
+        resource_type = str(item.get("acceptedResourceType") or "")
+        alias = str(item.get("localAlias") or resource_type)
+        match = next(
+            (
+                resource
+                for resource in connected_resources
+                if resource.get("sourceProjectId") == source_project and resource.get("resourceType") == resource_type
+            ),
+            None,
+        )
+        if not match:
+            continue
+        latest = latest_artifact_for_pattern(root, source_project, str(match.get("artifactPattern") or ""))
+        resolved.append(
+            {
+                "sourceProjectId": source_project,
+                "resourceType": resource_type,
+                "localAlias": alias,
+                "mode": match.get("mode", "read"),
+                "linkId": match.get("linkId", ""),
+                "artifactPattern": match.get("artifactPattern", ""),
+                "latestArtifact": latest,
+                "projectId": project_path,
+            }
+        )
+    return resolved
+
+
+def latest_artifact_for_pattern(root: str | Path, project_path: str, artifact_pattern: str) -> dict[str, Any] | None:
+    if not artifact_pattern or ".." in Path(artifact_pattern).parts or artifact_pattern.startswith("/"):
+        return None
+    base = storage.project_dir(root, project_path)
+    matches = [path for path in base.glob(artifact_pattern) if path.is_file()]
+    if not matches:
+        return None
+    latest = max(matches, key=lambda path: path.stat().st_mtime)
+    return {
+        "path": latest.relative_to(base).as_posix(),
+        "size": latest.stat().st_size,
+        "updatedAt": storage.datetime_from_timestamp(latest.stat().st_mtime) if hasattr(storage, "datetime_from_timestamp") else storage.utc_now(),
     }
 
 

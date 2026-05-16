@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ModelPickerButton } from "../model/ModelPickerButton.jsx";
+import { ModelPickerButton } from "../model/ModelPickerButton";
 import { SelectedAttachmentList } from "./SelectedAttachmentList.jsx";
 import { TableWorkbenchPanel } from "../table/TableWorkbenchPanel.jsx";
 import { useAttachments } from "../../hooks/useAttachments.js";

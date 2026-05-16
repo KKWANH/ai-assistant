@@ -1,28 +1,32 @@
-import React, { useEffect, useRef, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { type FormEvent, useEffect, useRef, useState } from "react";
 import { TaskSuggestionsPanel } from "../../components/actions/ActionPanels";
 import { AttachmentList } from "../../components/chat/AttachmentList.jsx";
 import { Composer } from "../../components/chat/Composer";
 import { ContextReceiptCard } from "../../components/chat/ContextReceiptCard.jsx";
 import { WaitingNotice } from "../../components/chat/WaitingNotice.jsx";
 import { MarkdownRenderer } from "../../components/markdown/MarkdownRenderer.jsx";
-import { StartPane } from "../../components/home/StartPane.jsx";
-import { ProjectDashboard } from "../../components/project/ProjectDashboard.jsx";
-import { AppsToolsCatalogPage } from "../../pages/AppsToolsCatalogPage.jsx";
+import { StartPane } from "../../components/home/StartPane";
+import { ProjectDashboard } from "../../components/project/ProjectDashboard";
+import { AppsToolsCatalogPage } from "../../pages/AppsToolsCatalogPage";
 import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
-import { fetchJson } from "../../lib/api.js";
+import { fetchJson } from "../../lib/api";
 import { DEFAULT_MODEL, modelLabel, normalizeModelCatalog } from "../../lib/modelModes.jsx";
+import type { ChatMessage } from "../../shared/contracts/workbench";
 
-export function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }) {
+type CenterPaneProps = Record<string, any>;
+
+export function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }: CenterPaneProps) {
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
   const models = normalizeModelCatalog(account?.model_catalog);
   const [composerDraft, setComposerDraft] = useState("");
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
-  if (activePath.view === "actions") {
-    return <AppsToolsCatalogPage navigate={navigate} copy={copy} home={home} onHome={onHome} projects={projects} />;
+  if (activePath.view === "apps-tools" || activePath.view === "actions") {
+    return <AppsToolsCatalogPage navigate={navigate} copy={copy} home={home} onHome={onHome} />;
   }
   if (activePath.projectPath && !activePath.sessionSlug) {
-    const project = projects.find((item) => item.path === activePath.projectPath);
+    const project = projects.find((item: any) => item.path === activePath.projectPath);
     return (
       <section className="center-pane project-workbench-page">
         <ProjectDashboard
@@ -31,7 +35,6 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
           project={project}
           power={power}
           copy={copy}
-          fetchJson={fetchJson}
           onProjectConfig={onProjectConfig}
           navigate={navigate}
         />
@@ -109,7 +112,9 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
   );
 }
 
-function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
+type EditableTitleProps = Record<string, any>;
+
+function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }: EditableTitleProps) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(chat?.session?.title || activePath.sessionSlug);
@@ -120,13 +125,13 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
     setTitle(chat?.session?.title || activePath.sessionSlug);
   }, [chat?.session?.title, activePath.sessionSlug]);
 
-  async function submit(event) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const clean = title.trim();
     if (!clean) return;
     setError("");
     try {
-      const payload = await fetchJson(`/api/session-title/${activePath.projectPath}/${activePath.sessionSlug}`, {
+      const payload = await fetchJson<{ session: any }>(`/api/session-title/${activePath.projectPath}/${activePath.sessionSlug}`, {
         method: "POST",
         body: new URLSearchParams({ title: clean }),
       });
@@ -171,8 +176,10 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }) {
   );
 }
 
-function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }) {
-  const endRef = useRef(null);
+type MessageTimelineProps = Record<string, any> & { messages: ChatMessage[] };
+
+function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }: MessageTimelineProps) {
+  const endRef = useRef<HTMLDivElement | null>(null);
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages.length]);
   if (messages.length === 0) {
@@ -195,7 +202,7 @@ function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }) {
   );
 }
 
-function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry }) {
+function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry }: Record<string, any> & { message: ChatMessage; index: number }) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
@@ -216,7 +223,9 @@ function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry })
   );
 }
 
-function MessageActions({ message, index, copy = COPY, onEdit, onRetry }) {
+type MessageActionsProps = Record<string, any> & { message: ChatMessage; index: number; copy?: typeof COPY };
+
+function MessageActions({ message, index, copy = COPY, onEdit, onRetry }: MessageActionsProps) {
   function downloadAnswer() {
     const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
     const blob = new window.Blob([String(message?.content || "")], { type: "text/markdown;charset=utf-8" });
@@ -239,9 +248,16 @@ function MessageActions({ message, index, copy = COPY, onEdit, onRetry }) {
   );
 }
 
-async function editFromMessage(message, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal) {
+async function editFromMessage(
+  message: any,
+  index: number,
+  activePath: any,
+  onAsk: any,
+  setComposerDraft: React.Dispatch<React.SetStateAction<string>>,
+  setComposerFocusSignal: React.Dispatch<React.SetStateAction<number>>,
+) {
   if (!activePath?.projectPath || !activePath?.sessionSlug) return;
-  const payload = await fetchJson(`/api/session-truncate/${activePath.projectPath}/${activePath.sessionSlug}`, {
+  const payload = await fetchJson<{ messages: ChatMessage[] }>(`/api/session-truncate/${activePath.projectPath}/${activePath.sessionSlug}`, {
     method: "POST",
     body: new URLSearchParams({ keep: String(index) }),
   });
@@ -250,19 +266,26 @@ async function editFromMessage(message, index, activePath, onAsk, setComposerDra
   setComposerFocusSignal((value) => value + 1);
 }
 
-async function retryFromMessage(messages, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal) {
+async function retryFromMessage(
+  messages: any[],
+  index: number,
+  activePath: any,
+  onAsk: any,
+  setComposerDraft: React.Dispatch<React.SetStateAction<string>>,
+  setComposerFocusSignal: React.Dispatch<React.SetStateAction<number>>,
+) {
   const userIndex = messages.slice(0, index).map((message, itemIndex) => ({ message, itemIndex })).reverse().find((item) => item.message.role === "user")?.itemIndex;
   if (userIndex === undefined) return;
   await editFromMessage(messages[userIndex], userIndex, activePath, onAsk, setComposerDraft, setComposerFocusSignal);
 }
 
-function pendingStepLabel(message, copy) {
+function pendingStepLabel(message: any, copy: typeof COPY) {
   const steps = Array.isArray(message?.execution_plan?.steps) ? message.execution_plan.steps : [];
   const active = steps.find((step) => step.status === "running") || steps.find((step) => step.status === "pending");
   return active?.title || copy.chat.assistantThinking;
 }
 
-function PlannerTraceSummary({ plan }) {
+function PlannerTraceSummary({ plan }: { plan?: any }) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   if (!steps.length) return null;
   return (
@@ -280,7 +303,7 @@ function PlannerTraceSummary({ plan }) {
   );
 }
 
-function messageAuthorLabel(message) {
+function messageAuthorLabel(message: ChatMessage) {
   if (message.role === "user") return message.actor_display || displayNameForId(message.actor);
   if (message.role === "assistant") return COPY.brandCompact;
   if (message.role === "system") return "System";
@@ -288,8 +311,8 @@ function messageAuthorLabel(message) {
   return message.actor_display || displayNameForId(message.actor) || message.role || "message";
 }
 
-function displayNameForId(id) {
-  const map = {
+function displayNameForId(id?: string) {
+  const map: Record<string, string> = {
     local: "Kwanho Kim",
     kwanho: "Kwanho Kim",
     kwanho0096: "Kwanho Kim",
@@ -299,16 +322,16 @@ function displayNameForId(id) {
   return map[id || "local"] || id || "Kwanho Kim";
 }
 
-function formatMessageTime(value) {
+function formatMessageTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function providerFriendlyLabel(provider) {
+function providerFriendlyLabel(provider?: string) {
   return provider === "kimi" ? "High-context AI" : "Fast local AI";
 }
 
-function isPowerMode(account) {
+function isPowerMode(account?: any) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }

@@ -1,9 +1,26 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { type DragEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
-import { csrfHeader, fetchJson } from "../../lib/api.js";
+import { csrfHeader, fetchJson } from "../../lib/api";
+import type { AccountSummary, WorkspaceSummary } from "../../entities/workspace/types";
+import type { ProjectSummary } from "../../entities/project/types";
+import type { SessionSummary } from "../../entities/session/types";
+import type { ActivePath, AutomationProject } from "../../shared/contracts/runtime";
 
-export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, automations = [], onAutomations }) {
+type NavSession = SessionSummary & { projectPath: string };
+type SidebarCopy = typeof COPY;
+
+type WorkspaceSidebarProps = {
+  workspace: WorkspaceSummary | null;
+  activePath: ActivePath;
+  navigate: (path: string) => void;
+  onRefresh?: () => void | Promise<void>;
+  automations?: AutomationProject[];
+  onAutomations?: (projects: AutomationProject[]) => void;
+};
+
+export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, automations = [], onAutomations }: WorkspaceSidebarProps) {
   const [query, setQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -12,9 +29,9 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
   const account = workspace?.account || { username: "local", nickname: "Kwanho Kim", display_name: "Kwanho Kim", profile: {} };
   const copy = copyForAccount(account);
   const activeIsGeneralChat = chats.some((project) => project.path === activePath.projectPath);
-  const allChatSessions = chats.flatMap((project) => project.sessions.map((session) => ({ ...session, projectPath: project.path })));
+  const allChatSessions: NavSession[] = chats.flatMap((project) => project.sessions.map((session) => ({ ...session, projectPath: project.path })));
   const needle = query.trim().toLowerCase();
-  const matchesChat = (session) => !needle || `${session.title} ${session.projectPath}`.toLowerCase().includes(needle);
+  const matchesChat = (session: NavSession) => !needle || `${session.title} ${session.projectPath}`.toLowerCase().includes(needle);
   const visibleChats = allChatSessions
     .filter(matchesChat)
     .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
@@ -32,8 +49,8 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
     await onRefresh?.();
   }
 
-  async function moveSession(projectPath, sessionSlug, targetProjectPath) {
-    const payload = await fetchJson(`/api/move-chat/${projectPath}/${sessionSlug}`, {
+  async function moveSession(projectPath: string, sessionSlug: string, targetProjectPath: string) {
+    const payload = await fetchJson<{ project_path: string; session: { slug: string } }>(`/api/move-chat/${projectPath}/${sessionSlug}`, {
       method: "POST",
       body: new URLSearchParams({ target_project: targetProjectPath }),
     });
@@ -41,12 +58,12 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
     navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
   }
 
-  function dragSession(event, projectPath, sessionSlug) {
+  function dragSession(event: DragEvent<HTMLElement>, projectPath: string, sessionSlug: string) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-aiws-session", JSON.stringify({ projectPath, sessionSlug }));
   }
 
-  async function dropOnProject(event, projectPath) {
+  async function dropOnProject(event: DragEvent<HTMLElement>, projectPath: string) {
     const raw = event.dataTransfer.getData("application/x-aiws-session");
     if (!raw) return;
     event.preventDefault();
@@ -67,7 +84,7 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
         <button className={`secondary-action home-action ${(!activePath.view || activePath.view === "home") && !activePath.projectPath && !activePath.sessionSlug ? "active" : ""}`} type="button" onClick={() => navigate("/")}>{copy.nav.home}</button>
         <NewGeneralChatForm onCreated={(path) => navigate(path)} copy={copy} />
         <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>{copy.nav.newProject}</button>
-        <button className={`secondary-action ${activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/actions")}>{copy.nav.actions}</button>
+        <button className={`secondary-action ${activePath.view === "apps-tools" || activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/apps-tools")}>{copy.nav.actions}</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>
@@ -120,19 +137,19 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
         )}
       </nav>
       {settingsOpen && <SettingsModal account={account} onClose={() => setSettingsOpen(false)} onSaved={onRefresh} />}
-      {projectOpen && <NewProjectModal onClose={() => setProjectOpen(false)} onCreated={(project) => { setProjectOpen(false); onRefresh(); navigate(`/project/${project.path}`); }} />}
+      {projectOpen && <NewProjectModal onClose={() => setProjectOpen(false)} onCreated={(project) => { setProjectOpen(false); onRefresh?.(); navigate(`/project/${project.path}`); }} />}
     </aside>
   );
 }
 
-function LocalJobItem({ project, onAutomations }) {
+function LocalJobItem({ project, onAutomations }: { project: AutomationProject; onAutomations?: (projects: AutomationProject[]) => void }) {
   const [running, setRunning] = useState(false);
   const latest = project.latest_run;
   async function run() {
     if (running) return;
     setRunning(true);
     try {
-      const payload = await fetchJson(`/api/automations/${project.slug}/run`, { method: "POST", body: new URLSearchParams() });
+      const payload = await fetchJson<{ projects: AutomationProject[] }>(`/api/automations/${project.slug}/run`, { method: "POST", body: new URLSearchParams() });
       onAutomations?.(payload.projects || []);
     } finally {
       setRunning(false);
@@ -150,12 +167,22 @@ function LocalJobItem({ project, onAutomations }) {
   );
 }
 
-function ownerProjects(projects, account) {
+function ownerProjects(projects: ProjectSummary[], account: AccountSummary) {
   const username = account?.username || "local";
   return (projects || []).filter((project) => !project.hidden && (project.owner ? project.owner === username : username === "local"));
 }
 
-function ChatSection({ title, sessions, activePath, navigate, query = "", projects, onRefresh, onDragSession, onMoveSession }) {
+function ChatSection({ title, sessions, activePath, navigate, query = "", projects, onRefresh, onDragSession, onMoveSession }: {
+  title: string;
+  sessions: NavSession[];
+  activePath: ActivePath;
+  navigate: (path: string) => void;
+  query?: string;
+  projects: ProjectSummary[];
+  onRefresh?: () => void | Promise<void>;
+  onDragSession: (event: DragEvent<HTMLElement>, projectPath: string, sessionSlug: string) => void;
+  onMoveSession: (projectPath: string, sessionSlug: string, targetProjectPath: string) => void | Promise<void>;
+}) {
   if (!sessions.length) return null;
   return (
     <section className="tree-section compact-section">
@@ -192,7 +219,7 @@ function ChatSection({ title, sessions, activePath, navigate, query = "", projec
   );
 }
 
-function highlightText(value, query) {
+function highlightText(value: string, query: string): ReactNode {
   const text = String(value || "");
   const needle = query.trim();
   if (!needle) return text;
@@ -207,11 +234,20 @@ function highlightText(value, query) {
   );
 }
 
-function initials(value) {
+function initials(value?: string) {
   return String(value || "A").trim().slice(0, 1).toUpperCase();
 }
 
-function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDragSession, onMoveSession, onDropOnProject }) {
+function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDragSession, onMoveSession, onDropOnProject }: {
+  project: ProjectSummary;
+  activePath: ActivePath;
+  navigate: (path: string) => void;
+  projects: ProjectSummary[];
+  onRefresh?: () => void | Promise<void>;
+  onDragSession: (event: DragEvent<HTMLElement>, projectPath: string, sessionSlug: string) => void;
+  onMoveSession: (projectPath: string, sessionSlug: string, targetProjectPath: string) => void | Promise<void>;
+  onDropOnProject: (event: DragEvent<HTMLElement>, projectPath: string) => void | Promise<void>;
+}) {
   const owned = projects.some((item) => item.path === project.path);
   const activeInProject = project.path === activePath.projectPath;
   const [collapsed, setCollapsed] = useState(() => !activeInProject);
@@ -248,7 +284,7 @@ function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDra
           <span>{project.title}</span>
           <small>
             <b>{project.visibility === "public" ? "Shared Project" : "Project"}</b>
-            {project.level > 0 ? " · Subproject" : ""}
+            {(project.level || 0) > 0 ? " · Subproject" : ""}
             {" · "}
             {project.owner_display || project.owner || "Kwanho Kim"}
           </small>
@@ -290,20 +326,30 @@ function ProjectNode({ project, activePath, navigate, projects, onRefresh, onDra
   );
 }
 
-function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false, projects = [], navigate, onRefresh, onMoveSession }) {
+function ItemOptions({ kind, projectPath, sessionSlug = "", title, isGeneral = false, projects = [], navigate, onRefresh, onMoveSession }: {
+  kind: "project" | "session";
+  projectPath: string;
+  sessionSlug?: string;
+  title?: string;
+  isGeneral?: boolean;
+  projects?: ProjectSummary[];
+  navigate: (path: string) => void;
+  onRefresh?: () => void | Promise<void>;
+  onMoveSession?: (projectPath: string, sessionSlug: string, targetProjectPath: string) => void | Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [moving, setMoving] = useState(false);
   const [draftTitle, setDraftTitle] = useState(title || "");
-  const menuRef = useRef(null);
+  const menuRef = useRef<HTMLSpanElement | null>(null);
   const targetProjects = projects.filter((project) => project.path !== projectPath);
 
   useEffect(() => {
     if (!open) return undefined;
-    function close(event) {
-      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false);
+    function close(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false);
     }
-    function key(event) {
+    function key(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
     document.addEventListener("pointerdown", close);
@@ -339,7 +385,7 @@ function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false,
     navigate("/");
   }
 
-  async function moveToProject(target) {
+  async function moveToProject(target: string) {
     setOpen(false);
     if (!target) return;
     await onMoveSession?.(projectPath, sessionSlug, target);
@@ -347,7 +393,7 @@ function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false,
 
   async function moveOut() {
     setOpen(false);
-    const payload = await fetchJson(`/api/move-chat-out/${projectPath}/${sessionSlug}`, { method: "POST", body: new URLSearchParams() });
+    const payload = await fetchJson<{ project_path: string; session: { slug: string } }>(`/api/move-chat-out/${projectPath}/${sessionSlug}`, { method: "POST", body: new URLSearchParams() });
     await onRefresh?.();
     navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
   }
@@ -394,18 +440,18 @@ function ItemOptions({ kind, projectPath, sessionSlug, title, isGeneral = false,
   );
 }
 
-function NewProjectModal({ onClose, onCreated }) {
+function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (project: ProjectSummary) => void }) {
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState("private");
   const [error, setError] = useState("");
   const canSubmit = title.trim().length > 0;
-  async function submit(event) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
     setError("");
     try {
       const form = new URLSearchParams({ title, visibility });
-      const payload = await fetchJson("/api/projects", { method: "POST", body: form });
+      const payload = await fetchJson<{ project: ProjectSummary }>("/api/projects", { method: "POST", body: form });
       onCreated(payload.project);
     } catch (err) {
       setError(err.message || "Could not create project.");
@@ -439,7 +485,7 @@ function NewProjectModal({ onClose, onCreated }) {
   );
 }
 
-function NewGeneralChatForm({ onCreated, copy = COPY }) {
+function NewGeneralChatForm({ onCreated, copy = COPY }: { onCreated: (path: string) => void; copy?: SidebarCopy }) {
   function create() {
     onCreated("/");
   }
@@ -450,7 +496,7 @@ function NewGeneralChatForm({ onCreated, copy = COPY }) {
   );
 }
 
-function NewSessionForm({ projectPath, onCreated }) {
+function NewSessionForm({ projectPath, onCreated }: { projectPath: string; onCreated: (path: string) => void }) {
   function startBlankProjectChat() {
     onCreated(`/project/${projectPath}`);
   }
@@ -461,19 +507,37 @@ function NewSessionForm({ projectPath, onCreated }) {
   );
 }
 
-function SettingsModal({ account, onClose, onSaved }) {
+type UsageProvider = { provider: string; usd?: number; calls?: number };
+type UsageSummary = {
+  month_usd?: number;
+  projected_month_usd?: number;
+  providers?: UsageProvider[];
+};
+type UsageDetail = {
+  user?: UsageSummary;
+  all_accounts?: UsageSummary;
+};
+
+function SettingsModal({ account, onClose, onSaved }: { account: any; onClose: () => void; onSaved?: () => void | Promise<void> }) {
   const [saving, setSaving] = useState(false);
-  const profile = account.profile || {};
+  const [usageDetail, setUsageDetail] = useState<UsageDetail | null>(null);
+  const profile = (account.profile || {}) as Record<string, string>;
   const copy = copyForAccount(account);
-  const usage = account.usage || {};
+  const usage = (account.usage || {}) as Record<string, unknown>;
   const costUsage = account.cost_usage || {};
-  async function submit(event) {
+  const costMonthly = recordValue(costUsage.monthly);
+  const monthly = usageDetail?.user || recordValue(costMonthly.user);
+  const allMonthly = usageDetail?.all_accounts || recordValue(costMonthly.all_accounts);
+  useEffect(() => {
+    fetchJson<UsageDetail>("/api/model-usage").then(setUsageDetail).catch(() => {});
+  }, []);
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     const form = new FormData(event.currentTarget);
     try {
       await fetchJson("/api/profile", { method: "POST", body: form });
-      onSaved();
+      await onSaved?.();
       onClose();
     } finally {
       setSaving(false);
@@ -497,25 +561,36 @@ function SettingsModal({ account, onClose, onSaved }) {
         </header>
         <section className="settings-stats" aria-label="Account usage history">
           <div>
-            <strong>{usage.messages || 0}</strong>
+            <strong>{String(usage.messages || 0)}</strong>
             <span>{copy.settings.savedMessages}</span>
           </div>
           <div>
-            <strong>{usage.asks || 0}</strong>
+            <strong>{String(usage.asks || 0)}</strong>
             <span>{copy.settings.aiRequests}</span>
           </div>
           <div>
-            <strong>${Number(costUsage.month_usd || 0).toFixed(4)}</strong>
+            <strong>${Number(monthly.month_usd ?? costUsage.month_usd ?? 0).toFixed(4)}</strong>
             <span>{copy.settings.monthlyApiCost}</span>
+          </div>
+          <div>
+            <strong>${Number(monthly.projected_month_usd ?? 0).toFixed(4)}</strong>
+            <span>{copy.settings.monthlyApiForecast || "Month forecast"}</span>
           </div>
           {account.admin && (
             <div>
-              <strong>${Number(costUsage.all_month_usd || 0).toFixed(4)}</strong>
-              <span>전체 계정 월 예측</span>
+              <strong>${Number(allMonthly.projected_month_usd ?? costUsage.all_month_usd ?? 0).toFixed(4)}</strong>
+              <span>{copy.settings.allAccountForecast || "All accounts forecast"}</span>
             </div>
           )}
         </section>
-        <p className="muted cost-note">{costUsage.basis || "Estimated token cost. Provider billing is source of truth."}</p>
+        <p className="muted cost-note">{String(costUsage.basis || "Estimated token cost. Provider billing is source of truth.")}</p>
+        {Array.isArray(monthly.providers) && monthly.providers.length > 0 && (
+          <div className="settings-cost-breakdown">
+            {(monthly.providers as UsageProvider[]).map((item) => (
+              <span key={item.provider}>{item.provider}: ${Number(item.usd || 0).toFixed(4)} · {item.calls} calls</span>
+            ))}
+          </div>
+        )}
         <form onSubmit={submit}>
           <fieldset>
             <legend>{copy.settings.profile}</legend>
@@ -542,8 +617,13 @@ function SettingsModal({ account, onClose, onSaved }) {
   );
 }
 
-function formatDate(value) {
+function formatDate(value?: string) {
+  if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }

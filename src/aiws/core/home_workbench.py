@@ -382,12 +382,17 @@ def save_upload(base: Path, upload: tuple[str, bytes], logs: list[dict[str, Any]
     target.write_bytes(content)
     logs.append(log_event("file", f"Stored input file: {target.name}"))
     text = ""
+    extraction_error = ""
     if not attachments.is_image_extension(extension):
-        if extension == ".csv":
-            text = target.read_text(encoding="utf-8", errors="replace")[:50_000]
-        else:
-            text = attachments.extract_text(target, extension)
-    return {"path": target.relative_to(base).as_posix(), "absolute": target, "filename": filename, "text": text}
+        try:
+            if extension == ".csv":
+                text = target.read_text(encoding="utf-8", errors="replace")[:50_000]
+            else:
+                text = attachments.extract_text(target, extension)
+        except storage.WorkspaceError as exc:
+            extraction_error = str(exc)
+            logs.append(log_event("warning", extraction_error))
+    return {"path": target.relative_to(base).as_posix(), "absolute": target, "filename": filename, "text": text, "extraction_error": extraction_error}
 
 
 def combined_saved_file(saved_files: list[dict[str, Any]]) -> dict[str, Any]:
@@ -477,11 +482,16 @@ def input_text(content: str, saved_file: dict[str, Any] | None) -> str:
 
 def document_summary_markdown(text: str, saved_file: dict[str, Any] | None) -> str:
     source = saved_file["filename"] if saved_file else "typed input"
+    extraction_error = str((saved_file or {}).get("extraction_error", "")).strip()
     readable = clean_readable_excerpt(text)
     status = "success" if readable.strip() else "no readable text"
+    if extraction_error:
+        status = "failed"
     limitation = (
         "This local starter uses extracted text and simple structure; ask a model for deeper interpretation."
-        if readable.strip()
+        if readable.strip() and not extraction_error
+        else extraction_error
+        if extraction_error
         else "No text was extracted from the input."
     )
     excerpt = readable[:2400].strip() or "(no extracted text)"

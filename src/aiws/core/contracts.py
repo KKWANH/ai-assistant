@@ -80,15 +80,19 @@ def input_schema_field(
     required: bool = False,
     accept: list[str] | None = None,
     help_text: str = "",
+    source: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    field = {
         "id": field_id,
         "label": label,
-        "type": field_type if field_type in {"file", "text", "select", "number", "boolean"} else "text",
+        "type": field_type if field_type in {"file", "text", "select", "number", "boolean", "resource"} else "text",
         "required": required,
         "accept": accept or [],
         "help": help_text,
     }
+    if source:
+        field["source"] = source
+    return field
 
 
 def output_artifact_spec(

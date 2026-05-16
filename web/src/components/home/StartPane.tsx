@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { type ChangeEvent, useEffect, useState } from "react";
 import { Composer } from "../chat/Composer";
 import { HomeArtifactContent } from "../table/TableWorkbenchPanel.jsx";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
-import { fetchJson } from "../../lib/api.js";
+import { fetchJson } from "../../lib/api";
 import {
   MODEL_MODES,
   normalizeModelCatalog,
 } from "../../lib/modelModes.jsx";
+import type { AccountLike, ChatUpdater, HomeAction, HomePayload, RunDetail } from "../../shared/contracts/runtime";
+import type { ArtifactRecord, ModelCatalogItem, RunRecord } from "../../shared/contracts/workbench";
 
-export const STARTER_ACTIONS = [
+export const STARTER_ACTIONS: HomeAction[] = [
   {
     id: "document_summary",
     label: "Summarize document",
@@ -48,28 +51,25 @@ export const STARTER_ACTIONS = [
     prompt: "Profile this table deterministically and summarize the column structure, key figures, possible outliers, and next analysis steps.",
     wantsFile: true,
   },
-  {
-    id: "deep_research",
-    label: "Deep Research",
-    category: "Chat Tool",
-    status: "Ready",
-    description: "Start a research pass that separates local context, web search intent, citations, and follow-up questions.",
-    inputs: "question · optional files · web approval",
-    output: "research brief · cited notes",
-    scope: "One-off tool",
-    viewer: "Research brief",
-    prompt: "Research this question carefully. Separate what came from local files, what needs web verification, sources to check, risks, and next questions.",
-  },
 ];
 
-function isPowerMode(account) {
+function isPowerMode(account?: AccountLike) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-export function StarterActionsGrid({ actions, onStart, running = "", hasFile = false, copy = COPY }) {
+export function StarterActionsGrid({ actions, onStart, running = "", hasFile = false, copy = COPY }: {
+  actions?: HomeAction[];
+  onStart?: (action: HomeAction) => void;
+  running?: string;
+  hasFile?: boolean;
+  copy?: typeof COPY;
+}) {
   const allowedToolIds = new Set(STARTER_ACTIONS.map((action) => action.id));
-  const sourceActions = actions?.length ? actions.filter((action) => allowedToolIds.has(action.id)) : STARTER_ACTIONS;
-  const items = sourceActions.map((action) => ({
+  const sourceActions = actions?.length
+    ? actions.filter((action) => allowedToolIds.has(action.id) && (action.resource_type || action.tool_type) === "chat_tool")
+    : STARTER_ACTIONS;
+  const items: HomeAction[] = sourceActions.map((action: HomeAction) => ({
+    ...STARTER_ACTIONS.find((starter) => starter.id === action.id),
     ...action,
     label: action.label || action.title,
     inputs: Array.isArray(action.inputs) ? action.inputs.join(" · ") : action.inputs,
@@ -78,8 +78,8 @@ export function StarterActionsGrid({ actions, onStart, running = "", hasFile = f
     wantsFile: Array.isArray(action.inputs) && action.inputs.some((item) => String(item).startsWith(".")),
     wantsBrief: action.id === "codex_task_prompt",
   }));
-  const localizedItems = items.map((action) => localizeStarterAction(action, copy));
-  const actionState = (action) => {
+  const localizedItems = items.map((action: HomeAction) => localizeStarterAction(action, copy));
+  const actionState = (action: HomeAction) => {
     if (action.disabled) return { value: "planned", label: copy.home.notAvailable, helper: copy.home.notAvailable };
     if (action.wantsFile && !hasFile) return { value: "needs-file", label: copy.home.needsFile, helper: copy.home.attachRequired };
     if (action.wantsBrief) return { value: "ready", label: copy.home.ready, helper: copy.home.codexBriefHint };
@@ -111,20 +111,26 @@ export function StarterActionsGrid({ actions, onStart, running = "", hasFile = f
   );
 }
 
-export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }) {
-  const [files, setFiles] = useState([]);
+export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }: {
+  action: HomeAction | null;
+  running: string;
+  onClose: () => void;
+  onRun: (action: HomeAction, options: { files: File[]; content: string }) => void | Promise<void>;
+  copy?: typeof COPY;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
   const [notes, setNotes] = useState("");
   const inputId = `home-tool-file-${action?.id || "tool"}`;
   if (!action) return null;
   const localized = localizeStarterAction(action, copy);
   const canRun = !localized.wantsFile || files.length > 0;
 
-  function addFiles(nextFiles) {
+  function addFiles(nextFiles?: FileList | File[] | null) {
     const next = Array.from(nextFiles || []);
     setFiles((current) => [...current, ...next]);
   }
 
-  function removeFile(index) {
+  function removeFile(index: number) {
     setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
@@ -142,7 +148,7 @@ export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }) {
           <small>{localized.category || copy.catalog?.oneOffTool || "Chat Tool"}</small>
           <strong>{localized.label}</strong>
         </div>
-        <button type="button" onClick={onClose}>{copy.common?.close || "닫기"}</button>
+        <button type="button" onClick={onClose}>{(copy as any).common?.close || "닫기"}</button>
       </div>
       <p>{localized.inputs} → {localized.output || "answer"}</p>
       <div className="tool-run-drop">
@@ -150,13 +156,13 @@ export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }) {
           id={inputId}
           type="file"
           multiple
-          onChange={(event) => addFiles(event.target.files)}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => addFiles(event.target.files)}
           accept=".txt,.md,.csv,.xls,.xlsx,.json,.yaml,.yml,.pdf,.docx,.ppt,.pptx,image/png,image/jpeg,image/gif,image/webp"
         />
         <label htmlFor={inputId}>{files.length ? "파일 더 추가" : "파일 선택 / 끌어놓기"}</label>
         {files.length > 0 && (
           <div className="tool-run-files">
-            {files.map((file, index) => (
+            {files.map((file: File, index: number) => (
               <span key={`${file.name}-${index}`}>{file.name}<button type="button" onClick={() => removeFile(index)}>×</button></span>
             ))}
           </div>
@@ -183,13 +189,18 @@ export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }) {
   );
 }
 
-function localizeStarterAction(action, copy) {
-  const localized = copy.starterActions?.[action.id];
+function localizeStarterAction(action: HomeAction, copy: typeof COPY): HomeAction {
+  const localized = (copy.starterActions as Record<string, Partial<HomeAction>> | undefined)?.[action.id];
   return localized ? { ...action, ...localized } : action;
 }
 
-function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
-  const run = detail.run || {};
+function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }: {
+  detail: RunDetail & { run?: RunRecord & { execution_plan?: Record<string, unknown>; logs?: Array<Record<string, unknown>>; errors?: string[] } };
+  power: boolean;
+  onClose: () => void;
+  onOpenArtifact?: (artifact: ArtifactRecord) => void | Promise<void>;
+}) {
+  const run = (detail.run || {}) as RunRecord & { execution_plan?: Record<string, any>; logs?: Array<Record<string, any>>; errors?: string[]; artifacts?: ArtifactRecord[] };
   const plan = run.execution_plan || {};
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   return (
@@ -199,12 +210,12 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
         <p className="eyebrow">Work Detail</p>
         <h2>{run.label || run.action_id || "Workbench output"}</h2>
         <div className="run-meta-grid"><span>Status: {run.status}</span><span>Tool/App: {run.action_id}</span><span>{run.created_at}</span></div>
-        {run.artifacts?.length > 0 && <div className="artifact-list"><strong>Artifacts</strong>{run.artifacts.map((item) => <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>{item.path.split("/").pop()} · {item.viewer_type}</button>)}</div>}
-        {steps.length > 0 && <div className="run-step-list"><strong>Steps</strong>{steps.map((step) => <span key={step.id || step.type}><b>{step.id || step.type}</b><small>{step.output || step.status || "done"}</small></span>)}</div>}
+        {(run.artifacts || []).length > 0 && <div className="artifact-list"><strong>Artifacts</strong>{(run.artifacts || []).map((item) => <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>{item.path.split("/").pop()} · {item.viewer_type}</button>)}</div>}
+        {steps.length > 0 && <div className="run-step-list"><strong>Steps</strong>{steps.map((step: any) => <span key={step.id || step.type}><b>{step.id || step.type}</b><small>{step.output || step.status || "done"}</small></span>)}</div>}
         <details className="run-log-details" open={power}>
           <summary>Logs</summary>
-          <pre>{(run.logs || detail.logs || []).map((item) => `[${item.kind || item.type || "log"}] ${item.content || item.message || ""}`).join("\n") || "(empty)"}</pre>
-          {run.errors?.length > 0 && <pre className="error-text">{run.errors.join("\n")}</pre>}
+          <pre>{(run.logs || detail.logs || []).map((item: any) => `[${item.kind || item.type || "log"}] ${item.content || item.message || ""}`).join("\n") || "(empty)"}</pre>
+          {(run.errors || []).length > 0 && <pre className="error-text">{(run.errors || []).join("\n")}</pre>}
         </details>
         {power && <details className="run-log-details"><summary>Raw plan</summary><pre>{JSON.stringify(plan, null, 2)}</pre></details>}
       </div>
@@ -212,7 +223,12 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }) {
   );
 }
 
-function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
+function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }: {
+  artifact: ArtifactRecord & { content?: string };
+  onClose: () => void;
+  onAsk?: (artifact: ArtifactRecord) => void | Promise<void>;
+  onReport?: (artifact: ArtifactRecord) => void | Promise<void>;
+}) {
   const filename = artifact.path?.split("/")?.pop() || artifact.path;
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
@@ -235,15 +251,28 @@ function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }) {
   );
 }
 
-export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome }) {
+export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome }: {
+  error?: string;
+  navigate: (path: string) => void;
+  refreshWorkspace?: () => void | Promise<void>;
+  onAsk: (payload: ChatUpdater) => void | Promise<void>;
+  account?: AccountLike;
+  models?: ModelCatalogItem[];
+  projectPath?: string;
+  embedded?: boolean;
+  workspace?: unknown;
+  home?: HomePayload | null;
+  onHome?: (home: HomePayload) => void;
+  refreshHome?: () => void | Promise<void>;
+}) {
   const [homeRunning, setHomeRunning] = useState("");
-  const [homeRunDetail, setHomeRunDetail] = useState(null);
-  const [homeArtifact, setHomeArtifact] = useState(null);
+  const [homeRunDetail, setHomeRunDetail] = useState<RunDetail | null>(null);
+  const [homeArtifact, setHomeArtifact] = useState<(ArtifactRecord & { content?: string }) | null>(null);
   const [homeError, setHomeError] = useState("");
   const [composerDraft, setComposerDraft] = useState("");
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerAttachmentSignal, setComposerAttachmentSignal] = useState(0);
-  const [toolPanelAction, setToolPanelAction] = useState(null);
+  const [toolPanelAction, setToolPanelAction] = useState<HomeAction | null>(null);
   const power = isPowerMode(account);
   const copy = copyForAccount(account);
   const modelModes = normalizeModelCatalog(models);
@@ -256,7 +285,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     const rawAction = STARTER_ACTIONS.find((item) => item.id === starterId);
     const action = rawAction ? localizeStarterAction(rawAction, copy) : null;
     if (action && !action.disabled) {
-      setComposerDraft(action.prompt || action.label);
+      setComposerDraft(action.prompt || action.label || "");
       setComposerFocusSignal((value) => value + 1);
       if (action.wantsFile) setComposerAttachmentSignal((value) => value + 1);
     }
@@ -267,12 +296,12 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
     // Shared Composer owns home chat attachments.
   }
 
-  function startAction(action) {
+  function startAction(action: HomeAction) {
     if (action.disabled) return;
     setToolPanelAction(action);
   }
 
-  async function runHomeAction(action, options = {}) {
+  async function runHomeAction(action: HomeAction, options: { files?: File[]; content?: string } = {}) {
     if (!isHomeWorkbench || homeRunning || action.disabled || String(action.status).toLowerCase() === "planned") return;
     const actionFiles = Array.from(options.files || []);
     const actionContent = String(options.content || "").trim();
@@ -293,7 +322,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       form.set("provider", "ollama");
       form.set("model", "qwen3:8b");
       actionFiles.forEach((file) => form.append("attachment", file));
-      const payload = await fetchJson(`/api/home-actions/${action.id}/run`, { method: "POST", body: form });
+      const payload = await fetchJson<{ home: HomePayload; run: RunRecord & { artifacts?: ArtifactRecord[] } }>(`/api/home-actions/${action.id}/run`, { method: "POST", body: form });
       onHome?.(payload.home);
       const firstArtifact = payload.run?.artifacts?.[0];
       if (firstArtifact) await askAboutHomeArtifact(firstArtifact);
@@ -301,36 +330,36 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       clearFile();
       setToolPanelAction(null);
     } catch (err) {
-      setHomeError(err.message || "Could not run Chat Tool.");
+      setHomeError(err instanceof Error ? err.message : "Could not run Chat Tool.");
     } finally {
       setHomeRunning("");
     }
   }
 
-  async function openHomeArtifact(item) {
+  async function openHomeArtifact(item: ArtifactRecord) {
     setHomeError("");
     try {
-      const payload = await fetchJson(`/api/home-artifact?path=${encodeURIComponent(item.path)}`);
+      const payload = await fetchJson<{ artifact: ArtifactRecord & { content?: string } }>(`/api/home-artifact?path=${encodeURIComponent(item.path)}`);
       setHomeArtifact(payload.artifact);
     } catch (err) {
-      setHomeError(err.message);
+      setHomeError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function askAboutHomeArtifact(artifact) {
-    const payload = await fetchJson("/api/home-artifact/ask", { method: "POST", body: new URLSearchParams({ path: artifact.path }) });
+  async function askAboutHomeArtifact(artifact: ArtifactRecord) {
+    const payload = await fetchJson<{ project_path: string; session: { slug: string } }>("/api/home-artifact/ask", { method: "POST", body: new URLSearchParams({ path: artifact.path }) });
     refreshWorkspace?.();
     navigate(`/chat/${payload.project_path}/${payload.session.slug}`);
   }
 
-  async function reportFromHomeArtifact(artifact) {
+  async function reportFromHomeArtifact(artifact: ArtifactRecord) {
     setHomeError("");
     try {
-      const payload = await fetchJson("/api/home-artifact/report", { method: "POST", body: new URLSearchParams({ path: artifact.path }) });
+      const payload = await fetchJson<{ home: HomePayload; run: RunRecord }>("/api/home-artifact/report", { method: "POST", body: new URLSearchParams({ path: artifact.path }) });
       onHome?.(payload.home);
       setHomeRunDetail({ run: payload.run, result: { run: payload.run }, stdout: "", stderr: "", markdown: "" });
     } catch (err) {
-      setHomeError(err.message);
+      setHomeError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -340,7 +369,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       <div className="start-composer-shell" data-context-note="AIWS prioritizes saved chats, project context, and attached files.">
         <Composer
           activePath={{ projectPath, sessionSlug: "" }}
-          onAsk={onAsk}
+          onAsk={onAsk as any}
           account={account}
           power={power}
           models={modelModes}

@@ -88,13 +88,14 @@ test.beforeEach(async ({ page }) => {
 
 test("home loads", async ({ page }) => {
   await page.goto("/home");
-  await expect(page.getByRole("heading", { name: "Start a work session", level: 1 })).toBeVisible();
+  await expect(page.getByPlaceholder("Ask anything")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Chat Tools" })).toBeVisible();
 });
 
 test("apps and tools catalog navigation loads", async ({ page }) => {
-  await page.goto("/actions");
-  await expect(page.getByRole("heading", { name: "Apps & Tools" })).toBeVisible();
+  await page.goto("/apps-tools");
   await expect(page.getByRole("heading", { name: "Chat Tools" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workflow Apps" })).toBeVisible();
 });
 
 test("project dashboard opens and investment app can launch chat dock", async ({ page }) => {

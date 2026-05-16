@@ -14,8 +14,8 @@ export type AccountSummary = {
     [key: string]: unknown;
   };
   model_catalog?: ModelCatalogItem[];
-  cost_usage?: Record<string, number>;
-  usage?: Record<string, number>;
+  cost_usage?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
 };
 
 export type WorkspaceSummary = {

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from aiws.core import action_registry, home_workbench
+from aiws.core import action_registry, home_workbench, project_connections
 
 
 def preview_home(action_id: str) -> dict[str, Any]:
@@ -56,4 +56,12 @@ def run_project(
     actor: str | None = None,
     confirmed: bool = False,
 ) -> dict[str, Any]:
-    return action_registry.run_action(root, project_path, command_name, actor=actor, confirmed=confirmed)
+    connections = project_connections.payload(root, project_path, actor)
+    return action_registry.run_action(
+        root,
+        project_path,
+        command_name,
+        actor=actor,
+        confirmed=confirmed,
+        resolved_imports=connections.get("resolvedImports", []),
+    )

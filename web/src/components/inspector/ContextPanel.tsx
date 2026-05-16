@@ -1,22 +1,40 @@
-import React, { useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { type FormEvent, useState } from "react";
 import { WorkflowAppInspector, AutomationPanel } from "../actions/ActionPanels";
 import { AttachmentList } from "../chat/AttachmentList.jsx";
 import { ContextReceiptCard } from "../chat/ContextReceiptCard.jsx";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
 import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
-import { fetchJson } from "../../lib/api.js";
+import { fetchJson } from "../../lib/api";
 
-function isPowerMode(account) {
+function isPowerMode(account?: any) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-function formatDate(value) {
+function formatDate(value?: string) {
+  if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
 }
 
-export function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }) {
+type ContextPanelProps = {
+  chat: any;
+  activePath: any;
+  runtime: any;
+  openclaw: any;
+  automations?: any[];
+  projectConfig: any;
+  onProjectConfig?: any;
+  onAutomations?: any;
+  onPreview?: any;
+  onChat?: any;
+  account?: any;
+  onOpenRun?: any;
+  onOpenArtifact?: any;
+};
+
+export function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }: ContextPanelProps) {
   const power = isPowerMode(account);
   const operator = power && Boolean(account?.admin);
   const diagnosticsVisible = operator && runtime?.diagnostics_visible !== false;
@@ -66,7 +84,7 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
       <div className="context-tabs" role="tablist">
         {tabs.map((item) => (
           <button key={item} type="button" className={currentTab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {copy.inspector.tabs[item]}
+            {(copy.inspector.tabs as Record<string, string>)[item]}
           </button>
         ))}
       </div>
@@ -150,13 +168,13 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
   );
 }
 
-function PromoteChatCard({ chat, activePath, copy = COPY }) {
+function PromoteChatCard({ chat, activePath, copy = COPY }: { chat: any; activePath: any; copy?: typeof COPY }) {
   const [busy, setBusy] = useState(false);
   async function promote() {
     setBusy(true);
     try {
       const title = chat?.session?.title || copy.inspector.promoteTitle;
-      const payload = await fetchJson(`/api/promote-chat/${activePath.projectPath}/${activePath.sessionSlug}`, { method: "POST", body: new URLSearchParams({ title }) });
+      const payload = await fetchJson<{ project_path: string; session: { slug: string } }>(`/api/promote-chat/${activePath.projectPath}/${activePath.sessionSlug}`, { method: "POST", body: new URLSearchParams({ title }) });
       window.location.href = `/chat/${payload.project_path}/${payload.session.slug}`;
     } finally {
       setBusy(false);
@@ -165,7 +183,14 @@ function PromoteChatCard({ chat, activePath, copy = COPY }) {
   return <div className="empty-action-state"><p><strong>{copy.inspector.promoteTitle}</strong></p><span>{copy.inspector.promoteBody}</span><button type="button" onClick={promote} disabled={busy}>{busy ? copy.inspector.promoting : copy.inspector.promote}</button></div>;
 }
 
-function SessionControlPanel({ chat, attachments, latestReceipt, artifacts, power, copy = COPY }) {
+function SessionControlPanel({ chat, attachments, latestReceipt, artifacts, power, copy = COPY }: {
+  chat: any;
+  attachments: any[];
+  latestReceipt: any;
+  artifacts: any[];
+  power: boolean;
+  copy?: typeof COPY;
+}) {
   const workSession = chat?.work_session || {};
   const taskType = workSession.type || (attachments.length ? "file_analysis" : "ask_once");
   const privacy = latestReceipt?.privacy_mode || chat?.context_manifest?.privacy_mode || "local";
@@ -189,12 +214,12 @@ function SessionControlPanel({ chat, attachments, latestReceipt, artifacts, powe
   );
 }
 
-function WorkSessionCard({ workSession, copy = COPY }) {
+function WorkSessionCard({ workSession, copy = COPY }: { workSession?: any; copy?: typeof COPY }) {
   if (!workSession) return null;
   return <div className="manifest-file-facts"><strong>{copy.inspector.workSession}</strong><span>{workSession.type} · {workSession.status}</span><span>{(workSession.model_calls || []).length} model calls · {(workSession.artifacts || []).length} artifacts</span>{(workSession.next_actions || []).slice(0, 3).map((item) => <span key={item.id || item.label}><small>{item.label}</small></span>)}</div>;
 }
 
-function ContextManifestCard({ manifest, power }) {
+function ContextManifestCard({ manifest, power }: { manifest?: any; power: boolean }) {
   if (!manifest) return null;
   const included = manifest.included || [];
   const excluded = manifest.excluded || [];
@@ -209,7 +234,7 @@ function ContextManifestCard({ manifest, power }) {
   );
 }
 
-function manifestLabel(item) {
+function manifestLabel(item: any) {
   if (item.type === "goal") return `Goal: ${item.label}`;
   if (item.type === "skills") return `${item.count} skills`;
   if (item.type === "chat_files") return `${item.count} chat files`;
@@ -218,15 +243,15 @@ function manifestLabel(item) {
   return item.label || item.type;
 }
 
-function OpenClawPanel({ openclaw }) {
+function OpenClawPanel({ openclaw }: { openclaw: any }) {
   const gateway = openclaw?.gateway?.summary || {};
   const sessionCount = openclaw?.sessions?.count ?? openclaw?.sessions?.totalCount ?? 0;
   return <div className="runtime-card openclaw-card"><strong>OpenClaw</strong><p>{openclaw?.installed ? openclaw.version || "installed" : "not installed"}</p><p>gateway: {gateway.connectivity_probe || gateway.runtime || "unknown"}</p><p>sessions: {sessionCount}</p>{gateway.dashboard && <a href={gateway.dashboard} target="_blank" rel="noreferrer">{gateway.dashboard}</a>}<code>openclaw gateway status</code></div>;
 }
 
-function collectVisibleAttachments(chat) {
+function collectVisibleAttachments(chat: any): any[] {
   const seen = new Set();
-  const items = [];
+  const items: any[] = [];
   function add(item) {
     if (!item || !item.filename) return;
     const key = item.url || item.filename;
@@ -239,7 +264,7 @@ function collectVisibleAttachments(chat) {
   return items;
 }
 
-function latestContextReceipt(chat) {
+function latestContextReceipt(chat: any): any {
   const messages = Array.isArray(chat?.messages) ? chat.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.context_receipt) return messages[index].context_receipt;
@@ -247,18 +272,23 @@ function latestContextReceipt(chat) {
   return null;
 }
 
-function GoalPanel({ chat, activePath, onChat, power = false }) {
+function GoalPanel({ chat, activePath, onChat, power = false }: {
+  chat: any;
+  activePath: any;
+  onChat?: any;
+  power?: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const goal = chat?.goal || {};
   const codexPrompt = chat?.codex_prompt || "";
-  async function save(event) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     try {
       const form = new FormData(event.currentTarget);
-      const payload = await fetchJson(`/api/goal/${activePath.projectPath}`, { method: "POST", body: form });
-      onChat((current) => ({ ...(current || {}), goal: payload.goal, codex_prompt: payload.codex_prompt }));
+      const payload = await fetchJson<{ goal: Record<string, unknown>; codex_prompt: string }>(`/api/goal/${activePath.projectPath}`, { method: "POST", body: form });
+      onChat?.((current: any) => ({ ...(current || {}), goal: payload.goal, codex_prompt: payload.codex_prompt }));
       setEditing(false);
     } finally {
       setSaving(false);
@@ -267,7 +297,7 @@ function GoalPanel({ chat, activePath, onChat, power = false }) {
   async function copyPrompt() {
     await navigator.clipboard?.writeText(codexPrompt);
   }
-  async function copyVariant(kind) {
+  async function copyVariant(kind: "full" | "task" | "ui" | "bugfix" | "test") {
     const prefix = {
       full: "Use the full project context and goal below.",
       task: "Focus only on the next concrete implementation task.",
@@ -280,21 +310,21 @@ function GoalPanel({ chat, activePath, onChat, power = false }) {
   if (editing) {
     return (
       <form className="goal-form" data-goal-panel onSubmit={save}>
-        <textarea name="objective" defaultValue={goal.objective || ""} placeholder="Objective" />
-        <textarea name="current_status" defaultValue={goal.current_status || ""} placeholder="Current status" />
-        <textarea name="next_actions" defaultValue={(goal.next_actions || []).join("\n")} placeholder="Next actions, one per line" />
-        <textarea name="constraints" defaultValue={(goal.constraints || []).join("\n")} placeholder="Constraints, one per line" />
-        <textarea name="success_criteria" defaultValue={(goal.success_criteria || []).join("\n")} placeholder="Success criteria, one per line" />
-        <textarea name="test_commands" defaultValue={(goal.test_commands || []).join("\n")} placeholder="Test commands, one per line" />
+        <textarea name="objective" defaultValue={String(goal.objective || "")} placeholder="Objective" />
+        <textarea name="current_status" defaultValue={String(goal.current_status || "")} placeholder="Current status" />
+        <textarea name="next_actions" defaultValue={(Array.isArray(goal.next_actions) ? goal.next_actions : []).join("\n")} placeholder="Next actions, one per line" />
+        <textarea name="constraints" defaultValue={(Array.isArray(goal.constraints) ? goal.constraints : []).join("\n")} placeholder="Constraints, one per line" />
+        <textarea name="success_criteria" defaultValue={(Array.isArray(goal.success_criteria) ? goal.success_criteria : []).join("\n")} placeholder="Success criteria, one per line" />
+        <textarea name="test_commands" defaultValue={(Array.isArray(goal.test_commands) ? goal.test_commands : []).join("\n")} placeholder="Test commands, one per line" />
         <div className="goal-actions"><button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Goal"}</button><button type="button" onClick={() => setEditing(false)}>Cancel</button></div>
       </form>
     );
   }
   return (
     <div className="goal-panel" data-goal-panel>
-      <strong>{goal.objective || "No goal set yet."}</strong>
-      {goal.current_status && <p>{goal.current_status}</p>}
-      {(goal.next_actions || []).length > 0 && <ul>{goal.next_actions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>}
+      <strong>{String(goal.objective || "No goal set yet.")}</strong>
+      {goal.current_status && <p>{String(goal.current_status)}</p>}
+      {(Array.isArray(goal.next_actions) ? goal.next_actions : []).length > 0 && <ul>{(Array.isArray(goal.next_actions) ? goal.next_actions : []).slice(0, 4).map((item: string) => <li key={item}>{item}</li>)}</ul>}
       <div className="goal-actions">
         <button type="button" data-edit-goal onClick={() => setEditing(true)}>{goal.objective ? "Edit goal" : "Set goal"}</button>
         {power && <button type="button" data-copy-codex-prompt onClick={copyPrompt} disabled={!codexPrompt}>Copy full project prompt</button>}
@@ -307,7 +337,7 @@ function GoalPanel({ chat, activePath, onChat, power = false }) {
   );
 }
 
-function RuntimePanel({ runtime }) {
+function RuntimePanel({ runtime }: { runtime: any }) {
   const url = runtime?.cloudflare_url || "";
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return <div className="runtime-card"><strong>Runtime</strong><p>{runtime?.status || "local"}</p>{url ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <span className="muted">No public tunnel URL.</span>}{url && <p className="warning-text">{copy.inspector.diagnosticsWarning}</p>}</div>;

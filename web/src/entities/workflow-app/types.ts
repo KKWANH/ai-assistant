@@ -9,12 +9,18 @@ export type RunPolicy = {
 export type InputSchemaField = {
   id: string;
   label: string;
-  type: "file" | "text" | "select" | "number" | "boolean";
+  type: "file" | "text" | "select" | "number" | "boolean" | "resource";
   required?: boolean;
   accept?: string[];
   placeholder?: string;
   help?: string;
   options?: Array<{ label: string; value: string }>;
+  source?: {
+    kind: "resolvedImport" | string;
+    alias?: string;
+    sourceProjectId?: string;
+    resourceType?: string;
+  };
 };
 
 export type OutputArtifactSpec = {

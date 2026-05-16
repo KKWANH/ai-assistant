@@ -28,10 +28,13 @@ def run(
     timeout: int = 120,
     output_limit: int = 200_000,
     allow_network: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> PythonResult:
     validate_paths(script, cwd, root)
     env = scrubbed_env()
     env["AIWS_NETWORK_ALLOWED"] = "1" if allow_network else "0"
+    if extra_env:
+        env.update({str(key): str(value) for key, value in extra_env.items()})
     completed = subprocess.run(
         [sys.executable, str(script), *args],
         cwd=cwd,

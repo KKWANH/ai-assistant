@@ -22,6 +22,10 @@ export type ProjectConfigPayload = {
 
 export const queryKeys = {
   workspace: ["workspace"] as const,
+  home: ["home"] as const,
+  runtime: ["runtime"] as const,
+  openclaw: ["openclaw"] as const,
+  automations: ["automations"] as const,
   models: ["models"] as const,
   session: (projectPath: string, sessionSlug: string) => ["session", projectPath, sessionSlug] as const,
   projectConfig: (projectPath: string) => ["project-config", projectPath] as const,
@@ -68,8 +72,24 @@ export function parseProjectConfigPayload(value: unknown): ProjectConfigPayload 
   };
 }
 
-export function useWorkspaceQuery() {
-  return useQuery({ queryKey: queryKeys.workspace, queryFn: () => apiJson<WorkspaceSummary>("/api/workspace") });
+export function useWorkspaceQuery(enabled = true) {
+  return useQuery({ queryKey: queryKeys.workspace, queryFn: () => apiJson<WorkspaceSummary>("/api/workspace"), enabled });
+}
+
+export function useHomeQuery(enabled = true) {
+  return useQuery({ queryKey: queryKeys.home, queryFn: () => apiJson<{ home: Record<string, unknown> }>("/api/home"), enabled });
+}
+
+export function useRuntimeQuery(enabled = true) {
+  return useQuery({ queryKey: queryKeys.runtime, queryFn: () => apiJson<{ runtime: Record<string, unknown> }>("/api/runtime"), refetchInterval: enabled ? 15_000 : false, enabled });
+}
+
+export function useOpenClawQuery(enabled = true) {
+  return useQuery({ queryKey: queryKeys.openclaw, queryFn: () => apiJson<{ openclaw: Record<string, unknown> }>("/api/openclaw"), refetchInterval: enabled ? 12_000 : false, enabled });
+}
+
+export function useAutomationsQuery(enabled = true) {
+  return useQuery({ queryKey: queryKeys.automations, queryFn: () => apiJson<{ projects: unknown[] }>("/api/automations"), refetchInterval: enabled ? 20_000 : false, enabled });
 }
 
 export function useModelCatalogQuery() {

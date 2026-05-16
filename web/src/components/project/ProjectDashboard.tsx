@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from "react";
 import { actionStatus, ProjectWorkflowAppsPanel } from "../actions/ActionPanels";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
@@ -6,22 +7,43 @@ import { COPY } from "../../shared/copy/copy";
 import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts.js";
 import { ViewerPane } from "../../features/workflow/components/ViewerPane";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
+import { fetchJson } from "../../lib/api";
+import type { ProjectSummary } from "../../entities/project/types";
+import type { ActivePath, ArtifactPayload, ProjectConfigState, RunDetail } from "../../shared/contracts/runtime";
+import type { ArtifactRecord, ProjectConnectionsPayload, RunRecord } from "../../shared/contracts/workbench";
+import type { WorkflowActionDefinition } from "../../shared/contracts/workflow-app";
 
-export function ProjectDashboard({ activePath, projectConfig, project, power, fetchJson, onProjectConfig, navigate, copy = COPY }) {
-  const [runDetail, setRunDetail] = useState(null);
-  const [artifact, setArtifact] = useState(null);
+type CopyShape = typeof COPY;
+type DashboardAction = WorkflowActionDefinition & Record<string, any>;
+type PanelItem = Record<string, any>;
+type CommandEntry = [string, Record<string, any>];
+type ArtifactWithRun = ArtifactRecord & { run: RunRecord; exists?: boolean; size?: number };
+
+type ProjectDashboardProps = {
+  activePath: ActivePath;
+  projectConfig: ProjectConfigState;
+  project?: ProjectSummary;
+  power: boolean;
+  onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigState>>;
+  navigate?: (path: string) => void;
+  copy?: CopyShape;
+};
+
+export function ProjectDashboard({ activePath, projectConfig, project, power, onProjectConfig, navigate, copy = COPY }: ProjectDashboardProps) {
+  const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
+  const [artifact, setArtifact] = useState<ArtifactPayload | null>(null);
   const [modalError, setModalError] = useState("");
   const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
-  const [connections, setConnections] = useState(projectConfig?.connections || null);
-  const projectRecord = projectConfig?.project || project || {};
+  const [connections, setConnections] = useState<ProjectConnectionsPayload | null>(projectConfig?.connections || null);
+  const projectRecord = (projectConfig?.project || project || {}) as Record<string, any>;
   const [localOnly, setLocalOnly] = useState(Boolean(projectRecord?.security?.local_only));
-  const config = projectConfig?.config || {};
+  const config = (projectConfig?.config || {}) as Record<string, any>;
   const runs = projectConfig?.runs || [];
-  const commands = Object.entries(config.commands || {});
-  const actions = commands.map(([name, command]) => normalizeActionDefinition(name, command));
-  const panels = (config.panels || []).map(normalizePanelDefinition);
-  const context = config.context || {};
-  const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
+  const commands = Object.entries(config.commands || {}) as CommandEntry[];
+  const actions = commands.map(([name, command]) => normalizeActionDefinition(name, command) as DashboardAction);
+  const panels = (config.panels || []).map((panel) => normalizePanelDefinition(panel) as PanelItem);
+  const context = (config.context || {}) as Record<string, any>;
+  const artifacts = runs.flatMap((run) => (run.artifacts || []).map((item) => ({ ...item, run }))) as ArtifactWithRun[];
   const chatInsights = useMemo(() => summarizeProjectChats(project), [project]);
   const isInvestmentAdvisor = /investment advisor|investment rebalancer|portfolio/i.test(`${config.name || ""} ${config.description || ""}`);
   const text = copy.projectDashboard || COPY.projectDashboard;
@@ -31,26 +53,27 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   }, [projectConfig?.connections]);
 
   useEffect(() => {
-    setLocalOnly(Boolean((projectConfig?.project || project)?.security?.local_only));
+    const record = (projectConfig?.project || project || {}) as Record<string, any>;
+    setLocalOnly(Boolean(record.security?.local_only));
   }, [projectConfig?.project, project]);
 
-  async function openRun(run) {
+  async function openRun(run: RunRecord) {
     setModalError("");
     try {
-      const payload = await fetchJson(`/api/project-run?project=${encodeURIComponent(activePath.projectPath)}&run_id=${encodeURIComponent(run.run_id)}`);
+      const payload = await fetchJson<RunDetail>(`/api/project-run?project=${encodeURIComponent(activePath.projectPath || "")}&run_id=${encodeURIComponent(run.run_id)}`);
       setRunDetail(payload);
     } catch (err) {
-      setModalError(err.message);
+      setModalError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function openArtifact(item) {
+  async function openArtifact(item: ArtifactRecord) {
     setModalError("");
     try {
-      const payload = await fetchJson(`/api/project-artifact?project=${encodeURIComponent(activePath.projectPath)}&path=${encodeURIComponent(item.path)}`);
+      const payload = await fetchJson<{ artifact: ArtifactPayload }>(`/api/project-artifact?project=${encodeURIComponent(activePath.projectPath || "")}&path=${encodeURIComponent(item.path)}`);
       setArtifact(payload.artifact);
     } catch (err) {
-      setModalError(err.message);
+      setModalError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -59,7 +82,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
       <div className="project-dashboard-hero">
         <p className="eyebrow">{text.eyebrow}</p>
         <h1>{config.name || project?.title || activePath.projectPath}</h1>
-        <p>{config.description || project?.notes || COPY.tagline}</p>
+        <p>{config.description || (project as any)?.notes || COPY.tagline}</p>
       </div>
 
       <section className="dashboard-card workbench-operating-model">
@@ -95,14 +118,14 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
           fetchJson={fetchJson}
           onConnections={(next) => {
             setConnections(next);
-            onProjectConfig?.((current) => ({ ...(current || {}), connections: next }));
+            onProjectConfig?.((current: any) => ({ ...(current || {}), connections: next }));
           }}
         />
       )}
 
       {activeTab === "overview" && <div className="dashboard-grid">
         <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} copy={copy} />
-        {isInvestmentAdvisor ? <InvestmentAdvisorCard actions={actions} runs={runs} artifacts={artifacts} copy={copy} /> : <AgentPlanFoundationCard copy={copy} />}
+        {isInvestmentAdvisor ? <InvestmentAdvisorCard activePath={activePath} actions={actions} runs={runs} artifacts={artifacts} copy={copy} /> : <AgentPlanFoundationCard copy={copy} />}
       </div>}
 
       {activeTab === "overview" && <section className="dashboard-card project-chat-overview">
@@ -147,9 +170,9 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
           {power && <span className="soft-pill">aiws.yaml</span>}
         </div>
         <ProjectWorkflowAppsPanel
-          activePath={activePath}
-          projectConfig={projectConfig}
-          onProjectConfig={onProjectConfig}
+          activePath={activePath as any}
+          projectConfig={projectConfig as any}
+          onProjectConfig={onProjectConfig as any}
           power={power}
           fetchJson={fetchJson}
           onOpenArtifact={openArtifact}
@@ -261,10 +284,11 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body,
             });
-            setLocalOnly(Boolean(payload.project?.security?.local_only));
-            onProjectConfig?.((current) => ({ ...(current || {}), project: payload.project }));
+            const nextProject = (payload.project || {}) as Record<string, any>;
+            setLocalOnly(Boolean(nextProject.security?.local_only));
+            onProjectConfig?.((current: any) => ({ ...(current || {}), project: payload.project as Record<string, unknown> }));
           } catch (err) {
-            setModalError(err.message);
+            setModalError(err instanceof Error ? err.message : String(err));
           }
         }}>
           {localOnly ? "Allow cloud after confirmation" : "Lock this project to local only"}
@@ -286,7 +310,13 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, fe
   );
 }
 
-function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
+function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, copy = COPY }: {
+  activePath: ActivePath;
+  actions: DashboardAction[];
+  runs: RunRecord[];
+  artifacts: ArtifactWithRun[];
+  copy?: CopyShape;
+}) {
   const text = copy.projectDashboard || COPY.projectDashboard;
   const latestMarketRun = runs.find((run) => run.command === "market_research" || run.action_id === "market_research");
   const hasReport = artifacts.some((artifact) => String(artifact.path || "").endsWith("advisor-report.md"));
@@ -325,6 +355,17 @@ function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
           {monthlyTable ? <ViewerPane artifact={{ ...monthlyTable, viewer_id: "tableViewer", type: "csv" }} /> : <p className="muted">monthly-performance.csv 생성 대기.</p>}
         </div>
       </div>
+      <div className="trusted-viewer-frame">
+        <div className="section-row">
+          <strong>Trusted dashboard iframe</strong>
+          <span className="soft-pill">manifest/build/reload ready</span>
+        </div>
+        <iframe
+          title="Investment rebalancing dashboard"
+          sandbox="allow-scripts"
+          src={`/project-viewers/${activePath.projectPath}/frame/investment-rebalance-dashboard`}
+        />
+      </div>
       <details className="advisor-tips">
         <summary>{text.customTips}</summary>
         <ul>
@@ -335,11 +376,18 @@ function InvestmentAdvisorCard({ actions, runs, artifacts, copy = COPY }) {
   );
 }
 
-function ManifestSummaryCard({ config, context, panels, actions, runs, copy = COPY }) {
+function ManifestSummaryCard({ config, context, panels, actions, runs, copy = COPY }: {
+  config: Record<string, unknown>;
+  context: Record<string, unknown>;
+  panels: PanelItem[];
+  actions: DashboardAction[];
+  runs: RunRecord[];
+  copy?: CopyShape;
+}) {
   const text = copy.projectDashboard || COPY.projectDashboard;
-  const include = context.include || [];
-  const exclude = context.exclude || [];
-  const views = config.views || [];
+  const include = Array.isArray(context.include) ? context.include : [];
+  const exclude = Array.isArray(context.exclude) ? context.exclude : [];
+  const views = Array.isArray(config.views) ? config.views : [];
   return (
     <section className="dashboard-card manifest-summary-card">
       <div className="section-row">
@@ -368,9 +416,9 @@ function ManifestSummaryCard({ config, context, panels, actions, runs, copy = CO
   );
 }
 
-function AgentPlanFoundationCard({ copy = COPY }) {
+function AgentPlanFoundationCard({ copy = COPY }: { copy?: CopyShape }) {
   const text = copy.projectDashboard || COPY.projectDashboard;
-  const steps = [
+  const steps: Array<[string, string, boolean]> = [
     ["read_file", text.agentStepRead, false],
     ["llm", text.agentStepPlan, false],
     ["search", text.agentStepSearch, true],
@@ -401,7 +449,7 @@ function AgentPlanFoundationCard({ copy = COPY }) {
   );
 }
 
-function RegistryPreviewCard({ title, items, active }) {
+function RegistryPreviewCard({ title, items, active }: { title: string; items: string[] | Set<string>; active?: string[] }) {
   const activeSet = new Set(active || []);
   return (
     <section className="dashboard-card registry-preview-card">
@@ -413,13 +461,13 @@ function RegistryPreviewCard({ title, items, active }) {
         <span className="soft-pill">{activeSet.size} active</span>
       </div>
       <div className="registry-chip-grid">
-        {items.map((item) => <span key={item} className={activeSet.has(item) ? "active" : ""}>{item}</span>)}
+        {Array.from(items).map((item) => <span key={item} className={activeSet.has(item) ? "active" : ""}>{item}</span>)}
       </div>
     </section>
   );
 }
 
-function MetricTile({ label, value }) {
+function MetricTile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <span className="metric-tile">
       <strong>{value}</strong>
@@ -428,7 +476,7 @@ function MetricTile({ label, value }) {
   );
 }
 
-function sampleManifest(config, panels, actions) {
+function sampleManifest(config: Record<string, unknown>, panels: PanelItem[], actions: DashboardAction[]) {
   const firstAction = actions[0] || { id: "summarize_file", kind: "prompt_recipe", label: "Summarize File" };
   const firstPanel = panels[0] || { id: "files", type: "fileExplorer", title: "Files" };
   return [
@@ -446,7 +494,7 @@ function sampleManifest(config, panels, actions) {
   ].join("\n");
 }
 
-function summarizeProjectChats(project) {
+function summarizeProjectChats(project?: ProjectSummary) {
   const sessions = project?.sessions || [];
   if (sessions.length === 0) {
     return {
@@ -471,7 +519,7 @@ function summarizeProjectChats(project) {
   };
 }
 
-function cleanSessionTitle(value) {
+function cleanSessionTitle(value: string) {
   return String(value || "")
     .replace(/\[[^\]]*\]/g, " ")
     .replace(/\b\d{1,4}[./:-]\d{1,2}(?:[./:-]\d{1,4})?\b/g, " ")
@@ -481,7 +529,7 @@ function cleanSessionTitle(value) {
     .trim();
 }
 
-function extractTopics(titles) {
+function extractTopics(titles: string[]) {
   const stop = new Set([
     "new", "chat", "test", "title", "project", "pdf", "file", "user", "assistant",
     "kwanho", "kim", "chungja", "byun", "이거", "저거", "그건", "오늘", "내일", "파일", "대화",
@@ -503,8 +551,14 @@ function extractTopics(titles) {
     .map(([token]) => token);
 }
 
-function RunDetailModal({ detail, power, activePath, onClose, onOpenArtifact }) {
-  const run = detail.run || {};
+function RunDetailModal({ detail, power, activePath, onClose, onOpenArtifact }: {
+  detail: RunDetail;
+  power: boolean;
+  activePath: ActivePath;
+  onClose: () => void;
+  onOpenArtifact: (artifact: ArtifactRecord) => void | Promise<void>;
+}) {
+  const run = (detail.run || {}) as RunRecord & { label?: string; command?: string; kind?: string; artifacts?: Array<ArtifactRecord & { exists?: boolean; size?: number }> };
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
@@ -546,7 +600,7 @@ function RunDetailModal({ detail, power, activePath, onClose, onOpenArtifact }) 
   );
 }
 
-function ArtifactViewer({ artifact, activePath, onClose }) {
+function ArtifactViewer({ artifact, activePath, onClose }: { artifact: ArtifactPayload; activePath: ActivePath; onClose: () => void }) {
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">

@@ -1,5 +1,5 @@
 export type ActivePath = {
-  view?: "login" | "actions" | "home";
+  view?: "login" | "apps-tools" | "actions" | "home";
   projectPath: string;
   sessionSlug: string;
 };
@@ -8,7 +8,10 @@ export function parseRoute(path = window.location.pathname): ActivePath {
   if (path === "/login") {
     return { view: "login", projectPath: "", sessionSlug: "" };
   }
-  if (path === "/actions" || path === "/actions/new" || path === "/apps-tools") {
+  if (path === "/apps-tools") {
+    return { view: "apps-tools", projectPath: "", sessionSlug: "" };
+  }
+  if (path === "/actions" || path === "/actions/new") {
     return { view: "actions", projectPath: "", sessionSlug: "" };
   }
   if (path === "/home") {

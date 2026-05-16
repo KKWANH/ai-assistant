@@ -12,6 +12,7 @@ export function ConnectionsTab({ activePath, connections, fetchJson, onConnectio
   const incoming = connections?.incomingLinks || [];
   const outgoing = connections?.outgoingLinks || [];
   const connected = connections?.connectedResources || [];
+  const resolved = connections?.resolvedImports || [];
   const availableTypes = selectedSource?.exports || [];
 
   useEffect(() => {
@@ -127,6 +128,19 @@ export function ConnectionsTab({ activePath, connections, fetchJson, onConnectio
               <span key={`${item.linkId}-${item.resourceType}`}>
                 <strong>{item.label || item.resourceType}</strong>
                 <small>{item.sourceProjectId} · {item.mode} · {item.artifactPattern}</small>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="connection-panel connected-resource-panel">
+        <h3>Runtime aliases for Workflow Apps</h3>
+        {resolved.length === 0 ? <p className="muted">No approved import alias is ready for execution.</p> : (
+          <div className="resource-list">
+            {resolved.map((item) => (
+              <span key={`${item.linkId}-${item.localAlias}`}>
+                <strong>{item.localAlias}</strong>
+                <small>{item.sourceProjectId} · {item.resourceType} · {item.latestArtifact?.path || "no artifact yet"}</small>
               </span>
             ))}
           </div>

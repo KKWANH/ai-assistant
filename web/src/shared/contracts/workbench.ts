@@ -101,6 +101,15 @@ export type ProjectConnectionsPayload = {
   incomingLinks: ProjectLink[];
   outgoingLinks: ProjectLink[];
   connectedResources: Array<ResourceExport & { sourceProjectId?: string; mode?: string; linkId?: string }>;
+  resolvedImports?: Array<{
+    sourceProjectId: string;
+    resourceType: string;
+    localAlias: string;
+    mode?: string;
+    linkId?: string;
+    artifactPattern?: string;
+    latestArtifact?: { path: string; size?: number; updatedAt?: string } | null;
+  }>;
   visibleSources: Array<{ projectId: string; title: string; exports: ResourceExport[] }>;
 };
 

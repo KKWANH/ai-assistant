@@ -42,6 +42,7 @@ def run(
     root: Path | None = None,
     timeout: int = 120,
     output_limit: int = 200_000,
+    extra_env: dict[str, str] | None = None,
 ) -> CommandResult:
     spec = (
         command
@@ -56,6 +57,9 @@ def run(
     )
     validate_cwd(spec.cwd, spec.root)
     validate_command(spec.argv)
+    env = scrubbed_env()
+    if extra_env:
+        env.update({str(key): str(value) for key, value in extra_env.items()})
     completed = subprocess.run(
         spec.argv,
         cwd=spec.cwd,
@@ -65,7 +69,7 @@ def run(
         text=True,
         timeout=spec.timeout_sec,
         input=spec.stdin,
-        env=scrubbed_env(),
+        env=env,
     )
     return CommandResult(
         args=list(completed.args) if isinstance(completed.args, (list, tuple)) else [str(completed.args)],

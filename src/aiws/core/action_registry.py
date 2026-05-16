@@ -139,6 +139,7 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
         assert_no_secret_references(workspace_root, normalized)
         normalized_commands[str(name)] = normalized
     workflow_apps = normalize_workflow_apps(config, normalized_commands)
+    attach_workflow_apps(normalized_commands, workflow_apps)
     context = config.get("context") if isinstance(config.get("context"), dict) else {}
     permissions = config.get("permissions") if isinstance(config.get("permissions"), dict) else {}
     return {
@@ -167,24 +168,71 @@ def validate_config(root: str | Path, project_path: str, config: dict[str, Any])
     }
 
 
+def attach_workflow_apps(commands: dict[str, Any], workflow_apps: list[dict[str, Any]]) -> None:
+    app_by_id = {str(app.get("id")): app for app in workflow_apps if isinstance(app, dict) and app.get("id")}
+    for command in commands.values():
+        requested = str(command.get("workflow_app_id") or command.get("workflowAppId") or "")
+        if requested and requested in app_by_id:
+            command["workflow_app_id"] = requested
+            command["workflow_app"] = app_by_id[requested]
+
+
 def normalize_workflow_apps(config: dict[str, Any], commands: dict[str, Any]) -> list[dict[str, Any]]:
     raw = config.get("workflow_apps")
     apps: list[dict[str, Any]] = []
+    resource_imports = list(config.get("resource_imports") or [])
     if isinstance(raw, list):
         for item in raw:
             if isinstance(item, dict):
                 app = dict(item)
                 app.setdefault("id", storage.slugify(str(app.get("title") or "workflow_app")))
+                app = with_resource_import_inputs(app, resource_imports)
                 apps.append(app)
     haystack = f"{config.get('name', '')} {config.get('description', '')} {' '.join(commands)}".lower()
     if "investment" in haystack or "portfolio" in haystack or "rebalance" in haystack:
         investment = investment_rebalancer_app_definition()
+        investment = with_resource_import_inputs(investment, resource_imports)
         if not any(item.get("id") == investment["id"] for item in apps):
             apps.insert(0, investment)
         for command in commands.values():
             command.setdefault("workflow_app_id", investment["id"])
             command.setdefault("workflow_app", investment)
     return apps
+
+
+def with_resource_import_inputs(app: dict[str, Any], resource_imports: list[object]) -> dict[str, Any]:
+    """Expose configured linked resources as official Workflow App input fields."""
+    fields = list(app.get("inputSchema")) if isinstance(app.get("inputSchema"), list) else []
+    existing = {str(field.get("id")) for field in fields if isinstance(field, dict)}
+    for item in resource_imports:
+        if not isinstance(item, dict):
+            continue
+        alias = str(item.get("localAlias") or item.get("local_alias") or "").strip()
+        source_project = str(item.get("sourceProjectId") or item.get("source_project_id") or "").strip()
+        resource_type = str(item.get("acceptedResourceType") or item.get("accepted_resource_type") or "").strip()
+        if not alias or not source_project or not resource_type:
+            continue
+        field_id = f"resource_{alias}"
+        if field_id in existing:
+            continue
+        fields.append(
+            contracts.input_schema_field(
+                field_id,
+                f"Linked resource: {alias}",
+                "resource",
+                required=False,
+                help_text=f"{source_project} / {resource_type}",
+                source={
+                    "kind": "resolvedImport",
+                    "alias": alias,
+                    "sourceProjectId": source_project,
+                    "resourceType": resource_type,
+                },
+            )
+        )
+        existing.add(field_id)
+    app["inputSchema"] = fields
+    return app
 
 
 def investment_rebalancer_app_definition() -> dict[str, Any]:
@@ -396,6 +444,7 @@ def run_action(
     *,
     actor: str | None = None,
     confirmed: bool = False,
+    resolved_imports: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     preview = preview_action(root, project_path, command_name)
     config = load_config(root, project_path)
@@ -415,6 +464,20 @@ def run_action(
             "approval", "Action approval checked.", {"confirmed": bool(confirmed), "required": bool(preview["requires_confirmation"])}
         ),
     ]
+    resolved_imports = resolved_imports or []
+    import_env = resolved_import_env(root, resolved_imports)
+    resolved_inputs = resolved_import_input_map(command, resolved_imports)
+    if resolved_imports:
+        logs.append(
+            log_event(
+                "imports",
+                "Resolved linked project resources.",
+                {
+                    "count": len(resolved_imports),
+                    "aliases": [str(item.get("localAlias", "")) for item in resolved_imports if isinstance(item, dict)],
+                },
+            )
+        )
     result: dict[str, Any] = {"preview": preview}
     try:
         if command["kind"] == "prompt_recipe":
@@ -438,6 +501,7 @@ def run_action(
                 str(command.get("command", "")),
                 cwd=resolve_cwd(project_root, command),
                 root=project_root,
+                extra_env=import_env,
             )
             stdout, stderr = shell_completed.stdout, shell_completed.stderr
             status = "completed" if shell_completed.returncode == 0 else "failed"
@@ -457,6 +521,7 @@ def run_action(
                 cwd=resolve_cwd(project_root, command),
                 root=project_root,
                 allow_network=capabilities.allow_network,
+                extra_env=import_env,
             )
             stdout, stderr = python_completed.stdout, python_completed.stderr
             status = "completed" if python_completed.returncode == 0 else "failed"
@@ -505,6 +570,9 @@ def run_action(
         capabilities=capabilities.to_dict(),
         inputs={
             "expected_files": preview.get("expected_input_files", []),
+            "resolved_imports": resolved_imports,
+            "resolved_input_resources": resolved_inputs,
+            "resolved_import_env_keys": sorted(import_env),
             "cwd": preview.get("cwd", ""),
             "command_line": preview.get("command_line", ""),
             "script": preview.get("script", ""),
@@ -522,7 +590,68 @@ def run_action(
     run["result_path"] = "result.json"
     result["run"] = run
     write_run_artifacts(run_path, run, stdout, stderr, result)
+    if resolved_imports:
+        storage.write_json(run_path / "imports.json", redaction.redact_value({"imports": resolved_imports, "env": import_env}))
     return run | {"stdout": stdout, "stderr": stderr, "result": result}
+
+
+def resolved_import_env(root: str | Path, resolved_imports: list[dict[str, Any]]) -> dict[str, str]:
+    """Expose approved linked resources to local Workflow App processes."""
+    env: dict[str, str] = {}
+    public_imports: list[dict[str, Any]] = []
+    for item in resolved_imports:
+        if not isinstance(item, dict):
+            continue
+        latest = item.get("latestArtifact") if isinstance(item.get("latestArtifact"), dict) else None
+        source_project = str(item.get("sourceProjectId") or "")
+        alias = safe_env_name(str(item.get("localAlias") or item.get("resourceType") or "resource"))
+        public_item = dict(item)
+        if latest and source_project:
+            artifact_path = str(latest.get("path") or "")
+            full_path = storage.project_dir(root, source_project) / artifact_path
+            if full_path.exists() and full_path.is_file():
+                env[f"AIWS_IMPORT_{alias}_PATH"] = str(full_path)
+                public_item["absolutePath"] = str(full_path)
+        public_imports.append(public_item)
+    if public_imports:
+        env["AIWS_RESOLVED_IMPORTS"] = json.dumps(public_imports, ensure_ascii=False)
+    return env
+
+
+def resolved_import_input_map(command: dict[str, Any], resolved_imports: list[dict[str, Any]]) -> dict[str, Any]:
+    """Map resolved import aliases into Workflow App input fields."""
+    app = command.get("workflow_app") if isinstance(command.get("workflow_app"), dict) else {}
+    fields = app.get("inputSchema") if isinstance(app.get("inputSchema"), list) else []
+    mapped: dict[str, Any] = {}
+    by_alias = {
+        str(item.get("localAlias") or item.get("resourceType") or ""): item
+        for item in resolved_imports
+        if isinstance(item, dict)
+    }
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        source = field.get("source") if isinstance(field.get("source"), dict) else {}
+        if source.get("kind") != "resolvedImport":
+            continue
+        alias = str(source.get("alias") or "")
+        match = by_alias.get(alias)
+        if not match:
+            continue
+        mapped[str(field.get("id") or alias)] = {
+            "alias": alias,
+            "sourceProjectId": match.get("sourceProjectId"),
+            "resourceType": match.get("resourceType"),
+            "mode": match.get("mode"),
+            "latestArtifact": match.get("latestArtifact"),
+            "absolutePath": match.get("absolutePath"),
+        }
+    return mapped
+
+
+def safe_env_name(value: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() else "_" for ch in value.upper()).strip("_")
+    return cleaned or "RESOURCE"
 
 
 def run_chat_summary(run: dict[str, Any]) -> str:
