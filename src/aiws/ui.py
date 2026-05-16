@@ -2604,7 +2604,7 @@ def starter_actions() -> list[dict[str, object]]:
     return [
         {
             "id": "document_summary",
-            "label": "문서 요약하기",
+            "label": "문서 요약",
             "category": "문서",
             "description": "PDF, DOCX, TXT, MD 파일을 읽고 구조적 요약을 시작합니다.",
             "inputs": [".pdf", ".docx", ".txt", ".md"],
@@ -2613,7 +2613,7 @@ def starter_actions() -> list[dict[str, object]]:
         },
         {
             "id": "image_explain",
-            "label": "이미지 설명하기",
+            "label": "이미지 설명",
             "category": "이미지",
             "description": "이미지를 첨부하고 무엇인지 설명하거나 비교 분석합니다.",
             "inputs": [".png", ".jpg", ".jpeg", ".webp"],
@@ -2622,7 +2622,7 @@ def starter_actions() -> list[dict[str, object]]:
         },
         {
             "id": "csv_analysis",
-            "label": "표 분석하기",
+            "label": "표 분석",
             "category": "데이터",
             "description": "CSV, Excel, 붙여넣은 표 구조를 파악하고 주요 숫자와 이상치를 요약합니다.",
             "inputs": [".csv", ".xls", ".xlsx"],
