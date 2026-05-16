@@ -304,6 +304,10 @@ def test_home_starter_action_creates_run_and_artifact(tmp_path):
             'Content-Disposition: form-data; name="attachment"; filename="note.md"\r\n'
             "Content-Type: text/markdown\r\n\r\n"
             "# Note\r\n\r\nImportant local workspace idea.\r\n"
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="attachment"; filename="second.md"\r\n'
+            "Content-Type: text/markdown\r\n\r\n"
+            "# Second\r\n\r\nSecond attached file is included.\r\n"
             f"--{boundary}--\r\n"
         ).encode("utf-8")
         req = request.Request(
@@ -323,6 +327,7 @@ def test_home_starter_action_creates_run_and_artifact(tmp_path):
         assert payload["run"]["action_label"] == "Summarize document"
         assert payload["run"]["model"] == {"provider": "ollama", "id": "qwen3:8b", "local": True}
         assert payload["run"]["context_receipt"]["privacy_mode"] == "local"
+        assert len(payload["run"]["context_receipt"]["files_used"]) == 2
         assert artifact_path.endswith("summary.md")
 
         detail = json.loads(request.urlopen(f"{base_url}/api/home-run?run_id={parse.quote(run_id)}", timeout=5).read().decode("utf-8"))
@@ -333,6 +338,7 @@ def test_home_starter_action_creates_run_and_artifact(tmp_path):
         assert detail["run"]["run_id"] == run_id
         assert artifact["artifact"]["viewer_type"] == "markdownViewer"
         assert "Important local workspace idea" in artifact["artifact"]["content"]
+        assert "Second attached file is included" in artifact["artifact"]["content"]
     finally:
         server.shutdown()
         server.server_close()

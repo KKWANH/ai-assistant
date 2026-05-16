@@ -132,6 +132,7 @@ def run_action(
     actor: str | None = None,
     content: str = "",
     upload: tuple[str, bytes] | None = None,
+    uploads: list[tuple[str, bytes]] | None = None,
     provider: str = "ollama",
     model: str = "qwen3:8b",
     model_response: str = "",
@@ -149,8 +150,10 @@ def run_action(
     logs: list[dict[str, Any]] = []
     errors: list[str] = []
     artifacts_out: list[dict[str, Any]] = []
-    saved_file = save_upload(base, upload, logs) if upload else None
-    if action_requires_file(action) and not saved_file:
+    upload_items = [item for item in (uploads or ([upload] if upload else [])) if item and item[1]]
+    saved_files = [save_upload(base, item, logs) for item in upload_items]
+    saved_file = combined_saved_file(saved_files) if saved_files else None
+    if action_requires_file(action) and not saved_files:
         raise storage.WorkspaceError("Attach a file before creating this artifact.")
     if action_id == "codex_task_prompt" and not content.strip():
         raise storage.WorkspaceError("Describe the situation before creating a Codex task brief.")
@@ -207,6 +210,7 @@ def run_action(
         inputs={
             "content": content[:2000],
             "file": saved_file["path"] if saved_file else "",
+            "files": [item["path"] for item in saved_files],
             "provider": provider,
             "model": model,
         },
@@ -216,8 +220,8 @@ def run_action(
             "provider": provider,
             "model": model,
             "privacy_mode": "local" if provider == "ollama" else "cloud",
-            "files_used": [saved_file["path"]] if saved_file else [],
-            "files_sent_to_cloud": [] if provider == "ollama" else [saved_file["path"]] if saved_file else [],
+            "files_used": [item["path"] for item in saved_files],
+            "files_sent_to_cloud": [] if provider == "ollama" else [item["path"] for item in saved_files],
             "estimated_cost": 0 if provider == "ollama" else None,
         },
         workspace_id=f"home:{storage.slugify(username or 'local')}",
@@ -349,6 +353,21 @@ def save_upload(base: Path, upload: tuple[str, bytes], logs: list[dict[str, Any]
     return {"path": target.relative_to(base).as_posix(), "absolute": target, "filename": filename, "text": text}
 
 
+def combined_saved_file(saved_files: list[dict[str, Any]]) -> dict[str, Any]:
+    if len(saved_files) == 1:
+        return saved_files[0]
+    primary = dict(saved_files[0])
+    primary["filename"] = ", ".join(str(item.get("filename", "upload")) for item in saved_files)
+    primary["path"] = ", ".join(str(item.get("path", "")) for item in saved_files)
+    primary["combined"] = True
+    primary["text"] = "\n\n".join(
+        f"# {item.get('filename', 'upload')}\n{str(item.get('text', '')).strip()}"
+        for item in saved_files
+        if str(item.get("text", "")).strip()
+    )
+    return primary
+
+
 def create_action_artifacts(
     action_id: str,
     content: str,
@@ -387,7 +406,7 @@ def create_action_artifacts(
 def csv_artifacts(
     content: str, saved_file: dict[str, Any] | None, artifact_root: Path, logs: list[dict[str, Any]]
 ) -> list[tuple[Path, str]]:
-    if saved_file and Path(saved_file["absolute"]).suffix.lower() in {".xls", ".xlsx"}:
+    if saved_file and not saved_file.get("combined") and Path(saved_file["absolute"]).suffix.lower() in {".xls", ".xlsx"}:
         absolute = Path(saved_file["absolute"])
         text = attachments.xls_first_sheet_csv(absolute) if absolute.suffix.lower() == ".xls" else attachments.xlsx_first_sheet_csv(absolute)
     else:

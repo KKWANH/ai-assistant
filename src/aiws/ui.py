@@ -253,7 +253,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     action_id,
                     actor=self.current_username(),
                     content=data.get("content", ""),
-                    upload=self._multipart_files.get("attachment"),
+                    uploads=self.multipart_files("attachment"),
                     provider=data.get("provider", "ollama"),
                     model=data.get("model", "qwen3:8b"),
                     model_response=self.home_action_model_response(action_id, data),
@@ -2557,11 +2557,19 @@ def start_ui(root: str, *, mode: str, port: int, password: str | None = None) ->
     if mode == "local" and storage.has_accounts(root):
         require_auth = True
     handler = partial(AIWSHandler, root=root, require_auth=require_auth, password=password)
-    server = ThreadingHTTPServer((host, port), handler)
-    print(f"AI Workbench Studio running at http://{host}:{port}")
+    try:
+        server = ThreadingHTTPServer((host, port), handler)
+    except OSError as exc:
+        if getattr(exc, "errno", None) in {48, 98}:
+            raise storage.WorkspaceError(
+                f"Port {port} is already in use. "
+                f"Stop the existing AIWS server or start with --port {port + 1}."
+            ) from exc
+        raise
+
+    display_host = "127.0.0.1" if host == "0.0.0.0" else host
+    print(f"AI Workbench Studio running at http://{display_host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
-    finally:
-        server.server_close()
