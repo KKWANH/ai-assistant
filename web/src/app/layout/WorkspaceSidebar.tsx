@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { type DragEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
@@ -454,7 +453,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       const payload = await fetchJson<{ project: ProjectSummary }>("/api/projects", { method: "POST", body: form });
       onCreated(payload.project);
     } catch (err) {
-      setError(err.message || "Could not create project.");
+      setError(err instanceof Error ? err.message : "Could not create project.");
     }
   }
   return (
@@ -518,7 +517,7 @@ type UsageDetail = {
   all_accounts?: UsageSummary;
 };
 
-function SettingsModal({ account, onClose, onSaved }: { account: any; onClose: () => void; onSaved?: () => void | Promise<void> }) {
+function SettingsModal({ account, onClose, onSaved }: { account: AccountSummary; onClose: () => void; onSaved?: () => void | Promise<void> }) {
   const [saving, setSaving] = useState(false);
   const [usageDetail, setUsageDetail] = useState<UsageDetail | null>(null);
   const profile = (account.profile || {}) as Record<string, string>;

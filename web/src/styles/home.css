@@ -20,7 +20,7 @@
   display: grid;
   place-items: center;
   text-align: center;
-  padding: clamp(18px, 4vh, 42px) 24px 24px;
+  padding: 24px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -48,12 +48,14 @@
   justify-items: center;
   gap: 16px;
   transform: none;
+  margin: auto;
 }
 
 .start-content.home-workbench {
   width: min(820px, 100%);
-  min-height: min(680px, calc(100dvh - 94px));
+  min-height: auto;
   align-content: center;
+  justify-content: center;
   gap: 14px;
 }
 
@@ -333,6 +335,7 @@
 }
 
 .starter-grid {
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -654,16 +657,19 @@
 
 .action-library-page {
   display: grid;
-  place-items: start center;
-  padding: 34px 24px;
+  place-items: center;
+  align-content: center;
+  padding: 24px;
   overflow-y: auto;
 }
 
 .action-library-page .home-workbench {
-  width: min(900px, 100%);
-  margin: 0 auto;
+  width: min(840px, 100%);
+  margin: auto;
   display: grid;
   gap: 18px;
+  align-content: center;
+  justify-items: center;
 }
 
 .catalog-workbench .home-hero {
@@ -671,5 +677,22 @@
 }
 
 .catalog-section .starter-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.catalog-section {
+  width: 100%;
+}
+
+.catalog-card {
+  min-height: 188px;
+}
+
+.catalog-card .starter-meta {
+  font-size: 11px;
+}
+
+.apps-tools-page .tool-run-panel {
+  justify-self: center;
 }

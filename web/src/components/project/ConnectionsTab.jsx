@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import styles from "./ProjectDashboard.module.css";
 
 export function ConnectionsTab({ activePath, connections, fetchJson, onConnections }) {
   const [sourceProject, setSourceProject] = useState("");
@@ -43,7 +44,7 @@ export function ConnectionsTab({ activePath, connections, fetchJson, onConnectio
   }
 
   return (
-    <section className="dashboard-card connections-tab">
+    <section className={`${styles["dashboard-card"]} connections-tab`}>
       <div className="section-row">
         <div>
           <p className="eyebrow">Project Connections</p>

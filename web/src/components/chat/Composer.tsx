@@ -15,6 +15,7 @@ import {
   savedModelMode,
   savedSearchMode,
 } from "../../lib/modelModes.jsx";
+import type { ChatState } from "../../shared/contracts/runtime";
 
 export type ComposerMode = "normalChat" | "dockedContextChat" | "workflowStepChat";
 export type ActiveChatPath = { projectPath: string; sessionSlug?: string };
@@ -28,9 +29,7 @@ export type DockContext = {
   resourceType?: string;
 };
 export type ChatSession = { slug?: string; title?: string; project_path?: string };
-// Chat payloads still mirror mixed legacy JSON until the remaining shell is typed.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ChatPayload = { messages?: Array<Record<string, any>>; [key: string]: any };
+export type ChatPayload = ChatState;
 export type AccountLike = { username?: string; nickname?: string; display_name?: string; profile?: Record<string, unknown> } | null | undefined;
 export type ModelMode = {
   value?: string;
@@ -39,9 +38,7 @@ export type ModelMode = {
   model: string;
   cloud?: boolean;
   supportsImage?: boolean;
-  // Model catalog items carry provider-specific metadata.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export type ComposerProps = {

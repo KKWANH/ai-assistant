@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { type FormEvent, useState } from "react";
 import { WorkflowAppInspector, AutomationPanel } from "../actions/ActionPanels";
 import { AttachmentList } from "../chat/AttachmentList.jsx";
@@ -6,8 +5,11 @@ import { ContextReceiptCard } from "../chat/ContextReceiptCard.jsx";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
 import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";
+import type { AccountSummary } from "../../entities/workspace/types";
+import type { ChatMessage, AttachmentMeta, ArtifactRecord, ContextReceipt, RunRecord } from "../../shared/contracts/workbench";
+import type { ActivePath, AutomationProject, ChatState, OpenClawPayload, ProjectConfigState, RuntimePayload } from "../../shared/contracts/runtime";
 
-function isPowerMode(account?: any) {
+function isPowerMode(account?: AccountSummary) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
@@ -19,19 +21,19 @@ function formatDate(value?: string) {
 }
 
 type ContextPanelProps = {
-  chat: any;
-  activePath: any;
-  runtime: any;
-  openclaw: any;
-  automations?: any[];
-  projectConfig: any;
-  onProjectConfig?: any;
-  onAutomations?: any;
-  onPreview?: any;
-  onChat?: any;
-  account?: any;
-  onOpenRun?: any;
-  onOpenArtifact?: any;
+  chat: ChatState | null;
+  activePath: ActivePath;
+  runtime: RuntimePayload | null;
+  openclaw: OpenClawPayload | null;
+  automations?: AutomationProject[];
+  projectConfig: ProjectConfigState;
+  onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigState>>;
+  onAutomations?: (items: AutomationProject[]) => void;
+  onPreview?: (attachment: unknown) => void;
+  onChat?: (next: ChatState | ((current: ChatState | null) => ChatState)) => void;
+  account?: AccountSummary;
+  onOpenRun?: (run: RunRecord) => void | Promise<void>;
+  onOpenArtifact?: (artifact: ArtifactRecord) => void | Promise<void>;
 };
 
 export function ContextPanel({ chat, activePath, runtime, openclaw, automations = [], projectConfig, onAutomations, onPreview, onChat, account, onOpenRun, onOpenArtifact }: ContextPanelProps) {
@@ -58,8 +60,8 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
     );
   }
   const attachments = collectVisibleAttachments(chat);
-  const runs = projectConfig?.runs || [];
-  const artifacts = runs.flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })));
+  const runs: RunRecord[] = projectConfig?.runs || [];
+  const artifacts = runs.flatMap((run: RunRecord) => (run.artifacts || []).map((artifact: ArtifactRecord) => ({ ...artifact, run })));
   const latestReceipt = latestContextReceipt(chat);
   const manifest = chat?.context_manifest || {};
   const manifestChunks = Array.isArray(manifest.included_chunks) ? manifest.included_chunks : [];
@@ -71,7 +73,7 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
         <h3>{copy.inspector.currentContext}</h3>
         <p><strong>{chat?.project?.hidden ? "General chat" : chat?.project?.title || activePath.projectPath}</strong></p>
         {power && <p className="muted">{activePath.projectPath} / {activePath.sessionSlug}</p>}
-        <div className="skill-stack">{(chat?.skills || []).map((skill) => <span key={skill}>{skill}</span>)}</div>
+        <div className="skill-stack">{(chat?.skills || []).map((skill: string) => <span key={skill}>{skill}</span>)}</div>
         <div className="inspector-fact-grid">
           <span><strong>{latestReceipt?.included_chunks?.length || manifestChunks.length || 0}</strong>{copy.inspector.factChunks}</span>
           <span><strong>{attachments.length}</strong>{copy.inspector.factFiles}</span>
@@ -116,13 +118,13 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
           {manifestChunks.length > 0 && (
             <div className="manifest-file-facts">
               <strong>{copy.inspector.includedChunks}</strong>
-              {manifestChunks.slice(0, 5).map((chunk) => <span key={chunk.chunk_id || chunk.path}>{chunk.filename || chunk.path}<small>{chunk.reason} · {chunk.privacy}</small></span>)}
+              {manifestChunks.slice(0, 5).map((chunk: Record<string, unknown>) => <span key={String(chunk.chunk_id || chunk.path)}>{String(chunk.filename || chunk.path || "")}<small>{String(chunk.reason || "")} · {String(chunk.privacy || "")}</small></span>)}
             </div>
           )}
           {power && manifestExcluded.length > 0 && (
             <details className="manifest-exclusions">
               <summary>{manifestExcluded.length} exclusions</summary>
-              {manifestExcluded.slice(0, 8).map((item, index) => <span key={`${item.path || item.pattern}-${index}`}>{item.path || item.pattern}<small>{item.reason}</small></span>)}
+              {manifestExcluded.slice(0, 8).map((item: Record<string, unknown>, index: number) => <span key={`${String(item.path || item.pattern)}-${index}`}>{String(item.path || item.pattern || "")}<small>{String(item.reason || "")}</small></span>)}
             </details>
           )}
         </section>
@@ -133,7 +135,7 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
           <h3>{copy.inspector.tabs.runs}</h3>
           {runs.length === 0 ? <div className="empty-action-state"><p className="muted">No project runs yet.</p><span>Run an aiws.yaml action to create logs and artifacts.</span></div> : (
             <div className="compact-list">
-              {runs.slice(0, 6).map((run) => <button type="button" className="compact-row-button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => onOpenRun?.(run)}><strong>{run.label || run.command}</strong><small>{run.status} · {run.created_at}</small></button>)}
+              {runs.slice(0, 6).map((run: RunRecord) => <button type="button" className="compact-row-button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => onOpenRun?.(run)}><strong>{run.label || run.command}</strong><small>{run.status} · {run.created_at}</small></button>)}
             </div>
           )}
         </section>
@@ -143,7 +145,7 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
           <h3>{copy.inspector.tabs.artifacts}</h3>
           {artifacts.length === 0 ? <div className="empty-action-state"><p className="muted">No artifacts yet.</p><span>Run an action to generate shareable files.</span></div> : (
             <div className="compact-list">
-              {artifacts.slice(0, 8).map((artifact) => <button type="button" className="compact-row-button" key={`${artifact.run.run_id}-${artifact.path}`} onClick={() => onOpenArtifact?.(artifact)}><strong>{artifact.path}</strong><small>{artifact.exists ? `${artifact.size} bytes` : "not found"} · {artifact.run.label || artifact.run.command}</small></button>)}
+              {artifacts.slice(0, 8).map((artifact: ArtifactRecord & { run: RunRecord }) => <button type="button" className="compact-row-button" key={`${artifact.run.run_id}-${artifact.path}`} onClick={() => onOpenArtifact?.(artifact)}><strong>{artifact.path}</strong><small>{artifact.exists ? `${artifact.size} bytes` : "not found"} · {artifact.run.label || artifact.run.command}</small></button>)}
             </div>
           )}
         </section>
@@ -168,7 +170,21 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
   );
 }
 
-function PromoteChatCard({ chat, activePath, copy = COPY }: { chat: any; activePath: any; copy?: typeof COPY }) {
+type WorkSessionRecord = {
+  type?: string;
+  status?: string;
+  model_calls?: unknown[];
+  artifacts?: unknown[];
+  next_actions?: Array<{ id?: string; label?: string }>;
+};
+type ManifestRecord = {
+  included?: Array<Record<string, unknown>>;
+  excluded?: Array<Record<string, unknown>>;
+  estimates?: { input_tokens?: number; estimated_cost?: number | null };
+  privacy_mode?: string;
+};
+
+function PromoteChatCard({ chat, activePath, copy = COPY }: { chat: ChatState | null; activePath: ActivePath; copy?: typeof COPY }) {
   const [busy, setBusy] = useState(false);
   async function promote() {
     setBusy(true);
@@ -184,14 +200,14 @@ function PromoteChatCard({ chat, activePath, copy = COPY }: { chat: any; activeP
 }
 
 function SessionControlPanel({ chat, attachments, latestReceipt, artifacts, power, copy = COPY }: {
-  chat: any;
-  attachments: any[];
-  latestReceipt: any;
-  artifacts: any[];
+  chat: ChatState | null;
+  attachments: AttachmentMeta[];
+  latestReceipt: ContextReceipt | null;
+  artifacts: Array<ArtifactRecord & { run: RunRecord }>;
   power: boolean;
   copy?: typeof COPY;
 }) {
-  const workSession = chat?.work_session || {};
+  const workSession = (chat?.work_session || {}) as WorkSessionRecord;
   const taskType = workSession.type || (attachments.length ? "file_analysis" : "ask_once");
   const privacy = latestReceipt?.privacy_mode || chat?.context_manifest?.privacy_mode || "local";
   const nextActions = workSession.next_actions || [];
@@ -208,51 +224,54 @@ function SessionControlPanel({ chat, attachments, latestReceipt, artifacts, powe
         {(nextActions.length ? nextActions : [
           { id: "attach", label: attachments.length ? copy.inspector.runAction : copy.inspector.attachOrPaste },
           { id: "save", label: latestReceipt ? copy.inspector.saveUsefulAnswer : copy.inspector.sendToCreateReceipt },
-        ]).slice(0, power ? 5 : 3).map((item) => <span key={item.id || item.label}>{item.label}</span>)}
+        ]).slice(0, power ? 5 : 3).map((item: { id?: string; label?: string }) => <span key={item.id || item.label}>{item.label}</span>)}
       </div>
     </section>
   );
 }
 
-function WorkSessionCard({ workSession, copy = COPY }: { workSession?: any; copy?: typeof COPY }) {
+function WorkSessionCard({ workSession, copy = COPY }: { workSession?: WorkSessionRecord | Record<string, unknown>; copy?: typeof COPY }) {
   if (!workSession) return null;
-  return <div className="manifest-file-facts"><strong>{copy.inspector.workSession}</strong><span>{workSession.type} · {workSession.status}</span><span>{(workSession.model_calls || []).length} model calls · {(workSession.artifacts || []).length} artifacts</span>{(workSession.next_actions || []).slice(0, 3).map((item) => <span key={item.id || item.label}><small>{item.label}</small></span>)}</div>;
+  const session = workSession as WorkSessionRecord;
+  return <div className="manifest-file-facts"><strong>{copy.inspector.workSession}</strong><span>{session.type} · {session.status}</span><span>{(session.model_calls || []).length} model calls · {(session.artifacts || []).length} artifacts</span>{(session.next_actions || []).slice(0, 3).map((item: { id?: string; label?: string }) => <span key={item.id || item.label}><small>{item.label}</small></span>)}</div>;
 }
 
-function ContextManifestCard({ manifest, power }: { manifest?: any; power: boolean }) {
+function ContextManifestCard({ manifest, power }: { manifest?: ManifestRecord | Record<string, unknown>; power: boolean }) {
   if (!manifest) return null;
-  const included = manifest.included || [];
-  const excluded = manifest.excluded || [];
-  const estimates = manifest.estimates || {};
+  const typedManifest = manifest as ManifestRecord;
+  const included = typedManifest.included || [];
+  const excluded = typedManifest.excluded || [];
+  const estimates = typedManifest.estimates || {};
   return (
     <section className="manifest-card">
       <h3>Context Manifest</h3>
-      {included.length === 0 ? <p className="muted">This chat has little additional context.</p> : <div className="manifest-list">{included.map((item, index) => <span key={`${item.type}-${index}`}>{manifestLabel(item)}</span>)}</div>}
-      {power && <div className="manifest-details"><small>{estimates.input_tokens || 0} estimated tokens</small>{estimates.estimated_cost !== null && estimates.estimated_cost !== undefined && <small>~USD {estimates.estimated_cost}</small>}<small>{manifest.privacy_mode === "local" ? "local-only" : "cloud allowed"}</small></div>}
+      {included.length === 0 ? <p className="muted">This chat has little additional context.</p> : <div className="manifest-list">{included.map((item: Record<string, unknown>, index: number) => <span key={`${String(item.type)}-${index}`}>{manifestLabel(item)}</span>)}</div>}
+      {power && <div className="manifest-details"><small>{estimates.input_tokens || 0} estimated tokens</small>{estimates.estimated_cost !== null && estimates.estimated_cost !== undefined && <small>~USD {estimates.estimated_cost}</small>}<small>{typedManifest.privacy_mode === "local" ? "local-only" : "cloud allowed"}</small></div>}
       {power && excluded.length > 0 && <p className="muted">{excluded.length} security exclusion patterns are active.</p>}
     </section>
   );
 }
 
-function manifestLabel(item: any) {
+function manifestLabel(item: Record<string, unknown>) {
   if (item.type === "goal") return `Goal: ${item.label}`;
   if (item.type === "skills") return `${item.count} skills`;
   if (item.type === "chat_files") return `${item.count} chat files`;
   if (item.type === "project_files") return `${item.count} project files`;
   if (item.type === "recent_runs") return `${item.count} recent runs`;
-  return item.label || item.type;
+  return String(item.label || item.type || "context");
 }
 
-function OpenClawPanel({ openclaw }: { openclaw: any }) {
+function OpenClawPanel({ openclaw }: { openclaw: OpenClawPayload | null }) {
   const gateway = openclaw?.gateway?.summary || {};
   const sessionCount = openclaw?.sessions?.count ?? openclaw?.sessions?.totalCount ?? 0;
-  return <div className="runtime-card openclaw-card"><strong>OpenClaw</strong><p>{openclaw?.installed ? openclaw.version || "installed" : "not installed"}</p><p>gateway: {gateway.connectivity_probe || gateway.runtime || "unknown"}</p><p>sessions: {sessionCount}</p>{gateway.dashboard && <a href={gateway.dashboard} target="_blank" rel="noreferrer">{gateway.dashboard}</a>}<code>openclaw gateway status</code></div>;
+  const dashboard = typeof gateway.dashboard === "string" ? gateway.dashboard : "";
+  return <div className="runtime-card openclaw-card"><strong>OpenClaw</strong><p>{openclaw?.installed ? openclaw.version || "installed" : "not installed"}</p><p>gateway: {String(gateway.connectivity_probe || gateway.runtime || "unknown")}</p><p>sessions: {sessionCount}</p>{dashboard && <a href={dashboard} target="_blank" rel="noreferrer">{dashboard}</a>}<code>openclaw gateway status</code></div>;
 }
 
-function collectVisibleAttachments(chat: any): any[] {
+function collectVisibleAttachments(chat: ChatState | null): AttachmentMeta[] {
   const seen = new Set();
-  const items: any[] = [];
-  function add(item) {
+  const items: AttachmentMeta[] = [];
+  function add(item: AttachmentMeta | undefined) {
     if (!item || !item.filename) return;
     const key = item.url || item.filename;
     if (seen.has(key)) return;
@@ -260,22 +279,22 @@ function collectVisibleAttachments(chat: any): any[] {
     items.push(item);
   }
   (chat?.attachments || []).forEach(add);
-  (chat?.messages || []).forEach((message) => (message.attachments || []).forEach(add));
+  (chat?.messages || []).forEach((message: ChatMessage) => (message.attachments || []).forEach(add));
   return items;
 }
 
-function latestContextReceipt(chat: any): any {
+function latestContextReceipt(chat: ChatState | null): ContextReceipt | null {
   const messages = Array.isArray(chat?.messages) ? chat.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.context_receipt) return messages[index].context_receipt;
+    if (messages[index]?.context_receipt) return messages[index].context_receipt || null;
   }
   return null;
 }
 
 function GoalPanel({ chat, activePath, onChat, power = false }: {
-  chat: any;
-  activePath: any;
-  onChat?: any;
+  chat: ChatState | null;
+  activePath: ActivePath;
+  onChat?: (next: ChatState | ((current: ChatState | null) => ChatState)) => void;
   power?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -288,7 +307,7 @@ function GoalPanel({ chat, activePath, onChat, power = false }: {
     try {
       const form = new FormData(event.currentTarget);
       const payload = await fetchJson<{ goal: Record<string, unknown>; codex_prompt: string }>(`/api/goal/${activePath.projectPath}`, { method: "POST", body: form });
-      onChat?.((current: any) => ({ ...(current || {}), goal: payload.goal, codex_prompt: payload.codex_prompt }));
+      onChat?.((current: ChatState | null) => ({ ...(current || {}), goal: payload.goal, codex_prompt: payload.codex_prompt }));
       setEditing(false);
     } finally {
       setSaving(false);
@@ -323,7 +342,7 @@ function GoalPanel({ chat, activePath, onChat, power = false }: {
   return (
     <div className="goal-panel" data-goal-panel>
       <strong>{String(goal.objective || "No goal set yet.")}</strong>
-      {goal.current_status && <p>{String(goal.current_status)}</p>}
+      {Boolean(goal.current_status) && <p>{String(goal.current_status)}</p>}
       {(Array.isArray(goal.next_actions) ? goal.next_actions : []).length > 0 && <ul>{(Array.isArray(goal.next_actions) ? goal.next_actions : []).slice(0, 4).map((item: string) => <li key={item}>{item}</li>)}</ul>}
       <div className="goal-actions">
         <button type="button" data-edit-goal onClick={() => setEditing(true)}>{goal.objective ? "Edit goal" : "Set goal"}</button>
@@ -337,7 +356,7 @@ function GoalPanel({ chat, activePath, onChat, power = false }: {
   );
 }
 
-function RuntimePanel({ runtime }: { runtime: any }) {
+function RuntimePanel({ runtime }: { runtime: RuntimePayload | null }) {
   const url = runtime?.cloudflare_url || "";
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return <div className="runtime-card"><strong>Runtime</strong><p>{runtime?.status || "local"}</p>{url ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : <span className="muted">No public tunnel URL.</span>}{url && <p className="warning-text">{copy.inspector.diagnosticsWarning}</p>}</div>;

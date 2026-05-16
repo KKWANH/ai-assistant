@@ -1,23 +1,36 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { actionStatus, ProjectWorkflowAppsPanel } from "../actions/ActionPanels";
 import { ArchitectureDiagram } from "./ArchitectureDiagram.jsx";
 import { ConnectionsTab } from "./ConnectionsTab.jsx";
+import styles from "./ProjectDashboard.module.css";
 import { COPY } from "../../shared/copy/copy";
 import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts.js";
 import { ViewerPane } from "../../features/workflow/components/ViewerPane";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
 import { fetchJson } from "../../lib/api";
+import { queryKeys } from "../../shared/api/client";
 import type { ProjectSummary } from "../../entities/project/types";
 import type { ActivePath, ArtifactPayload, ProjectConfigState, RunDetail } from "../../shared/contracts/runtime";
 import type { ArtifactRecord, ProjectConnectionsPayload, RunRecord } from "../../shared/contracts/workbench";
 import type { WorkflowActionDefinition } from "../../shared/contracts/workflow-app";
 
+const localClass = (name: string) => styles[name] || name;
+const cx = (...names: Array<string | false | null | undefined>) => names.filter(Boolean).map((name) => localClass(String(name))).join(" ");
+
 type CopyShape = typeof COPY;
-type DashboardAction = WorkflowActionDefinition & Record<string, any>;
-type PanelItem = Record<string, any>;
-type CommandEntry = [string, Record<string, any>];
+type DashboardAction = WorkflowActionDefinition & Record<string, unknown>;
+type PanelItem = Record<string, unknown>;
+type CommandEntry = [string, Record<string, unknown>];
 type ArtifactWithRun = ArtifactRecord & { run: RunRecord; exists?: boolean; size?: number };
+type ProjectRecord = Record<string, unknown> & { security?: { local_only?: boolean }; notes?: string };
+type ConfigRecord = Record<string, unknown> & {
+  name?: string;
+  description?: string;
+  commands?: Record<string, Record<string, unknown>>;
+  panels?: unknown[];
+  context?: Record<string, unknown>;
+};
 
 type ProjectDashboardProps = {
   activePath: ActivePath;
@@ -34,26 +47,51 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
   const [artifact, setArtifact] = useState<ArtifactPayload | null>(null);
   const [modalError, setModalError] = useState("");
   const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
+  const investmentDashboardRef = useRef<HTMLElement | null>(null);
+  const queryClient = useQueryClient();
   const [connections, setConnections] = useState<ProjectConnectionsPayload | null>(projectConfig?.connections || null);
-  const projectRecord = (projectConfig?.project || project || {}) as Record<string, any>;
+  const projectRecord = (projectConfig?.project || project || {}) as ProjectRecord;
   const [localOnly, setLocalOnly] = useState(Boolean(projectRecord?.security?.local_only));
-  const config = (projectConfig?.config || {}) as Record<string, any>;
+  const config = (projectConfig?.config || {}) as ConfigRecord;
   const runs = projectConfig?.runs || [];
   const commands = Object.entries(config.commands || {}) as CommandEntry[];
   const actions = commands.map(([name, command]) => normalizeActionDefinition(name, command) as DashboardAction);
-  const panels = (config.panels || []).map((panel) => normalizePanelDefinition(panel) as PanelItem);
-  const context = (config.context || {}) as Record<string, any>;
+  const panels = ((config.panels || []) as unknown[]).map((panel: unknown) => normalizePanelDefinition((panel && typeof panel === "object" ? panel : {}) as Record<string, unknown>) as PanelItem);
+  const context = (config.context || {}) as Record<string, unknown>;
   const artifacts = runs.flatMap((run) => (run.artifacts || []).map((item) => ({ ...item, run }))) as ArtifactWithRun[];
   const chatInsights = useMemo(() => summarizeProjectChats(project), [project]);
   const isInvestmentAdvisor = /investment advisor|investment rebalancer|portfolio/i.test(`${config.name || ""} ${config.description || ""}`);
   const text = copy.projectDashboard || COPY.projectDashboard;
+  const securityMutation = useMutation({
+    mutationFn: async (nextLocalOnly: boolean) => {
+      const body = new URLSearchParams();
+      body.set("local_only", nextLocalOnly ? "1" : "0");
+      return fetchJson<{ project: Record<string, unknown> }>(`/api/project-config/${activePath.projectPath}/security`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+    },
+    onSuccess: (payload) => {
+      const nextProject = (payload.project || {}) as ProjectRecord;
+      setLocalOnly(Boolean(nextProject.security?.local_only));
+      onProjectConfig?.((current: ProjectConfigState) => ({ ...(current || {}), project: payload.project } as NonNullable<ProjectConfigState>));
+      if (activePath.projectPath) void queryClient.invalidateQueries({ queryKey: queryKeys.projectConfig(activePath.projectPath) });
+    },
+    onError: (err) => setModalError(err instanceof Error ? err.message : String(err)),
+  });
+
+  function focusInvestmentDashboard() {
+    setActiveTab("apps");
+    window.setTimeout(() => investmentDashboardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 80);
+  }
 
   useEffect(() => {
     setConnections(projectConfig?.connections || null);
   }, [projectConfig?.connections]);
 
   useEffect(() => {
-    const record = (projectConfig?.project || project || {}) as Record<string, any>;
+    const record = (projectConfig?.project || project || {}) as ProjectRecord;
     setLocalOnly(Boolean(record.security?.local_only));
   }, [projectConfig?.project, project]);
 
@@ -78,25 +116,25 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
   }
 
   return (
-    <div className="project-dashboard">
-      <div className="project-dashboard-hero">
+    <div className={cx("project-dashboard")}>
+      <div className={cx("project-dashboard-hero")}>
         <p className="eyebrow">{text.eyebrow}</p>
         <h1>{config.name || project?.title || activePath.projectPath}</h1>
-        <p>{config.description || (project as any)?.notes || COPY.tagline}</p>
+        <p>{config.description || projectRecord.notes || COPY.tagline}</p>
       </div>
 
-      <section className="dashboard-card workbench-operating-model">
+      <section className={cx("dashboard-card", "workbench-operating-model")}>
         <div>
           <p className="eyebrow">{text.operatingEyebrow}</p>
           <h2>{text.operatingTitle}</h2>
           <p className="muted">{text.operatingBody}</p>
         </div>
-        <div className="operating-steps" aria-label="AIWS operating loop">
+        <div className={cx("operating-steps")} aria-label="AIWS operating loop">
           {text.operatingSteps.map((item) => <span key={item}>{item}</span>)}
         </div>
       </section>
 
-      <div className="project-tabbar" role="tablist" aria-label="Project dashboard sections">
+      <div className={cx("project-tabbar")} role="tablist" aria-label="Project dashboard sections">
         {[
           ["overview", "Overview"],
           ["apps", "Workflow Apps"],
@@ -105,7 +143,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
           ["artifacts", "Artifacts"],
           ["settings", "Settings"],
         ].map(([id, label]) => (
-          <button key={id} type="button" className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>
+          <button key={id} type="button" className={activeTab === id ? cx("active") : ""} onClick={() => setActiveTab(id)}>
             {label}
           </button>
         ))}
@@ -116,19 +154,19 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
           activePath={activePath}
           connections={connections}
           fetchJson={fetchJson}
-          onConnections={(next) => {
+          onConnections={(next: ProjectConnectionsPayload) => {
             setConnections(next);
-            onProjectConfig?.((current: any) => ({ ...(current || {}), connections: next }));
+            onProjectConfig?.((current: ProjectConfigState) => ({ ...(current || {}), connections: next } as NonNullable<ProjectConfigState>));
           }}
         />
       )}
 
-      {activeTab === "overview" && <div className="dashboard-grid">
+      {activeTab === "overview" && <div className={cx("dashboard-grid")}>
         <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} copy={copy} />
-        {isInvestmentAdvisor ? <InvestmentAdvisorCard activePath={activePath} actions={actions} runs={runs} artifacts={artifacts} copy={copy} /> : <AgentPlanFoundationCard copy={copy} />}
+        {isInvestmentAdvisor ? <InvestmentAdvisorCard activePath={activePath} actions={actions} runs={runs} artifacts={artifacts} copy={copy} dashboardRef={investmentDashboardRef} /> : <AgentPlanFoundationCard copy={copy} />}
       </div>}
 
-      {activeTab === "overview" && <section className="dashboard-card project-chat-overview">
+      {activeTab === "overview" && <section className={cx("dashboard-card", "project-chat-overview")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{text.memoryEyebrow}</p>
@@ -136,20 +174,20 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
           </div>
           <span className="soft-pill">{project?.sessions?.length || 0} {text.chats}</span>
         </div>
-        <p className="project-chat-summary">{chatInsights.summary}</p>
+        <p className={cx("project-chat-summary")}>{chatInsights.summary}</p>
         {chatInsights.topics.length > 0 && (
-          <div className="topic-strip">
+          <div className={cx("topic-strip")}>
             {chatInsights.topics.map((topic) => <span key={topic}>{topic}</span>)}
           </div>
         )}
-        {project?.sessions?.length > 0 ? (
-          <div className="project-chat-list">
-            {project.sessions.map((session) => (
+        {(project?.sessions?.length || 0) > 0 ? (
+          <div className={cx("project-chat-list")}>
+            {(project?.sessions || []).map((session) => (
               <button
                 type="button"
                 key={session.slug}
-                className="project-chat-row"
-                onClick={() => navigate?.(`/chat/${project.path}/${session.slug}`)}
+                className={cx("project-chat-row")}
+                onClick={() => navigate?.(`/chat/${project?.path || activePath.projectPath}/${session.slug}`)}
               >
                 <span>{session.title || session.slug}</span>
                 <small>{session.created_at?.slice(0, 10) || "date unknown"}</small>
@@ -161,7 +199,18 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         )}
       </section>}
 
-      {activeTab === "apps" && <section className="dashboard-card dashboard-actions">
+      {activeTab === "apps" && isInvestmentAdvisor && (
+        <InvestmentAdvisorCard
+          activePath={activePath}
+          actions={actions}
+          runs={runs}
+          artifacts={artifacts}
+          copy={copy}
+          dashboardRef={investmentDashboardRef}
+        />
+      )}
+
+      {activeTab === "apps" && <section className={cx("dashboard-card", "dashboard-actions")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{text.actionsEyebrow}</p>
@@ -170,21 +219,22 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
           {power && <span className="soft-pill">aiws.yaml</span>}
         </div>
         <ProjectWorkflowAppsPanel
-          activePath={activePath as any}
-          projectConfig={projectConfig as any}
-          onProjectConfig={onProjectConfig as any}
+          activePath={activePath}
+          projectConfig={projectConfig}
+          onProjectConfig={onProjectConfig}
           power={power}
           fetchJson={fetchJson}
           onOpenArtifact={openArtifact}
+          onRunComplete={isInvestmentAdvisor ? focusInvestmentDashboard : undefined}
         />
       </section>}
 
-      {activeTab === "overview" && <div className="dashboard-grid">
-        <RegistryPreviewCard title={text.panelRegistry} items={PANEL_TYPES} active={panels.map((panel) => panel.type)} />
+      {activeTab === "overview" && <div className={cx("dashboard-grid")}>
+        <RegistryPreviewCard title={text.panelRegistry} items={PANEL_TYPES} active={panels.map((panel: PanelItem) => String(panel.type || ""))} />
         <RegistryPreviewCard title={text.actionKinds} items={ACTION_KINDS} active={actions.map((action) => action.kind)} />
       </div>}
 
-      {activeTab === "overview" && <section className="dashboard-card">
+      {activeTab === "overview" && <section className={cx("dashboard-card")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{COPY.project.recipeStatus}</p>
@@ -195,19 +245,19 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         {commands.length === 0 ? (
           <p className="muted">{text.noRecipes}</p>
         ) : (
-          <div className="recipe-status-grid">
+          <div className={cx("recipe-status-grid")}>
             {commands.map(([name, command]) => (
-              <div className="recipe-status-row" key={name}>
+              <div className={cx("recipe-status-row")} key={name}>
                 <span className={`status-badge ${actionStatus(command).toLowerCase()}`}>{actionStatus(command)}</span>
-                <strong>{command.label || name}</strong>
-                <small>{command.description || name}</small>
+                <strong>{String(command.label || name)}</strong>
+                <small>{String(command.description || name)}</small>
               </div>
             ))}
           </div>
         )}
       </section>}
 
-      {activeTab === "overview" && <section className="dashboard-card dashboard-architecture passive-card">
+      {activeTab === "overview" && <section className={cx("dashboard-card", "dashboard-architecture", "passive-card")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{text.architectureEyebrow}</p>
@@ -219,7 +269,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         <ArchitectureDiagram />
       </section>}
 
-      {activeTab === "runs" && <section className="dashboard-card">
+      {activeTab === "runs" && <section className={cx("dashboard-card")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{text.recentRuns}</p>
@@ -230,9 +280,9 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         {runs.length === 0 ? (
           <p className="muted">{text.noRuns}</p>
         ) : (
-          <div className="run-list">
+          <div className={cx("run-list")}>
             {runs.slice(0, 5).map((run) => (
-              <button className="run-row clickable-row" type="button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => openRun(run)}>
+              <button className={cx("run-row", "clickable-row")} type="button" key={run.run_id || `${run.command}-${run.created_at}`} onClick={() => openRun(run)}>
                 <strong>{run.label || run.command}</strong>
                 <span>{run.status}</span>
                 <small>{run.created_at}</small>
@@ -242,7 +292,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         )}
       </section>}
 
-      {activeTab === "artifacts" && <section className="dashboard-card">
+      {activeTab === "artifacts" && <section className={cx("dashboard-card")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{COPY.project.artifacts}</p>
@@ -253,9 +303,9 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         {artifacts.length === 0 ? (
           <p className="muted">{text.noArtifacts}</p>
         ) : (
-          <div className="artifact-grid">
+          <div className={cx("artifact-grid")}>
             {artifacts.slice(0, 8).map((artifact) => (
-              <button className="artifact-tile clickable-row" type="button" key={`${artifact.run.run_id}-${artifact.path}`} onClick={() => openArtifact(artifact)}>
+              <button className={cx("artifact-tile", "clickable-row")} type="button" key={`${artifact.run.run_id}-${artifact.path}`} onClick={() => openArtifact(artifact)}>
                 <strong>{artifact.path}</strong>
                 <span>{artifact.exists ? `${artifact.size} bytes` : "not found"}</span>
                 <small>{artifact.run.label || artifact.run.command}</small>
@@ -265,7 +315,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
         )}
       </section>}
 
-      {activeTab === "settings" && <section className="dashboard-card">
+      {activeTab === "settings" && <section className={cx("dashboard-card")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">Project security</p>
@@ -274,24 +324,11 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
           <span className={`status-badge ${localOnly ? "ready" : "planned"}`}>{localOnly ? "Cloud blocked" : "Cloud allowed with confirmation"}</span>
         </div>
         <p className="muted">When enabled, this project cannot call cloud model providers even if a user confirms remote execution.</p>
-        <button type="button" className="primary-action" onClick={async () => {
+        <button type="button" className="primary-action" disabled={securityMutation.isPending} onClick={() => {
           setModalError("");
-          try {
-            const body = new URLSearchParams();
-            body.set("local_only", localOnly ? "0" : "1");
-            const payload = await fetchJson(`/api/project-config/${activePath.projectPath}/security`, {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body,
-            });
-            const nextProject = (payload.project || {}) as Record<string, any>;
-            setLocalOnly(Boolean(nextProject.security?.local_only));
-            onProjectConfig?.((current: any) => ({ ...(current || {}), project: payload.project as Record<string, unknown> }));
-          } catch (err) {
-            setModalError(err instanceof Error ? err.message : String(err));
-          }
+          securityMutation.mutate(!localOnly);
         }}>
-          {localOnly ? "Allow cloud after confirmation" : "Lock this project to local only"}
+          {securityMutation.isPending ? "Saving..." : localOnly ? "Allow cloud after confirmation" : "Lock this project to local only"}
         </button>
       </section>}
 
@@ -310,11 +347,12 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, on
   );
 }
 
-function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, copy = COPY }: {
+function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, dashboardRef, copy = COPY }: {
   activePath: ActivePath;
   actions: DashboardAction[];
   runs: RunRecord[];
   artifacts: ArtifactWithRun[];
+  dashboardRef?: React.RefObject<HTMLElement | null>;
   copy?: CopyShape;
 }) {
   const text = copy.projectDashboard || COPY.projectDashboard;
@@ -323,7 +361,7 @@ function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, copy = CO
   const growthChart = artifacts.find((artifact) => String(artifact.path || "").endsWith("portfolio-growth-chart.json"));
   const monthlyTable = artifacts.find((artifact) => String(artifact.path || "").endsWith("monthly-performance.csv"));
   return (
-    <section className="dashboard-card investment-advisor-card">
+    <section ref={dashboardRef} className={cx("dashboard-card", "investment-advisor-card")}>
       <div className="section-row">
         <div>
           <p className="eyebrow">{text.customApp}</p>
@@ -332,20 +370,20 @@ function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, copy = CO
         <span className="soft-pill">{text.educationOnly}</span>
       </div>
       <p className="muted">{text.investmentBody}</p>
-      <div className="advisor-autoload-note">
+      <div className={cx("advisor-autoload-note")}>
         <strong>기본 입력 자동 사용</strong>
         <span>files/portfolio.example.csv · files/target_allocation.example.yaml</span>
         <small>실제 파일로 바꾸려면 프로젝트 files/ 안의 샘플 파일만 교체하면 됨.</small>
       </div>
-      <div className="advisor-flow">
+      <div className={cx("advisor-flow")}>
         {text.investmentFlow.map((item) => <span key={item}>{item}</span>)}
       </div>
-      <div className="advisor-metrics">
+      <div className={cx("advisor-metrics")}>
         <MetricTile label={text.advisorActions} value={actions.length} />
         <MetricTile label={text.marketSnapshot} value={latestMarketRun ? latestMarketRun.status : text.notRun} />
         <MetricTile label={text.report} value={hasReport ? text.ready : text.pending} />
       </div>
-      <div className="advisor-viewer-grid">
+      <div className={cx("advisor-viewer-grid")}>
         <div>
           <strong>월별 총자산</strong>
           {growthChart ? <ViewerPane artifact={{ ...growthChart, viewer_id: "chartViewer", type: "chart" }} /> : <p className="muted">rebalance_plan 실행 후 그래프 표시됨.</p>}
@@ -355,7 +393,7 @@ function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, copy = CO
           {monthlyTable ? <ViewerPane artifact={{ ...monthlyTable, viewer_id: "tableViewer", type: "csv" }} /> : <p className="muted">monthly-performance.csv 생성 대기.</p>}
         </div>
       </div>
-      <div className="trusted-viewer-frame">
+      <div className={cx("trusted-viewer-frame")}>
         <div className="section-row">
           <strong>Trusted dashboard iframe</strong>
           <span className="soft-pill">manifest/build/reload ready</span>
@@ -366,7 +404,7 @@ function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, copy = CO
           src={`/project-viewers/${activePath.projectPath}/frame/investment-rebalance-dashboard`}
         />
       </div>
-      <details className="advisor-tips">
+      <details className={cx("advisor-tips")}>
         <summary>{text.customTips}</summary>
         <ul>
           {text.customTipItems.map((item) => <li key={item}>{item}</li>)}
@@ -389,7 +427,7 @@ function ManifestSummaryCard({ config, context, panels, actions, runs, copy = CO
   const exclude = Array.isArray(context.exclude) ? context.exclude : [];
   const views = Array.isArray(config.views) ? config.views : [];
   return (
-    <section className="dashboard-card manifest-summary-card">
+    <section className={cx("dashboard-card", "manifest-summary-card")}>
       <div className="section-row">
         <div>
           <p className="eyebrow">{text.manifestEyebrow}</p>
@@ -397,21 +435,21 @@ function ManifestSummaryCard({ config, context, panels, actions, runs, copy = CO
         </div>
         <span className="soft-pill">{config.name ? text.loaded : text.templateReady}</span>
       </div>
-      <div className="manifest-summary-grid">
+      <div className={cx("manifest-summary-grid")}>
         <MetricTile label={text.actions} value={actions.length} />
         <MetricTile label={text.panels} value={panels.length} />
         <MetricTile label={text.views} value={views.length} />
         <MetricTile label={text.runs} value={runs.length} />
       </div>
-      <div className="manifest-section">
+      <div className={cx("manifest-section")}>
         <strong>{text.contextInclude}</strong>
         <p>{include.length ? include.slice(0, 4).join(", ") : text.noInclude}</p>
       </div>
-      <div className="manifest-section security">
+      <div className={cx("manifest-section", "security")}>
         <strong>{text.securityExclusions}</strong>
         <p>{exclude.length ? exclude.slice(0, 4).join(", ") : text.defaultExclusions}</p>
       </div>
-      <pre className="manifest-code">{sampleManifest(config, panels, actions)}</pre>
+      <pre className={cx("manifest-code")}>{sampleManifest(config, panels, actions)}</pre>
     </section>
   );
 }
@@ -426,7 +464,7 @@ function AgentPlanFoundationCard({ copy = COPY }: { copy?: CopyShape }) {
     ["report", text.agentStepReport, false],
   ];
   return (
-    <section className="dashboard-card agent-plan-card">
+    <section className={cx("dashboard-card", "agent-plan-card")}>
       <div className="section-row">
         <div>
           <p className="eyebrow">{text.agentEyebrow}</p>
@@ -435,9 +473,9 @@ function AgentPlanFoundationCard({ copy = COPY }: { copy?: CopyShape }) {
         <span className="soft-pill">{text.experimental}</span>
       </div>
       <p className="muted">{text.agentBody}</p>
-      <div className="agent-step-list">
+      <div className={cx("agent-step-list")}>
         {steps.map(([kind, title, approval], index) => (
-          <div key={title} className={approval ? "needs-approval" : ""}>
+          <div key={title} className={approval ? cx("needs-approval") : ""}>
             <span>{index + 1}</span>
             <strong>{title}</strong>
             <small>{AGENT_STEP_KINDS.includes(kind) ? kind : "llm"}{approval ? ` · ${text.approvalRequired}` : ""}</small>
@@ -452,7 +490,7 @@ function AgentPlanFoundationCard({ copy = COPY }: { copy?: CopyShape }) {
 function RegistryPreviewCard({ title, items, active }: { title: string; items: string[] | Set<string>; active?: string[] }) {
   const activeSet = new Set(active || []);
   return (
-    <section className="dashboard-card registry-preview-card">
+    <section className={cx("dashboard-card", "registry-preview-card")}>
       <div className="section-row">
         <div>
           <p className="eyebrow">Registry</p>
@@ -460,8 +498,8 @@ function RegistryPreviewCard({ title, items, active }: { title: string; items: s
         </div>
         <span className="soft-pill">{activeSet.size} active</span>
       </div>
-      <div className="registry-chip-grid">
-        {Array.from(items).map((item) => <span key={item} className={activeSet.has(item) ? "active" : ""}>{item}</span>)}
+      <div className={cx("registry-chip-grid")}>
+        {Array.from(items).map((item) => <span key={item} className={activeSet.has(item) ? cx("active") : ""}>{item}</span>)}
       </div>
     </section>
   );
@@ -469,7 +507,7 @@ function RegistryPreviewCard({ title, items, active }: { title: string; items: s
 
 function MetricTile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <span className="metric-tile">
+    <span className={cx("metric-tile")}>
       <strong>{value}</strong>
       <small>{label}</small>
     </span>
@@ -570,10 +608,10 @@ function RunDetailModal({ detail, power, activePath, onClose, onOpenArtifact }: 
           <span>Kind: {run.kind}</span>
           <span>{run.created_at}</span>
         </div>
-        {run.artifacts?.length > 0 && (
+        {(run.artifacts?.length || 0) > 0 && (
           <div className="artifact-list">
             <strong>Artifacts</strong>
-            {run.artifacts.map((item) => (
+            {(run.artifacts || []).map((item) => (
               <button type="button" key={item.path} onClick={() => onOpenArtifact(item)}>
                 {item.path} · {item.exists ? `${item.size} bytes` : "not found"}
               </button>

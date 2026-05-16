@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { type ChangeEvent, useEffect, useState } from "react";
 import { Composer } from "../chat/Composer";
 import { HomeArtifactContent } from "../table/TableWorkbenchPanel.jsx";
@@ -55,6 +54,11 @@ export const STARTER_ACTIONS: HomeAction[] = [
 
 function isPowerMode(account?: AccountLike) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
+}
+
+function closeLabel(copy: typeof COPY) {
+  const maybeCommon = "common" in copy ? (copy as { common?: { close?: string } }).common : undefined;
+  return maybeCommon?.close || "닫기";
 }
 
 export function StarterActionsGrid({ actions, onStart, running = "", hasFile = false, copy = COPY }: {
@@ -148,7 +152,7 @@ export function ToolRunPanel({ action, running, onClose, onRun, copy = COPY }: {
           <small>{localized.category || copy.catalog?.oneOffTool || "Chat Tool"}</small>
           <strong>{localized.label}</strong>
         </div>
-        <button type="button" onClick={onClose}>{(copy as any).common?.close || "닫기"}</button>
+        <button type="button" onClick={onClose}>{closeLabel(copy)}</button>
       </div>
       <p>{localized.inputs} → {localized.output || "answer"}</p>
       <div className="tool-run-drop">
@@ -200,7 +204,9 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }: {
   onClose: () => void;
   onOpenArtifact?: (artifact: ArtifactRecord) => void | Promise<void>;
 }) {
-  const run = (detail.run || {}) as RunRecord & { execution_plan?: Record<string, any>; logs?: Array<Record<string, any>>; errors?: string[]; artifacts?: ArtifactRecord[] };
+  type HomeRunStep = { id?: string; type?: string; output?: string; status?: string };
+  type HomeRunLog = { kind?: string; type?: string; content?: string; message?: string };
+  const run = (detail.run || {}) as RunRecord & { execution_plan?: { steps?: HomeRunStep[] }; logs?: HomeRunLog[]; errors?: string[]; artifacts?: ArtifactRecord[] };
   const plan = run.execution_plan || {};
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   return (
@@ -211,10 +217,10 @@ function HomeRunDetailModal({ detail, power, onClose, onOpenArtifact }: {
         <h2>{run.label || run.action_id || "Workbench output"}</h2>
         <div className="run-meta-grid"><span>Status: {run.status}</span><span>Tool/App: {run.action_id}</span><span>{run.created_at}</span></div>
         {(run.artifacts || []).length > 0 && <div className="artifact-list"><strong>Artifacts</strong>{(run.artifacts || []).map((item) => <button type="button" key={item.path} onClick={() => onOpenArtifact?.(item)}>{item.path.split("/").pop()} · {item.viewer_type}</button>)}</div>}
-        {steps.length > 0 && <div className="run-step-list"><strong>Steps</strong>{steps.map((step: any) => <span key={step.id || step.type}><b>{step.id || step.type}</b><small>{step.output || step.status || "done"}</small></span>)}</div>}
+        {steps.length > 0 && <div className="run-step-list"><strong>Steps</strong>{steps.map((step: HomeRunStep) => <span key={step.id || step.type}><b>{step.id || step.type}</b><small>{step.output || step.status || "done"}</small></span>)}</div>}
         <details className="run-log-details" open={power}>
           <summary>Logs</summary>
-          <pre>{(run.logs || detail.logs || []).map((item: any) => `[${item.kind || item.type || "log"}] ${item.content || item.message || ""}`).join("\n") || "(empty)"}</pre>
+          <pre>{(run.logs || (detail.logs as HomeRunLog[] | undefined) || []).map((item: HomeRunLog) => `[${item.kind || item.type || "log"}] ${item.content || item.message || ""}`).join("\n") || "(empty)"}</pre>
           {(run.errors || []).length > 0 && <pre className="error-text">{(run.errors || []).join("\n")}</pre>}
         </details>
         {power && <details className="run-log-details"><summary>Raw plan</summary><pre>{JSON.stringify(plan, null, 2)}</pre></details>}
@@ -369,7 +375,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       <div className="start-composer-shell" data-context-note="AIWS prioritizes saved chats, project context, and attached files.">
         <Composer
           activePath={{ projectPath, sessionSlug: "" }}
-          onAsk={onAsk as any}
+          onAsk={onAsk}
           account={account}
           power={power}
           models={modelModes}

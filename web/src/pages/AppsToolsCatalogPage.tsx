@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState } from "react";
 import { STARTER_ACTIONS, ToolRunPanel } from "../components/home/StartPane";
 import { COPY } from "../shared/copy/copy";
@@ -34,6 +33,7 @@ export function AppsToolsCatalogPage({ navigate, copy = COPY, home, onHome }: {
   onHome?: (home: HomePayload) => void;
 }) {
   const text = copy.catalog || COPY.catalog;
+  const textLookup = text as Record<string, string | undefined>;
   const runs = home?.runs || [];
   const catalogTools = catalogItems(home?.actions, "chat_tool", STARTER_ACTIONS);
   const catalogApps = catalogItems(home?.actions, "workflow_app", WORKFLOW_APPS);
@@ -129,8 +129,8 @@ export function AppsToolsCatalogPage({ navigate, copy = COPY, home, onHome }: {
                   <span className="starter-category">{text.workflowApp}</span>
                   <span className={`status-badge ${app.status}`}>{app.status}</span>
                 </div>
-                <h3>{(text as any)[String(app.titleKey)] || app.title || app.label}</h3>
-                <p>{(text as any)[String(app.bodyKey)] || app.description}</p>
+                <h3>{textLookup[String(app.titleKey)] || app.title || app.label}</h3>
+                <p>{textLookup[String(app.bodyKey)] || app.description}</p>
                 <div className="starter-meta">
                   <span>{text.input}: {app.input}</span>
                   <span>{text.output}: {app.output}</span>
@@ -148,7 +148,7 @@ export function AppsToolsCatalogPage({ navigate, copy = COPY, home, onHome }: {
           <CatalogSection title={text.recentRuns} body={text.dataResourceBody}>
             <div className="run-list compact-catalog-runs">
               {runs.slice(0, 4).map((run) => (
-                <div className="run-row" key={run.run_id || String((run as any).id || run.action_id)}>
+                <div className="run-row" key={run.run_id || run.action_id || `${run.created_at}-${run.status}`}>
                   <strong>{run.label || run.action_id}</strong>
                   <span>{run.status}</span>
                   <small>{run.created_at}</small>

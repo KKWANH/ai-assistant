@@ -3,17 +3,18 @@ import type { ProjectSummary } from "../../entities/project/types";
 import type { ChatSessionPayload } from "../../entities/session/types";
 import type { ArtifactRecord, ModelCatalogItem, ProjectConnectionsPayload, RunRecord } from "./workbench";
 import type { ProjectConfigPayload } from "../api/client";
+import type { ActivePath } from "../../app/router/parseRoute";
 
-export type ActivePath = {
-  view?: string;
-  projectPath?: string;
-  sessionSlug?: string;
-};
+export type { ActivePath };
+
+export type JsonRecord = Record<string, unknown>;
 
 export type NavigateFn = (path: string) => void;
 export type RefreshFn = () => void | Promise<void>;
 
-export type ChatUpdater = ChatSessionPayload | ((current: ChatSessionPayload | null) => ChatSessionPayload | null);
+export type ChatState = Partial<ChatSessionPayload> & JsonRecord;
+export type ChatUpdater = ChatState | ((current: ChatState | null) => ChatState | null);
+export type SetChatFn = (payload: ChatUpdater) => void;
 
 export type HomePayload = {
   actions?: HomeAction[];
@@ -65,8 +66,8 @@ export type AutomationProject = {
   slug: string;
   title: string;
   category?: string;
-  kind?: string;
-  latest_run?: RunRecord;
+  kind: string;
+  latest_run?: { status?: string; created_at?: string };
 };
 
 export type ProjectConfigState = ProjectConfigPayload | null;

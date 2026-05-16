@@ -1,4 +1,5 @@
 import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -22,7 +23,12 @@ const app: WorkflowAppDefinition = {
 describe("WorkflowAppShell", () => {
   it("renders launcher, viewer slots, and chat dock", async () => {
     const onRun = vi.fn();
-    render(<WorkflowAppShell app={app} projectPath="investing" onRun={onRun} />);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkflowAppShell app={app} projectPath="investing" onRun={onRun} />
+      </QueryClientProvider>
+    );
     expect(screen.getByText("Investment Rebalancer")).toBeInTheDocument();
     expect(screen.getByText("reportViewer")).toBeInTheDocument();
     expect(screen.getByText("Chat Dock")).toBeInTheDocument();

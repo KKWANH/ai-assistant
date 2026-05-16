@@ -3,7 +3,7 @@
 }
 
 
-.project-workbench-page {
+:global(.project-workbench-page) {
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: auto;
   padding: 24px;
@@ -53,6 +53,26 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.project-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-tabbar button {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 11px;
+}
+
+.project-tabbar button.active {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
 }
 
 .dashboard-card {
@@ -365,7 +385,7 @@
   color: var(--muted);
 }
 
-.dashboard-actions .project-actions-panel {
+.dashboard-actions :global(.project-actions-panel) {
   margin-top: 12px;
 }
 
@@ -382,7 +402,7 @@
   background: rgba(2, 6, 12, .64);
 }
 
-.architecture-diagram .react-flow__node {
+.architecture-diagram :global(.react-flow__node) {
   width: 190px;
   border: 1px solid rgba(99, 215, 255, .3);
   border-radius: 16px;
@@ -395,7 +415,33 @@
   line-height: 1.35;
 }
 
-.architecture-diagram .react-flow__edge-path {
+.architecture-diagram :global(.react-flow__edge-path) {
   stroke: rgba(99, 215, 255, .68);
   stroke-width: 1.5;
+}
+
+@media (max-width: 760px) {
+  .project-dashboard {
+    gap: 12px;
+  }
+
+  .project-dashboard-hero,
+  .dashboard-card {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .dashboard-grid,
+  .workbench-operating-model,
+  .manifest-summary-grid,
+  .advisor-flow,
+  .advisor-metrics,
+  .advisor-viewer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-chat-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
 }

@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { type FormEvent, useEffect, useRef, useState } from "react";
-import { TaskSuggestionsPanel } from "../../components/actions/ActionPanels";
+import { TaskSuggestionsPanel, type CommandDefinition } from "../../components/actions/ActionPanels";
 import { AttachmentList } from "../../components/chat/AttachmentList.jsx";
 import { Composer } from "../../components/chat/Composer";
 import { ContextReceiptCard } from "../../components/chat/ContextReceiptCard.jsx";
@@ -12,9 +11,38 @@ import { AppsToolsCatalogPage } from "../../pages/AppsToolsCatalogPage";
 import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";
 import { DEFAULT_MODEL, modelLabel, normalizeModelCatalog } from "../../lib/modelModes.jsx";
+import type { AccountSummary } from "../../entities/workspace/types";
+import type { ProjectSummary } from "../../entities/project/types";
 import type { ChatMessage } from "../../shared/contracts/workbench";
+import type {
+  ActivePath,
+  ChatState,
+  HomePayload,
+  NavigateFn,
+  ProjectConfigState,
+  RefreshFn,
+  SetChatFn,
+} from "../../shared/contracts/runtime";
 
-type CenterPaneProps = Record<string, any>;
+type CenterPaneProps = {
+  chat: ChatState | null;
+  activePath: ActivePath;
+  account?: AccountSummary;
+  projects: ProjectSummary[];
+  onAsk: SetChatFn;
+  onPreview?: (attachment: unknown) => void;
+  error?: string;
+  navigate: NavigateFn;
+  refreshWorkspace?: RefreshFn;
+  contextOpen: boolean;
+  onToggleContext: () => void;
+  projectConfig: ProjectConfigState;
+  onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigState>>;
+  workspace?: unknown;
+  home?: HomePayload | null;
+  onHome?: (home: HomePayload) => void;
+  refreshHome?: RefreshFn;
+};
 
 export function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }: CenterPaneProps) {
   const power = isPowerMode(account);
@@ -26,7 +54,7 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
     return <AppsToolsCatalogPage navigate={navigate} copy={copy} home={home} onHome={onHome} />;
   }
   if (activePath.projectPath && !activePath.sessionSlug) {
-    const project = projects.find((item: any) => item.path === activePath.projectPath);
+    const project = projects.find((item) => item.path === activePath.projectPath);
     return (
       <section className="center-pane project-workbench-page">
         <ProjectDashboard
@@ -79,8 +107,8 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
         <div className="context-chips">
           <span>{chat?.project?.hidden ? copy.chatHeader.privateChat : copy.chatHeader.projectMemory}</span>
           <span>{(chat?.attachments || []).length} {copy.chatHeader.files}</span>
-          {chat?.goal?.objective && <span>{copy.chatHeader.goalSet}</span>}
-          <span>{power ? `${chat?.latest?.provider || "ollama"} · ${modelLabel(chat?.latest?.model || DEFAULT_MODEL, models)}` : providerFriendlyLabel(chat?.latest?.provider || "ollama")}</span>
+          {Boolean(chat?.goal?.objective) && <span>{copy.chatHeader.goalSet}</span>}
+          <span>{power ? `${String(chat?.latest?.provider || "ollama")} · ${modelLabel(String(chat?.latest?.model || DEFAULT_MODEL), models)}` : providerFriendlyLabel(String(chat?.latest?.provider || "ollama"))}</span>
           <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? copy.chatHeader.close : copy.inspector.title}</button>
         </div>
       </div>
@@ -88,12 +116,12 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
         messages={chat?.messages || []}
         onPreview={onPreview}
         activePath={activePath}
-        onEdit={(message, index) => editFromMessage(message, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal)}
-        onRetry={(index) => retryFromMessage(chat?.messages || [], index, activePath, onAsk, setComposerDraft, setComposerFocusSignal)}
+        onEdit={(message: ChatMessage, index: number) => editFromMessage(message, index, activePath, onAsk, setComposerDraft, setComposerFocusSignal)}
+        onRetry={(index: number) => retryFromMessage(chat?.messages || [], index, activePath, onAsk, setComposerDraft, setComposerFocusSignal)}
       />
       <TaskSuggestionsPanel
         activePath={activePath}
-        suggestions={chat?.task_suggestions || []}
+        suggestions={(chat?.task_suggestions || []) as CommandDefinition[]}
         onProjectConfig={onProjectConfig}
         onChat={onAsk}
         power={power}
@@ -112,7 +140,12 @@ export function CenterPane({ chat, activePath, account, projects, onAsk, onPrevi
   );
 }
 
-type EditableTitleProps = Record<string, any>;
+type EditableTitleProps = {
+  chat: ChatState | null;
+  activePath: ActivePath;
+  onAsk: SetChatFn;
+  refreshWorkspace?: RefreshFn;
+};
 
 function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }: EditableTitleProps) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
@@ -131,17 +164,17 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }: EditableTi
     if (!clean) return;
     setError("");
     try {
-      const payload = await fetchJson<{ session: any }>(`/api/session-title/${activePath.projectPath}/${activePath.sessionSlug}`, {
+      const payload = await fetchJson<{ session: ChatState["session"] }>(`/api/session-title/${activePath.projectPath}/${activePath.sessionSlug}`, {
         method: "POST",
         body: new URLSearchParams({ title: clean }),
       });
-      onAsk((current) => ({ ...(current || {}), session: payload.session }));
+      onAsk((current: ChatState | null) => ({ ...(current || {}), session: payload.session }));
       refreshWorkspace?.();
       setEditing(false);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1800);
     } catch (err) {
-      setError(err.message || copy.titleEdit.error);
+      setError(err instanceof Error ? err.message : copy.titleEdit.error);
     }
   }
 
@@ -176,7 +209,13 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }: EditableTi
   );
 }
 
-type MessageTimelineProps = Record<string, any> & { messages: ChatMessage[] };
+type MessageTimelineProps = {
+  messages: ChatMessage[];
+  onPreview?: (attachment: unknown) => void;
+  activePath: ActivePath;
+  onEdit: (message: ChatMessage, index: number) => void | Promise<void>;
+  onRetry: (index: number) => void | Promise<void>;
+};
 
 function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }: MessageTimelineProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -202,7 +241,23 @@ function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }: M
   );
 }
 
-function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry }: Record<string, any> & { message: ChatMessage; index: number }) {
+type MessageCardProps = {
+  message: ChatMessage;
+  index: number;
+  onPreview?: (attachment: unknown) => void;
+  activePath: ActivePath;
+  onEdit: (message: ChatMessage, index: number) => void | Promise<void>;
+  onRetry: (index: number) => void | Promise<void>;
+};
+
+function MessageCard({
+  message,
+  index,
+  onPreview,
+  activePath,
+  onEdit,
+  onRetry,
+}: MessageCardProps) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   return (
     <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
@@ -217,13 +272,19 @@ function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry }:
         <MessageActions message={message} index={index} copy={copy} onEdit={onEdit} onRetry={onRetry} />
       )}
       {message.context_receipt && <ContextReceiptCard receipt={message.context_receipt} compact />}
-      {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan} />}
+      {message.execution_plan && <PlannerTraceSummary plan={message.execution_plan as PlannerTrace} />}
       <AttachmentList attachments={message.attachments || []} onPreview={onPreview} />
     </article>
   );
 }
 
-type MessageActionsProps = Record<string, any> & { message: ChatMessage; index: number; copy?: typeof COPY };
+type MessageActionsProps = {
+  message: ChatMessage;
+  index: number;
+  copy?: typeof COPY;
+  onEdit: (message: ChatMessage, index: number) => void | Promise<void>;
+  onRetry: (index: number) => void | Promise<void>;
+};
 
 function MessageActions({ message, index, copy = COPY, onEdit, onRetry }: MessageActionsProps) {
   function downloadAnswer() {
@@ -249,10 +310,10 @@ function MessageActions({ message, index, copy = COPY, onEdit, onRetry }: Messag
 }
 
 async function editFromMessage(
-  message: any,
+  message: ChatMessage,
   index: number,
-  activePath: any,
-  onAsk: any,
+  activePath: ActivePath,
+  onAsk: SetChatFn,
   setComposerDraft: React.Dispatch<React.SetStateAction<string>>,
   setComposerFocusSignal: React.Dispatch<React.SetStateAction<number>>,
 ) {
@@ -261,16 +322,16 @@ async function editFromMessage(
     method: "POST",
     body: new URLSearchParams({ keep: String(index) }),
   });
-  onAsk((current) => ({ ...(current || {}), messages: payload.messages || [] }));
+  onAsk((current: ChatState | null) => ({ ...(current || {}), messages: payload.messages || [] }));
   setComposerDraft(message.content || "");
   setComposerFocusSignal((value) => value + 1);
 }
 
 async function retryFromMessage(
-  messages: any[],
+  messages: ChatMessage[],
   index: number,
-  activePath: any,
-  onAsk: any,
+  activePath: ActivePath,
+  onAsk: SetChatFn,
   setComposerDraft: React.Dispatch<React.SetStateAction<string>>,
   setComposerFocusSignal: React.Dispatch<React.SetStateAction<number>>,
 ) {
@@ -279,26 +340,31 @@ async function retryFromMessage(
   await editFromMessage(messages[userIndex], userIndex, activePath, onAsk, setComposerDraft, setComposerFocusSignal);
 }
 
-function pendingStepLabel(message: any, copy: typeof COPY) {
-  const steps = Array.isArray(message?.execution_plan?.steps) ? message.execution_plan.steps : [];
-  const active = steps.find((step) => step.status === "running") || steps.find((step) => step.status === "pending");
+type PlanStep = { id?: string; type?: string; title?: string; status?: string };
+type PlannerTrace = { steps?: PlanStep[]; estimated_model_calls?: number; requires_confirmation?: boolean };
+
+function pendingStepLabel(message: ChatMessage, copy: typeof COPY) {
+  const plan = message.execution_plan as PlannerTrace | undefined;
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const active = steps.find((step: PlanStep) => step.status === "running") || steps.find((step: PlanStep) => step.status === "pending");
   return active?.title || copy.chat.assistantThinking;
 }
 
-function PlannerTraceSummary({ plan }: { plan?: any }) {
+function PlannerTraceSummary({ plan }: { plan?: PlannerTrace }) {
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   if (!steps.length) return null;
+  const estimatedCalls = plan?.estimated_model_calls || 1;
   return (
     <details className="planner-trace-summary">
-      <summary>Agent plan · {steps.length} steps · {plan.estimated_model_calls || 1} model call budget</summary>
+      <summary>Agent plan · {steps.length} steps · {estimatedCalls} model call budget</summary>
       <div>
-        {steps.map((step) => (
+        {steps.map((step: PlanStep) => (
           <span key={step.id || step.title}>
             <b>{step.status}</b> {step.title || step.type}
           </span>
         ))}
       </div>
-      {plan.requires_confirmation && <small>Web search runs only when selected. Sandbox/code execution still requires promotion into a Workflow App.</small>}
+      {plan?.requires_confirmation && <small>Web search runs only when selected. Sandbox/code execution still requires promotion into a Workflow App.</small>}
     </details>
   );
 }
@@ -332,6 +398,6 @@ function providerFriendlyLabel(provider?: string) {
   return provider === "kimi" ? "High-context AI" : "Fast local AI";
 }
 
-function isPowerMode(account?: any) {
+function isPowerMode(account?: AccountSummary) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }

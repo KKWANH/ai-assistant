@@ -1,6 +1,7 @@
 import React from "react";
 import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import styles from "./ProjectDashboard.module.css";
 
 const nodes = [
   { id: "input", position: { x: 0, y: 130 }, data: { label: "User Input\nChat · Workbench · Recipe" }, type: "default" },
@@ -33,7 +34,7 @@ const edges = [
 
 export function ArchitectureDiagram() {
   return (
-    <div className="architecture-diagram" aria-label="AIWS architecture diagram">
+    <div className={styles["architecture-diagram"]} aria-label="AIWS architecture diagram">
       <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}>
         <Background color="rgba(143, 192, 255, .12)" gap={18} />
         <MiniMap pannable={false} zoomable={false} />

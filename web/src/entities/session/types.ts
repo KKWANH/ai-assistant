@@ -9,8 +9,8 @@ export type SessionSummary = {
 
 export type ChatSessionPayload = {
   project?: { path: string; title: string; hidden?: boolean };
-  session: SessionSummary;
-  messages: ChatMessage[];
+  session?: SessionSummary;
+  messages?: ChatMessage[];
   attachments?: AttachmentMeta[];
   skills?: string[];
   goal?: Record<string, unknown>;
@@ -18,4 +18,5 @@ export type ChatSessionPayload = {
   latest?: Record<string, unknown>;
   context_manifest?: Record<string, unknown>;
   work_session?: Record<string, unknown>;
+  task_suggestions?: unknown[];
 };
