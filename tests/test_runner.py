@@ -83,6 +83,38 @@ def test_ask_calls_ollama_and_persists_messages(tmp_path, monkeypatch):
     assert "## Assistant" in markdown
 
 
+def test_ask_includes_project_retrieval_context(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "Research")
+    storage.create_session(root, "research", "Question")
+    files = storage.project_dir(root, "research") / "files"
+    files.mkdir()
+    (files / "camera.md").write_text("Canon battery door failure usually cuts power intermittently.", encoding="utf-8")
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    runner.ask(
+        str(root),
+        "research",
+        "question",
+        provider="ollama",
+        model="qwen3:8b",
+        content="battery door failure 원인?",
+    )
+
+    system = captured["payload"]["messages"][0]["content"]
+    assert "## Retrieved Project Context" in system
+    assert "files/camera.md" in system
+    messages = storage.read_messages(root, "research", "question")
+    chunks = messages[-1]["metadata"]["context_receipt"]["included_chunks"]
+    assert any(item.get("source") == "project_retrieval" for item in chunks)
+
+
 def test_ollama_provider_falls_back_to_ipv4_localhost(monkeypatch):
     calls = []
 

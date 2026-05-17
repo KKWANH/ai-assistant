@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from . import costs, search, storage
-from .core import context_manifest, context_receipts, work_sessions
+from .core import context_manifest, context_receipts, retrieval, work_sessions
 from .env import load_env
 from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
@@ -92,7 +92,7 @@ def ask(
         "- For Korean UI/chat, prefer short engineering style endings such as '함', '됨', '필요함' when natural.\n"
         "- If the question is simple, give the answer first.\n\n"
     )
-    prompt_context = (
+    base_prompt_context = (
         answer_policy
         + server_time_context()
         + account_context
@@ -105,6 +105,8 @@ def ask(
             include_project_files=include_prior_files,
         )
     )
+    retrieval_chunks = retrieve_project_context(root, project_path, content)
+    prompt_context = base_prompt_context + retrieval.format_retrieval_context(retrieval_chunks)
     network_used = bool(resolved_results)
     manifest = write_used_context(
         root,
@@ -119,6 +121,7 @@ def ask(
         search_queries=[content] if network_used else [],
         active_attachment_filenames=(active_files or None) if not include_prior_files else None,
         include_project_files=include_prior_files,
+        retrieval_chunks=retrieval_chunks,
     )
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
@@ -246,6 +249,7 @@ def write_used_context(
     search_queries: list[str] | None = None,
     active_attachment_filenames: set[str] | None = None,
     include_project_files: bool = True,
+    retrieval_chunks: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     path = storage.session_dir(root, project_path, session_slug) / "used_context.json"
     manifest = context_manifest.build_context_manifest(
@@ -261,6 +265,7 @@ def write_used_context(
         search_queries=search_queries or [],
         active_attachment_filenames=active_attachment_filenames,
         include_project_files=include_project_files,
+        retrieval_chunks=retrieval_chunks,
     )
     storage.write_json(
         path,
@@ -276,6 +281,17 @@ def write_used_context(
         },
     )
     return manifest
+
+
+def retrieve_project_context(root: str, project_path: str, content: str) -> list[dict[str, object]]:
+    if os.environ.get("AIWS_RAG_ENABLED", "true").lower() in {"0", "false", "no"}:
+        return []
+    if not project_path or len(content.strip()) < 3:
+        return []
+    try:
+        return retrieval.search_project(root, project_path, content, limit=int(os.environ.get("AIWS_RAG_TOP_K", "4")))
+    except storage.WorkspaceError:
+        return []
 
 
 def default_model_for_provider(provider: str) -> str:

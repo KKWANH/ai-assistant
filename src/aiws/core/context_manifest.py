@@ -23,6 +23,7 @@ def build_context_manifest(
     search_queries: list[str] | None = None,
     active_attachment_filenames: set[str] | None = None,
     include_project_files: bool = True,
+    retrieval_chunks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return a compact record of what AIWS intends to use as context."""
     project = storage.load_project(root, project_path)
@@ -51,7 +52,9 @@ def build_context_manifest(
     input_tokens = costs.rough_token_count(prompt_context) if prompt_context else 0
     estimate = costs.estimate_cost(provider, model, input_tokens) if provider and model else {}
     all_files = session_files + project_files
-    included_chunks = _included_chunks(all_files, model_delivery="local" if provider == "ollama" else "cloud")
+    model_delivery = "local" if provider == "ollama" else "cloud"
+    retrieval_items = _retrieval_chunk_items(retrieval_chunks or [], model_delivery=model_delivery)
+    included_chunks = _included_chunks(all_files, model_delivery=model_delivery) + retrieval_items
     file_exclusions = session_excluded + project_excluded
 
     included: list[dict[str, Any]] = []
@@ -65,8 +68,9 @@ def build_context_manifest(
         included.append({"type": "project_files", "count": len(project_files)})
     if recent_runs:
         included.append({"type": "recent_runs", "count": len(recent_runs)})
+    if retrieval_items:
+        included.append({"type": "retrieval_chunks", "count": len(retrieval_items)})
 
-    model_delivery = "local" if provider == "ollama" else "cloud"
     files_sent_to_cloud = [item["path"] for item in all_files if model_delivery == "cloud" and item.get("included_in_context")]
     files_kept_local = [item["path"] for item in all_files if model_delivery == "local" and item.get("included_in_context")]
     return {
@@ -254,3 +258,26 @@ def _run_summary(run: dict[str, Any]) -> dict[str, Any]:
         "created_at": run.get("created_at", ""),
         "artifacts": run.get("artifacts", []),
     }
+
+
+def _retrieval_chunk_items(chunks: list[dict[str, Any]], *, model_delivery: str) -> list[dict[str, Any]]:
+    privacy = "kept_local" if model_delivery == "local" else "sent_to_cloud"
+    items: list[dict[str, Any]] = []
+    for item in chunks:
+        source = str(item.get("source_path", "retrieved"))
+        text = str(item.get("text", ""))
+        if not text:
+            continue
+        items.append(
+            {
+                "filename": Path(source).name,
+                "path": source,
+                "scope": "retrieval",
+                "chunk_id": item.get("chunk_id", source),
+                "token_count": costs.rough_token_count(text),
+                "privacy": privacy,
+                "source": "project_retrieval",
+                "text_preview": text[:500],
+            }
+        )
+    return items

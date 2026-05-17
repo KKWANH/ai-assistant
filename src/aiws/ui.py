@@ -25,7 +25,7 @@ from .app.routes import projects as project_routes
 from .app.routes import project_viewers as project_viewer_routes
 from .app.routes import runtime as runtime_routes
 from .app.routes import workspace as workspace_routes
-from .core import action_registry, action_runs, chat_orchestrator, home_workbench, project_connections, redaction, work_sessions
+from .core import action_registry, action_runs, chat_orchestrator, home_workbench, project_connections, redaction, retrieval, work_sessions
 from .domain import accounts as account_domain
 from .domain import chats as chat_domain
 from .domain import goals as goal_domain
@@ -132,6 +132,11 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_workbench_contract()
         elif path == "/api/model-usage":
             self.api_model_usage()
+        elif path == "/api/retrieval/search":
+            query = parse_qs(parsed.query)
+            project_path = unquote((query.get("project") or [""])[0])
+            search_query = (query.get("q") or [""])[0]
+            self.api_retrieval_search(project_path, search_query)
         elif path == "/api/home-run":
             query = parse_qs(parsed.query)
             run_id = unquote((query.get("run_id") or [""])[0])
@@ -534,6 +539,20 @@ class AIWSHandler(BaseHTTPRequestHandler):
                     step_id=step_id,
                 )
                 self.send_json({"run": run, "config": action_registry.load_config(self.root, project_path)})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/retrieval/index":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                project_path = str(data.get("project", "")).strip()
+                self.require_project_access(project_path, "read")
+                self.send_json({"index": retrieval.index_project(self.root, project_path)})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -1319,6 +1338,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.send_json(usage_domain.monthly_summary(self.root, username, include_all=include_all))
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=400)
+
+    def api_retrieval_search(self, project_path: str, query: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            self.send_json({"chunks": retrieval.search_project(self.root, project_path, query)})
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
 
     def api_investment_viewer(self, project_path: str) -> None:
         try:

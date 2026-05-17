@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { WorkflowAppDefinition } from "../../../entities/workflow-app/types";
 import type { AccountLike } from "../../../components/chat/Composer";
 import type { ModelMode } from "../../../lib/modelModes";
@@ -47,11 +47,23 @@ export function WorkflowAppShell({
   navigate?: (path: string) => void;
   children?: React.ReactNode;
 }) {
+  const viewerRef = useRef<HTMLDivElement | null>(null);
+  const latestRunId = latestRun?.run_id;
+  const latestArtifactCount = latestRun?.artifacts?.length || 0;
+  const hasLatestRun = Boolean(latestRun);
+  useEffect(() => {
+    if (!hasLatestRun || running) return;
+    viewerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hasLatestRun, latestRunId, latestArtifactCount, running]);
+
   return (
-    <section className="workflow-app-shell">
+    <section className={`workflow-app-shell ${latestRun ? "has-run" : ""}`}>
       <AppLauncher app={app} running={running} error={error} onPreview={onPreview} onRun={onRun} />
       <RunReceipt run={latestRun} running={running} />
-      <div className="workflow-viewer-layout">
+      <div className="workflow-viewer-focus" ref={viewerRef}>
+        {latestRun && <div className="workflow-complete-banner">완료됨 · 산출물 {(latestRun.artifacts || []).length}개 · 아래 대시보드 갱신됨</div>}
+      </div>
+      <div className="workflow-viewer-layout" aria-live="polite">
         {app.defaultViewerLayout.map((slot) => (
           <div className={`workflow-viewer-slot ${slot.position}`} key={slot.id}>
             <div className="section-row"><strong>{slot.title}</strong><span className="soft-pill">{slot.viewer_id}</span></div>

@@ -6,24 +6,25 @@ export type ActivePath = {
 };
 
 export function parseRoute(path = window.location.pathname): ActivePath {
-  if (path === "/login") {
+  const cleanPath = (path || "/").split("?")[0]?.split("#")[0] || "/";
+  if (cleanPath === "/login") {
     return { view: "login", projectPath: "", sessionSlug: "" };
   }
-  if (path === "/apps-tools") {
+  if (cleanPath === "/apps-tools") {
     return { view: "apps-tools", projectPath: "", sessionSlug: "" };
   }
-  if (path === "/actions" || path === "/actions/new") {
+  if (cleanPath === "/actions" || cleanPath === "/actions/new") {
     return { view: "actions", projectPath: "", sessionSlug: "" };
   }
-  if (path === "/home") {
+  if (cleanPath === "/home") {
     return { view: "home", projectPath: "", sessionSlug: "" };
   }
-  if (path.startsWith("/chat/")) {
-    const parts = path.replace("/chat/", "").split("/");
+  if (cleanPath.startsWith("/chat/")) {
+    const parts = cleanPath.replace("/chat/", "").split("/");
     return { projectPath: parts.slice(0, -1).join("/"), sessionSlug: parts.at(-1) || "" };
   }
-  if (path.startsWith("/project/")) {
-    const route = path.replace("/project/", "");
+  if (cleanPath.startsWith("/project/")) {
+    const route = cleanPath.replace("/project/", "");
     const appMarker = "/app/";
     if (route.includes(appMarker)) {
       const [projectPath, appId] = route.split(appMarker);
