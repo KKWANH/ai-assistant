@@ -447,17 +447,50 @@ function ItemOptions({ kind, projectPath, sessionSlug = "", title, isGeneral = f
 }
 
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (project: ProjectSummary) => void }) {
+  const templates = [
+    {
+      id: "blank",
+      title: "빈 작업대",
+      description: "파일, 대화, Workflow App을 나중에 직접 붙임.",
+      output: "Project folder + aiws.yaml 기본값",
+      defaultTitle: "",
+      notes: "Local-first project workspace.",
+    },
+    {
+      id: "investment-advisor",
+      title: "투자 리밸런싱",
+      description: "portfolio CSV와 target allocation으로 표/차트/리포트를 바로 생성.",
+      output: "Rebalance dashboard + artifacts",
+      defaultTitle: "Investment Advisor",
+      notes: "Educational portfolio analysis workspace. Not financial advice.",
+    },
+    {
+      id: "document-review",
+      title: "문서 리뷰",
+      description: "PDF/DOCX/MD를 모아 검색, 출처, 요약 산출물 중심으로 운영.",
+      output: "Document context + reports",
+      defaultTitle: "Document Review",
+      notes: "Document review workspace.",
+    },
+  ];
+  const [template, setTemplate] = useState(templates[0]);
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState("private");
   const [error, setError] = useState("");
-  const canSubmit = title.trim().length > 0;
+  const effectiveTitle = title.trim() || template.defaultTitle;
+  const canSubmit = effectiveTitle.trim().length > 0;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
     setError("");
     try {
-      const form = new URLSearchParams({ title, visibility });
-      const payload = await fetchJson<{ project: ProjectSummary }>("/api/projects", { method: "POST", body: form });
+      const form = new URLSearchParams({ title: effectiveTitle, visibility, notes: template.notes });
+      const payload = template.id === "investment-advisor"
+        ? await fetchJson<{ project: ProjectSummary }>("/api/projects/import-template", {
+          method: "POST",
+          body: new URLSearchParams({ template: "investment-advisor", project: "investment-advisor", overwrite: "1" }),
+        })
+        : await fetchJson<{ project: ProjectSummary }>("/api/projects", { method: "POST", body: form });
       onCreated(payload.project);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create project.");
@@ -467,14 +500,34 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
     createPortal(<div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal project-modal" onClick={(event) => event.stopPropagation()}>
         <header>
-          <h2>New Project</h2>
+          <div>
+            <span className="modal-eyebrow">Project Workbench</span>
+            <h2>새 프로젝트 만들기</h2>
+          </div>
           <button type="button" onClick={onClose}>Close</button>
         </header>
-        <p className="muted">Projects are repeatable workbenches for chats, files, goals, Workflow Apps, and artifacts.</p>
+        <p className="muted">프로젝트는 “파일 + 대화 + Workflow App + 산출물”을 묶는 작업대임. 먼저 목적을 고르면 다음 화면에서 바로 할 일이 보임.</p>
         <form onSubmit={submit}>
+          <div className="project-template-grid" role="radiogroup" aria-label="Project template">
+            {templates.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`project-template-card ${template.id === item.id ? "active" : ""}`}
+                onClick={() => {
+                  setTemplate(item);
+                  if (!title.trim()) setTitle(item.defaultTitle);
+                }}
+              >
+                <strong>{item.title}</strong>
+                <span>{item.description}</span>
+                <small>{item.output}</small>
+              </button>
+            ))}
+          </div>
           <label>
             <span>Project name</span>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
+            <input value={title} placeholder={template.defaultTitle || "예: My Research"} onChange={(event) => setTitle(event.target.value)} autoFocus />
           </label>
           <label>
             <span>Visibility</span>
@@ -483,8 +536,26 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <option value="public">Public - logged-in users</option>
             </select>
           </label>
+          <div className="project-create-preview">
+            <strong>생성 후 하는 일</strong>
+            {template.id === "investment-advisor" ? (
+              <ol>
+                <li>샘플 portfolio/target 파일 자동 설치</li>
+                <li>Workflow Apps 탭에서 리밸런싱 실행</li>
+                <li>차트/표/리포트를 대시보드에서 확인</li>
+              </ol>
+            ) : (
+              <ol>
+                <li>프로젝트 파일 추가</li>
+                <li>대화나 Workflow App 실행</li>
+                <li>Run과 artifact 기록 확인</li>
+              </ol>
+            )}
+          </div>
           {error && <div className="system-note compact">{error}</div>}
-          <button className="primary-button" type="submit" disabled={!canSubmit}>Create project</button>
+          <button className="primary-button" type="submit" disabled={!canSubmit}>
+            {template.id === "investment-advisor" ? "투자 작업대 만들기" : "프로젝트 만들기"}
+          </button>
         </form>
       </section>
     </div>, document.body)

@@ -47,7 +47,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
   const [runDetail, setRunDetail] = useState<RunDetail | null>(null);
   const [artifact, setArtifact] = useState<ArtifactPayload | null>(null);
   const [modalError, setModalError] = useState("");
-  const [activeTab, setActiveTab] = useState(() => activeAppId ? "apps" : new URLSearchParams(window.location.search).get("tab") || "overview");
+  const [activeTab, setActiveTab] = useState(() => activeAppId ? "apps" : new URLSearchParams(window.location.search).get("tab") || "chats");
   const investmentDashboardRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
   const [connections, setConnections] = useState<ProjectConnectionsPayload | null>(projectConfig?.connections || null);

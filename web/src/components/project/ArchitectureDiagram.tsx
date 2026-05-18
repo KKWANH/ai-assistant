@@ -1,44 +1,54 @@
 import React from "react";
-import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
+import { Background, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import styles from "./ProjectDashboard.module.css";
 
 const nodes = [
-  { id: "input", position: { x: 0, y: 130 }, data: { label: "User Input\nChat · Workbench · Recipe" }, type: "default" },
-  { id: "intent", position: { x: 245, y: 130 }, data: { label: "Intent Router\nchat · file · code · run" } },
-  { id: "planner", position: { x: 490, y: 130 }, data: { label: "Planner AI\nsteps · model · risk · cost" } },
-  { id: "context", position: { x: 735, y: 10 }, data: { label: "Context Builder\nfiles · memory · goal · runs" } },
-  { id: "approval", position: { x: 735, y: 250 }, data: { label: "Approval Gate\nread-only · cloud · command" } },
-  { id: "models", position: { x: 980, y: 10 }, data: { label: "Model Router\nOllama · Gemini · Kimi · OpenAI" } },
-  { id: "tools", position: { x: 980, y: 250 }, data: { label: "Tool Executors\nPython · Shell · Codex · OpenClaw" } },
-  { id: "store", position: { x: 1225, y: 130 }, data: { label: "Run Store\nplan · steps · stdout · artifacts" } },
-  { id: "synthesis", position: { x: 1470, y: 130 }, data: { label: "Synthesis AI\nanswer · next actions" } },
-  { id: "output", position: { x: 1715, y: 130 }, data: { label: "Workbench Output\nchat · files · viewer · publish" } },
-  { id: "publisher", position: { x: 1470, y: 300 }, data: { label: "Publisher\nplanned · redaction · share" } },
+  { id: "project", position: { x: 0, y: 130 }, data: { label: "Project Folder\naiws.yaml · files · viewers" }, type: "default" },
+  { id: "inputs", position: { x: 245, y: 130 }, data: { label: "Inputs\nchat · files · linked resources" } },
+  { id: "planner", position: { x: 490, y: 130 }, data: { label: "Context Planner\nmode · budget · privacy" } },
+  { id: "retrieval", position: { x: 735, y: 10 }, data: { label: "Retrieval Index\nFTS5 · native watcher · linked RAG" } },
+  { id: "manifest", position: { x: 735, y: 250 }, data: { label: "Context Receipt\nsources · files · cost" } },
+  { id: "models", position: { x: 980, y: 10 }, data: { label: "Model Router\nOllama · Gemini · BYOK" } },
+  { id: "apps", position: { x: 980, y: 250 }, data: { label: "Workflow Apps\nschema · run policy · approval" } },
+  { id: "runs", position: { x: 1225, y: 130 }, data: { label: "Run Store\nlogs · stdout · artifacts" } },
+  { id: "viewers", position: { x: 1470, y: 70 }, data: { label: "Viewers\nbuilt-in · trusted TSX iframe" } },
+  { id: "connections", position: { x: 1470, y: 250 }, data: { label: "Project Links\nexports · imports · aliases" } },
+  { id: "output", position: { x: 1715, y: 130 }, data: { label: "Workbench Output\nanswer · dashboard · report" } },
 ];
 
 const edges = [
-  { id: "input-intent", source: "input", target: "intent", animated: true },
-  { id: "intent-planner", source: "intent", target: "planner", animated: true },
-  { id: "planner-context", source: "planner", target: "context" },
-  { id: "planner-approval", source: "planner", target: "approval" },
-  { id: "context-models", source: "context", target: "models" },
-  { id: "approval-tools", source: "approval", target: "tools", animated: true },
-  { id: "models-store", source: "models", target: "store" },
-  { id: "tools-store", source: "tools", target: "store" },
-  { id: "store-synthesis", source: "store", target: "synthesis", animated: true },
-  { id: "synthesis-output", source: "synthesis", target: "output", animated: true },
-  { id: "store-publisher", source: "store", target: "publisher" },
-  { id: "publisher-output", source: "publisher", target: "output" },
+  { id: "project-inputs", source: "project", target: "inputs", animated: true },
+  { id: "inputs-planner", source: "inputs", target: "planner", animated: true },
+  { id: "planner-retrieval", source: "planner", target: "retrieval" },
+  { id: "planner-manifest", source: "planner", target: "manifest" },
+  { id: "retrieval-models", source: "retrieval", target: "models" },
+  { id: "manifest-apps", source: "manifest", target: "apps", animated: true },
+  { id: "models-runs", source: "models", target: "runs" },
+  { id: "apps-runs", source: "apps", target: "runs" },
+  { id: "runs-viewers", source: "runs", target: "viewers", animated: true },
+  { id: "runs-connections", source: "runs", target: "connections" },
+  { id: "viewers-output", source: "viewers", target: "output", animated: true },
+  { id: "connections-output", source: "connections", target: "output" },
 ];
 
 export function ArchitectureDiagram() {
   return (
     <div className={styles["architecture-diagram"]} aria-label="AIWS architecture diagram">
-      <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        zoomOnScroll
+        zoomOnPinch
+        panOnDrag
+        panOnScroll
+        proOptions={{ hideAttribution: true }}
+      >
         <Background color="rgba(143, 192, 255, .12)" gap={18} />
-        <MiniMap pannable={false} zoomable={false} />
-        <Controls showInteractive={false} />
       </ReactFlow>
     </div>
   );
