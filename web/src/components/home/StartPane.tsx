@@ -400,12 +400,12 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       {isHomeWorkbench ? (
         <>
           <section className="home-launch-panel" aria-label="AIWS home launcher">
-            <button type="button" className="home-launch-primary" onClick={startNewChat}>
-              <strong>새 대화 시작</strong>
+            <button type="button" className="home-launch-primary" aria-label="새 대화 시작" onClick={startNewChat}>
+              <strong>Chat</strong>
               <span>질문은 전용 채팅 화면에서 입력함.</span>
             </button>
             <button type="button" onClick={() => window.dispatchEvent(new Event("aiws:new-project"))}>
-              <strong>프로젝트 만들기</strong>
+              <strong>New project</strong>
               <span>파일, Workflow App, 산출물을 한 곳에 묶음.</span>
             </button>
             <button type="button" onClick={() => navigate("/apps-tools")}>

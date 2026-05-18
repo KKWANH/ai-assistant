@@ -1,4 +1,4 @@
-import { AppShell } from "./layout/AppShell";
+import { AppShell } from "./shell/AppShell";
 import LegacyApp from "./legacy/LegacyApp";
 
 export function App() {

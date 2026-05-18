@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { ContextPanel } from "../../components/inspector/ContextPanel";
 import { copyForLocale } from "../../shared/copy/copy";
 import { getCookie, setCookie } from "../../lib/api";
+import { AppShell } from "../shell/AppShell";
+import type { CommandPaletteItem } from "../shell/AppCommandPalette";
 import { TopBar } from "../layout/TopBar";
 import { WorkspaceSidebar } from "../layout/WorkspaceSidebar";
 import { parseRoute } from "../router/parseRoute";
@@ -17,6 +19,7 @@ export function LegacyApp() {
   const [activePath, setActivePath] = useState(parseRoute());
   const [lightbox, setLightbox] = useState<LightboxItem | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => getCookie("aiws_sidebar_open") !== "0");
   const {
     automations,
@@ -73,6 +76,46 @@ export function LegacyApp() {
     setCookie("aiws_sidebar_open", "0");
   }
 
+  function commandItems(): CommandPaletteItem[] {
+    const items: CommandPaletteItem[] = [
+      { id: "home", title: "Home", subtitle: "Open the workbench launcher", keywords: ["start", "launcher"], action: () => navigate("/") },
+      { id: "new-chat", title: "New chat", subtitle: "Start a one-off AI conversation", keywords: ["chat"], action: () => navigate("/") },
+      { id: "new-project", title: "New project", subtitle: "Create a local workspace", keywords: ["workspace"], action: () => window.dispatchEvent(new CustomEvent("aiws:new-project")) },
+      { id: "apps-tools", title: "Workflow Apps", subtitle: "Browse chat tools and project apps", keywords: ["tools", "apps"], action: () => navigate("/apps-tools") },
+      { id: "toggle-inspector", title: contextOpen ? "Hide inspector" : "Show inspector", subtitle: "Context, sources, runs, and outputs", keywords: ["context", "receipt"], action: toggleContext },
+    ];
+    for (const project of workspace?.projects || []) {
+      items.push({
+        id: `project:${project.path}`,
+        title: project.title || project.path,
+        subtitle: "Project",
+        keywords: [project.path],
+        action: () => navigate(`/project/${project.path}`),
+      });
+      for (const session of (project.sessions || []).slice(0, 4)) {
+        items.push({
+          id: `chat:${project.path}:${session.slug}`,
+          title: session.title || session.slug,
+          subtitle: `Chat · ${project.title || project.path}`,
+          keywords: [project.path, session.slug],
+          action: () => navigate(`/chat/${project.path}/${session.slug}`),
+        });
+      }
+    }
+    for (const chatProject of workspace?.chats || []) {
+      for (const session of (chatProject.sessions || []).slice(0, 6)) {
+        items.push({
+          id: `general:${chatProject.path}:${session.slug}`,
+          title: session.title || session.slug,
+          subtitle: "Recent chat",
+          keywords: [chatProject.path, session.slug],
+          action: () => navigate(`/chat/${chatProject.path}/${session.slug}`),
+        });
+      }
+    }
+    return items;
+  }
+
   if (isLogin) {
     return (
       <div className="app-shell auth-shell">
@@ -91,8 +134,14 @@ export function LegacyApp() {
   }
 
   return (
-    <div className="app-shell">
-      <TopBar
+    <AppShell
+      sidebarOpen={sidebarOpen}
+      inspectorOpen={contextOpen}
+      commandOpen={commandOpen}
+      onCommandOpenChange={setCommandOpen}
+      commandItems={commandItems()}
+      onCloseSidebar={closeSidebar}
+      topbar={<TopBar
         runtime={runtime}
         account={workspace?.account}
         activePath={activePath}
@@ -101,18 +150,17 @@ export function LegacyApp() {
         onToggleContext={toggleContext}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={toggleSidebar}
-      />
-      <main className={`layout ${contextOpen ? "with-workbench" : "no-workbench"} ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-        <WorkspaceSidebar
+        onOpenCommand={() => setCommandOpen(true)}
+      />}
+      sidebar={<WorkspaceSidebar
           workspace={workspace}
           activePath={activePath}
           navigate={navigate}
           onRefresh={refreshWorkspace}
           automations={automations}
           onAutomations={setAutomations}
-        />
-        {sidebarOpen && <button type="button" className="mobile-sidebar-scrim" aria-label="Close sidebar" onClick={closeSidebar} />}
-        <CenterPane
+        />}
+      main={<CenterPane
           chat={chat}
           activePath={activePath}
           account={workspace?.account}
@@ -130,8 +178,8 @@ export function LegacyApp() {
           home={home}
           onHome={setHome}
           refreshHome={refreshHome}
-        />
-        <ContextPanel
+        />}
+      inspector={<ContextPanel
           chat={chat}
           activePath={activePath}
           runtime={runtime}
@@ -145,9 +193,8 @@ export function LegacyApp() {
           account={workspace?.account}
           onOpenRun={openProjectRun}
           onOpenArtifact={openProjectArtifact}
-        />
-      </main>
-      <AppOverlays
+        />}
+      overlays={<AppOverlays
         runDetail={projectRunDetail}
         artifact={projectArtifact}
         lightbox={lightbox}
@@ -158,8 +205,8 @@ export function LegacyApp() {
         onCloseArtifact={() => setProjectArtifact(null)}
         onCloseLightbox={() => setLightbox(null)}
         onOpenArtifact={openProjectArtifact}
-      />
-    </div>
+      />}
+    />
   );
 }
 

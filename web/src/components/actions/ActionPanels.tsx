@@ -95,18 +95,22 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
       ) : (
         commands.map(([name, command]) => {
           const app = workflowAppForCommand(name, command);
+          const matchingRun = result?.command_id === name || result?.action_id === name
+            ? result
+            : (projectConfig?.runs || []).find((run) => run.command === name || run.action_id === name) || null;
+          const matchingArtifacts = matchingRun?.artifacts || [];
           return (
             <WorkflowAppShell
               key={name}
               app={app}
               running={running === name}
               error={error}
-              latestRun={result?.command_id === name || result?.action_id === name ? result : null}
+              latestRun={matchingRun}
               onPreview={() => previewCommand(name)}
               onRun={(values) => runCommand(name, { command, values })}
               projectPath={activePath?.projectPath}
               power={power}
-              artifacts={result?.command_id === name || result?.action_id === name ? result.artifacts || [] : []}
+              artifacts={matchingArtifacts}
             >
               <div className="action-badges">
                 <span>{actionKindLabel(command.kind)}</span>

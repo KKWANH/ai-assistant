@@ -126,6 +126,12 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
               ))}
             </div>
           )}
+          {compactEasy && (
+            <div className="model-recommendation simple">
+              <strong>추천 모델</strong>
+              <small>작업별 4개만 표시함. 상세 설정을 열면 전체 모델과 가격 정보를 볼 수 있음.</small>
+            </div>
+          )}
           {!compactEasy && (
             <div className="model-recommendation">
               <strong>{copy.modelPicker.recommendationTitle || `추천 모델 ${Math.min(recommendations.length, 4)}개`}</strong>
@@ -170,11 +176,11 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
                     </span>
                   )}
                   <span className="model-card-price">{power && item.cloud && Number(item.inputPrice || 0) > 0 ? `Input ~$${Number(item.inputPrice || 0).toFixed(2)} / 1M · output ~$${Number(item.outputPrice || 0).toFixed(2)} / 1M` : item.easyPrice || item.cost || easyModelCostLabel(item, copy)}</span>
-                  {compactEasy && item.cloud && <span className="model-card-estimate">{copy.modelPicker.estimate}: {singleEstimate}</span>}
+                  {compactEasy && item.cloud && <span className="model-card-estimate easy-cloud">예상 {singleEstimate}</span>}
                   {!compactEasy && <span className="model-card-estimate">Single call estimate: {singleEstimate}</span>}
                   {!compactEasy && item.cloud && <span className="model-card-estimate">Agent {agentCalls}-step budget: {agentEstimate}</span>}
                   {!compactEasy && item.cloud && <span className="model-card-estimate">Actual cost accumulates per executed model call</span>}
-                  <span className={`model-key-status ${keyMissing ? "missing" : ""}`}>{keyStatus}</span>
+                  {(!compactEasy || keyMissing) && <span className={`model-key-status ${keyMissing ? "missing" : ""}`}>{keyStatus}</span>}
                   {disabledReason && <span className="model-card-estimate">{disabledReason}</span>}
                   {power && <code>{item.provider} · {item.model}</code>}
                 </button>

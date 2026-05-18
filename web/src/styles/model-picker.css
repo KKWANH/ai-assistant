@@ -15,16 +15,16 @@
 
 .model-select-button {
   width: 100%;
-  min-height: 42px;
+  min-height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   padding: 7px 12px;
   color: var(--text);
-  background: linear-gradient(180deg, rgba(18, 33, 55, .78), rgba(5, 12, 23, .86));
+  background: #15161a;
 }
 
 .model-select-button strong {
@@ -48,18 +48,18 @@
   min-width: min(720px, calc(100vw - 40px));
   max-height: min(70vh, 600px);
   overflow: auto;
-  border: 1px solid var(--border-strong);
-  border-radius: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   padding: 12px;
-  background: #0b0f16;
-  box-shadow: var(--shadow-high);
+  background: #111214;
+  box-shadow: var(--shadow-mid);
   animation: picker-rise 160ms ease-out;
   transform-origin: bottom center;
 }
 
 .model-picker.easy {
-  max-width: 560px;
-  min-width: min(560px, calc(100vw - 40px));
+  max-width: 620px;
+  min-width: min(620px, calc(100vw - 40px));
   padding: 10px;
 }
 
@@ -95,20 +95,20 @@
 
 .model-picker header button {
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 9px;
   color: var(--text-soft);
-  background: rgba(255,255,255,.055);
+  background: #15161a;
   padding: 6px 10px;
 }
 
 .model-details-toggle {
   width: 100%;
   margin: 0 0 9px;
-  border: 1px solid rgba(82, 196, 255, .28);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 10px;
   color: var(--text);
-  background: rgba(82, 196, 255, .08);
+  background: var(--surface);
   text-align: center;
 }
 
@@ -121,18 +121,18 @@
 
 .model-quick-row button {
   flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 999px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
   padding: 7px 11px;
   color: var(--text-soft);
-  background: rgba(255, 255, 255, .04);
+  background: #15161a;
   font-size: 13px;
 }
 
 .model-quick-row button.active {
-  color: white;
-  border-color: rgba(99, 215, 255, .42);
-  background: rgba(79, 140, 255, .2);
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: #1d1f24;
 }
 
 .model-grid {
@@ -146,9 +146,9 @@
 }
 
 .model-picker.easy .model-card {
-  gap: 3px;
+  gap: 5px;
   min-height: 0;
-  padding: 11px 12px;
+  padding: 12px 13px;
 }
 
 .model-picker.easy .model-card-title {
@@ -162,14 +162,35 @@
   font-size: 12px;
 }
 
+.model-picker.easy .model-card-capabilities,
+.model-picker.easy .model-card-version,
+.model-picker.easy .model-card code {
+  display: none;
+}
+
+.model-picker.easy .model-card-estimate.easy-cloud {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid rgba(240, 198, 116, .18);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: #ffe0a8;
+  background: rgba(240, 198, 116, .06);
+}
+
 .model-recommendation {
   display: grid;
   gap: 3px;
   margin: 0 0 10px;
   padding: 10px 12px;
-  border: 1px solid rgba(82, 196, 255, .24);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(82, 196, 255, .08);
+  background: #0d0e10;
+}
+
+.model-recommendation.simple {
+  border-radius: 10px;
+  background: #0d0e10;
 }
 
 .model-recommendation small {
@@ -180,20 +201,20 @@
   display: grid;
   gap: 4px;
   text-align: left;
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 12px;
   color: var(--text-soft);
-  background: #111722;
+  background: #111214;
 }
 
 .model-card.selected {
-  border-color: rgba(79, 140, 255, .75);
-  background: #142542;
+  border-color: var(--border-strong);
+  background: #171a20;
 }
 
 .model-card.recommended {
-  border-color: rgba(82, 196, 255, .38);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
 .model-card.disabled,
@@ -213,7 +234,7 @@
 .model-card-estimate,
 .model-key-status,
 .model-card-version {
-  color: #a8c9ff;
+  color: var(--muted);
   font-size: 12px;
 }
 

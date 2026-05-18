@@ -2,6 +2,9 @@ import React, { type DragEvent, type FormEvent, type ReactNode, useEffect, useMe
 import { createPortal } from "react-dom";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
 import { csrfHeader, fetchJson } from "../../lib/api";
+import { isThemeName, themeNames } from "../../ui/theme/tokens";
+import { themes } from "../../ui/theme/themes";
+import { useTheme } from "../../ui/theme/useTheme";
 import type { AccountSummary, WorkspaceSummary } from "../../entities/workspace/types";
 import type { ProjectSummary } from "../../entities/project/types";
 import type { SessionSummary } from "../../entities/session/types";
@@ -598,6 +601,7 @@ type UsageDetail = {
 function SettingsModal({ account, onClose, onSaved }: { account: AccountSummary; onClose: () => void; onSaved?: () => void | Promise<void> }) {
   const [saving, setSaving] = useState(false);
   const [usageDetail, setUsageDetail] = useState<UsageDetail | null>(null);
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const profile = (account.profile || {}) as Record<string, string>;
   const copy = copyForAccount(account);
   const usage = (account.usage || {}) as Record<string, unknown>;
@@ -685,6 +689,21 @@ function SettingsModal({ account, onClose, onSaved }: { account: AccountSummary;
           <fieldset>
             <legend>{copy.settings.interface}</legend>
             <label><span>{copy.settings.uiMode}</span><select name="ui_mode" defaultValue={profile.ui_mode || (account.admin ? "power" : "easy")}><option value="easy">{copy.settings.easyMode}</option><option value="power">{copy.settings.powerMode}</option></select></label>
+            <label>
+              <span>Design theme</span>
+              <select value={theme} onChange={(event) => {
+                if (isThemeName(event.target.value)) setTheme(event.target.value);
+              }}>
+                {themeNames.map((item) => (
+                  <option key={item} value={item}>
+                    {item === "system" ? `System (${themes[resolvedTheme].label})` : themes[item].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="settings-help">
+              {theme === "system" ? "OS 설정을 따라감." : themes[theme].description}
+            </p>
             <p className="settings-help">{copy.settings.modeHelp}</p>
           </fieldset>
           <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : copy.settings.saveProfile}</button>

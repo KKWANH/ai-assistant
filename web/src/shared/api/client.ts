@@ -96,19 +96,19 @@ export function useModelCatalogQuery() {
   return useQuery({ queryKey: queryKeys.models, queryFn: () => apiJson<{ models: ModelCatalogItem[] }>("/api/models") });
 }
 
-export function useSessionQuery(projectPath: string, sessionSlug: string) {
+export function useSessionQuery(projectPath: string, sessionSlug: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.session(projectPath, sessionSlug),
     queryFn: () => apiJson<ChatSessionPayload>(`/api/chat/${projectPath}/${sessionSlug}`),
-    enabled: Boolean(projectPath && sessionSlug),
+    enabled: enabled && Boolean(projectPath && sessionSlug),
   });
 }
 
-export function useProjectConfigQuery(projectPath: string) {
+export function useProjectConfigQuery(projectPath: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.projectConfig(projectPath),
     queryFn: async () => parseProjectConfigPayload(await apiJson<unknown>(`/api/project-config/${projectPath}`)),
-    enabled: Boolean(projectPath),
+    enabled: enabled && Boolean(projectPath),
   });
 }
 

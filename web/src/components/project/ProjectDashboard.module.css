@@ -6,38 +6,34 @@
 :global(.project-workbench-page) {
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: auto;
-  padding: 24px;
-  gap: 22px;
+  padding: 22px;
+  gap: 16px;
 }
 
 .project-dashboard {
-  width: min(1120px, 100%);
+  width: min(1040px, 100%);
   margin: 0 auto;
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .project-dashboard-hero,
 .dashboard-card,
 .manifest-card {
-  border: 1px solid rgba(143, 192, 255, .14);
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(79, 140, 255, .1), transparent 18rem),
-    rgba(9, 18, 32, .72);
-  box-shadow: var(--shadow-mid), var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #111214;
+  box-shadow: var(--shadow-low);
 }
 
 .project-dashboard-hero {
-  padding: 30px;
-  background:
-    radial-gradient(circle at 8% 8%, rgba(99, 215, 255, .13), transparent 18rem),
-    linear-gradient(135deg, rgba(18, 34, 58, .92), rgba(5, 10, 20, .82));
+  padding: 18px 20px;
+  background: #111214;
 }
 
 .project-dashboard-hero h1 {
   margin: 2px 0 8px;
-  font-size: clamp(28px, 4vw, 44px);
+  font-size: clamp(24px, 2.6vw, 32px);
   font-weight: 580;
   letter-spacing: -.02em;
 }
@@ -52,37 +48,37 @@
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 10px;
 }
 
 .project-tabbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
 }
 
 .project-tabbar button {
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  padding: 8px 11px;
+  padding: 7px 10px;
 }
 
 .project-tabbar button.active {
-  border-color: var(--border-strong);
-  background: var(--panel-2);
+  border-color: var(--border);
+  background: #15161a;
   color: var(--text);
 }
 
 .dashboard-card {
-  padding: 20px;
+  padding: 16px;
 }
 
 .dashboard-card.passive-card {
-  background:
-    radial-gradient(circle at 90% 0%, rgba(99, 215, 255, .045), transparent 14rem),
-    rgba(7, 13, 24, .56);
+  background: #0d0e10;
 }
 
 .dashboard-card h2 {
@@ -92,32 +88,51 @@
 }
 
 .workbench-operating-model {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr);
-  gap: 20px;
-  align-items: center;
-  border-color: rgba(99, 215, 255, .24);
-  background:
-    radial-gradient(circle at 0% 0%, rgba(99, 215, 255, .13), transparent 20rem),
-    linear-gradient(135deg, rgba(14, 29, 51, .95), rgba(3, 9, 18, .9));
+  display: block;
+  border-color: var(--border);
+  background: #111214;
 }
 
-.workbench-operating-model h2 {
-  font-size: clamp(22px, 3vw, 32px);
+.developer-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.developer-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.developer-details summary span {
+  display: grid;
+  gap: 3px;
+}
+
+.developer-details summary b {
+  color: var(--text);
+  font-weight: 560;
+}
+
+.developer-details summary small {
+  color: var(--muted);
 }
 
 .operating-steps {
   display: grid;
   gap: 8px;
+  margin-top: 16px;
 }
 
 .operating-steps span {
   position: relative;
   padding: 11px 12px;
-  border: 1px solid rgba(99, 215, 255, .18);
-  border-radius: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   color: var(--text-soft);
-  background: rgba(2, 7, 14, .46);
+  background: #0d0e10;
 }
 
 .manifest-summary-card,
@@ -137,9 +152,9 @@
   display: grid;
   gap: 2px;
   padding: 10px;
-  border: 1px solid rgba(99, 215, 255, .15);
-  border-radius: 14px;
-  background: rgba(99, 215, 255, .055);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0d0e10;
 }
 
 .metric-tile strong {
@@ -150,6 +165,57 @@
 .manifest-section p,
 .agent-step-list small {
   color: var(--muted);
+}
+
+.project-cockpit-card {
+  display: grid;
+  gap: 14px;
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.cockpit-action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cockpit-action-grid button {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--text);
+  background: #0d0e10;
+}
+
+.cockpit-action-grid button:hover {
+  border-color: var(--border-strong);
+  background: #15161a;
+}
+
+.cockpit-action-grid small,
+.cockpit-summary-row small {
+  color: var(--muted);
+}
+
+.cockpit-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cockpit-summary-row span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #0d0e10;
 }
 
 .manifest-section {
@@ -434,6 +500,7 @@
   .dashboard-grid,
   .workbench-operating-model,
   .manifest-summary-grid,
+  .cockpit-action-grid,
   .advisor-flow,
   .advisor-metrics,
   .advisor-viewer-grid {

@@ -5,12 +5,13 @@ import {
   useAutomationsQuery,
   useHomeQuery,
   useOpenClawQuery,
+  useProjectConfigQuery,
   useRuntimeQuery,
+  useSessionQuery,
   useWorkspaceQuery,
 } from "../../shared/api/client";
 import type { ActivePath } from "../router/parseRoute";
 import type { WorkspaceSummary } from "../../entities/workspace/types";
-import type { ChatSessionPayload } from "../../entities/session/types";
 import type {
   AutomationProject,
   ArtifactPayload,
@@ -41,6 +42,8 @@ export function useLegacyWorkbenchData(activePath: ActivePath) {
   const runtimeQuery = useRuntimeQuery(!isLogin);
   const openclawQuery = useOpenClawQuery(!isLogin);
   const automationsQuery = useAutomationsQuery(!isLogin);
+  const sessionQuery = useSessionQuery(activePath.projectPath || "", activePath.sessionSlug || "", !isLogin);
+  const projectConfigQuery = useProjectConfigQuery(activePath.projectPath || "", !isLogin);
 
   async function refreshWorkspace() {
     const payload = await workspaceQuery.refetch();
@@ -50,31 +53,6 @@ export function useLegacyWorkbenchData(activePath: ActivePath) {
   async function refreshHome() {
     const payload = await homeQuery.refetch();
     if (payload.data) setHome(payload.data.home);
-  }
-
-  async function refreshChat(target = activePath) {
-    if (!target.projectPath || !target.sessionSlug) {
-      setChat(null);
-      return;
-    }
-    const payload = await fetchJson<ChatSessionPayload>(`/api/chat/${target.projectPath}/${target.sessionSlug}`);
-    setChat((current: ChatState | null) => {
-      const sameThread = current?.project?.path === target.projectPath && current?.session?.slug === target.sessionSlug;
-      const hasPending = (current?.messages || []).some((message) => message.pending);
-      if (sameThread && hasPending && (payload.messages || []).length === 0) {
-        return current;
-      }
-      return payload;
-    });
-  }
-
-  async function refreshProjectConfig(target = activePath) {
-    if (!target.projectPath) {
-      setProjectConfig(null);
-      return;
-    }
-    const payload = await fetchJson<ProjectConfigState>(`/api/project-config/${target.projectPath}`);
-    setProjectConfig(payload);
   }
 
   async function openProjectRun(run: RunRecord) {
@@ -102,6 +80,18 @@ export function useLegacyWorkbenchData(activePath: ActivePath) {
     if (runtimeQuery.data) setRuntime(runtimeQuery.data.runtime);
     if (openclawQuery.data) setOpenclaw(openclawQuery.data.openclaw);
     if (automationsQuery.data) setAutomations((automationsQuery.data.projects || []) as AutomationProject[]);
+    if (sessionQuery.data) {
+      setChat((current: ChatState | null) => {
+        const sameThread = current?.project?.path === activePath.projectPath && current?.session?.slug === activePath.sessionSlug;
+        const hasPending = (current?.messages || []).some((message) => message.pending);
+        if (sameThread && hasPending && (sessionQuery.data?.messages || []).length === 0) return current;
+        return sessionQuery.data || current;
+      });
+    } else if (!activePath.sessionSlug) {
+      setChat(null);
+    }
+    if (projectConfigQuery.data) setProjectConfig(projectConfigQuery.data);
+    if (!activePath.projectPath) setProjectConfig(null);
     if (workspaceQuery.error) setError(workspaceQuery.error.message);
   }, [
     isLogin,
@@ -110,16 +100,18 @@ export function useLegacyWorkbenchData(activePath: ActivePath) {
     runtimeQuery.data,
     openclawQuery.data,
     automationsQuery.data,
+    sessionQuery.data,
+    projectConfigQuery.data,
+    activePath.projectPath,
+    activePath.sessionSlug,
     workspaceQuery.error,
   ]);
 
   useEffect(() => {
     if (isLogin) return;
-    refreshChat(activePath).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-    refreshProjectConfig(activePath).catch(() => setProjectConfig(null));
-    // Legacy route-backed refresh remains here until mutations fully move to query invalidation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLogin, activePath.projectPath, activePath.sessionSlug]);
+    if (sessionQuery.error) setError(sessionQuery.error instanceof Error ? sessionQuery.error.message : String(sessionQuery.error));
+    if (projectConfigQuery.error) setProjectConfig(null);
+  }, [isLogin, sessionQuery.error, projectConfigQuery.error]);
 
   useEffect(() => {
     document.documentElement.lang = copyForAccount(workspace?.account).locale;

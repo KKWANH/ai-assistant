@@ -21,6 +21,12 @@ type ChatState = {
   session?: {
     title?: string;
   };
+  latest?: {
+    provider?: string;
+    model?: string;
+    privacy_mode?: string;
+    estimated_cost?: number | string;
+  };
 };
 
 export type TopBarProps = {
@@ -33,6 +39,7 @@ export type TopBarProps = {
   onToggleContext?: () => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  onOpenCommand?: () => void;
 };
 
 function isPowerMode(account?: AccountSummary | null) {
@@ -49,6 +56,7 @@ export function TopBar({
   onToggleContext,
   sidebarOpen = true,
   onToggleSidebar,
+  onOpenCommand,
 }: TopBarProps) {
   const [open, setOpen] = useState(false);
   const url = runtime?.cloudflare_url || "";
@@ -60,6 +68,16 @@ export function TopBar({
       ? "General chat"
       : `${chat?.project?.title || "Project"} / ${chat?.session?.title || activePath.sessionSlug}`
     : "Private AI Cockpit";
+  const modelLabel = chat?.latest?.model
+    ? `${chat.latest.provider || "model"} · ${chat.latest.model}`
+    : activePath?.projectPath
+      ? "Project model"
+      : "Model ready";
+  const privacyLabel = chat?.latest?.privacy_mode === "cloud"
+    ? "Cloud"
+    : chat?.latest?.privacy_mode === "network"
+      ? "Local + web"
+      : "Local";
 
   if (children) return <>{children}</>;
 
@@ -80,7 +98,13 @@ export function TopBar({
         <span className="brand-mark" /> {copy.productName}
       </a>
       <span className="local-badge">{copy.topbar.localFirst}</span>
+      <button className="command-trigger" type="button" onClick={onOpenCommand} aria-label="Open command palette">
+        <span>Search</span>
+        <kbd>⌘K</kbd>
+      </button>
       <span className="top-context">{context}</span>
+      <span className="top-status-chip model" title={modelLabel}>{modelLabel}</span>
+      <span className={`top-status-chip privacy ${privacyLabel === "Cloud" ? "cloud" : "local"}`}>{privacyLabel}</span>
       <span
         className={`mode-chip ${power ? "power" : "easy"}`}
         title={`${copy.topbar.modeLabel}: ${power ? "Power" : "Easy"}`}

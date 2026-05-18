@@ -230,6 +230,12 @@ function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }: M
         <div className="desk-note">
           <h2>{copy.chat.emptyTitle}</h2>
           <p>{copy.chat.emptyBody}</p>
+          <div className="empty-action-row" aria-label="Suggested first actions">
+            <span>파일 추가</span>
+            <span>프로젝트 자료로 질문</span>
+            <span>웹 검색 켜기</span>
+            <span>산출물 만들기</span>
+          </div>
         </div>
       </div>
     );
@@ -359,7 +365,7 @@ function PlannerTraceSummary({ plan }: { plan?: PlannerTrace }) {
   const estimatedCalls = plan?.estimated_model_calls || 1;
   return (
     <details className="planner-trace-summary">
-      <summary>Agent plan · {steps.length} steps · {estimatedCalls} model call budget</summary>
+      <summary>Execution plan · {steps.length} steps · {estimatedCalls} model call budget</summary>
       <div>
         {steps.map((step: PlanStep) => (
           <span key={step.id || step.title}>

@@ -132,16 +132,19 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
         <p>{config.description || projectRecord.notes || COPY.tagline}</p>
       </div>
 
-      <section className={cx("dashboard-card", "workbench-operating-model")}>
-        <div>
-          <p className="eyebrow">{text.operatingEyebrow}</p>
-          <h2>{text.operatingTitle}</h2>
-          <p className="muted">{text.operatingBody}</p>
-        </div>
-        <div className={cx("operating-steps")} aria-label="AIWS operating loop">
-          {text.operatingSteps.map((item) => <span key={item}>{item}</span>)}
-        </div>
-      </section>
+      {power && activeTab === "overview" && (
+        <details className={cx("dashboard-card", "workbench-operating-model", "developer-details")}>
+          <summary>
+            <span>
+              <b>{text.operatingTitle}</b>
+              <small>{text.operatingBody}</small>
+            </span>
+          </summary>
+          <div className={cx("operating-steps")} aria-label="AIWS operating loop">
+            {text.operatingSteps.map((item) => <span key={item}>{item}</span>)}
+          </div>
+        </details>
+      )}
 
       <div className={cx("project-tabbar")} role="tablist" aria-label="Project dashboard sections">
         {!activeAppId && [
@@ -180,6 +183,19 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
         <ManifestSummaryCard config={config} context={context} panels={panels} actions={actions} runs={runs} copy={copy} />
         {isInvestmentAdvisor ? <InvestmentAdvisorCard activePath={activePath} actions={actions} runs={runs} artifacts={artifacts} copy={copy} dashboardRef={investmentDashboardRef} /> : <AgentPlanFoundationCard copy={copy} />}
       </div>}
+
+      {activeTab === "chats" && (
+        <ProjectCockpitCard
+          activePath={activePath}
+          project={project}
+          artifacts={artifacts}
+          actions={actions}
+          context={context}
+          localOnly={localOnly}
+          navigate={navigate}
+          onOpenTab={setActiveTab}
+        />
+      )}
 
       {activeTab === "chats" && <section className={cx("dashboard-card", "project-chat-overview")}>
         <div className="section-row">
@@ -260,10 +276,20 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
         />
       </section>}
 
-      {activeTab === "overview" && <div className={cx("dashboard-grid")}>
-        <RegistryPreviewCard title={text.panelRegistry} items={PANEL_TYPES} active={panels.map((panel: PanelItem) => String(panel.type || ""))} />
-        <RegistryPreviewCard title={text.actionKinds} items={ACTION_KINDS} active={actions.map((action) => action.kind)} />
-      </div>}
+      {activeTab === "overview" && power && (
+        <details className={cx("dashboard-card", "developer-details")}>
+          <summary>
+            <span>
+              <b>Developer details</b>
+              <small>Project config, registry, and architecture internals.</small>
+            </span>
+          </summary>
+          <div className={cx("dashboard-grid")}>
+            <RegistryPreviewCard title={text.panelRegistry} items={PANEL_TYPES} active={panels.map((panel: PanelItem) => String(panel.type || ""))} />
+            <RegistryPreviewCard title={text.actionKinds} items={ACTION_KINDS} active={actions.map((action) => action.kind)} />
+          </div>
+        </details>
+      )}
 
       {activeTab === "overview" && <section className={cx("dashboard-card")}>
         <div className="section-row">
@@ -288,7 +314,7 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
         )}
       </section>}
 
-      {activeTab === "overview" && <section className={cx("dashboard-card", "dashboard-architecture", "passive-card")}>
+      {activeTab === "overview" && power && <section className={cx("dashboard-card", "dashboard-architecture", "passive-card")}>
         <div className="section-row">
           <div>
             <p className="eyebrow">{text.architectureEyebrow}</p>
@@ -429,6 +455,55 @@ function InvestmentAdvisorCard({ activePath, actions, runs, artifacts, dashboard
           {text.customTipItems.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </details>
+    </section>
+  );
+}
+
+function ProjectCockpitCard({ activePath, project, artifacts, actions, context, localOnly, navigate, onOpenTab }: {
+  activePath: ActivePath;
+  project?: ProjectSummary;
+  artifacts: ArtifactWithRun[];
+  actions: DashboardAction[];
+  context: Record<string, unknown>;
+  localOnly: boolean;
+  navigate?: (path: string) => void;
+  onOpenTab?: (tab: string) => void;
+}) {
+  const includeCount = toStringList(context.include).length;
+  const excludeCount = toStringList(context.exclude).length;
+  const sessions = project?.sessions || [];
+  return (
+    <section className={cx("dashboard-card", "project-cockpit-card")}>
+      <div className="section-row">
+        <div>
+          <p className="eyebrow">Project cockpit</p>
+          <h2>바로 작업하기</h2>
+        </div>
+        <span className={`status-badge ${localOnly ? "ready" : "planned"}`}>{localOnly ? "로컬 전용" : "클라우드 확인 후 사용"}</span>
+      </div>
+      <div className={cx("cockpit-action-grid")}>
+        <button type="button" onClick={() => navigate?.(`/project/${activePath.projectPath}?tab=chats`)}>
+          <strong>프로젝트 자료로 질문</strong>
+          <small>아래 입력창에서 파일/검색/모델을 고르고 바로 질문함.</small>
+        </button>
+        <button type="button" onClick={() => onOpenTab?.("files")}>
+          <strong>파일 관리</strong>
+          <small>{includeCount} include · {excludeCount} exclude</small>
+        </button>
+        <button type="button" onClick={() => onOpenTab?.("apps")}>
+          <strong>Workflow App 실행</strong>
+          <small>{actions.length || 0}개 설치됨</small>
+        </button>
+        <button type="button" onClick={() => onOpenTab?.("artifacts")}>
+          <strong>산출물 보기</strong>
+          <small>{artifacts.length || 0}개 저장됨</small>
+        </button>
+      </div>
+      <div className={cx("cockpit-summary-row")}>
+        <span><b>{sessions.length}</b><small>대화</small></span>
+        <span><b>{artifacts.length}</b><small>산출물</small></span>
+        <span><b>{actions.length}</b><small>앱</small></span>
+      </div>
     </section>
   );
 }

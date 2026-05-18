@@ -73,10 +73,12 @@ export function ContextReceiptCard({ receipt, compact = false }: ContextReceiptC
     });
   };
 
+  const title = `Context used · ${mode} · ${fileLabel} · ${cost}`;
+
   return (
     <details className={`context-receipt ${compact ? "compact" : ""}`}>
       <summary>
-        <span>Context receipt · {mode} · {fileLabel} · {cost}</span>
+        <span>{title}</span>
       </summary>
       <div className="receipt-grid">
         <span><strong>Model</strong><small>{receipt.provider} {receipt.model}</small></span>

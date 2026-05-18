@@ -23,7 +23,7 @@ describe("ContextReceiptCard", () => {
         }}
       />,
     );
-    expect(screen.getByText(/Context receipt · local · 1 file/)).toBeInTheDocument();
+    expect(screen.getByText(/Context used · local · 1 file/)).toBeInTheDocument();
     expect(screen.getByText(/qwen3:8b/)).toBeInTheDocument();
     expect(screen.getByText(/CSV parser: pandas/)).toBeInTheDocument();
   });
