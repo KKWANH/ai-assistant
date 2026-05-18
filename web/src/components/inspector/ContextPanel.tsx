@@ -93,6 +93,7 @@ export function ContextPanel({ chat, activePath, runtime, openclaw, automations 
       {currentTab === "context" && (
         <section>
           <h3>{latestReceipt ? "Latest context receipt" : "What will be sent"}</h3>
+          {!power && <SourcesUsedPanel receipt={latestReceipt} manifestChunks={manifestChunks} />}
           {latestReceipt ? <ContextReceiptCard receipt={latestReceipt} /> : <p className="muted">Send a message to create a receipt showing files, privacy mode, model, exclusions, and estimated cost.</p>}
           {chat?.project?.hidden && <PromoteChatCard chat={chat} activePath={activePath} copy={copy} />}
           <WorkSessionCard workSession={chat?.work_session} copy={copy} />
@@ -249,6 +250,36 @@ function ContextManifestCard({ manifest, power }: { manifest?: ManifestRecord | 
       {power && <div className="manifest-details"><small>{estimates.input_tokens || 0} estimated tokens</small>{estimates.estimated_cost !== null && estimates.estimated_cost !== undefined && <small>~USD {estimates.estimated_cost}</small>}<small>{typedManifest.privacy_mode === "local" ? "local-only" : "cloud allowed"}</small></div>}
       {power && excluded.length > 0 && <p className="muted">{excluded.length} security exclusion patterns are active.</p>}
     </section>
+  );
+}
+
+function SourcesUsedPanel({ receipt, manifestChunks }: { receipt: ContextReceipt | null; manifestChunks: unknown[] }) {
+  const receiptChunks = Array.isArray(receipt?.included_chunks) ? receipt.included_chunks : [];
+  const chunks = (receiptChunks.length ? receiptChunks : manifestChunks).filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
+  if (chunks.length === 0) {
+    return (
+      <div className="manifest-file-facts">
+        <strong>사용된 출처</strong>
+        <span>아직 검색된 프로젝트 출처 없음.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="manifest-file-facts sources-used-panel">
+      <strong>사용된 출처</strong>
+      {chunks.slice(0, 4).map((chunk, index) => {
+        const name = String(chunk.filename || chunk.path || chunk.source_path || `source ${index + 1}`);
+        const sourceId = String(chunk.source_id || "");
+        const score = typeof chunk.rerank_score === "number" ? `score ${chunk.rerank_score}` : "";
+        const terms = Array.isArray(chunk.matched_terms) ? chunk.matched_terms.slice(0, 4).join(", ") : "";
+        return (
+          <span key={`${name}-${index}`}>
+            {sourceId ? `[${sourceId}] ` : ""}{name}
+            <small>{[score, terms, String(chunk.privacy || "")].filter(Boolean).join(" · ")}</small>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 

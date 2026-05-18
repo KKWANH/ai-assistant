@@ -24,6 +24,8 @@ def build_context_manifest(
     active_attachment_filenames: set[str] | None = None,
     include_project_files: bool = True,
     retrieval_chunks: list[dict[str, Any]] | None = None,
+    context_mode: str = "",
+    context_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a compact record of what AIWS intends to use as context."""
     project = storage.load_project(root, project_path)
@@ -95,6 +97,8 @@ def build_context_manifest(
         "provider": provider,
         "model": model,
         "search_mode": search_mode,
+        "context_mode": context_mode or "unspecified",
+        "context_plan": context_plan or {},
         "included": included,
         "files": all_files,
         "included_chunks": included_chunks,
@@ -270,6 +274,7 @@ def _retrieval_chunk_items(chunks: list[dict[str, Any]], *, model_delivery: str)
             continue
         items.append(
             {
+                "source_id": item.get("source_id", ""),
                 "filename": Path(source).name,
                 "path": source,
                 "scope": "retrieval",
@@ -277,6 +282,12 @@ def _retrieval_chunk_items(chunks: list[dict[str, Any]], *, model_delivery: str)
                 "token_count": costs.rough_token_count(text),
                 "privacy": privacy,
                 "source": "project_retrieval",
+                "linked_alias": item.get("linked_alias", ""),
+                "linked_project": item.get("linked_project", ""),
+                "resource_type": item.get("resource_type", ""),
+                "rerank_score": item.get("rerank_score"),
+                "vector_score": item.get("vector_score"),
+                "matched_terms": item.get("matched_terms", []),
                 "text_preview": text[:500],
             }
         )

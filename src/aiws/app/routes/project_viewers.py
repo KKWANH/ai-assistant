@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import json
 import re
 import shutil
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from aiws import storage
+from aiws.core import project_connections
 from aiws.infra.paths import resolve_under_root
 
 VIEWER_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
@@ -105,6 +107,7 @@ def normalize_manifest_viewer(base: Path, item: dict[str, Any]) -> dict[str, Any
         "sandbox": "allow-scripts",
         "framePath": f"frame/{viewer_id}",
         "assetPath": f"asset/{viewer_id}.js",
+        "payload": item.get("payload", {}) if isinstance(item.get("payload", {}), dict) else {},
         "exists": entry_path.exists(),
     }
 
@@ -142,7 +145,7 @@ def build_viewer_asset(base: Path, build_dir: Path, viewer: dict[str, Any], proj
     if not esbuild:
         return {"id": viewer_id, "status": "missing_bundler", "entry": entry.relative_to(base).as_posix(), "mode": "tsx"}
     wrapper = build_dir / f"__{viewer_id}.entry.tsx"
-    payload_url = f"/api/project-viewers/{project_path}/investment-rebalance"
+    payload_url = f"/api/project-viewers/{project_path}/{viewer_id}/payload"
     wrapper.write_text(
         "\n".join(
             [
@@ -228,7 +231,7 @@ def trusted_viewer_frame_html(root: str | Path, project_path: str, viewer_id: st
     if not viewer:
         raise storage.WorkspaceError("Unknown trusted viewer.")
     title = str(viewer.get("title") or viewer_id)
-    payload_url = f"/api/project-viewers/{project_path}/investment-rebalance"
+    payload_url = f"/api/project-viewers/{project_path}/{viewer_id}/payload"
     asset = safe_project_file(storage.project_dir(root, project_path), f".aiws-viewers/{viewer_id}.js")
     asset_url = f"/project-viewers/{project_path}/asset/{viewer_id}.js" if asset.exists() else ""
     script = (
@@ -273,6 +276,110 @@ def trusted_viewer_asset(root: str | Path, project_path: str, asset_name: str) -
     if not path.exists() or not path.is_file():
         raise storage.WorkspaceError("Trusted viewer asset not built.")
     return path.read_bytes()
+
+
+def trusted_viewer_payload(root: str | Path, project_path: str, viewer_id: str) -> dict[str, Any]:
+    """Return the manifest-declared payload for a trusted viewer."""
+    manifest = trusted_viewer_manifest(root, project_path)
+    viewer = next((item for item in manifest["viewers"] if item.get("id") == viewer_id), None)
+    if not viewer:
+        raise storage.WorkspaceError("Unknown trusted viewer.")
+    if viewer_id == "investment-rebalance-dashboard" and not viewer.get("payload"):
+        return investment_rebalance_payload(root, project_path)
+    base = storage.project_dir(root, project_path)
+    payload = viewer.get("payload") if isinstance(viewer.get("payload"), dict) else {}
+    artifact_patterns = payload.get("artifacts") if isinstance(payload, dict) else None
+    patterns = [str(item) for item in artifact_patterns] if isinstance(artifact_patterns, list) else ["artifacts/**/*"]
+    return {
+        "viewerId": viewer_id,
+        "projectId": project_path,
+        "title": viewer.get("title", viewer_id),
+        "payload": payload,
+        "artifacts": [artifact_payload(base, path) for path in matching_artifacts(base, patterns)],
+        "linkedResources": linked_resource_payloads(root, project_path, payload),
+    }
+
+
+def linked_resource_payloads(root: str | Path, project_path: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    requested = payload.get("linkedResources") or payload.get("resources") or payload.get("aliases")
+    aliases = {str(item) for item in requested} if isinstance(requested, list) else set()
+    resolved = project_connections.payload(root, project_path, None).get("resolvedImports", [])
+    if not isinstance(resolved, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for item in resolved:
+        if not isinstance(item, dict):
+            continue
+        alias = str(item.get("localAlias") or "")
+        if aliases and alias not in aliases:
+            continue
+        artifact = item.get("latestArtifact")
+        if not isinstance(artifact, dict) or not artifact.get("path"):
+            continue
+        source_project = str(item.get("sourceProjectId") or "")
+        path = safe_project_file(storage.project_dir(root, source_project), str(artifact["path"]))
+        if not path.exists() or not path.is_file():
+            continue
+        items.append(
+            {
+                "alias": alias,
+                "sourceProjectId": source_project,
+                "resourceType": item.get("resourceType", ""),
+                "mode": item.get("mode", "read"),
+                "linkId": item.get("linkId", ""),
+                "artifact": artifact_payload(storage.project_dir(root, source_project), path),
+            }
+        )
+    return items
+
+
+def matching_artifacts(base: Path, patterns: list[str]) -> list[Path]:
+    artifacts_root = safe_project_file(base, "artifacts")
+    if not artifacts_root.exists():
+        return []
+    matches: list[Path] = []
+    for path in sorted(artifacts_root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(base).as_posix()
+        if any(fnmatch.fnmatch(rel, pattern) for pattern in patterns):
+            matches.append(path)
+    return matches[:100]
+
+
+def artifact_payload(base: Path, path: Path) -> dict[str, Any]:
+    rel = path.relative_to(base).as_posix()
+    suffix = path.suffix.lower()
+    size = path.stat().st_size
+    item: dict[str, Any] = {"path": rel, "name": path.name, "type": artifact_type(suffix), "size": size}
+    if size > 1_000_000:
+        item["content_truncated"] = True
+        return item
+    if suffix == ".json":
+        try:
+            item["json"] = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            item["text"] = path.read_text(encoding="utf-8", errors="replace")
+        return item
+    if suffix == ".csv":
+        item["rows"] = read_csv(base, rel)
+        item["text"] = path.read_text(encoding="utf-8", errors="replace")
+        return item
+    if suffix in {".md", ".txt", ".yaml", ".yml", ".log"}:
+        item["text"] = path.read_text(encoding="utf-8", errors="replace")
+    return item
+
+
+def artifact_type(suffix: str) -> str:
+    if suffix == ".json":
+        return "json"
+    if suffix == ".csv":
+        return "table"
+    if suffix == ".md":
+        return "markdown"
+    if suffix in {".txt", ".log", ".yaml", ".yml"}:
+        return "text"
+    return "file"
 
 
 def html_escape(value: str) -> str:

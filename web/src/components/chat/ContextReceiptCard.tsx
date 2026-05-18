@@ -1,14 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 import type { ContextReceipt } from "../../shared/contracts/workbench";
 
 type ReceiptFile = { filename?: string; path?: string };
 type ReceiptChunk = {
+  source_id?: string;
   chunk_id?: string;
   path?: string;
   filename?: string;
   reason?: string;
   token_count?: number;
   privacy?: string;
+  matched_terms?: string[];
+  rerank_score?: number;
+  vector_score?: number;
+  text_preview?: string;
+  linked_alias?: string;
+  linked_project?: string;
+  resource_type?: string;
 };
 type ReceiptCsv = {
   parser?: string;
@@ -41,6 +49,8 @@ type ContextReceiptCardProps = {
 };
 
 export function ContextReceiptCard({ receipt, compact = false }: ContextReceiptCardProps) {
+  const [selectedChunk, setSelectedChunk] = useState<ReceiptChunk | null>(null);
+  const [pinnedChunks, setPinnedChunks] = useState<ReceiptChunk[]>([]);
   if (!receipt) return null;
   const used = Array.isArray(receipt.used_files) ? receipt.used_files : [];
   const unused = Array.isArray(receipt.unused_files) ? receipt.unused_files : [];
@@ -53,6 +63,15 @@ export function ContextReceiptCard({ receipt, compact = false }: ContextReceiptC
   const mode = receipt.privacy_mode === "local" ? "local" : receipt.privacy_mode === "network" ? "local + network" : "cloud";
   const cost = `${receipt.estimated_cost ?? 0} ${receipt.currency || "USD"}`;
   const fileLabel = `${used.length} file${used.length === 1 ? "" : "s"}`;
+  const isPinned = (chunk: ReceiptChunk) => pinnedChunks.some((item) => chunkKey(item) === chunkKey(chunk));
+  const togglePinned = (chunk: ReceiptChunk) => {
+    setPinnedChunks((current) => {
+      if (current.some((item) => chunkKey(item) === chunkKey(chunk))) {
+        return current.filter((item) => chunkKey(item) !== chunkKey(chunk));
+      }
+      return [...current, chunk].slice(-4);
+    });
+  };
 
   return (
     <details className={`context-receipt ${compact ? "compact" : ""}`}>
@@ -71,11 +90,71 @@ export function ContextReceiptCard({ receipt, compact = false }: ContextReceiptC
       {chunks.length > 0 && (
         <div className="receipt-chunks">
           {chunks.slice(0, 4).map((chunk) => (
-            <span key={chunk.chunk_id || `${chunk.path}-${chunk.token_count}`}>
-              <strong>{chunk.filename || chunk.path}</strong>
-              <small>{chunk.reason} · {chunk.token_count} tokens · {chunk.privacy}</small>
-            </span>
+            <div className="receipt-source-row" key={chunkKey(chunk)}>
+              <button
+                type="button"
+                className="receipt-source-button"
+                onClick={() => setSelectedChunk(chunk)}
+              >
+                <strong>{chunk.source_id ? `[${chunk.source_id}] ` : ""}{chunk.filename || chunk.path}</strong>
+                <small>
+                  {chunk.reason || "retrieved"} · {chunk.token_count} tokens · {chunk.privacy}
+                  {chunk.linked_alias ? ` · linked:${chunk.linked_alias}` : ""}
+                  {typeof chunk.rerank_score === "number" ? ` · score ${chunk.rerank_score}` : ""}
+                  {chunk.matched_terms?.length ? ` · ${chunk.matched_terms.join(", ")}` : ""}
+                </small>
+              </button>
+              <button type="button" className={`receipt-pin-button ${isPinned(chunk) ? "active" : ""}`} onClick={() => togglePinned(chunk)}>
+                {isPinned(chunk) ? "Pinned" : "Pin"}
+              </button>
+            </div>
           ))}
+        </div>
+      )}
+      {selectedChunk && (
+        <div className="source-drawer-backdrop" role="presentation" onClick={() => setSelectedChunk(null)}>
+          <aside className="source-drawer" aria-label="Source preview" onClick={(event) => event.stopPropagation()}>
+            <div className="source-drawer-header">
+              <span>Source</span>
+              <div>
+                <button type="button" onClick={() => togglePinned(selectedChunk)}>{isPinned(selectedChunk) ? "Unpin" : "Pin"}</button>
+                <button type="button" onClick={() => setSelectedChunk(null)}>Close</button>
+              </div>
+            </div>
+            <h3>{selectedChunk.source_id ? `[${selectedChunk.source_id}] ` : ""}{selectedChunk.filename || selectedChunk.path}</h3>
+            <dl>
+              <div><dt>Path</dt><dd>{selectedChunk.path || "unknown"}</dd></div>
+              {selectedChunk.linked_alias && <div><dt>Linked alias</dt><dd>{selectedChunk.linked_alias}</dd></div>}
+              {selectedChunk.linked_project && <div><dt>Source project</dt><dd>{selectedChunk.linked_project}</dd></div>}
+              {selectedChunk.resource_type && <div><dt>Resource</dt><dd>{selectedChunk.resource_type}</dd></div>}
+              {typeof selectedChunk.rerank_score === "number" && <div><dt>Score</dt><dd>{selectedChunk.rerank_score}</dd></div>}
+              {selectedChunk.matched_terms?.length && <div><dt>Matched</dt><dd>{selectedChunk.matched_terms.join(", ")}</dd></div>}
+            </dl>
+            <pre>{selectedChunk.text_preview || "No preview stored."}</pre>
+            {pinnedChunks.length > 0 && (
+              <section className="source-drawer-pins" aria-label="Pinned source comparison">
+                <div className="source-drawer-section-title">
+                  <strong>Pinned sources</strong>
+                  <button type="button" onClick={() => setPinnedChunks([])}>Clear</button>
+                </div>
+                <div className="source-compare-grid">
+                  {pinnedChunks.map((chunk) => (
+                    <article key={chunkKey(chunk)}>
+                      <div>
+                        <strong>{chunk.source_id ? `[${chunk.source_id}] ` : ""}{chunk.filename || chunk.path}</strong>
+                        <button type="button" onClick={() => setSelectedChunk(chunk)}>Open</button>
+                      </div>
+                      <small>
+                        {chunk.linked_alias ? `linked:${chunk.linked_alias} · ` : ""}
+                        {typeof chunk.rerank_score === "number" ? `score ${chunk.rerank_score}` : chunk.reason || "source"}
+                      </small>
+                      <pre>{chunk.text_preview || "No preview stored."}</pre>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+          </aside>
         </div>
       )}
       {csv.length > 0 && (
@@ -97,4 +176,8 @@ export function ContextReceiptCard({ receipt, compact = false }: ContextReceiptC
       {excluded.length > 0 && <p className="muted">{excluded.length} file/path exclusions were active.</p>}
     </details>
   );
+}
+
+function chunkKey(chunk: ReceiptChunk): string {
+  return chunk.chunk_id || `${chunk.source_id || ""}:${chunk.path || chunk.filename || ""}:${chunk.token_count || ""}`;
 }

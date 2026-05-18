@@ -109,10 +109,17 @@ def test_ask_includes_project_retrieval_context(tmp_path, monkeypatch):
 
     system = captured["payload"]["messages"][0]["content"]
     assert "## Retrieved Project Context" in system
+    assert "[R1]" in system
     assert "files/camera.md" in system
     messages = storage.read_messages(root, "research", "question")
     chunks = messages[-1]["metadata"]["context_receipt"]["included_chunks"]
-    assert any(item.get("source") == "project_retrieval" for item in chunks)
+    retrieval_chunks = [item for item in chunks if item.get("source") == "project_retrieval"]
+    assert retrieval_chunks
+    assert retrieval_chunks[0]["source_id"] == "R1"
+    assert retrieval_chunks[0]["matched_terms"]
+    assert retrieval_chunks[0]["rerank_score"] is not None
+    used_context = storage.read_json(storage.session_dir(root, "research", "question") / "used_context.json")
+    assert used_context["context_mode"] == "retrieval_first"
 
 
 def test_ollama_provider_falls_back_to_ipv4_localhost(monkeypatch):
@@ -216,6 +223,34 @@ def test_ask_with_current_attachment_does_not_send_previous_files(tmp_path, monk
     assert receipt["included_chunks"][0]["filename"] == "current.txt"
     assert receipt["included_chunks"][0]["privacy"] == "local_only"
     assert any(item["filename"] == "old.txt" and item["reason"] == "not selected for this request" for item in receipt["excluded"])
+
+
+def test_ask_without_active_attachment_uses_retrieval_first_not_prior_file_dump(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    storage.create_project(root, "AI System")
+    storage.create_session(root, "ai-system", "Images")
+    attachments.save_attachment(root, "ai-system", "images", "old.txt", b"old private text", delivery="text_context")
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.request, "urlopen", fake_urlopen)
+
+    runner.ask(
+        str(root),
+        "ai-system",
+        "images",
+        provider="ollama",
+        model="qwen3:4b",
+        content="Hello",
+    )
+
+    system = captured["payload"]["messages"][0]["content"]
+    assert "old private text" not in system
+    receipt = storage.read_messages(root, "ai-system", "images")[-1]["metadata"]["context_receipt"]
+    assert receipt["context_mode"] == "retrieval_first"
 
 
 def test_ask_can_include_previous_files_when_requested(tmp_path, monkeypatch):

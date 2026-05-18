@@ -40,8 +40,11 @@ def current_attachment_filenames(user_metadata: dict[str, object] | None) -> set
 
 
 def should_include_prior_files(content: str, *, has_current_file: bool) -> bool:
-    if not has_current_file:
-        return True
+    del has_current_file
+    return requests_prior_files(content)
+
+
+def requests_prior_files(content: str) -> bool:
     text = " ".join(content.lower().split())
     return any(trigger in text for trigger in PRIOR_FILE_TRIGGERS)
 
@@ -74,6 +77,8 @@ def build_context_receipt(
         "created_at": storage.utc_now(),
         "provider": provider,
         "model": model,
+        "context_mode": manifest.get("context_mode", "unspecified"),
+        "context_plan": manifest.get("context_plan", {}),
         "privacy_mode": manifest.get("privacy_mode", "local"),
         "model_delivery": privacy.get("model_delivery", ""),
         "privacy": privacy,

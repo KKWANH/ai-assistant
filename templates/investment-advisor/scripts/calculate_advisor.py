@@ -30,8 +30,12 @@ def write_json(path: Path, value: object) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) not in {7, 9}:
-        print("usage: calculate_advisor.py portfolio.csv target.yaml weights.json gap.json suggestions.csv chart.json [monthly.csv growth-chart.json]", file=sys.stderr)
+    if len(sys.argv) not in {7, 9, 11}:
+        print(
+            "usage: calculate_advisor.py portfolio.csv target.yaml weights.json gap.json suggestions.csv chart.json "
+            "[monthly.csv growth-chart.json [interests.md report.md]]",
+            file=sys.stderr,
+        )
         return 2
     portfolio_path = Path(sys.argv[1])
     target_path = Path(sys.argv[2])
@@ -41,6 +45,14 @@ def main() -> int:
     chart_path = Path(sys.argv[6])
     monthly_path = Path(sys.argv[7]) if len(sys.argv) == 9 else None
     growth_chart_path = Path(sys.argv[8]) if len(sys.argv) == 9 else None
+    if len(sys.argv) == 11:
+        monthly_path = Path(sys.argv[7])
+        growth_chart_path = Path(sys.argv[8])
+        interests_path = Path(sys.argv[9])
+        report_path = Path(sys.argv[10])
+    else:
+        interests_path = None
+        report_path = None
     rows = load_rows(portfolio_path)
     targets = load_targets(target_path)
     totals: dict[str, float] = {}
@@ -75,6 +87,8 @@ def main() -> int:
     write_json(chart_path, {"kind": "bar", "title": "Allocation gap", "data": [{"label": item["asset_class"], "value": abs(float(item["delta_value"]))} for item in gaps]})
     if monthly_path and growth_chart_path:
         write_monthly_performance(monthly_path, growth_chart_path, total_value)
+    if report_path:
+        write_report(report_path, interests_path, total_value, weights, gaps)
     print(f"Wrote {weights_path}, {gap_path}, {suggestions_path}, and {chart_path}")
     return 0
 
@@ -101,6 +115,49 @@ def write_monthly_performance(monthly_path: Path, chart_path: Path, total_value:
         "title": "Total asset change",
         "data": [{"label": f"2026-{index:02d}", "value": round(total_value * factor, 2)} for index, factor in enumerate(factors, start=1)],
     })
+
+
+def write_report(report_path: Path, interests_path: Path | None, total_value: float, weights: list[dict[str, object]], gaps: list[dict[str, object]]) -> None:
+    interests = interests_path.read_text(encoding="utf-8").strip() if interests_path and interests_path.exists() else ""
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Investment Advisor Dashboard Report",
+        "",
+        "> 교육/시나리오용 계산 결과임. 매수/매도 권유 아님.",
+        "",
+        "## 바로 볼 것",
+        "",
+        f"- 총자산: {round(total_value, 2)}",
+        f"- 자산군 수: {len(weights)}",
+        f"- 조정 필요 항목: {sum(1 for item in gaps if item.get('suggestion') != 'hold')}",
+        "",
+        "## 현재 비중",
+        "",
+        "| 자산군 | 평가액 | 현재 % |",
+        "| --- | ---: | ---: |",
+    ]
+    for row in weights:
+        lines.append(f"| {row.get('asset_class', '')} | {row.get('value', '')} | {row.get('current_pct', '')} |")
+    lines.extend(["", "## 목표 대비 차이", "", "| 자산군 | 현재 % | 목표 % | 차이 금액 | 제안 |", "| --- | ---: | ---: | ---: | --- |"])
+    for row in gaps:
+        lines.append(
+            f"| {row.get('asset_class', '')} | {row.get('current_pct', '')} | {row.get('target_pct', '')} | {row.get('delta_value', '')} | {row.get('suggestion', '')} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 관심 방향",
+            "",
+            interests or "관심 ETF/주식/제약조건 파일이 비어 있음.",
+            "",
+            "## 다음 행동",
+            "",
+            "- `rebalance-suggestions.csv` 표 확인.",
+            "- `portfolio-growth-chart.json` 월별 총자산 변화 확인.",
+            "- 필요하면 market_research 실행 전 네트워크 사용 승인.",
+        ]
+    )
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

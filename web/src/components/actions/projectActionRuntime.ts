@@ -73,7 +73,7 @@ export function useProjectActionRuntime({
       if (!activePath.projectPath) return null;
       return fetchJson<{ config: ProjectConfigPayload["config"] }>(`/api/project-config/${activePath.projectPath}/import`, {
         method: "POST",
-        body: new URLSearchParams({ template: "investment-advisor" }),
+        body: new URLSearchParams({ template: "investment-advisor", overwrite: "1" }),
       });
     },
     onSuccess: (payload) => {

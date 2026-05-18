@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from . import costs, search, storage
-from .core import context_manifest, context_receipts, retrieval, work_sessions
+from .core import context_manifest, context_planner, context_receipts, retrieval, work_sessions
 from .env import load_env
 from .providers.gemini import GeminiProvider
 from .providers.kimi import KimiProvider
@@ -84,7 +84,7 @@ def ask(
             raise storage.WorkspaceError("Web search requires explicit network approval.")
         resolved_results = search.web_search(content)
     active_files = context_receipts.current_attachment_filenames(user_metadata)
-    include_prior_files = context_receipts.should_include_prior_files(content, has_current_file=bool(active_files))
+    context_plan = context_planner.plan_context(content, active_files=active_files)
     answer_policy = (
         "AIWS answer policy:\n"
         "- Answer in the user's language.\n"
@@ -101,11 +101,12 @@ def ask(
             root,
             project_path,
             session_slug,
-            active_attachment_filenames=(active_files or None) if not include_prior_files else None,
-            include_project_files=include_prior_files,
+            active_attachment_filenames=context_plan.active_attachment_filenames,
+            include_project_files=context_plan.include_project_files,
         )
+        + format_context_plan(context_plan)
     )
-    retrieval_chunks = retrieve_project_context(root, project_path, content)
+    retrieval_chunks = retrieve_project_context(root, project_path, content, actor=actor) if context_plan.retrieval_enabled else []
     prompt_context = base_prompt_context + retrieval.format_retrieval_context(retrieval_chunks)
     network_used = bool(resolved_results)
     manifest = write_used_context(
@@ -119,9 +120,11 @@ def ask(
         search_mode,
         network_used=network_used,
         search_queries=[content] if network_used else [],
-        active_attachment_filenames=(active_files or None) if not include_prior_files else None,
-        include_project_files=include_prior_files,
+        active_attachment_filenames=context_plan.active_attachment_filenames,
+        include_project_files=context_plan.include_project_files,
         retrieval_chunks=retrieval_chunks,
+        context_mode=context_plan.mode,
+        context_plan=context_plan.as_dict(),
     )
     input_tokens = costs.rough_token_count(prompt_context + content)
     max_output_tokens = int(os.environ.get("AIWS_MAX_OUTPUT_TOKENS", "1024"))
@@ -175,7 +178,7 @@ def ask(
         provider,
         model,
         actual,
-        current_files=active_files if not include_prior_files else None,
+        current_files=active_files if context_plan.mode == "current_attachment" else None,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
@@ -250,6 +253,8 @@ def write_used_context(
     active_attachment_filenames: set[str] | None = None,
     include_project_files: bool = True,
     retrieval_chunks: list[dict[str, object]] | None = None,
+    context_mode: str = "",
+    context_plan: dict[str, object] | None = None,
 ) -> dict[str, object]:
     path = storage.session_dir(root, project_path, session_slug) / "used_context.json"
     manifest = context_manifest.build_context_manifest(
@@ -266,6 +271,8 @@ def write_used_context(
         active_attachment_filenames=active_attachment_filenames,
         include_project_files=include_project_files,
         retrieval_chunks=retrieval_chunks,
+        context_mode=context_mode,
+        context_plan=context_plan or {},
     )
     storage.write_json(
         path,
@@ -277,21 +284,39 @@ def write_used_context(
             "search_mode": search_mode,
             "context_chars": len(prompt_context),
             "context_preview": prompt_context[:8000],
+            "context_mode": context_mode,
+            "context_plan": context_plan or {},
             "manifest": manifest,
         },
     )
     return manifest
 
 
-def retrieve_project_context(root: str, project_path: str, content: str) -> list[dict[str, object]]:
+def retrieve_project_context(root: str, project_path: str, content: str, *, actor: str | None = None) -> list[dict[str, object]]:
     if os.environ.get("AIWS_RAG_ENABLED", "true").lower() in {"0", "false", "no"}:
         return []
     if not project_path or len(content.strip()) < 3:
         return []
     try:
-        return retrieval.search_project(root, project_path, content, limit=int(os.environ.get("AIWS_RAG_TOP_K", "4")))
+        chunks = retrieval.search_project_with_links(
+            root,
+            project_path,
+            content,
+            username=actor,
+            limit=int(os.environ.get("AIWS_RAG_TOP_K", "4")),
+        )
+        return [dict(item) | {"source_id": f"R{index}"} for index, item in enumerate(chunks, start=1)]
     except storage.WorkspaceError:
         return []
+
+
+def format_context_plan(plan: context_planner.ContextPlan) -> str:
+    return (
+        "## Context Mode\n"
+        f"Mode: {plan.mode}\n"
+        f"Reason: {plan.reason}\n"
+        f"Prior project files included: {'yes' if plan.include_project_files else 'no'}\n\n"
+    )
 
 
 def default_model_for_provider(provider: str) -> str:

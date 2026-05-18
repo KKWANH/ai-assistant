@@ -242,8 +242,8 @@ def investment_rebalancer_app_definition() -> dict[str, Any]:
         description="Deterministic portfolio weights, target gaps, rebalance suggestions, and educational report outputs.",
         category="Finance",
         input_schema=[
-            contracts.input_schema_field("portfolio", "portfolio.csv", "file", required=True, accept=[".csv"], help_text="Holdings with account, symbol, asset_class, and value."),
-            contracts.input_schema_field("target_allocation", "target-allocation.yaml", "file", required=True, accept=[".yaml", ".yml"], help_text="Target asset-class percentages."),
+            contracts.input_schema_field("portfolio", "portfolio.csv", "file", required=False, accept=[".csv"], help_text="Defaults to files/portfolio.example.csv unless a new file is attached."),
+            contracts.input_schema_field("target_allocation", "target-allocation.yaml", "file", required=False, accept=[".yaml", ".yml"], help_text="Defaults to files/target_allocation.example.yaml unless a new file is attached."),
         ],
         output_schema=[
             contracts.output_artifact_spec("artifacts/current-weights.json", "json", "jsonViewer", "Computed current weights by asset class."),
@@ -1050,7 +1050,7 @@ def build_codex_prompt(config: dict[str, Any], command: dict[str, Any]) -> str:
     )
 
 
-def import_template(root: str | Path, project_path: str, template_name: str) -> dict[str, Any]:
+def import_template(root: str | Path, project_path: str, template_name: str, *, overwrite: bool = False) -> dict[str, Any]:
     source = Path(__file__).resolve().parents[3] / "templates" / template_name
     if not source.exists():
         raise storage.WorkspaceError(f"Template does not exist: {template_name}")
@@ -1058,6 +1058,11 @@ def import_template(root: str | Path, project_path: str, template_name: str) -> 
     for child in source.iterdir():
         target = destination / child.name
         if target.exists():
+            if overwrite and child.name != "files":
+                if child.is_dir():
+                    shutil.copytree(child, target, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(child, target)
             continue
         if child.is_dir():
             shutil.copytree(child, target)

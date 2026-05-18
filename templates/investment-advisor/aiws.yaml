@@ -102,6 +102,8 @@ commands:
       - artifacts/rebalance-chart.json
       - artifacts/monthly-performance.csv
       - artifacts/portfolio-growth-chart.json
+      - files/investment_interests.example.md
+      - artifacts/rebalance-report.md
     outputs:
       - artifacts/current-weights.json
       - artifacts/target-gap.json
@@ -109,6 +111,7 @@ commands:
       - artifacts/rebalance-chart.json
       - artifacts/monthly-performance.csv
       - artifacts/portfolio-growth-chart.json
+      - artifacts/rebalance-report.md
 
   advisor_report:
     kind: python

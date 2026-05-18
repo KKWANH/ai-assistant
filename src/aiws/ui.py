@@ -137,6 +137,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
             project_path = unquote((query.get("project") or [""])[0])
             search_query = (query.get("q") or [""])[0]
             self.api_retrieval_search(project_path, search_query)
+        elif path == "/api/retrieval/status":
+            query = parse_qs(parsed.query)
+            project_path = unquote((query.get("project") or [""])[0])
+            self.api_retrieval_status(project_path)
         elif path == "/api/home-run":
             query = parse_qs(parsed.query)
             run_id = unquote((query.get("run_id") or [""])[0])
@@ -161,6 +165,10 @@ class AIWSHandler(BaseHTTPRequestHandler):
         elif path.startswith("/api/project-viewers/") and path.endswith("/investment-rebalance"):
             project_path = unquote(path.removeprefix("/api/project-viewers/").removesuffix("/investment-rebalance")).strip("/")
             self.api_investment_viewer(project_path)
+        elif path.startswith("/api/project-viewers/") and path.endswith("/payload"):
+            route = unquote(path.removeprefix("/api/project-viewers/").removesuffix("/payload")).strip("/")
+            project_path, viewer_id = route.rsplit("/", 1) if "/" in route else ("", route)
+            self.api_project_viewer_payload(project_path, viewer_id)
         elif path.startswith("/api/project-viewers/") and path.endswith("/manifest"):
             project_path = unquote(path.removeprefix("/api/project-viewers/").removesuffix("/manifest")).strip("/")
             self.api_project_viewer_manifest(project_path)
@@ -379,7 +387,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 self.require_project_access(project_path, "owner")
                 template = data.get("template", "investment-rebalancer")
-                config = action_registry.import_template(self.root, project_path, template)
+                config = action_registry.import_template(self.root, project_path, template, overwrite=data.get("overwrite") in {"1", "true", "yes"})
                 self.send_json({"config": config})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
@@ -543,7 +551,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, status=400)
             return
 
-        if parsed.path == "/api/retrieval/index":
+        if parsed.path in {"/api/retrieval/index", "/api/retrieval/rebuild"}:
             if self.require_auth and not self.is_authenticated():
                 self.send_json({"error": "Authentication required."}, status=401)
                 return
@@ -552,7 +560,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_csrf(data)
                 project_path = str(data.get("project", "")).strip()
                 self.require_project_access(project_path, "read")
-                self.send_json({"index": retrieval.index_project(self.root, project_path)})
+                self.send_json({"index": retrieval.index_project(self.root, project_path, force=True)})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -805,6 +813,33 @@ class AIWSHandler(BaseHTTPRequestHandler):
                 self.require_project_access(project_path, "owner")
                 project_domain.delete(self.root, project_path)
                 self.send_json({"ok": True})
+            except storage.WorkspaceError as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            return
+
+        if parsed.path == "/api/projects/import-template":
+            if self.require_auth and not self.is_authenticated():
+                self.send_json({"error": "Authentication required."}, status=401)
+                return
+            try:
+                data = self.form_data()
+                self.require_csrf(data)
+                template = data.get("template", "investment-advisor").strip() or "investment-advisor"
+                project_path = data.get("project", "").strip() or template
+                if storage.project_json_path(self.root, project_path).exists():
+                    self.require_project_access(project_path, "owner")
+                    project = storage.load_project(self.root, project_path)
+                else:
+                    project = storage.create_project(
+                        self.root,
+                        "Investment Advisor" if template == "investment-advisor" else template.replace("-", " ").title(),
+                        slug=project_path,
+                        notes="Project Workflow App template.",
+                        owner=self.current_username(),
+                        visibility="private",
+                    )
+                config = action_registry.import_template(self.root, project["path"], template, overwrite=data.get("overwrite") in {"1", "true", "yes"})
+                self.send_json({"project": project, "config": config})
             except storage.WorkspaceError as exc:
                 self.send_json({"error": str(exc)}, status=400)
             return
@@ -1342,7 +1377,14 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def api_retrieval_search(self, project_path: str, query: str) -> None:
         try:
             self.require_project_access(project_path, "read")
-            self.send_json({"chunks": retrieval.search_project(self.root, project_path, query)})
+            self.send_json({"mode": retrieval.RETRIEVAL_MODE, "chunks": retrieval.search_project(self.root, project_path, query)})
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_retrieval_status(self, project_path: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            self.send_json({"status": retrieval.index_status(self.root, project_path)})
         except storage.WorkspaceError as exc:
             self.send_json({"error": str(exc)}, status=404)
 
@@ -1357,6 +1399,13 @@ class AIWSHandler(BaseHTTPRequestHandler):
         try:
             self.require_project_access(project_path, "read")
             self.send_json(project_viewer_routes.trusted_viewer_manifest(self.root, project_path))
+        except (json.JSONDecodeError, storage.WorkspaceError) as exc:
+            self.send_json({"error": str(exc)}, status=404)
+
+    def api_project_viewer_payload(self, project_path: str, viewer_id: str) -> None:
+        try:
+            self.require_project_access(project_path, "read")
+            self.send_json(project_viewer_routes.trusted_viewer_payload(self.root, project_path, viewer_id))
         except (json.JSONDecodeError, storage.WorkspaceError) as exc:
             self.send_json({"error": str(exc)}, status=404)
 
@@ -2831,6 +2880,7 @@ def parse_json_object(value: str) -> dict[str, object]:
 
 def start_ui(root: str, *, mode: str, port: int, password: str | None = None) -> None:
     storage.init_workspace(root)
+    retrieval.start_index_watcher(root)
     if mode == "server" and not password and storage.has_accounts(root):
         host, require_auth = "0.0.0.0", True
     else:

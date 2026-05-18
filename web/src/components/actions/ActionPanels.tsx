@@ -79,9 +79,18 @@ export function ProjectWorkflowAppsPanel({ activePath, projectConfig, onProjectC
   return (
     <div className="project-actions-panel">
       {commands.length === 0 ? (
-        <div className="empty-actions">
-          <p className="muted">No project Workflow Apps yet.</p>
-          <button type="button" onClick={importTemplate}>Import Investment Advisor template</button>
+        <div className="empty-actions investment-empty-state">
+          <div>
+            <span className="status-badge ready">Template</span>
+            <strong>Investment Advisor 설치</strong>
+            <p className="muted">샘플 포트폴리오와 목표 비중 파일을 넣고, 한 번 실행하면 표/차트/리포트가 바로 생김.</p>
+          </div>
+          <ol>
+            <li>템플릿 설치</li>
+            <li>Calculate rebalance deltas 실행</li>
+            <li>대시보드에서 월별 자산/수익률 확인</li>
+          </ol>
+          <button type="button" onClick={importTemplate}>현재 프로젝트에 설치</button>
         </div>
       ) : (
         commands.map(([name, command]) => {
