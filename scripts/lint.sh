@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
-source "$REPO_ROOT/.venv/bin/activate"
-python -m ruff check src tests
+PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
+
+"$PYTHON_BIN" -m ruff check src tests
+"$PYTHON_BIN" -m mypy src
+
+if [ -d web/node_modules ]; then
+  npm --prefix web run typecheck
+else
+  echo "Skipping frontend typecheck; run npm --prefix web install first."
+fi

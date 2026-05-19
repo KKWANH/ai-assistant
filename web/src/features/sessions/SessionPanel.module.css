@@ -1,0 +1,113 @@
+.panel {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 420px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.list {
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  padding: var(--space-12);
+}
+
+.list p {
+  color: var(--text-muted);
+}
+
+.session {
+  display: grid;
+  width: 100%;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.session small {
+  color: var(--text-muted);
+}
+
+.selected,
+.session:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-surface-active);
+}
+
+.thread {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  background: var(--bg-surface);
+}
+
+.threadHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-12);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.threadHeader span {
+  color: var(--text-muted);
+}
+
+.messages {
+  overflow: auto;
+  padding: var(--space-16);
+}
+
+.message {
+  margin-bottom: var(--space-12);
+  padding: var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-app);
+}
+
+.message span {
+  color: var(--accent);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.message p {
+  margin: var(--space-8) 0 0;
+  color: var(--text-secondary);
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.composer textarea {
+  min-height: 42px;
+  max-height: 160px;
+  resize: vertical;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--code-bg);
+  color: var(--text-primary);
+  padding: var(--space-8);
+}
+
+@media (max-width: 760px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+
+  .list {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}

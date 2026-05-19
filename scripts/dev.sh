@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
+PORT="${PORT:-8787}"
 
-source "$REPO_ROOT/.venv/bin/activate"
-aiws run --root "${AIWS_ROOT:-$HOME/.ai-workspace}" --mode local --port "${AIWS_PORT:-8765}" --models "${AIWS_MODELS:-ollama}"
+"$PYTHON_BIN" -m uvicorn aiws.api.app:app --host 127.0.0.1 --port "$PORT" --reload

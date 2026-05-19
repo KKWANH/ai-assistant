@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT/web"
-npm run build
+PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
+
+"$PYTHON_BIN" -m compileall -q src
+
+if [ -d web/node_modules ]; then
+  npm --prefix web run build
+else
+  echo "Skipping frontend build; run npm --prefix web install first."
+fi

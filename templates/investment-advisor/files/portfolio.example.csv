@@ -1,6 +1,0 @@
-account,symbol,name,asset_class,value,target_price
-ISA,VT,Vanguard Total World Stock ETF,equity_global,12000,125
-ISA,BND,Vanguard Total Bond ETF,bond,3000,78
-IRP,SCHD,Schwab US Dividend Equity ETF,equity_us,6000,86
-Taxable,MSFT,Microsoft Corporation,equity_us,4500,520
-Taxable,CASH,Settlement Cash,cash,2000,1
