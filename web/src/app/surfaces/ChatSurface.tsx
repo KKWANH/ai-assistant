@@ -1,120 +1,65 @@
-import React, { type FormEvent, useEffect, useRef, useState } from "react";
+import React, { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { TaskSuggestionsPanel, type CommandDefinition } from "../../components/actions/ActionPanels";
 import { AttachmentList } from "../../components/chat/AttachmentList";
 import { Composer } from "../../components/chat/Composer";
 import { ContextReceiptCard } from "../../components/chat/ContextReceiptCard";
 import { WaitingNotice } from "../../components/chat/WaitingNotice";
 import { MarkdownRenderer } from "../../components/markdown/MarkdownRenderer";
-import { StartPane } from "../../components/home/StartPane";
-import { ProjectDashboard } from "../../components/project/ProjectDashboard";
-import { AppsToolsCatalogPage } from "../../pages/AppsToolsCatalogPage";
-import { COPY, copyForAccount, copyForLocale } from "../../shared/copy/copy";
+import { COPY, copyForLocale } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";
-import { DEFAULT_MODEL, modelLabel, normalizeModelCatalog } from "../../lib/modelModes";
+import { DEFAULT_MODEL, modelLabel, type ModelMode } from "../../lib/modelModes";
 import type { AccountSummary } from "../../entities/workspace/types";
-import type { ProjectSummary } from "../../entities/project/types";
 import type { ChatMessage } from "../../shared/contracts/workbench";
-import type {
-  ActivePath,
-  ChatState,
-  HomePayload,
-  NavigateFn,
-  ProjectConfigState,
-  RefreshFn,
-  SetChatFn,
-} from "../../shared/contracts/runtime";
+import type { ActivePath, ChatState, ProjectConfigState, RefreshFn, SetChatFn } from "../../shared/contracts/runtime";
+import styles from "./ChatSurface.module.css";
 
-type CenterPaneProps = {
+export type ChatSurfaceProps = {
   chat: ChatState | null;
   activePath: ActivePath;
   account?: AccountSummary;
-  projects: ProjectSummary[];
+  models: ModelMode[];
+  power: boolean;
   onAsk: SetChatFn;
   onPreview?: (attachment: unknown) => void;
-  error?: string;
-  navigate: NavigateFn;
   refreshWorkspace?: RefreshFn;
   contextOpen: boolean;
   onToggleContext: () => void;
-  projectConfig: ProjectConfigState;
   onProjectConfig?: React.Dispatch<React.SetStateAction<ProjectConfigState>>;
-  workspace?: unknown;
-  home?: HomePayload | null;
-  onHome?: (home: HomePayload) => void;
-  refreshHome?: RefreshFn;
 };
 
-export function CenterPane({ chat, activePath, account, projects, onAsk, onPreview, error, navigate, refreshWorkspace, contextOpen, onToggleContext, projectConfig, onProjectConfig, workspace, home, onHome, refreshHome }: CenterPaneProps) {
-  const power = isPowerMode(account);
-  const copy = copyForAccount(account);
-  const models = normalizeModelCatalog(account?.model_catalog);
+export function ChatSurface({
+  chat,
+  activePath,
+  account,
+  models,
+  power,
+  onAsk,
+  onPreview,
+  refreshWorkspace,
+  contextOpen,
+  onToggleContext,
+  onProjectConfig,
+}: ChatSurfaceProps) {
+  const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
   const [composerDraft, setComposerDraft] = useState("");
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
-  if (activePath.view === "apps-tools" || activePath.view === "actions") {
-    return <AppsToolsCatalogPage navigate={navigate} copy={copy} home={home} onHome={onHome} />;
-  }
-  if (activePath.projectPath && !activePath.sessionSlug) {
-    const project = projects.find((item) => item.path === activePath.projectPath);
-    return (
-      <section className="center-pane project-workbench-page">
-        <ProjectDashboard
-          activePath={activePath}
-          projectConfig={projectConfig}
-          project={project}
-          power={power}
-          copy={copy}
-          activeAppId={activePath.view === "workflow-app" ? activePath.appId : undefined}
-          onProjectConfig={onProjectConfig}
-          navigate={navigate}
-        />
-        {activePath.view !== "workflow-app" && (
-          <StartPane
-            error={error}
-            navigate={navigate}
-            refreshWorkspace={refreshWorkspace}
-            onAsk={onAsk}
-            account={account}
-            models={models}
-            projectPath={activePath.projectPath}
-            embedded
-          />
-        )}
-      </section>
-    );
-  }
-  if (!activePath.projectPath || !activePath.sessionSlug) {
-    return (
-      <StartPane
-        error={error}
-        navigate={navigate}
-        refreshWorkspace={refreshWorkspace}
-        onAsk={onAsk}
-        account={account}
-        models={models}
-        projectPath={activePath.projectPath}
-        workspace={workspace}
-        home={home}
-        onHome={onHome}
-        refreshHome={refreshHome}
-      />
-    );
-  }
-
+  const latestReceipt = useMemo(() => [...(chat?.messages || [])].reverse().find((message) => message.context_receipt)?.context_receipt, [chat?.messages]);
   return (
-    <section className="center-pane">
-      <div className="chat-header">
+    <section className={styles.surface}>
+      <div className={styles.header}>
         <div>
-          <p className="breadcrumb">{chat?.project?.hidden ? copy.chatHeader.chats : copy.chatHeader.workspace} / {chat?.project?.title || activePath.projectPath}</p>
+          <p className={styles.scope}>{chat?.project?.hidden ? copy.chatHeader.chats : copy.chatHeader.workspace} / {chat?.project?.title || activePath.projectPath}</p>
           <EditableTitle chat={chat} activePath={activePath} onAsk={onAsk} refreshWorkspace={refreshWorkspace} />
         </div>
-        <div className="context-chips">
+        <div className={styles.chips}>
           <span>{chat?.project?.hidden ? copy.chatHeader.privateChat : copy.chatHeader.projectMemory}</span>
           <span>{(chat?.attachments || []).length} {copy.chatHeader.files}</span>
           {Boolean(chat?.goal?.objective) && <span>{copy.chatHeader.goalSet}</span>}
           <span>{power ? `${String(chat?.latest?.provider || "ollama")} · ${modelLabel(String(chat?.latest?.model || DEFAULT_MODEL), models)}` : providerFriendlyLabel(String(chat?.latest?.provider || "ollama"))}</span>
-          <button className="chip-button" type="button" onClick={onToggleContext}>{contextOpen ? copy.chatHeader.close : copy.inspector.title}</button>
+          <button className={styles.chipButton} type="button" onClick={onToggleContext}>{contextOpen ? copy.chatHeader.close : copy.inspector.title}</button>
         </div>
       </div>
+      {latestReceipt && <CompactReceiptLine receipt={latestReceipt as Record<string, unknown>} />}
       <MessageTimeline
         messages={chat?.messages || []}
         onPreview={onPreview}
@@ -183,7 +128,7 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }: EditableTi
 
   if (editing) {
     return (
-      <form className="title-edit-form" onSubmit={submit}>
+      <form className={styles.titleForm} onSubmit={submit}>
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -198,15 +143,15 @@ function EditableTitle({ chat, activePath, onAsk, refreshWorkspace }: EditableTi
         />
         <button type="submit">{copy.titleEdit.save}</button>
         <button type="button" onClick={() => setEditing(false)}>{copy.titleEdit.cancel}</button>
-        {error && <small className="error-text">{error}</small>}
+        {error && <small className={styles.error}>{error}</small>}
       </form>
     );
   }
 
   return (
-    <div className="editable-title">
+    <div className={styles.titleRow}>
       <h1>{chat?.session?.title || activePath.sessionSlug}</h1>
-      <button type="button" onClick={() => setEditing(true)} aria-label={copy.titleEdit.rename}>{copy.titleEdit.rename}</button>
+      <button className={styles.renameButton} type="button" onClick={() => setEditing(true)} aria-label={copy.titleEdit.rename}>{copy.titleEdit.rename}</button>
       {saved && <small>{copy.titleEdit.saved}</small>}
     </div>
   );
@@ -226,11 +171,11 @@ function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }: M
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [messages.length]);
   if (messages.length === 0) {
     return (
-      <div className="messages empty-thread">
-        <div className="desk-note">
+      <div className={`${styles.messages} ${styles.emptyThread}`}>
+        <div className={styles.emptyCard}>
           <h2>{copy.chat.emptyTitle}</h2>
           <p>{copy.chat.emptyBody}</p>
-          <div className="empty-action-row" aria-label="Suggested first actions">
+          <div className={styles.emptyActions} aria-label="Suggested first actions">
             <span>파일 추가</span>
             <span>프로젝트 자료로 질문</span>
             <span>웹 검색 켜기</span>
@@ -241,7 +186,7 @@ function MessageTimeline({ messages, onPreview, activePath, onEdit, onRetry }: M
     );
   }
   return (
-    <div className="messages">
+    <div className={styles.messages}>
       {messages.map((message, index) => (
         <MessageCard key={`${index}-${message.role}`} message={message} index={index} onPreview={onPreview} activePath={activePath} onEdit={onEdit} onRetry={onRetry} />
       ))}
@@ -259,18 +204,12 @@ type MessageCardProps = {
   onRetry: (index: number) => void | Promise<void>;
 };
 
-function MessageCard({
-  message,
-  index,
-  onPreview,
-  activePath,
-  onEdit,
-  onRetry,
-}: MessageCardProps) {
+function MessageCard({ message, index, onPreview, activePath, onEdit, onRetry }: MessageCardProps) {
   const copy = copyForLocale(document.documentElement.lang || navigator.language || "en");
+  const roleClass = message.role === "user" ? styles.user : message.role === "assistant" ? styles.assistant : message.role === "tool" ? styles.tool : styles.system;
   return (
-    <article className={`message-card ${message.role} ${message.pending ? "is-pending" : ""}`}>
-      <div className="message-meta">
+    <article className={`${styles.messageCard} ${roleClass} ${message.pending ? styles.pending : ""}`}>
+      <div className={styles.messageMeta}>
         <strong>{messageAuthorLabel(message)}</strong>
         {message.created_at && <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>}
         {message.provider && <span>{message.provider} {message.model}</span>}
@@ -309,10 +248,10 @@ function MessageActions({ message, index, copy = COPY, onEdit, onRetry }: Messag
     URL.revokeObjectURL(url);
   }
   return (
-    <div className="message-actions">
+    <div className={styles.messageActions}>
       {message.role === "user" && <button type="button" onClick={() => onEdit?.(message, index)}>수정</button>}
       {message.role === "assistant" && <button type="button" onClick={() => onRetry?.(index)}>다시 시도</button>}
-      {message.role === "assistant" && <span className="message-variant-nav">‹ 1 / 1 ›</span>}
+      {message.role === "assistant" && <span className={styles.variantNav}>‹ 1 / 1 ›</span>}
       <button type="button" onClick={downloadAnswer}>{copy.messageActions.download || "Download"}</button>
     </div>
   );
@@ -364,7 +303,7 @@ function PlannerTraceSummary({ plan }: { plan?: PlannerTrace }) {
   if (!steps.length) return null;
   const estimatedCalls = plan?.estimated_model_calls || 1;
   return (
-    <details className="planner-trace-summary">
+    <details className={styles.plannerTrace}>
       <summary>Execution plan · {steps.length} steps · {estimatedCalls} model call budget</summary>
       <div>
         {steps.map((step: PlanStep) => (
@@ -376,6 +315,14 @@ function PlannerTraceSummary({ plan }: { plan?: PlannerTrace }) {
       {plan?.requires_confirmation && <small>Web search runs only when selected. Sandbox/code execution still requires promotion into a Workflow App.</small>}
     </details>
   );
+}
+
+function CompactReceiptLine({ receipt }: { receipt: Record<string, unknown> }) {
+  const files = Array.isArray(receipt.files_used) ? receipt.files_used.length : Array.isArray(receipt.included_files) ? receipt.included_files.length : 0;
+  const chunks = Array.isArray(receipt.included_chunks) ? receipt.included_chunks.length : 0;
+  const cost = typeof receipt.estimated_cost_usd === "number" ? receipt.estimated_cost_usd : typeof receipt.estimated_cost === "number" ? receipt.estimated_cost : 0;
+  const mode = receipt.local === true ? "local" : receipt.cloud === true ? "cloud" : String(receipt.provider || "model");
+  return <div className={styles.receiptLine}>Context used · {mode} · {files} files · {chunks} sources · USD {cost}</div>;
 }
 
 function messageAuthorLabel(message: ChatMessage) {
@@ -405,8 +352,4 @@ function formatMessageTime(value: string) {
 
 function providerFriendlyLabel(provider?: string) {
   return provider === "kimi" ? "High-context AI" : "Fast local AI";
-}
-
-function isPowerMode(account?: AccountSummary) {
-  return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }

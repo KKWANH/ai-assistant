@@ -53,11 +53,37 @@
 }
 
 .start-content.home-workbench {
-  width: min(700px, 100%);
+  width: min(1080px, 100%);
   min-height: auto;
-  align-content: center;
+  align-content: start;
   justify-content: center;
   gap: 14px;
+}
+
+.home-cockpit-header {
+  width: 100%;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  text-align: left;
+  background: var(--surface-solid);
+}
+
+.home-cockpit-header h1 {
+  margin: 0 0 6px;
+  font-size: clamp(26px, 4vw, 42px);
+  letter-spacing: -.03em;
+}
+
+.home-cockpit-header p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .home-hero {
@@ -71,14 +97,14 @@
 }
 
 .home-launch-panel {
-  width: min(680px, 100%);
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .home-launch-panel button {
-  min-height: 104px;
+  min-height: 86px;
   display: grid;
   align-content: center;
   gap: 7px;
@@ -111,6 +137,39 @@
 .home-launch-primary {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border)) !important;
   background: #151923 !important;
+}
+
+.home-object-board {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  text-align: left;
+}
+
+.home-object-lane {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--surface-solid);
+}
+
+.home-object-lane .section-row h2 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.home-object-lane .section-row button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 12px;
 }
 
 .home-recent-artifacts {
@@ -285,11 +344,11 @@
 
 .start-composer {
   width: min(920px, 100%);
-  border: 1px solid rgba(99, 215, 255, .34);
-  border-radius: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   padding: 14px;
-  background: rgba(10, 18, 31, .92);
-  box-shadow: 0 18px 54px rgba(0, 0, 0, .34), 0 0 0 1px rgba(79, 140, 255, .16);
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .start-composer-shell {
@@ -299,8 +358,8 @@
 .start-composer-shell .composer {
   width: 100%;
   margin-bottom: 0;
-  border-color: rgba(99, 215, 255, .34);
-  background: rgba(10, 18, 31, .92);
+  border-color: var(--border);
+  background: var(--surface);
 }
 
 .start-composer-shell .composer textarea {
@@ -399,14 +458,12 @@
   display: grid;
   align-content: start;
   gap: 12px;
-  border: 1px solid rgba(143, 192, 255, .18);
-  border-radius: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 16px;
   text-align: left;
-  background:
-    linear-gradient(160deg, rgba(24, 45, 75, .84), rgba(8, 15, 27, .88)),
-    radial-gradient(circle at 12% 0%, rgba(79, 140, 255, .18), transparent 20rem);
-  box-shadow: var(--shadow-low), var(--inset);
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .starter-card.simple-tool-card {
@@ -423,12 +480,12 @@
   width: min(760px, 100%);
   display: grid;
   gap: 12px;
-  border: 1px solid rgba(93, 183, 255, .32);
-  border-radius: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   padding: 14px;
   text-align: left;
-  background: linear-gradient(180deg, rgba(11, 22, 35, .96), rgba(5, 10, 18, .96));
-  box-shadow: var(--shadow-low), var(--inset);
+  background: var(--surface-solid);
+  box-shadow: none;
 }
 
 .tool-run-panel-head {

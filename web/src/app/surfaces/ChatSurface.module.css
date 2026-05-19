@@ -1,0 +1,251 @@
+.surface {
+  width: min(980px, calc(100vw - var(--sidebar-width, 280px) - 48px));
+  margin: 0 auto;
+  min-height: calc(100vh - var(--topbar-height, 44px));
+  padding: 28px 16px 140px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.scope {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titleRow h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.renameButton,
+.chipButton {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.renameButton:hover,
+.chipButton:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.titleForm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.titleForm input {
+  min-width: min(420px, 70vw);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  padding: 9px 10px;
+}
+
+.titleForm button {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.titleForm button[type="submit"] {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+  color: var(--accent);
+}
+
+.error {
+  width: 100%;
+  color: var(--danger);
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chips span,
+.receiptLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.receiptLine {
+  margin-bottom: 14px;
+  width: fit-content;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.emptyThread {
+  min-height: 44vh;
+  justify-content: center;
+}
+
+.emptyCard {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.emptyCard h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.emptyCard p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.emptyActions span {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.messageCard {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
+}
+
+.messageCard.user {
+  margin-left: auto;
+  width: min(760px, 92%);
+  background: var(--bg-surface-raised);
+}
+
+.messageCard.assistant,
+.messageCard.tool,
+.messageCard.system {
+  width: min(860px, 100%);
+}
+
+.messageCard.pending {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+}
+
+.messageMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.messageMeta strong {
+  color: var(--text-secondary);
+}
+
+.messageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.messageActions button,
+.variantNav {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.plannerTrace {
+  margin-top: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+}
+
+.plannerTrace summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.plannerTrace div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .surface {
+    width: 100%;
+    padding-inline: 12px;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .chips {
+    justify-content: flex-start;
+  }
+}

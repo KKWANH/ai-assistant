@@ -1,5 +1,5 @@
 export type ActivePath = {
-  view?: "login" | "apps-tools" | "actions" | "home" | "workflow-app";
+  view?: "login" | "apps-tools" | "actions" | "home" | "projects" | "runs" | "artifacts" | "settings" | "workflow-app";
   projectPath: string;
   sessionSlug: string;
   appId?: string;
@@ -18,6 +18,18 @@ export function parseRoute(path = window.location.pathname): ActivePath {
   }
   if (cleanPath === "/home") {
     return { view: "home", projectPath: "", sessionSlug: "" };
+  }
+  if (cleanPath === "/projects") {
+    return { view: "projects", projectPath: "", sessionSlug: "" };
+  }
+  if (cleanPath === "/runs") {
+    return { view: "runs", projectPath: "", sessionSlug: "" };
+  }
+  if (cleanPath === "/artifacts") {
+    return { view: "artifacts", projectPath: "", sessionSlug: "" };
+  }
+  if (cleanPath === "/settings") {
+    return { view: "settings", projectPath: "", sessionSlug: "" };
   }
   if (cleanPath.startsWith("/chat/")) {
     const parts = cleanPath.replace("/chat/", "").split("/");

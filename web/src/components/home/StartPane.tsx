@@ -3,12 +3,14 @@ import { Composer } from "../chat/Composer";
 import { HomeArtifactContent } from "../table/TableWorkbenchPanel";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
 import { fetchJson } from "../../lib/api";
+import { ArtifactCard, ProjectCard, RunCard, SessionCard, StatPill } from "../work-objects/WorkObjectCards";
 import {
   MODEL_MODES,
   normalizeModelCatalog,
 } from "../../lib/modelModes";
 import type { AccountLike, ChatUpdater, HomeAction, HomePayload, RunDetail } from "../../shared/contracts/runtime";
 import type { ArtifactRecord, ModelCatalogItem, RunRecord } from "../../shared/contracts/workbench";
+import type { WorkspaceSummary } from "../../entities/workspace/types";
 
 export const STARTER_ACTIONS: HomeAction[] = [
   {
@@ -257,7 +259,7 @@ function HomeArtifactViewer({ artifact, onClose, onAsk, onReport }: {
   );
 }
 
-export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, home, onHome }: {
+export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, models = MODEL_MODES, projectPath = "", embedded = false, workspace, home, onHome }: {
   error?: string;
   navigate: (path: string) => void;
   refreshWorkspace?: () => void | Promise<void>;
@@ -266,7 +268,7 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
   models?: ModelCatalogItem[];
   projectPath?: string;
   embedded?: boolean;
-  workspace?: unknown;
+  workspace?: WorkspaceSummary | null;
   home?: HomePayload | null;
   onHome?: (home: HomePayload) => void;
   refreshHome?: () => void | Promise<void>;
@@ -374,6 +376,12 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
   const recentArtifacts = (home?.runs || [])
     .flatMap((run) => (run.artifacts || []).map((artifact) => ({ ...artifact, run })))
     .slice(0, 4);
+  const recentRuns = (home?.runs || []).slice(0, 4);
+  const recentSessions = (workspace?.chats || [])
+    .flatMap((project) => (project.sessions || []).map((session) => ({ ...session, projectPath: project.path, projectTitle: project.title })))
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    .slice(0, 4);
+  const activeProjects = (workspace?.projects || []).filter((project) => !project.hidden).slice(0, 4);
 
   const contentNode = (
     <div className={`start-content ${isHomeWorkbench ? "home-workbench" : ""}`}>
@@ -399,6 +407,18 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
       )}
       {isHomeWorkbench ? (
         <>
+          <section className="home-cockpit-header" aria-label="Workbench summary">
+            <div>
+              <p className="eyebrow">Private workflow desk</p>
+              <h1>Traceable local AI workbench</h1>
+              <p>Projects, chats, runs, artifacts, context receipts, and model usage stay connected.</p>
+            </div>
+            <div className="work-stat-row">
+              <StatPill label="projects" value={workspace?.projects?.length || 0} />
+              <StatPill label="recent runs" value={home?.runs?.length || 0} />
+              <StatPill label="outputs" value={recentArtifacts.length} />
+            </div>
+          </section>
           <section className="home-launch-panel" aria-label="AIWS home launcher">
             <button type="button" className="home-launch-primary" aria-label="새 대화 시작" onClick={startNewChat}>
               <strong>Chat</strong>
@@ -413,27 +433,32 @@ export function StartPane({ error, navigate, refreshWorkspace, onAsk, account, m
               <span>도구와 반복 앱을 고름.</span>
             </button>
           </section>
-          {recentArtifacts.length > 0 && (
-            <section className="home-recent-artifacts" aria-label="Recent artifacts">
-              <div className="section-row">
-                <p className="eyebrow">Recent artifacts</p>
-                <span className="soft-pill">{recentArtifacts.length}</span>
+          <section className="home-object-board" aria-label="Recent work objects">
+            <div className="home-object-lane">
+              <div className="section-row"><h2>Continue work</h2><button type="button" onClick={() => navigate("/projects")}>All projects</button></div>
+              <div className="work-object-grid">
+                {activeProjects.length ? activeProjects.map((project) => <ProjectCard key={project.path} project={project} onOpen={navigate} />) : <p className="muted">No projects yet. Create one to bind files, actions, and outputs.</p>}
               </div>
-              <div className="artifact-grid compact">
-                {recentArtifacts.map((artifact) => (
-                  <button
-                    type="button"
-                    key={`${artifact.run.run_id}-${artifact.path}`}
-                    className="artifact-tile clickable-row"
-                    onClick={() => openHomeArtifact(artifact)}
-                  >
-                    <strong>{artifact.path.split("/").pop()}</strong>
-                    <small>{artifact.viewer_type || artifact.type || "artifact"}</small>
-                  </button>
-                ))}
+            </div>
+            <div className="home-object-lane">
+              <div className="section-row"><h2>Recent sessions</h2><button type="button" onClick={() => startNewChat()}>New chat</button></div>
+              <div className="work-object-grid">
+                {recentSessions.length ? recentSessions.map((session) => <SessionCard key={`${session.projectPath}-${session.slug}`} session={session} onOpen={navigate} />) : <p className="muted">No chats yet. Start with a question or attach a file.</p>}
               </div>
-            </section>
-          )}
+            </div>
+            <div className="home-object-lane">
+              <div className="section-row"><h2>Recent runs</h2><button type="button" onClick={() => navigate("/runs")}>All runs</button></div>
+              <div className="work-object-grid">
+                {recentRuns.length ? recentRuns.map((run) => <RunCard key={run.run_id || String(run.created_at)} run={run} onOpen={(item) => setHomeRunDetail({ run: item, result: { run: item }, stdout: "", stderr: "" })} />) : <p className="muted">No runs yet. Run a Workflow App or create an output.</p>}
+              </div>
+            </div>
+            <div className="home-object-lane">
+              <div className="section-row"><h2>Recent artifacts</h2><button type="button" onClick={() => navigate("/artifacts")}>All outputs</button></div>
+              <div className="work-object-grid">
+                {recentArtifacts.length ? recentArtifacts.map((artifact) => <ArtifactCard key={`${artifact.run.run_id}-${artifact.path}`} artifact={artifact} onOpen={openHomeArtifact} />) : <p className="muted">No durable outputs yet. Save reports, CSV profiles, and generated prompts here.</p>}
+              </div>
+            </div>
+          </section>
           <ToolRunPanel action={toolPanelAction} running={homeRunning} onClose={() => setToolPanelAction(null)} onRun={runHomeAction} copy={copy} />
         </>
       ) : (

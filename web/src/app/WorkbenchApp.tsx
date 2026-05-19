@@ -1,21 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { ContextPanel } from "../../components/inspector/ContextPanel";
-import { copyForLocale } from "../../shared/copy/copy";
-import { getCookie, setCookie } from "../../lib/api";
-import { AppShell } from "../shell/AppShell";
-import type { CommandPaletteItem } from "../shell/AppCommandPalette";
-import { TopBar } from "../layout/TopBar";
-import { WorkspaceSidebar } from "../layout/WorkspaceSidebar";
-import { parseRoute } from "../router/parseRoute";
-import { CenterPane } from "./CenterPane";
-import { AppOverlays } from "./Overlays";
-import { useLegacyWorkbenchData } from "./useLegacyWorkbenchData";
-import "../../styles.css";
-import type { AccountSummary } from "../../entities/workspace/types";
+import { ContextPanel } from "../components/inspector/ContextPanel";
+import { copyForLocale } from "../shared/copy/copy";
+import { getCookie, setCookie } from "../lib/api";
+import { WorkbenchShell } from "./shell/WorkbenchShell";
+import type { CommandPaletteItem } from "./shell/AppCommandPalette";
+import { TopBar } from "./layout/TopBar";
+import { WorkspaceSidebar } from "./layout/WorkspaceSidebar";
+import { parseRoute } from "./router/parseRoute";
+import { WorkbenchRoutes } from "./routes/WorkbenchRoutes";
+import { AppOverlays } from "./overlays/AppOverlays";
+import { useWorkbenchData } from "./useWorkbenchData";
+import "../styles.css";
+import type { AccountSummary } from "../entities/workspace/types";
 
 type LightboxItem = { filename: string; url: string; is_pdf?: boolean };
 
-export function LegacyApp() {
+export function WorkbenchApp() {
   const [activePath, setActivePath] = useState(parseRoute());
   const [lightbox, setLightbox] = useState<LightboxItem | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
@@ -44,7 +44,7 @@ export function LegacyApp() {
     setProjectArtifact,
     setProjectConfig,
     setProjectRunDetail,
-  } = useLegacyWorkbenchData(activePath);
+  } = useWorkbenchData(activePath);
 
   useEffect(() => {
     function onPop() {
@@ -82,6 +82,9 @@ export function LegacyApp() {
       { id: "new-chat", title: "New chat", subtitle: "Start a one-off AI conversation", keywords: ["chat"], action: () => navigate("/") },
       { id: "new-project", title: "New project", subtitle: "Create a local workspace", keywords: ["workspace"], action: () => window.dispatchEvent(new CustomEvent("aiws:new-project")) },
       { id: "apps-tools", title: "Workflow Apps", subtitle: "Browse chat tools and project apps", keywords: ["tools", "apps"], action: () => navigate("/apps-tools") },
+      { id: "projects", title: "Projects", subtitle: "Browse local workbenches", keywords: ["workspace", "folder"], action: () => navigate("/projects") },
+      { id: "runs", title: "Runs", subtitle: "Inspect traceable execution records", keywords: ["execution", "history", "logs"], action: () => navigate("/runs") },
+      { id: "artifacts", title: "Artifacts", subtitle: "Browse durable outputs", keywords: ["outputs", "files", "reports"], action: () => navigate("/artifacts") },
       { id: "toggle-inspector", title: contextOpen ? "Hide inspector" : "Show inspector", subtitle: "Context, sources, runs, and outputs", keywords: ["context", "receipt"], action: toggleContext },
     ];
     for (const project of workspace?.projects || []) {
@@ -134,7 +137,7 @@ export function LegacyApp() {
   }
 
   return (
-    <AppShell
+    <WorkbenchShell
       sidebarOpen={sidebarOpen}
       inspectorOpen={contextOpen}
       commandOpen={commandOpen}
@@ -160,7 +163,7 @@ export function LegacyApp() {
           automations={automations}
           onAutomations={setAutomations}
         />}
-      main={<CenterPane
+      main={<WorkbenchRoutes
           chat={chat}
           activePath={activePath}
           account={workspace?.account}
@@ -255,4 +258,4 @@ function isPowerMode(account?: AccountSummary) {
   return (account?.profile?.ui_mode || (account?.admin ? "power" : "easy")) === "power";
 }
 
-export default LegacyApp;
+export default WorkbenchApp;

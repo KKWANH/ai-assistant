@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { copyForAccount } from "../../shared/copy/copy";
-import { fetchJson } from "../../lib/api";
+import { copyForAccount } from "../shared/copy/copy";
+import { fetchJson } from "../lib/api";
 import {
   useAutomationsQuery,
   useHomeQuery,
@@ -9,9 +9,9 @@ import {
   useRuntimeQuery,
   useSessionQuery,
   useWorkspaceQuery,
-} from "../../shared/api/client";
-import type { ActivePath } from "../router/parseRoute";
-import type { WorkspaceSummary } from "../../entities/workspace/types";
+} from "../shared/api/client";
+import type { ActivePath } from "./router/parseRoute";
+import type { WorkspaceSummary } from "../entities/workspace/types";
 import type {
   AutomationProject,
   ArtifactPayload,
@@ -21,10 +21,10 @@ import type {
   ProjectConfigState,
   RunDetail,
   RuntimePayload,
-} from "../../shared/contracts/runtime";
-import type { ArtifactRecord, RunRecord } from "../../shared/contracts/workbench";
+} from "../shared/contracts/runtime";
+import type { ArtifactRecord, RunRecord } from "../shared/contracts/workbench";
 
-export function useLegacyWorkbenchData(activePath: ActivePath) {
+export function useWorkbenchData(activePath: ActivePath) {
   const isLogin = activePath.view === "login";
   const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
   const [chat, setChat] = useState<ChatState | null>(null);

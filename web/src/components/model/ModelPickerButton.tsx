@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { copyForLocale } from "../../shared/copy/copy";
+import styles from "./ModelPickerButton.module.css";
 
 export type PickerModel = {
   value?: string;
@@ -93,13 +94,13 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
   }, [open, setOpen]);
 
   return (
-    <div className="model-picker-wrap" ref={wrapRef}>
-      <button className="model-select-button" type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+    <div className={styles.wrap} ref={wrapRef}>
+      <button className={styles.selectButton} type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
         <strong>{mode.label || "Model"}</strong>
         <span>{compactModelCost(mode)}</span>
       </button>
       {open && (
-        <div className={`model-picker ${easy ? "easy" : "power"}`} role="dialog" aria-label="AI model picker">
+        <div className={`${styles.picker} ${easy ? styles.easy : styles.power}`} role="dialog" aria-label="AI model picker">
           <header>
             <div>
               <strong>{easy ? copy.modelPicker.easyTitle || copy.modelPicker.title : copy.modelPicker.title}</strong>
@@ -108,17 +109,17 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
             <button type="button" onClick={() => setOpen(false)}>Close</button>
           </header>
           {easy && (
-            <button className="model-details-toggle" type="button" onClick={() => setShowDetails((value) => !value)}>
+            <button className={styles.detailsToggle} type="button" onClick={() => setShowDetails((value) => !value)}>
               {showDetails ? copy.modelPicker.hideDetails : copy.modelPicker.showDetails}
             </button>
           )}
           {!compactEasy && (
-            <div className="model-quick-row">
+            <div className={styles.quickRow}>
               {groups.map((item) => (
                 <button
                   key={item.value}
                   type="button"
-                  className={safeGroup === item.value ? "active" : ""}
+                  className={safeGroup === item.value ? styles.active : ""}
                   onClick={() => setGroup(item.value)}
                 >
                   {modelPickerGroupLabel(copy, item.value) || item.label}
@@ -127,18 +128,18 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
             </div>
           )}
           {compactEasy && (
-            <div className="model-recommendation simple">
+            <div className={`${styles.recommendation} ${styles.simple}`}>
               <strong>추천 모델</strong>
               <small>작업별 4개만 표시함. 상세 설정을 열면 전체 모델과 가격 정보를 볼 수 있음.</small>
             </div>
           )}
           {!compactEasy && (
-            <div className="model-recommendation">
+            <div className={styles.recommendation}>
               <strong>{copy.modelPicker.recommendationTitle || `추천 모델 ${Math.min(recommendations.length, 4)}개`}</strong>
               <small>{copy.modelPicker.recommendationHint || "작업 종류별 추천. 실제 비용은 provider billing 기준, 여기는 토큰 단가 기반 예측."}</small>
             </div>
           )}
-          <div className="model-grid">
+          <div className={styles.grid}>
             {visibleModels.map((item) => {
               const selected = item.value === selectedKey;
               const recommended = recommendations.some((entry) => item.value === entry.model.value);
@@ -153,7 +154,13 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
                 <button
                   key={item.value || item.model || item.label}
                   type="button"
-                  className={`model-card ${selected ? "selected" : ""} ${recommended ? "recommended" : ""} ${item.cloud ? "cloud" : "local"} ${keyMissing ? "disabled" : ""}`}
+                  className={[
+                    styles.card,
+                    selected ? styles.selected : "",
+                    recommended ? styles.recommended : "",
+                    item.cloud ? styles.cloud : styles.local,
+                    keyMissing ? styles.disabled : "",
+                  ].join(" ")}
                   disabled={keyMissing}
                   title={disabledReason || item.bestFor || item.recommendedUse}
                   onClick={() => {
@@ -162,26 +169,26 @@ export function ModelPickerButton({ open, setOpen, selectedKey, onSelect, conten
                     setOpen(false);
                   }}
                 >
-                  <span className="model-card-title">{item.label || item.model}</span>
-                  {recommended && <span className="model-key-status">{recommendation?.label || modelPickerGroupLabel(copy, "recommended")}</span>}
-                  {!compactEasy && <span className="model-card-version">{item.version || item.model}</span>}
-                  <span className="model-card-privacy">{item.cloud ? copy.modelPicker.cloudAi : copy.modelPicker.localMac}</span>
+                  <span className={styles.cardTitle}>{item.label || item.model}</span>
+                  {recommended && <span className={styles.keyStatus}>{recommendation?.label || modelPickerGroupLabel(copy, "recommended")}</span>}
+                  {!compactEasy && <span className={styles.cardVersion}>{item.version || item.model}</span>}
+                  <span className={styles.cardPrivacy}>{item.cloud ? copy.modelPicker.cloudAi : copy.modelPicker.localMac}</span>
                   <span>{compactEasy ? easyModelReason(item, recommendation, copy) : item.recommendedUse || item.bestFor || easyModelReason(item, recommendation, copy)}</span>
                   {!compactEasy && (
-                    <span className="model-card-capabilities">
+                    <span className={styles.cardCapabilities}>
                       {item.supportsText && "Text"}
                       {item.supportsImage ? " · Image" : " · No image"}
                       {item.supportsFileText && " · File text"}
                       {item.supportsWebSearch ? " · Web" : " · No web"}
                     </span>
                   )}
-                  <span className="model-card-price">{power && item.cloud && Number(item.inputPrice || 0) > 0 ? `Input ~$${Number(item.inputPrice || 0).toFixed(2)} / 1M · output ~$${Number(item.outputPrice || 0).toFixed(2)} / 1M` : item.easyPrice || item.cost || easyModelCostLabel(item, copy)}</span>
-                  {compactEasy && item.cloud && <span className="model-card-estimate easy-cloud">예상 {singleEstimate}</span>}
-                  {!compactEasy && <span className="model-card-estimate">Single call estimate: {singleEstimate}</span>}
-                  {!compactEasy && item.cloud && <span className="model-card-estimate">Agent {agentCalls}-step budget: {agentEstimate}</span>}
-                  {!compactEasy && item.cloud && <span className="model-card-estimate">Actual cost accumulates per executed model call</span>}
-                  {(!compactEasy || keyMissing) && <span className={`model-key-status ${keyMissing ? "missing" : ""}`}>{keyStatus}</span>}
-                  {disabledReason && <span className="model-card-estimate">{disabledReason}</span>}
+                  <span className={styles.cardPrice}>{power && item.cloud && Number(item.inputPrice || 0) > 0 ? `Input ~$${Number(item.inputPrice || 0).toFixed(2)} / 1M · output ~$${Number(item.outputPrice || 0).toFixed(2)} / 1M` : item.easyPrice || item.cost || easyModelCostLabel(item, copy)}</span>
+                  {compactEasy && item.cloud && <span className={`${styles.cardEstimate} ${styles.easyCloud}`}>예상 {singleEstimate}</span>}
+                  {!compactEasy && <span className={styles.cardEstimate}>Single call estimate: {singleEstimate}</span>}
+                  {!compactEasy && item.cloud && <span className={styles.cardEstimate}>Agent {agentCalls}-step budget: {agentEstimate}</span>}
+                  {!compactEasy && item.cloud && <span className={styles.cardEstimate}>Actual cost accumulates per executed model call</span>}
+                  {(!compactEasy || keyMissing) && <span className={`${styles.keyStatus} ${keyMissing ? styles.missing : ""}`}>{keyStatus}</span>}
+                  {disabledReason && <span className={styles.cardEstimate}>{disabledReason}</span>}
                   {power && <code>{item.provider} · {item.model}</code>}
                 </button>
               );

@@ -1,10 +1,10 @@
 import { AppShell } from "./shell/AppShell";
-import LegacyApp from "./legacy/LegacyApp";
+import WorkbenchApp from "./WorkbenchApp";
 
 export function App() {
   return (
     <AppShell>
-      <LegacyApp />
+      <WorkbenchApp />
     </AppShell>
   );
 }

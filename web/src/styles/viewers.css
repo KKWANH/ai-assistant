@@ -659,8 +659,7 @@
   gap: 7px;
 }
 
-.empty-action-state span,
-.model-card-capabilities {
+.empty-action-state span {
   color: var(--muted);
   font-size: 12px;
 }

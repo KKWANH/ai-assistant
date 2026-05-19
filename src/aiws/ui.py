@@ -14,6 +14,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import attachments, automations, costs
@@ -106,12 +107,17 @@ class AIWSHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if self.require_auth:
             self.csrf_token()
-        public_asset = path.startswith("/assets/") or path in {"/vite.svg", "/aiws-icon.svg"}
+        public_asset = path.startswith("/assets/") or path.startswith("/new-ui/assets/") or path in {"/vite.svg", "/aiws-icon.svg"}
         if self.require_auth and not self.is_authenticated() and path != "/login" and not public_asset:
             self.redirect("/login")
             return
         if path == "/login":
             self.serve_spa()
+        elif path == "/new-ui" or path.startswith("/new-ui/"):
+            if path.startswith("/new-ui/assets/"):
+                self.serve_new_ui_static_asset(path)
+            else:
+                self.serve_new_ui_spa()
         elif path == "/api/workspace":
             self.api_workspace()
         elif path == "/api/account":
@@ -124,6 +130,12 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.api_automations()
         elif path == "/api/home":
             self.api_home()
+        elif path == "/api/runs":
+            query = parse_qs(parsed.query)
+            self.api_runs(query)
+        elif path == "/api/artifacts":
+            query = parse_qs(parsed.query)
+            self.api_artifacts(query)
         elif path == "/api/action-library":
             self.api_action_library()
         elif path == "/api/models":
@@ -200,7 +212,7 @@ class AIWSHandler(BaseHTTPRequestHandler):
             self.serve_spa()
         elif path == "/projects/new":
             self.serve_spa()
-        elif path in {"/home", "/apps-tools", "/actions", "/actions/new"}:
+        elif path in {"/home", "/apps-tools", "/actions", "/actions/new", "/runs", "/artifacts", "/settings"}:
             self.serve_spa()
         elif path == "/profile":
             self.serve_spa()
@@ -1287,6 +1299,151 @@ class AIWSHandler(BaseHTTPRequestHandler):
     def api_home(self) -> None:
         self.send_json({"home": action_routes.home_payload(self.root, self.current_username() or "local")})
 
+    def api_runs(self, query: dict[str, list[str]]) -> None:
+        try:
+            limit = self.query_int(query, "limit", 24, maximum=200)
+            offset = self.query_int(query, "offset", 0, maximum=10000)
+            search = (query.get("q") or [""])[0].strip().lower()
+            status = (query.get("status") or ["all"])[0].strip().lower() or "all"
+            sort = (query.get("sort") or ["created_at"])[0].strip().lower() or "created_at"
+            order = (query.get("order") or ["desc"])[0].strip().lower() or "desc"
+            project_filter = (query.get("project") or [""])[0].strip()
+            items = self.collect_visible_runs(limit=offset + limit + 50)
+            if project_filter:
+                items = [item for item in items if str(item.get("projectPath") or "") == project_filter]
+            if status != "all":
+                items = [item for item in items if str(item.get("status") or "").lower() == status]
+            if search:
+                items = [item for item in items if self.matches_query(item, search)]
+            items.sort(key=lambda item: self.run_sort_value(item, sort), reverse=order != "asc")
+            total = len(items)
+            self.send_json(
+                {
+                    "items": items[offset : offset + limit],
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "statuses": sorted({str(item.get("status") or "").lower() for item in items if item.get("status")}),
+                }
+            )
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=400)
+
+    def api_artifacts(self, query: dict[str, list[str]]) -> None:
+        try:
+            limit = self.query_int(query, "limit", 24, maximum=200)
+            offset = self.query_int(query, "offset", 0, maximum=10000)
+            search = (query.get("q") or [""])[0].strip().lower()
+            artifact_type = (query.get("type") or ["all"])[0].strip().lower() or "all"
+            sort = (query.get("sort") or ["created_at"])[0].strip().lower() or "created_at"
+            order = (query.get("order") or ["desc"])[0].strip().lower() or "desc"
+            project_filter = (query.get("project") or [""])[0].strip()
+            runs = self.collect_visible_runs(limit=max(offset + limit + 200, 250))
+            artifacts: list[dict[str, Any]] = []
+            for run in runs:
+                for artifact in run.get("artifacts", []) or []:
+                    if not isinstance(artifact, dict):
+                        continue
+                    item = {
+                        **artifact,
+                        "projectPath": run.get("projectPath", ""),
+                        "projectTitle": run.get("projectTitle", "Home"),
+                        "scope": run.get("scope", "home"),
+                        "run": {
+                            "run_id": run.get("run_id", ""),
+                            "label": run.get("label") or run.get("action_label") or run.get("command") or "Execution",
+                            "command": run.get("command", ""),
+                            "status": run.get("status", ""),
+                        },
+                    }
+                    artifacts.append(item)
+            if project_filter:
+                artifacts = [item for item in artifacts if str(item.get("projectPath") or "") == project_filter]
+            if artifact_type != "all":
+                artifacts = [
+                    item
+                    for item in artifacts
+                    if artifact_type in str(item.get("viewer_type") or item.get("type") or "").lower()
+                ]
+            if search:
+                artifacts = [item for item in artifacts if self.matches_query(item, search)]
+            artifacts.sort(key=lambda item: self.artifact_sort_value(item, sort), reverse=order != "asc")
+            total = len(artifacts)
+            self.send_json(
+                {
+                    "items": artifacts[offset : offset + limit],
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "types": sorted(
+                        {
+                            str(item.get("viewer_type") or item.get("type") or "").lower()
+                            for item in artifacts
+                            if item.get("viewer_type") or item.get("type")
+                        }
+                    ),
+                }
+            )
+        except storage.WorkspaceError as exc:
+            self.send_json({"error": str(exc)}, status=400)
+
+    def collect_visible_runs(self, *, limit: int) -> list[dict[str, Any]]:
+        username = self.current_username()
+        runs: list[dict[str, Any]] = []
+        for run in home_workbench.list_runs(self.root, username, limit=limit):
+            if isinstance(run, dict):
+                runs.append({**run, "projectTitle": "Home", "projectPath": "", "scope": "home"})
+        for project in storage.list_visible_projects(self.root, username):
+            project_path = str(project.get("path") or "")
+            if not project_path:
+                continue
+            try:
+                self.require_project_access(project_path, "read")
+            except storage.WorkspaceError:
+                continue
+            project_title = str(project.get("title") or project_path)
+            for run in action_registry.latest_runs(self.root, project_path, limit=limit):
+                if isinstance(run, dict):
+                    runs.append({**run, "projectTitle": project_title, "projectPath": project_path, "scope": "project"})
+        return runs
+
+    def query_int(self, query: dict[str, list[str]], key: str, default: int, *, maximum: int) -> int:
+        try:
+            value = int((query.get(key) or [str(default)])[0])
+        except ValueError:
+            return default
+        return max(0, min(value, maximum))
+
+    def matches_query(self, item: dict[str, Any], search: str) -> bool:
+        haystack = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str).lower()
+        return search in haystack
+
+    def run_sort_value(self, item: dict[str, Any], sort: str) -> str | int:
+        if sort == "status":
+            return str(item.get("status") or "")
+        if sort == "project":
+            return str(item.get("projectTitle") or item.get("projectPath") or "")
+        if sort == "artifacts":
+            artifacts = item.get("artifacts") if isinstance(item.get("artifacts"), list) else []
+            return len(artifacts)
+        if sort == "label":
+            return str(item.get("label") or item.get("action_label") or item.get("command") or item.get("action_id") or "")
+        return str(item.get("created_at") or "")
+
+    def artifact_sort_value(self, item: dict[str, Any], sort: str) -> str | int:
+        if sort == "type":
+            return str(item.get("viewer_type") or item.get("type") or "")
+        if sort == "project":
+            return str(item.get("projectTitle") or item.get("projectPath") or "")
+        if sort == "size":
+            try:
+                return int(item.get("size") or 0)
+            except (TypeError, ValueError):
+                return 0
+        if sort == "name":
+            return str(item.get("path") or "")
+        return str(item.get("created_at") or "")
+
     def home_action_model_response(self, action_id: str, data: dict[str, str]) -> str:
         if action_id != "image_explain":
             return ""
@@ -1500,9 +1657,25 @@ class AIWSHandler(BaseHTTPRequestHandler):
             return
         self.serve_file(index, "text/html; charset=utf-8")
 
+    def serve_new_ui_spa(self) -> None:
+        index = new_web_dist_path() / "index.html"
+        if not index.exists():
+            self.page("AIWS New UI", '<div id="root"></div><p>Build the new React UI with <code>cd web-workbench && npm run build</code>.</p>')
+            return
+        self.serve_file(index, "text/html; charset=utf-8")
+
     def serve_static_asset(self, path: str) -> None:
         dist = web_dist_path()
         target = (dist / path.removeprefix("/")).resolve()
+        if not str(target).startswith(str(dist.resolve())) or not target.exists() or not target.is_file():
+            self.not_found()
+            return
+        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        self.serve_file(target, content_type)
+
+    def serve_new_ui_static_asset(self, path: str) -> None:
+        dist = new_web_dist_path()
+        target = (dist / path.removeprefix("/new-ui/")).resolve()
         if not str(target).startswith(str(dist.resolve())) or not target.exists() or not target.is_file():
             self.not_found()
             return
@@ -2659,6 +2832,10 @@ def short_date(value: object) -> str:
 
 def web_dist_path() -> Path:
     return Path(__file__).resolve().parents[2] / "web" / "dist"
+
+
+def new_web_dist_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "web-workbench" / "dist"
 
 
 def image_content_type(extension: str) -> str:

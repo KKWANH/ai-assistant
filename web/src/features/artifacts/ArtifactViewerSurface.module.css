@@ -1,0 +1,67 @@
+.surface {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+  min-height: 420px;
+}
+
+.main {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.meta {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--surface-solid);
+}
+
+.meta h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.row {
+  display: grid;
+  gap: 3px;
+}
+
+.row span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.row code,
+.row strong {
+  overflow-wrap: anywhere;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+}
+
+.actions a,
+.actions button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text-soft);
+  text-align: center;
+  text-decoration: none;
+  background: var(--surface);
+}
+
+@media (max-width: 860px) {
+  .surface {
+    grid-template-columns: 1fr;
+  }
+}

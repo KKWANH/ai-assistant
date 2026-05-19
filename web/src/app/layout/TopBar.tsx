@@ -9,6 +9,7 @@ type RuntimeState = {
 };
 
 type ActivePath = {
+  view?: string;
   projectPath?: string;
   sessionSlug?: string;
 };
@@ -63,11 +64,24 @@ export function TopBar({
   const power = isPowerMode(account);
   const operator = power && Boolean(account?.admin);
   const copy = copyForAccount(account);
+  const scope = activePath?.view === "runs"
+    ? "Runs"
+    : activePath?.view === "artifacts"
+      ? "Artifacts"
+      : activePath?.view === "projects"
+        ? "Projects"
+        : activePath?.view === "apps-tools" || activePath?.view === "actions"
+          ? "Workflow Apps"
+          : activePath?.projectPath
+            ? "Project"
+            : "General";
   const context = activePath?.sessionSlug
     ? chat?.project?.hidden
       ? "General chat"
       : `${chat?.project?.title || "Project"} / ${chat?.session?.title || activePath.sessionSlug}`
-    : "Private AI Cockpit";
+    : activePath?.projectPath
+      ? activePath.projectPath
+      : scope;
   const modelLabel = chat?.latest?.model
     ? `${chat.latest.provider || "model"} · ${chat.latest.model}`
     : activePath?.projectPath
@@ -103,6 +117,7 @@ export function TopBar({
         <kbd>⌘K</kbd>
       </button>
       <span className="top-context">{context}</span>
+      <span className="top-status-chip scope">{scope}</span>
       <span className="top-status-chip model" title={modelLabel}>{modelLabel}</span>
       <span className={`top-status-chip privacy ${privacyLabel === "Cloud" ? "cloud" : "local"}`}>{privacyLabel}</span>
       <span

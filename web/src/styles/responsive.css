@@ -237,35 +237,6 @@
     display: none;
   }
 
-  .model-select-button {
-    min-width: 0;
-    width: 100%;
-    padding-inline: 9px;
-  }
-
-  .model-picker {
-    position: fixed;
-    inset: auto 0 0 0;
-    min-width: 0;
-    width: 100vw;
-    max-height: min(82dvh, 720px);
-    border-radius: 20px 20px 0 0;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-  }
-
-  .start-composer .model-picker {
-    top: auto;
-    bottom: 0;
-  }
-
-  .model-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .model-card {
-    min-height: 0;
-  }
-
   .project-dashboard {
     gap: 12px;
   }
@@ -292,8 +263,10 @@
 
   .starter-grid,
   .home-launch-panel,
+  .home-object-board,
   .artifact-grid.compact,
   .home-hints { grid-template-columns: 1fr; }
+  .home-cockpit-header { align-items: start; flex-direction: column; }
   .section-row { align-items: start; flex-direction: column; }
   .login-screen { grid-template-columns: 1fr; padding: 18px; }
   .login-aside { display: none; }

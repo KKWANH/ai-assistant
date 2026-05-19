@@ -8,6 +8,8 @@ import { COPY } from "../../shared/copy/copy";
 import { ACTION_KINDS, AGENT_STEP_KINDS, PANEL_TYPES, normalizeActionDefinition, normalizePanelDefinition } from "../../workbenchContracts";
 import { ViewerPane } from "../../features/workflow/components/ViewerPane";
 import { ChatDock } from "../../features/workflow/components/ChatDock";
+import { ArtifactViewerSurface } from "../../features/artifacts/ArtifactViewerSurface";
+import { RunCard } from "../work-objects/WorkObjectCards";
 import { fetchJson } from "../../lib/api";
 import { queryKeys } from "../../shared/api/client";
 import type { ProjectSummary } from "../../entities/project/types";
@@ -97,10 +99,6 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
   }, [projectConfig?.project, project]);
 
   useEffect(() => {
-    if (activeTab === "runs") setActiveTab("artifacts");
-  }, [activeTab]);
-
-  useEffect(() => {
     if (activeAppId) setActiveTab("apps");
   }, [activeAppId]);
 
@@ -151,6 +149,8 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
           ["overview", "Overview"],
           ["chats", "Chats"],
           ["files", "Files"],
+          ["actions", "Actions"],
+          ["runs", "Runs"],
           ["apps", "Workflow Apps"],
           ["artifacts", "Artifacts"],
           ["connections", "Linked Resources"],
@@ -255,11 +255,11 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
         />
       )}
 
-      {activeTab === "apps" && <section className={cx("dashboard-card", "dashboard-actions")}>
+      {(activeTab === "apps" || activeTab === "actions") && <section className={cx("dashboard-card", "dashboard-actions")}>
         <div className="section-row">
           <div>
-            <p className="eyebrow">{text.actionsEyebrow}</p>
-            <h2>{text.projectActions}</h2>
+            <p className="eyebrow">{activeTab === "actions" ? "Action registry" : text.actionsEyebrow}</p>
+            <h2>{activeTab === "actions" ? "Executable project actions" : text.projectActions}</h2>
           </div>
           {power && <span className="soft-pill">aiws.yaml</span>}
         </div>
@@ -274,6 +274,23 @@ export function ProjectDashboard({ activePath, projectConfig, project, power, ac
           activeAppId={activeAppId}
           navigate={navigate}
         />
+      </section>}
+
+      {activeTab === "runs" && <section className={cx("dashboard-card")}>
+        <div className="section-row">
+          <div>
+            <p className="eyebrow">Execution history</p>
+            <h2>Runs</h2>
+          </div>
+          <span className="soft-pill">{runs.length}</span>
+        </div>
+        {runs.length === 0 ? (
+          <p className="muted">No runs yet. Run an action or Workflow App to create traceable execution records.</p>
+        ) : (
+          <div className="work-object-grid">
+            {runs.map((run) => <RunCard key={run.run_id || `${run.command}-${run.created_at}`} run={run} onOpen={openRun} />)}
+          </div>
+        )}
       </section>}
 
       {activeTab === "overview" && power && (
@@ -761,14 +778,7 @@ function ArtifactViewer({ artifact, activePath, onClose }: { artifact: ArtifactP
     <div className="viewer-modal" role="dialog" aria-modal="true">
       <div className="viewer-card wide">
         <button type="button" className="viewer-close" onClick={onClose}>Close</button>
-        <p className="eyebrow">Artifact Viewer</p>
-        <h2>{artifact.path}</h2>
-        <span className="soft-pill">{artifact.kind} · {artifact.size} bytes</span>
-        <ViewerPane artifact={artifact} />
-        <ChatDock
-          projectPath={activePath?.projectPath}
-          context={{ kind: "artifact", label: artifact.path, path: artifact.path }}
-        />
+        <ArtifactViewerSurface artifact={artifact} activePath={activePath} />
       </div>
     </div>
   );

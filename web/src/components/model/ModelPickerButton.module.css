@@ -1,19 +1,9 @@
-.start-composer .composer-toolbar {
-  grid-template-columns: auto minmax(220px, 1fr) minmax(150px, 190px) auto;
-}
-
-.composer-scope {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-
-.model-picker-wrap {
+.wrap {
   position: relative;
   min-width: 0;
 }
 
-.model-select-button {
+.selectButton {
   width: 100%;
   min-height: 38px;
   display: flex;
@@ -27,11 +17,11 @@
   background: #15161a;
 }
 
-.model-select-button strong {
+.selectButton strong {
   font-weight: 560;
 }
 
-.model-select-button span {
+.selectButton span {
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
@@ -39,7 +29,7 @@
   white-space: nowrap;
 }
 
-.model-picker {
+.picker {
   position: absolute;
   z-index: 40;
   left: 0;
@@ -57,14 +47,14 @@
   transform-origin: bottom center;
 }
 
-.model-picker.easy {
+.picker.easy {
   max-width: 620px;
   min-width: min(620px, calc(100vw - 40px));
   padding: 10px;
 }
 
-.start-composer .model-picker,
-.start-composer-shell .model-picker {
+:global(.start-composer) .picker,
+:global(.start-composer-shell) .picker {
   top: calc(100% + 10px);
   bottom: auto;
   max-height: min(64vh, 620px);
@@ -76,24 +66,24 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.model-picker header {
+.picker header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
 }
 
-.model-picker header div {
+.picker header div {
   display: grid;
   gap: 2px;
 }
 
-.model-picker header small {
+.picker header small {
   color: var(--muted);
   font-size: 12px;
 }
 
-.model-picker header button {
+.picker header button {
   border: 1px solid var(--border);
   border-radius: 9px;
   color: var(--text-soft);
@@ -101,7 +91,7 @@
   padding: 6px 10px;
 }
 
-.model-details-toggle {
+.detailsToggle {
   width: 100%;
   margin: 0 0 9px;
   border: 1px solid var(--border);
@@ -112,14 +102,14 @@
   text-align: center;
 }
 
-.model-quick-row {
+.quickRow {
   display: flex;
   gap: 7px;
   overflow-x: auto;
   padding: 0 0 10px;
 }
 
-.model-quick-row button {
+.quickRow button {
   flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -129,46 +119,46 @@
   font-size: 13px;
 }
 
-.model-quick-row button.active {
+.quickRow button.active {
   color: var(--text);
   border-color: var(--border-strong);
   background: #1d1f24;
 }
 
-.model-grid {
+.grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.model-picker.easy .model-grid {
+.picker.easy .grid {
   grid-template-columns: 1fr;
 }
 
-.model-picker.easy .model-card {
+.picker.easy .card {
   gap: 5px;
   min-height: 0;
   padding: 12px 13px;
 }
 
-.model-picker.easy .model-card-title {
+.picker.easy .cardTitle {
   font-size: 15px;
 }
 
-.model-picker.easy .model-card-privacy,
-.model-picker.easy .model-card-price,
-.model-picker.easy .model-card-estimate,
-.model-picker.easy .model-key-status {
+.picker.easy .cardPrivacy,
+.picker.easy .cardPrice,
+.picker.easy .cardEstimate,
+.picker.easy .keyStatus {
   font-size: 12px;
 }
 
-.model-picker.easy .model-card-capabilities,
-.model-picker.easy .model-card-version,
-.model-picker.easy .model-card code {
+.picker.easy .cardCapabilities,
+.picker.easy .cardVersion,
+.picker.easy .card code {
   display: none;
 }
 
-.model-picker.easy .model-card-estimate.easy-cloud {
+.picker.easy .cardEstimate.easyCloud {
   display: inline-flex;
   width: fit-content;
   border: 1px solid rgba(240, 198, 116, .18);
@@ -178,7 +168,7 @@
   background: rgba(240, 198, 116, .06);
 }
 
-.model-recommendation {
+.recommendation {
   display: grid;
   gap: 3px;
   margin: 0 0 10px;
@@ -188,16 +178,16 @@
   background: #0d0e10;
 }
 
-.model-recommendation.simple {
+.recommendation.simple {
   border-radius: 10px;
   background: #0d0e10;
 }
 
-.model-recommendation small {
+.recommendation small {
   color: var(--text-soft);
 }
 
-.model-card {
+.card {
   display: grid;
   gap: 4px;
   text-align: left;
@@ -208,95 +198,81 @@
   background: #111214;
 }
 
-.model-card.selected {
+.card.selected {
   border-color: var(--border-strong);
   background: #171a20;
 }
 
-.model-card.recommended {
+.card.recommended {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
-.model-card.disabled,
-.model-card:disabled {
+.card.disabled,
+.card:disabled {
   cursor: not-allowed;
   opacity: .62;
   border-color: rgba(255, 180, 180, .22);
 }
 
-.model-card-title {
+.cardTitle {
   color: var(--text);
   font-weight: 580;
 }
 
-.model-card-privacy,
-.model-card-price,
-.model-card-estimate,
-.model-key-status,
-.model-card-version {
+.cardPrivacy,
+.cardPrice,
+.cardEstimate,
+.keyStatus,
+.cardVersion {
   color: var(--muted);
   font-size: 12px;
 }
 
-.model-card-version {
+.cardVersion {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
 
-.model-key-status.missing {
+.keyStatus.missing {
   color: #ffb4b4;
 }
 
-.model-card code {
+.card code {
   overflow-wrap: anywhere;
   color: var(--muted);
 }
 
-.cloud-confirm {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  border: 1px solid rgba(240, 198, 116, .38);
-  border-radius: 18px;
-  padding: 12px;
-  text-align: left;
-  background: rgba(73, 48, 12, .26);
+@media (max-width: 760px) {
+  .selectButton {
+    min-width: 0;
+    width: 100%;
+    padding-inline: 9px;
+  }
+
+  .picker {
+    position: fixed;
+    inset: auto 0 0 0;
+    min-width: 0;
+    width: 100vw;
+    max-height: min(82dvh, 720px);
+    border-radius: 20px 20px 0 0;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  :global(.start-composer) .picker {
+    top: auto;
+    bottom: 0;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    min-height: 0;
+  }
 }
 
-.cloud-confirm p {
-  margin: 0;
-  color: var(--text-soft);
-}
-
-.cloud-confirm div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.cloud-confirm button {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 11px;
-  color: var(--text);
-  background: rgba(255,255,255,.07);
-}
-
-.composer.dragging,
-.start-composer.dragging {
-  border-color: rgba(99, 215, 255, .72);
-  box-shadow: 0 0 0 3px rgba(99, 215, 255, .12), var(--shadow-high), var(--inset);
-}
-
-.drop-hint {
-  margin-bottom: 10px;
-  border: 1px dashed rgba(99, 215, 255, .72);
-  border-radius: var(--radius-lg);
-  padding: 12px;
-  text-align: center;
-  color: var(--text);
-  background: rgba(24, 119, 242, .14);
-}
 
 .control-toggle {
   min-height: 42px;

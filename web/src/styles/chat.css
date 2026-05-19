@@ -482,6 +482,51 @@
   box-shadow: var(--shadow-mid);
 }
 
+.waiting-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
+.waiting-notice::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.waiting-notice.compact {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.waiting-notice small {
+  color: var(--text-muted);
+}
+
+.advanced-controls {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.advanced-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .start-composer-shell .composer-plus-menu {
   top: calc(100% + 10px);
   bottom: auto;
@@ -601,4 +646,50 @@
 
 .start-toolbar {
   grid-template-columns: auto minmax(220px, 1fr) minmax(150px, 190px) auto;
+}
+
+.cloud-confirm {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid rgba(240, 198, 116, .38);
+  border-radius: 18px;
+  padding: 12px;
+  text-align: left;
+  background: rgba(73, 48, 12, .26);
+}
+
+.cloud-confirm p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.cloud-confirm div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cloud-confirm button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: var(--text);
+  background: rgba(255,255,255,.07);
+}
+
+.composer.dragging,
+.start-composer.dragging {
+  border-color: rgba(99, 215, 255, .72);
+  box-shadow: 0 0 0 3px rgba(99, 215, 255, .12), var(--shadow-high), var(--inset);
+}
+
+.drop-hint {
+  margin-bottom: 10px;
+  border: 1px dashed rgba(99, 215, 255, .72);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  text-align: center;
+  color: var(--text);
+  background: rgba(24, 119, 242, .14);
 }

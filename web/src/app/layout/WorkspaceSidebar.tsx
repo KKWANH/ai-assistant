@@ -1,10 +1,8 @@
 import React, { type DragEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { COPY, copyForAccount } from "../../shared/copy/copy";
-import { csrfHeader, fetchJson } from "../../lib/api";
-import { isThemeName, themeNames } from "../../ui/theme/tokens";
-import { themes } from "../../ui/theme/themes";
-import { useTheme } from "../../ui/theme/useTheme";
+import { fetchJson } from "../../lib/api";
+import { SettingsSurface } from "../../features/settings/SettingsSurface";
 import type { AccountSummary, WorkspaceSummary } from "../../entities/workspace/types";
 import type { ProjectSummary } from "../../entities/project/types";
 import type { SessionSummary } from "../../entities/session/types";
@@ -92,8 +90,11 @@ export function WorkspaceSidebar({ workspace, activePath, navigate, onRefresh, a
         <button className={`secondary-action home-action ${(!activePath.view || activePath.view === "home") && !activePath.projectPath && !activePath.sessionSlug ? "active" : ""}`} type="button" onClick={() => navigate("/")}>{copy.nav.home}</button>
         <NewGeneralChatForm onCreated={(path) => navigate(path)} copy={copy} />
         <button className="secondary-action" type="button" onClick={() => setProjectOpen(true)}>{copy.nav.newProject}</button>
-        <button className={`secondary-action ${activePath.view === "apps-tools" || activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/apps-tools")}>{copy.nav.actions}</button>
-        <button className="secondary-action" type="button" onClick={() => setSettingsOpen(true)}>{copy.nav.settings || "Settings"}</button>
+        <button className={`secondary-action ${activePath.view === "projects" ? "active" : ""}`} type="button" onClick={() => navigate("/projects")}>Projects</button>
+        <button className={`secondary-action ${activePath.view === "apps-tools" || activePath.view === "actions" ? "active" : ""}`} type="button" onClick={() => navigate("/apps-tools")}>Workflow Apps</button>
+        <button className={`secondary-action ${activePath.view === "runs" ? "active" : ""}`} type="button" onClick={() => navigate("/runs")}>Runs</button>
+        <button className={`secondary-action ${activePath.view === "artifacts" ? "active" : ""}`} type="button" onClick={() => navigate("/artifacts")}>Artifacts</button>
+        <button className={`secondary-action ${activePath.view === "settings" ? "active" : ""}`} type="button" onClick={() => navigate("/settings")}>{copy.nav.settings || "Settings"}</button>
         {activePath.projectPath && !activeIsGeneralChat && <NewSessionForm projectPath={activePath.projectPath} onCreated={(path) => navigate(path)} />}
       </section>
       <label className="visually-hidden" htmlFor="workspace-search">Search workspace</label>
@@ -587,127 +588,11 @@ function NewSessionForm({ projectPath, onCreated }: { projectPath: string; onCre
   );
 }
 
-type UsageProvider = { provider: string; usd?: number; calls?: number };
-type UsageSummary = {
-  month_usd?: number;
-  projected_month_usd?: number;
-  providers?: UsageProvider[];
-};
-type UsageDetail = {
-  user?: UsageSummary;
-  all_accounts?: UsageSummary;
-};
-
 function SettingsModal({ account, onClose, onSaved }: { account: AccountSummary; onClose: () => void; onSaved?: () => void | Promise<void> }) {
-  const [saving, setSaving] = useState(false);
-  const [usageDetail, setUsageDetail] = useState<UsageDetail | null>(null);
-  const { theme, resolvedTheme, setTheme } = useTheme();
-  const profile = (account.profile || {}) as Record<string, string>;
-  const copy = copyForAccount(account);
-  const usage = (account.usage || {}) as Record<string, unknown>;
-  const costUsage = account.cost_usage || {};
-  const costMonthly = recordValue(costUsage.monthly);
-  const monthly = usageDetail?.user || recordValue(costMonthly.user);
-  const allMonthly = usageDetail?.all_accounts || recordValue(costMonthly.all_accounts);
-  useEffect(() => {
-    fetchJson<UsageDetail>("/api/model-usage").then(setUsageDetail).catch(() => {});
-  }, []);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    const form = new FormData(event.currentTarget);
-    try {
-      await fetchJson("/api/profile", { method: "POST", body: form });
-      await onSaved?.();
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function logout() {
-    await fetch("/api/logout", { method: "POST", headers: csrfHeader() });
-    window.location.href = "/login";
-  }
-
   return (
     createPortal(<div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal" onClick={(event) => event.stopPropagation()}>
-        <header>
-          <h2>{copy.settings.title}</h2>
-          <div className="settings-header-actions">
-            <button className="danger-button compact" type="button" onClick={logout}>Logout</button>
-            <button type="button" onClick={onClose}>{copy.settings.close}</button>
-          </div>
-        </header>
-        <section className="settings-stats" aria-label="Account usage history">
-          <div>
-            <strong>{String(usage.messages || 0)}</strong>
-            <span>{copy.settings.savedMessages}</span>
-          </div>
-          <div>
-            <strong>{String(usage.asks || 0)}</strong>
-            <span>{copy.settings.aiRequests}</span>
-          </div>
-          <div>
-            <strong>${Number(monthly.month_usd ?? costUsage.month_usd ?? 0).toFixed(4)}</strong>
-            <span>{copy.settings.monthlyApiCost}</span>
-          </div>
-          <div>
-            <strong>${Number(monthly.projected_month_usd ?? 0).toFixed(4)}</strong>
-            <span>{copy.settings.monthlyApiForecast || "Month forecast"}</span>
-          </div>
-          {account.admin && (
-            <div>
-              <strong>${Number(allMonthly.projected_month_usd ?? costUsage.all_month_usd ?? 0).toFixed(4)}</strong>
-              <span>{copy.settings.allAccountForecast || "All accounts forecast"}</span>
-            </div>
-          )}
-        </section>
-        <p className="muted cost-note">{String(costUsage.basis || "Estimated token cost. Provider billing is source of truth.")}</p>
-        {Array.isArray(monthly.providers) && monthly.providers.length > 0 && (
-          <div className="settings-cost-breakdown">
-            {(monthly.providers as UsageProvider[]).map((item) => (
-              <span key={item.provider}>{item.provider}: ${Number(item.usd || 0).toFixed(4)} · {item.calls} calls</span>
-            ))}
-          </div>
-        )}
-        <form onSubmit={submit}>
-          <fieldset>
-            <legend>{copy.settings.profile}</legend>
-            <label><span>{copy.settings.avatar}</span><input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
-            <label><span>{copy.settings.name}</span><input name="name" defaultValue={profile.name || account.display_name || ""} /></label>
-            <label><span>{copy.settings.age}</span><input name="age" defaultValue={profile.age || ""} /></label>
-            <label><span>{copy.settings.role}</span><input name="job" defaultValue={profile.job || ""} /></label>
-            <label><span>{copy.settings.language}</span><select name="language" defaultValue={profile.language || "en"}><option value="en">English</option><option value="ko">한국어</option></select></label>
-          </fieldset>
-          <fieldset>
-            <legend>{copy.settings.personalContext}</legend>
-            <label><span>{copy.settings.situation}</span><textarea name="situation" defaultValue={profile.situation || ""} /></label>
-            <label><span>{copy.settings.addMemory}</span><textarea name="memory" placeholder={copy.settings.memoryPlaceholder} /></label>
-          </fieldset>
-          <fieldset>
-            <legend>{copy.settings.interface}</legend>
-            <label><span>{copy.settings.uiMode}</span><select name="ui_mode" defaultValue={profile.ui_mode || (account.admin ? "power" : "easy")}><option value="easy">{copy.settings.easyMode}</option><option value="power">{copy.settings.powerMode}</option></select></label>
-            <label>
-              <span>Design theme</span>
-              <select value={theme} onChange={(event) => {
-                if (isThemeName(event.target.value)) setTheme(event.target.value);
-              }}>
-                {themeNames.map((item) => (
-                  <option key={item} value={item}>
-                    {item === "system" ? `System (${themes[resolvedTheme].label})` : themes[item].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="settings-help">
-              {theme === "system" ? "OS 설정을 따라감." : themes[theme].description}
-            </p>
-            <p className="settings-help">{copy.settings.modeHelp}</p>
-          </fieldset>
-          <button className="primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : copy.settings.saveProfile}</button>
-        </form>
+        <SettingsSurface account={account} onClose={onClose} onSaved={onSaved} />
       </section>
     </div>, document.body)
   );
@@ -718,8 +603,4 @@ function formatDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
-}
-
-function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
