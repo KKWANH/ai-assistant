@@ -1,0 +1,8 @@
+/*
+ * Ariadne Design Tokens — values are injected at runtime by applyTheme()
+ * (lib/theme.ts) from THEME_TOKENS in @ariadne/shared.
+ *
+ * This file is intentionally left without token value declarations —
+ * they are set as inline custom properties on :root by JavaScript so the
+ * web app and the custom-surface iframe always share one identical source.
+ */

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ariadne — Supervisor</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <span class="topbar-title">Ariadne Supervisor</span>
+    <span class="topbar-meta" id="supervisor-uptime">—</span>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-meta" id="last-refresh">—</span>
+  </header>
+
+  <main class="main">
+
+    <!-- Row 1: Process status + Tunnel URL -->
+    <div class="grid-2">
+
+      <!-- Process status -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Processes</span>
+        </div>
+        <div class="card-body">
+          <div class="process-list" id="process-list">
+            <div class="text-muted text-sm">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tunnel URL -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Cloudflare Tunnel</span>
+          <span class="badge" id="tunnel-badge">—</span>
+        </div>
+        <div class="tunnel-panel" id="tunnel-panel">
+          <span class="tunnel-placeholder">Waiting for tunnel URL…</span>
+        </div>
+        <div class="card-body" style="padding-top:0">
+          <p class="text-sm text-muted" style="margin-top:4px">
+            Share this URL to access Ariadne from any device.
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Row 2: Log viewer + Error analysis -->
+    <div class="grid-2">
+
+      <!-- Log viewer -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Logs</span>
+          <div class="log-controls">
+            <select class="log-select" id="log-select">
+              <option value="server">server</option>
+              <option value="tunnel">tunnel</option>
+              <option value="supervisor">supervisor</option>
+            </select>
+            <button class="btn-ghost" onclick="refreshLogs()">Refresh</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <pre class="log-output" id="log-output">Loading…</pre>
+        </div>
+      </div>
+
+      <!-- Error analysis -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Error Analysis</span>
+          <button class="btn-ghost" onclick="refreshErrors()">Refresh</button>
+        </div>
+        <div class="card-body">
+          <div class="error-list" id="error-list">
+            <div class="text-muted text-sm">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="status-bar" id="status-bar">Auto-refresh every 5s</div>
+
+  </main>
+</div>
+<script src="/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+/* ── Card ── */
+.card {
+  border-radius: var(--radius-xl);
+  border: 1px solid rgb(var(--border));
+  background-color: rgb(var(--card));
+}
+
+.interactive {
+  cursor: pointer;
+  transition: border-color 100ms;
+}
+.interactive:hover {
+  border-color: rgb(var(--border-strong));
+}
+
+.selected {
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, rgb(var(--accent)) 20%, transparent);
+}
+
+/* ── Surface ── */
+.surface1 { background-color: rgb(var(--surface-1)); }
+.surface2 { background-color: rgb(var(--surface-2)); }
+.surface3 { background-color: rgb(var(--surface-3)); }

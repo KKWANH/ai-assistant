@@ -1,0 +1,59 @@
+/* ── Textarea wrapper ── */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--muted-foreground));
+}
+
+.required {
+  color: rgb(var(--destructive));
+  margin-left: 0.125rem;
+}
+
+.textarea {
+  min-height: 5rem;
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid rgb(var(--border));
+  background-color: rgb(var(--surface-2));
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: rgb(var(--foreground));
+  resize: vertical;
+  transition: border-color 100ms, box-shadow 100ms;
+  outline: none;
+  font-family: inherit;
+}
+
+.textarea::placeholder {
+  color: rgb(var(--muted-foreground));
+}
+
+.textarea:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--ring));
+}
+
+.textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hasError {
+  border-color: rgb(var(--destructive));
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: rgb(var(--muted-foreground));
+}
+
+.error {
+  font-size: 0.75rem;
+  color: rgb(var(--destructive));
+}

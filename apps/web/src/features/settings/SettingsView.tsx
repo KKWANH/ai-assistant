@@ -1,0 +1,365 @@
+import { useState, useEffect } from "react";
+import {
+  Settings as SettingsIcon,
+  CheckCircle,
+  XCircle,
+  TrendingUp,
+  Loader2,
+  Wifi,
+  WifiOff,
+  Star,
+  Languages,
+  Layers,
+} from "lucide-react";
+import {
+  PROVIDERS,
+  PROVIDER_LABELS,
+  MODEL_CHOICES,
+  DEFAULT_MODELS,
+  MODEL_PRICING,
+} from "@ariadne/shared";
+import type { AccountMode } from "@ariadne/shared";
+import { useSettings, useUpdateSettings, useUsage, useProviderStatus, useMe, useUpdateMode } from "../../lib/queries";
+import { useT, LOCALES, type Locale } from "../../lib/i18n";
+import { Select } from "../../components/ui/Select";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { PageHeader } from "../../components/layout/PageHeader";
+import { useToast } from "../../components/ui/Toast";
+
+export function SettingsView() {
+  const { data: settings, isLoading } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const { toast } = useToast();
+  const { data: usage } = useUsage();
+  const { data: liveProviders, isLoading: statusLoading } = useProviderStatus();
+  const { t, locale, setLocale } = useT();
+  const { data: me } = useMe();
+  const updateMode = useUpdateMode();
+
+  const [provider, setProvider] = useState<string>("");
+  const [model, setModel] = useState<string>("");
+
+  useEffect(() => {
+    if (settings) {
+      setProvider(settings.provider);
+      setModel(settings.model);
+    }
+  }, [settings]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateSettings.mutateAsync({
+        provider: provider as (typeof PROVIDERS)[number],
+        model,
+      });
+      toast({ title: t("settings.activeProvider.saved"), variant: "success" });
+    } catch (err) {
+      toast({
+        title: t("settings.activeProvider.failed"),
+        description: err instanceof Error ? err.message : t("common.unknown"),
+        variant: "error",
+      });
+    }
+  };
+
+  const handleLocaleChange = async (next: Locale) => {
+    try {
+      await setLocale(next);
+    } catch {
+      toast({ title: t("settings.language.failed"), variant: "error" });
+    }
+  };
+
+  const handleModeChange = async (next: AccountMode) => {
+    try {
+      await updateMode.mutateAsync(next);
+      toast({ title: t("settings.mode.saved"), variant: "success" });
+    } catch {
+      toast({ title: t("settings.mode.failed"), variant: "error" });
+    }
+  };
+
+  // For Ollama: use live installed models if reachable
+  const ollamaLive = liveProviders?.find((p) => p.id === "ollama");
+  const modelChoices: string[] =
+    provider === "ollama" && ollamaLive?.configured && (ollamaLive.models?.length ?? 0) > 0
+      ? (ollamaLive.models ?? [])
+      : ((MODEL_CHOICES as Record<string, string[] | undefined>)[provider] ?? []);
+
+  if (isLoading || !settings) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-sm text-muted-foreground">{t("settings.loading")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 p-5 max-w-lg overflow-y-auto h-full">
+      <PageHeader
+        icon={<SettingsIcon className="h-5 w-5" />}
+        title={t("settings.title")}
+        description={t("settings.description")}
+      />
+
+      {/* Provider status overview — live */}
+      <section>
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+          {t("settings.providers.heading")}
+          {statusLoading && (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          )}
+        </h2>
+        <div className="flex flex-col gap-1.5">
+          {PROVIDERS.map((pid) => {
+            const live = liveProviders?.find((p) => p.id === pid);
+            // Fall back to settings data while live data loads
+            const fallback = settings.providers.find((p) => p.id === pid);
+            const configured = live?.configured ?? fallback?.configured ?? false;
+            const label = PROVIDER_LABELS[pid];
+            const isActive = settings.provider === pid;
+            const isOllama = pid === "ollama";
+            const installedCount = live?.models?.length ?? 0;
+
+            return (
+              <Card
+                key={pid}
+                className={[
+                  "flex items-center gap-3 px-4 py-2.5",
+                  isActive ? "border-accent ring-1 ring-accent/20" : "",
+                ].join(" ")}
+              >
+                <span className="flex items-center gap-1.5 flex-1 text-sm text-foreground">
+                  {configured ? (
+                    isOllama ? (
+                      <Wifi className="h-3.5 w-3.5 text-success shrink-0" />
+                    ) : (
+                      <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
+                    )
+                  ) : (
+                    isOllama ? (
+                      <WifiOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    )
+                  )}
+                  {label}
+                  {isActive && (
+                    <Star className="h-3 w-3 text-accent fill-accent shrink-0" aria-label={t("settings.providers.active")} />
+                  )}
+                </span>
+                <div className="flex items-center gap-2">
+                  {isActive && (
+                    <span className="text-xs font-medium text-accent">{t("settings.providers.active")}</span>
+                  )}
+                  {isOllama ? (
+                    configured ? (
+                      <span className="text-xs text-success">
+                        {t("settings.providers.reachable", {
+                          n: installedCount,
+                          s: installedCount !== 1 ? "s" : "",
+                        })}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{t("settings.providers.notRunning")}</span>
+                    )
+                  ) : configured ? (
+                    <span className="text-xs text-success">{t("settings.providers.apiKeySet")}</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">{t("settings.providers.keyRequired")}</span>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Active provider/model form */}
+      <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4">
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+          {t("settings.activeProvider.heading")}
+        </h2>
+
+        <Select
+          label={t("settings.activeProvider.provider")}
+          value={provider}
+          onChange={(e) => {
+            const p = e.target.value;
+            setProvider(p);
+            setModel(DEFAULT_MODELS[p as keyof typeof DEFAULT_MODELS] ?? "");
+          }}
+          options={PROVIDERS.map((p) => ({
+            value: p,
+            label: PROVIDER_LABELS[p],
+          }))}
+        />
+
+        <Select
+          label={t("settings.activeProvider.model")}
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          options={modelChoices.map((m) => ({ value: m, label: m }))}
+        />
+
+        {/* Model pricing hint */}
+        {model && (
+          <p className="text-xs text-muted-foreground font-mono -mt-1">
+            {(() => {
+              const p = (MODEL_PRICING as Record<string, { input: number; output: number } | undefined>)[model];
+              if (!p || (p.input === 0 && p.output === 0)) return t("settings.activeProvider.pricingFree");
+              return t("settings.activeProvider.pricingPerM", {
+                input: p.input.toFixed(2),
+                output: p.output.toFixed(2),
+              });
+            })()}
+          </p>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <Button
+            variant="primary"
+            type="submit"
+            loading={updateSettings.isPending}
+          >
+            {t("settings.activeProvider.save")}
+          </Button>
+        </div>
+      </form>
+
+      {/* Language / 언어 */}
+      <section>
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+          <Languages className="h-3.5 w-3.5" />
+          {t("settings.language.heading")}
+        </h2>
+        <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">{t("settings.language.description")}</p>
+          <div className="flex gap-2">
+            {LOCALES.map((loc) => (
+              <button
+                key={loc}
+                onClick={() => void handleLocaleChange(loc)}
+                className={[
+                  "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                  locale === loc
+                    ? "bg-accent text-accent-foreground border-accent"
+                    : "text-foreground border-border hover:border-border-strong hover:bg-surface-3",
+                ].join(" ")}
+              >
+                {loc === "en" ? t("settings.language.en") : t("settings.language.ko")}
+              </button>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      {/* UI Mode */}
+      <section>
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+          <Layers className="h-3.5 w-3.5" />
+          {t("settings.mode.heading")}
+        </h2>
+        <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">{t("settings.mode.description")}</p>
+          <div className="flex gap-2">
+            {(["standard", "simple"] as AccountMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => void handleModeChange(m)}
+                disabled={updateMode.isPending}
+                className={[
+                  "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                  (me?.account.mode ?? "standard") === m
+                    ? "bg-accent text-accent-foreground border-accent"
+                    : "text-foreground border-border hover:border-border-strong hover:bg-surface-3",
+                  updateMode.isPending ? "opacity-50 cursor-wait" : "",
+                ].join(" ")}
+              >
+                {m === "standard" ? t("settings.mode.standard") : t("settings.mode.simple")}
+              </button>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      {/* Usage & Cost */}
+      <section>
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+          <TrendingUp className="h-3.5 w-3.5" />
+          {t("settings.usage.heading")}
+        </h2>
+        {usage ? (
+          <div className="flex flex-col gap-2">
+            <Card className="px-4 py-3 flex flex-wrap gap-4 bg-surface-2">
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs text-muted-foreground">{t("settings.usage.tokensIn")}</p>
+                <p className="font-mono text-sm text-foreground">{usage.total.inputTokens.toLocaleString()}</p>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs text-muted-foreground">{t("settings.usage.tokensOut")}</p>
+                <p className="font-mono text-sm text-foreground">{usage.total.outputTokens.toLocaleString()}</p>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs text-muted-foreground">{t("settings.usage.totalCost")}</p>
+                <p className="font-mono text-sm text-foreground">
+                  {usage.total.costUsd === 0 ? "$0.00" : `$${usage.total.costUsd.toFixed(4)}`}
+                </p>
+              </div>
+            </Card>
+
+            {usage.byModel.length > 0 && (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-surface-2 border-b border-border">
+                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">{t("settings.usage.model")}</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-medium">{t("settings.usage.tokensInCol")}</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-medium">{t("settings.usage.tokensOutCol")}</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-medium">{t("settings.usage.cost")}</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-medium">{t("settings.usage.runs")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usage.byModel.map((row, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="px-3 py-2 font-mono text-foreground">{row.model}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{row.inputTokens.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{row.outputTokens.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono text-foreground">
+                          {row.costUsd === 0 ? "$0.00" : `$${row.costUsd.toFixed(4)}`}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{row.runs}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <Card className="px-4 py-3 bg-surface-2">
+            <p className="text-xs text-muted-foreground">{t("settings.usage.empty")}</p>
+          </Card>
+        )}
+      </section>
+
+      {/* Info */}
+      <Card className="px-4 py-3 bg-surface-2">
+        <p className="text-xs text-muted-foreground">
+          {t("settings.info.body", {
+            anthropic: "ANTHROPIC_API_KEY",
+            openai: "OPENAI_API_KEY",
+            mock: "mock",
+          }).split(/(ANTHROPIC_API_KEY|OPENAI_API_KEY|mock)/).map((part, i) =>
+            ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "mock"].includes(part)
+              ? <code key={i} className="font-mono text-foreground">{part}</code>
+              : <span key={i}>{part}</span>
+          )}
+        </p>
+      </Card>
+    </div>
+  );
+}

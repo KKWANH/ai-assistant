@@ -1,0 +1,128 @@
+import OpenAI from "openai";
+import type { ProviderId } from "@ariadne/shared";
+import type { AiProvider, ProviderUsage, CompleteRequest, CompleteWithImagesRequest } from "./index.js";
+import { extractJson, processThinkBlocks } from "./index.js";
+
+export class OpenAIProvider implements AiProvider {
+  readonly id: ProviderId = "openai";
+  protected client: OpenAI;
+  protected model: string;
+
+  constructor(model: string, opts?: ConstructorParameters<typeof OpenAI>[0]) {
+    this.model = model;
+    this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, ...opts });
+  }
+
+  async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {
+    const res = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: "system", content: req.system },
+        { role: "user", content: req.prompt },
+      ],
+      ...(req.json ? { response_format: { type: "json_object" } } : {}),
+    });
+    const raw = res.choices[0]?.message.content ?? "";
+    const usage = res.usage
+      ? { inputTokens: res.usage.prompt_tokens, outputTokens: res.usage.completion_tokens }
+      : undefined;
+    return { text: req.json ? extractJson(raw) : raw, usage };
+  }
+
+  async completeStream(
+    req: CompleteRequest,
+    onDelta: (delta: string) => void,
+    onStatus?: (status: string) => void,
+  ): Promise<{ text: string; usage?: ProviderUsage }> {
+    const stream = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: "system", content: req.system },
+        { role: "user", content: req.prompt },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+
+    let fullText = "";
+    let inThink = false;
+    let thinkBuf = "";
+    let usage: ProviderUsage | undefined;
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content ?? "";
+      if (delta) {
+        const { emitted, buffered, nowInThink } = processThinkBlocks(
+          delta, fullText, inThink, thinkBuf, onStatus,
+        );
+        inThink = nowInThink;
+        thinkBuf = buffered;
+        fullText += delta;
+        if (emitted) onDelta(emitted);
+      }
+      // usage arrives on the final chunk
+      if (chunk.usage) {
+        usage = {
+          inputTokens: chunk.usage.prompt_tokens,
+          outputTokens: chunk.usage.completion_tokens,
+        };
+      }
+    }
+
+    const cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    return { text: req.json ? extractJson(cleaned) : cleaned, usage };
+  }
+
+  async completeWithImages(req: CompleteWithImagesRequest): Promise<{ text: string; usage?: ProviderUsage }> {
+    const imageContent: OpenAI.Chat.ChatCompletionContentPart[] = req.images.map((img) => ({
+      type: "image_url" as const,
+      image_url: {
+        url: `data:${img.mediaType};base64,${img.dataBase64}`,
+      },
+    }));
+
+    const res = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: "system", content: req.system },
+        {
+          role: "user",
+          content: [
+            ...imageContent,
+            { type: "text" as const, text: req.prompt },
+          ],
+        },
+      ],
+    });
+    const raw = res.choices[0]?.message.content ?? "";
+    const usage = res.usage
+      ? { inputTokens: res.usage.prompt_tokens, outputTokens: res.usage.completion_tokens }
+      : undefined;
+    return { text: req.json ? extractJson(raw) : raw, usage };
+  }
+}
+
+/** Moonshot / Kimi — OpenAI-compatible, different base URL. */
+export class MoonshotProvider extends OpenAIProvider {
+  override readonly id: ProviderId = "moonshot";
+
+  constructor(model: string) {
+    super(model, {
+      apiKey: process.env.MOONSHOT_API_KEY ?? "dummy",
+      baseURL: "https://api.moonshot.ai/v1",
+    });
+  }
+}
+
+/** Ollama local — OpenAI-compatible, local base URL. */
+export class OllamaProvider extends OpenAIProvider {
+  override readonly id: ProviderId = "ollama";
+
+  constructor(model: string) {
+    const base = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+    super(model, {
+      apiKey: "ollama", // Ollama doesn't check the key
+      baseURL: `${base}/v1`,
+    });
+  }
+}

@@ -1,0 +1,54 @@
+/* ── IconButton base ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color 100ms, color 100ms;
+  padding: 0;
+  line-height: 1;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--ring));
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Sizes ── */
+.xs { height: 1.25rem; width: 1.25rem; }
+.sm { height: 1.75rem; width: 1.75rem; }
+.md { height: 2rem;    width: 2rem; }
+.lg { height: 2.25rem; width: 2.25rem; }
+
+/* ── Variants ── */
+.ghost {
+  color: rgb(var(--muted-foreground));
+}
+.ghost:not(:disabled):hover {
+  color: rgb(var(--foreground));
+  background-color: rgb(var(--surface-3));
+}
+
+.subtle {
+  color: rgb(var(--muted-foreground));
+}
+.subtle:not(:disabled):hover {
+  color: rgb(var(--foreground));
+  background-color: rgb(var(--surface-2));
+}
+
+.outline {
+  color: rgb(var(--foreground));
+  border: 1px solid rgb(var(--border));
+}
+.outline:not(:disabled):hover {
+  background-color: rgb(var(--surface-3));
+}

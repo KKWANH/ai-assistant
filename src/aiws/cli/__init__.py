@@ -1,1 +1,0 @@
-"""AIWS command line interface."""
