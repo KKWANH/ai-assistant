@@ -12,6 +12,14 @@ export ARIADNE_LOG_DIR="${ARIADNE_LOG_DIR:-${ARIADNE_ROOT}/logs}"
 export ARIADNE_RUN_DIR="${ARIADNE_RUN_DIR:-${ARIADNE_ROOT}/run}"
 export ARIADNE_HOME="${ARIADNE_HOME:-${ARIADNE_ROOT}/data}"
 
+# ── Load .env so the daemon sees provider keys + tunnel config ────────────
+if [[ -f "${ARIADNE_ROOT}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ARIADNE_ROOT}/.env"
+  set +a
+fi
+
 PID_FILE="${ARIADNE_RUN_DIR}/supervisor.pid"
 TUNNEL_URL_FILE="${ARIADNE_RUN_DIR}/tunnel-url.txt"
 TSX_BIN="${ARIADNE_ROOT}/node_modules/.bin/tsx"

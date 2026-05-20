@@ -1,0 +1,13 @@
+{
+  "name": "Ariadne",
+  "short_name": "Ariadne",
+  "description": "Local-first AI workspace for traceable, repeatable work.",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512" }
+  ],
+  "theme_color": "#6366f1",
+  "background_color": "#0e0e10",
+  "display": "standalone",
+  "start_url": "/"
+}

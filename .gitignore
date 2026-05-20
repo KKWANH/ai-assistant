@@ -15,6 +15,7 @@ __pycache__/
 apps/web/dist/
 **/dist/
 **/*.tsbuildinfo
+**/.vite/
 
 # runtime state
 logs/
@@ -24,11 +25,19 @@ data/
 .ariadne/
 **/.ariadne/
 
-# env / secrets
+# env / secrets — never commit credentials
 .env
 .env.*
 !.env.example
 *.local
+*.pem
+*.key
+*.p12
+**/credentials*.json
+.cloudflared/
+id_rsa
+id_rsa.*
+*.secret
 
 # os
 .DS_Store

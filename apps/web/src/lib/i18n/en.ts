@@ -347,6 +347,7 @@ const en = {
   "settings.loading": "Loading settings…",
 
   "settings.providers.heading": "Provider Status",
+  "settings.providers.pickInChat": "Choose the active provider and model from the chat composer.",
   "settings.providers.active": "Active",
   "settings.providers.reachable": "Reachable · {n} model{s}",
   "settings.providers.notRunning": "Not running",

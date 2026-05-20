@@ -49,8 +49,10 @@
   --color-inspector: rgb(var(--inspector));
   --color-inspector-border: rgb(var(--inspector-border));
 
-  /* Typography */
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Typography — Pretendard unifies Latin + Hangul at consistent metrics
+     (Inter alone has no Hangul, so Korean fell back smaller). */
+  --font-sans: "Pretendard Variable", Pretendard, "Inter", ui-sans-serif,
+    system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
   /* Radius — scaled with the UI (≈ +25%). */

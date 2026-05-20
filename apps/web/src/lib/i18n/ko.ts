@@ -340,6 +340,7 @@ const ko: Record<TranslationKey, string> = {
   "settings.loading": "설정 불러오는 중…",
 
   "settings.providers.heading": "프로바이더 상태",
+  "settings.providers.pickInChat": "활성 프로바이더와 모델은 채팅 입력창에서 선택합니다.",
   "settings.providers.active": "활성",
   "settings.providers.reachable": "연결됨 · 모델 {n}개",
   "settings.providers.notRunning": "실행 안 됨",

@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import {
   Settings as SettingsIcon,
   CheckCircle,
@@ -11,58 +10,22 @@ import {
   Languages,
   Layers,
 } from "lucide-react";
-import {
-  PROVIDERS,
-  PROVIDER_LABELS,
-  MODEL_CHOICES,
-  DEFAULT_MODELS,
-  MODEL_PRICING,
-} from "@ariadne/shared";
+import { PROVIDERS, PROVIDER_LABELS } from "@ariadne/shared";
 import type { AccountMode } from "@ariadne/shared";
-import { useSettings, useUpdateSettings, useUsage, useProviderStatus, useMe, useUpdateMode } from "../../lib/queries";
+import { useSettings, useUsage, useProviderStatus, useMe, useUpdateMode } from "../../lib/queries";
 import { useT, LOCALES, type Locale } from "../../lib/i18n";
-import { Select } from "../../components/ui/Select";
-import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
 
 export function SettingsView() {
   const { data: settings, isLoading } = useSettings();
-  const updateSettings = useUpdateSettings();
   const { toast } = useToast();
   const { data: usage } = useUsage();
   const { data: liveProviders, isLoading: statusLoading } = useProviderStatus();
   const { t, locale, setLocale } = useT();
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
-
-  const [provider, setProvider] = useState<string>("");
-  const [model, setModel] = useState<string>("");
-
-  useEffect(() => {
-    if (settings) {
-      setProvider(settings.provider);
-      setModel(settings.model);
-    }
-  }, [settings]);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await updateSettings.mutateAsync({
-        provider: provider as (typeof PROVIDERS)[number],
-        model,
-      });
-      toast({ title: t("settings.activeProvider.saved"), variant: "success" });
-    } catch (err) {
-      toast({
-        title: t("settings.activeProvider.failed"),
-        description: err instanceof Error ? err.message : t("common.unknown"),
-        variant: "error",
-      });
-    }
-  };
 
   const handleLocaleChange = async (next: Locale) => {
     try {
@@ -81,13 +44,6 @@ export function SettingsView() {
     }
   };
 
-  // For Ollama: use live installed models if reachable
-  const ollamaLive = liveProviders?.find((p) => p.id === "ollama");
-  const modelChoices: string[] =
-    provider === "ollama" && ollamaLive?.configured && (ollamaLive.models?.length ?? 0) > 0
-      ? (ollamaLive.models ?? [])
-      : ((MODEL_CHOICES as Record<string, string[] | undefined>)[provider] ?? []);
-
   if (isLoading || !settings) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -104,7 +60,8 @@ export function SettingsView() {
         description={t("settings.description")}
       />
 
-      {/* Provider status overview — live */}
+      {/* Provider status overview — live. The active provider/model is
+          chosen in the chat composer; this is a read-only status panel. */}
       <section>
         <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
           {t("settings.providers.heading")}
@@ -112,10 +69,12 @@ export function SettingsView() {
             <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
           )}
         </h2>
+        <p className="text-xs text-muted-foreground mb-2">
+          {t("settings.providers.pickInChat")}
+        </p>
         <div className="flex flex-col gap-1.5">
           {PROVIDERS.map((pid) => {
             const live = liveProviders?.find((p) => p.id === pid);
-            // Fall back to settings data while live data loads
             const fallback = settings.providers.find((p) => p.id === pid);
             const configured = live?.configured ?? fallback?.configured ?? false;
             const label = PROVIDER_LABELS[pid];
@@ -138,21 +97,24 @@ export function SettingsView() {
                     ) : (
                       <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
                     )
+                  ) : isOllama ? (
+                    <WifiOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   ) : (
-                    isOllama ? (
-                      <WifiOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    ) : (
-                      <XCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )
+                    <XCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   )}
                   {label}
                   {isActive && (
-                    <Star className="h-3 w-3 text-accent fill-accent shrink-0" aria-label={t("settings.providers.active")} />
+                    <Star
+                      className="h-3 w-3 text-accent fill-accent shrink-0"
+                      aria-label={t("settings.providers.active")}
+                    />
                   )}
                 </span>
                 <div className="flex items-center gap-2">
                   {isActive && (
-                    <span className="text-xs font-medium text-accent">{t("settings.providers.active")}</span>
+                    <span className="text-xs font-medium text-accent">
+                      {t("settings.providers.active")}
+                    </span>
                   )}
                   {isOllama ? (
                     configured ? (
@@ -163,12 +125,18 @@ export function SettingsView() {
                         })}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">{t("settings.providers.notRunning")}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {t("settings.providers.notRunning")}
+                      </span>
                     )
                   ) : configured ? (
-                    <span className="text-xs text-success">{t("settings.providers.apiKeySet")}</span>
+                    <span className="text-xs text-success">
+                      {t("settings.providers.apiKeySet")}
+                    </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground">{t("settings.providers.keyRequired")}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t("settings.providers.keyRequired")}
+                    </span>
                   )}
                 </div>
               </Card>
@@ -176,58 +144,6 @@ export function SettingsView() {
           })}
         </div>
       </section>
-
-      {/* Active provider/model form */}
-      <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4">
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-          {t("settings.activeProvider.heading")}
-        </h2>
-
-        <Select
-          label={t("settings.activeProvider.provider")}
-          value={provider}
-          onChange={(e) => {
-            const p = e.target.value;
-            setProvider(p);
-            setModel(DEFAULT_MODELS[p as keyof typeof DEFAULT_MODELS] ?? "");
-          }}
-          options={PROVIDERS.map((p) => ({
-            value: p,
-            label: PROVIDER_LABELS[p],
-          }))}
-        />
-
-        <Select
-          label={t("settings.activeProvider.model")}
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          options={modelChoices.map((m) => ({ value: m, label: m }))}
-        />
-
-        {/* Model pricing hint */}
-        {model && (
-          <p className="text-xs text-muted-foreground font-mono -mt-1">
-            {(() => {
-              const p = (MODEL_PRICING as Record<string, { input: number; output: number } | undefined>)[model];
-              if (!p || (p.input === 0 && p.output === 0)) return t("settings.activeProvider.pricingFree");
-              return t("settings.activeProvider.pricingPerM", {
-                input: p.input.toFixed(2),
-                output: p.output.toFixed(2),
-              });
-            })()}
-          </p>
-        )}
-
-        <div className="flex justify-end pt-1">
-          <Button
-            variant="primary"
-            type="submit"
-            loading={updateSettings.isPending}
-          >
-            {t("settings.activeProvider.save")}
-          </Button>
-        </div>
-      </form>
 
       {/* Language / 언어 */}
       <section>

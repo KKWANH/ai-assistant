@@ -188,14 +188,25 @@ export class ProcessManager {
       this.tunnelUrl = null;
     }
 
+    // A named tunnel (configured via ops/setup-tunnel.sh) serves a stable
+    // custom domain; otherwise fall back to an ephemeral quick tunnel.
+    const tunnelName = process.env.ARIADNE_TUNNEL_NAME?.trim();
+    const tunnelHostname = process.env.ARIADNE_TUNNEL_HOSTNAME?.trim();
+    const named = Boolean(tunnelName && tunnelHostname);
+    const localUrl = `http://localhost:${this.opts.serverPort}`;
+
     this.writeSupervisorLog(
-      `Spawning cloudflared tunnel (restart #${state.restartCount})`
+      `Spawning cloudflared ${
+        named ? `named tunnel "${tunnelName ?? ""}" → ${tunnelHostname ?? ""}` : "quick tunnel"
+      } (restart #${state.restartCount})`
     );
 
     const logStream = this.openLogStream("tunnel");
     const child = spawn(
       "cloudflared",
-      ["tunnel", "--url", `http://localhost:${this.opts.serverPort}`],
+      named
+        ? ["tunnel", "run", "--url", localUrl, tunnelName ?? ""]
+        : ["tunnel", "--url", localUrl],
       {
         cwd: this.opts.repoRoot,
         env: { ...process.env },
@@ -207,6 +218,19 @@ export class ProcessManager {
     state.running = true;
     state.startTime = new Date();
     this.processes.set("tunnel", child);
+
+    // A named tunnel has a known, stable URL — publish it immediately
+    // (cloudflared does not print one for named tunnels).
+    if (named && !this.tunnelUrl) {
+      this.tunnelUrl = `https://${tunnelHostname ?? ""}`;
+      this.writeSupervisorLog(`Tunnel URL: ${this.tunnelUrl}`);
+      this.opts.onTunnelUrl?.(this.tunnelUrl);
+      fs.mkdirSync(this.opts.runDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(this.opts.runDir, "tunnel-url.txt"),
+        this.tunnelUrl + "\n"
+      );
+    }
 
     const handleChunk = (chunk: Buffer) => {
       const text = chunk.toString();
