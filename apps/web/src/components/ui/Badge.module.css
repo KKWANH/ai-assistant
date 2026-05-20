@@ -1,0 +1,71 @@
+/* ── Badge base ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dot {
+  display: inline-block;
+  height: 0.375rem;
+  width: 0.375rem;
+  border-radius: 9999px;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+/* ── Semantic variants ── */
+/* success / supported / completed */
+.supported,
+.completed {
+  background-color: color-mix(in srgb, rgb(var(--success)) 10%, transparent);
+  color: rgb(var(--success));
+  border: 1px solid color-mix(in srgb, rgb(var(--success)) 20%, transparent);
+}
+
+/* warning / partially_supported / context_pick / sensitive */
+.partially_supported,
+.context_pick,
+.sensitive {
+  background-color: color-mix(in srgb, rgb(var(--warning)) 10%, transparent);
+  color: rgb(var(--warning));
+  border: 1px solid color-mix(in srgb, rgb(var(--warning)) 20%, transparent);
+}
+
+/* info / inferred / scanning */
+.inferred,
+.scanning {
+  background-color: color-mix(in srgb, rgb(var(--info)) 10%, transparent);
+  color: rgb(var(--info));
+  border: 1px solid color-mix(in srgb, rgb(var(--info)) 20%, transparent);
+}
+
+/* destructive / unsupported / failed */
+.unsupported,
+.failed {
+  background-color: color-mix(in srgb, rgb(var(--destructive)) 10%, transparent);
+  color: rgb(var(--destructive));
+  border: 1px solid color-mix(in srgb, rgb(var(--destructive)) 20%, transparent);
+}
+
+/* accent / generating */
+.generating {
+  background-color: color-mix(in srgb, rgb(var(--accent)) 10%, transparent);
+  color: rgb(var(--accent));
+  border: 1px solid color-mix(in srgb, rgb(var(--accent)) 20%, transparent);
+}
+
+/* neutral: created / large-file / estimated / default */
+.created,
+.large_file,
+.estimated,
+.default {
+  background-color: rgb(var(--muted));
+  color: rgb(var(--muted-foreground));
+  border: 1px solid rgb(var(--border));
+}

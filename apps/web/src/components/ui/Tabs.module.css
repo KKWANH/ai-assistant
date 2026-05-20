@@ -1,0 +1,45 @@
+/* ── TabsList ── */
+.list {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  border-bottom: 1px solid rgb(var(--border));
+}
+
+/* ── TabsTrigger ── */
+.trigger {
+  position: relative;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 100ms;
+  color: rgb(var(--muted-foreground));
+  outline: none;
+}
+
+.trigger:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--ring));
+  border-radius: 4px;
+}
+
+.trigger:hover {
+  color: rgb(var(--foreground));
+}
+
+/* Active tab: full-colour text + accent underline */
+.triggerActive {
+  color: rgb(var(--foreground));
+}
+
+.triggerActive::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: rgb(var(--accent));
+}

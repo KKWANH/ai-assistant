@@ -1,88 +1,129 @@
-# Architecture
+# Ariadne — Architecture & Contract (v0.1)
 
-AIWS is intentionally boring: a Python backend, a React frontend, and file-based workspace storage.
+This is the build contract shared by the backend, frontend, and supervisor.
+It implements `PRODUCT_PLAN.md` + `DESIGN_GUIDELINE.md`.
 
-## Layers
+## Deployment model
 
-```text
-web/src/
-  React UI
-    -> fetch /api/*
+Ariadne is **local-first**: the server runs on the user's Mac and reads their
+local folders. To reach it from other devices, a **Cloudflare Quick Tunnel**
+(`cloudflared tunnel --url http://localhost:<port>`) exposes it on a temporary
+`*.trycloudflare.com` domain — no Cloudflare account or DNS needed.
 
-src/aiws/ui.py
-  HTTP server, auth, CSRF, static assets
-    -> app/routes/*
-
-src/aiws/app/routes/
-  API payload builders and route-specific adapters
-    -> domain/*
-    -> core/*
-
-src/aiws/domain/
-  Account, project, chat, goal, and usage operations
-    -> storage.py
-
-src/aiws/core/
-  Workbench concepts:
-  actions, context manifests, context receipts, work sessions,
-  deterministic CSV/table profiling, model capability contracts
-
-src/aiws/providers/
-  Ollama, Gemini, Kimi, OpenAI, ERNIE provider adapters
-
-src/aiws/storage.py
-  File-based workspace invariants and project/session layout
+```
+ other device ──▶ https://<random>.trycloudflare.com
+                        │  (cloudflared quick tunnel)
+                        ▼
+              Ariadne server  localhost:4319   ── serves API + built SPA
+                        ▲
+              supervisor (apps/admin) monitors & restarts it
+              admin dashboard  localhost:7459   (loopback only)
 ```
 
-## Request Flow
+## Monorepo layout
 
-```text
-Browser
-  -> ui.py
-  -> auth/CSRF/project access
-  -> route handler
-  -> domain/core service
-  -> storage/provider/action execution
-  -> JSON response
+```
+package.json            npm workspaces root
+tsconfig.base.json
+packages/shared/         @ariadne/shared — types, zod schemas, config
+apps/server/             @ariadne/server — Fastify API + static SPA host
+apps/web/                @ariadne/web — React + Vite + Tailwind SPA
+apps/admin/              @ariadne/admin — supervisor + admin dashboard
+ops/                     ariadne control script + zshrc alias installer
+logs/  run/  data/       runtime state (gitignored)
 ```
 
-## Chat Flow
+Ports: server `4319`, admin dashboard `7459` (override via `ARIADNE_PORT`,
+`ARIADNE_ADMIN_PORT`). All TS runs through `tsx` — no build step except the web SPA.
 
-```text
-POST /api/ask/<project>/<session>
-  -> parse form and optional attachment
-  -> validate project access
-  -> extract or profile file context
-  -> build execution plan preview
-  -> runner.ask
-  -> provider call
-  -> build context manifest and receipt
-  -> append messages.jsonl
-  -> update work-session record
+## Storage
+
+- Central registry: SQLite at `data/ariadne.db` via Node's built-in
+  `node:sqlite` (no native module to compile). Holds workspaces, runs,
+  claims, settings, and an FTS5 file-metadata index.
+- Per-workspace portable folder: `<workspaceRoot>/.ariadne/` with
+  `runs/ snapshots/ artifacts/ evidence/ workspace.yaml` — human-readable,
+  copyable (PRODUCT_PLAN §10).
+- Security (PRODUCT_PLAN §12): the app only ever **writes** inside
+  `<workspaceRoot>/.ariadne/`; a path guard rejects writes elsewhere. No shell
+  execution. Sensitive patterns excluded by default.
+
+## REST API (server, prefix `/api`)
+
+All JSON. Errors: `{ "error": string, "detail"?: string }` with 4xx/5xx.
+
+| Method | Path | Body / Query | Returns |
+|---|---|---|---|
+| GET  | `/healthz` | — | `{ ok, uptime }` |
+| GET  | `/api/workspaces` | — | `Workspace[]` |
+| POST | `/api/workspaces` | `CreateWorkspaceInput` | `Workspace` |
+| GET  | `/api/workspaces/:id` | — | `Workspace` |
+| PATCH| `/api/workspaces/:id` | `UpdateWorkspaceInput` | `Workspace` |
+| POST | `/api/workspaces/:id/scan` | — | `Snapshot` |
+| GET  | `/api/workspaces/:id/snapshot` | — | `Snapshot` |
+| GET  | `/api/templates` | — | `Template[]` |
+| GET  | `/api/templates/:id` | — | `Template` |
+| GET  | `/api/runs` | `?workspaceId=` | `Run[]` |
+| POST | `/api/runs` | `CreateRunInput` | `Run` (status `context_pick`) |
+| GET  | `/api/runs/:id` | — | `Run` |
+| GET  | `/api/runs/:id/context` | — | `ContextPick` |
+| POST | `/api/runs/:id/context` | `ConfirmContextInput` | `Run` (status `generating`) |
+| GET  | `/api/runs/:id/brief` | — | `{ markdown: string }` |
+| GET  | `/api/runs/:id/evidence` | — | `EvidencePack` |
+| GET  | `/api/runs/:id/diff` | — | `RunDiff` |
+| GET  | `/api/settings` | — | `Settings` |
+| PUT  | `/api/settings` | `UpdateSettingsInput` | `Settings` |
+
+Types and zod schemas live in `@ariadne/shared`. Import them — do not redeclare.
+
+## Run lifecycle
+
+A run is gated in two user steps (PRODUCT_PLAN §5, DESIGN_GUIDELINE §3.5):
+
+1. `POST /api/runs` → server scans the workspace, builds the manifest, asks the
+   provider to pick candidate files from manifest metadata only. Run rests at
+   status `context_pick`. Trace records `scan, manifest, candidate_select`.
+2. User reviews candidates in the Context Pick screen, then
+   `POST /api/runs/:id/context`. Server does the focused read of approved files,
+   generates the Brief, extracts claims, maps evidence, splits unsupported
+   claims, and (if a previous run exists) computes the diff. Status → `completed`.
+   Artifacts are written into `.ariadne/`.
+
+Run execution is async; the frontend polls `GET /api/runs/:id` (~1s) and renders
+the phase-based progress from `run.trace`.
+
+## Provider interface
+
+`apps/server/src/providers/` exposes one interface used by all run steps:
+
+```ts
+interface AiProvider {
+  id: ProviderId;
+  complete(req: { system: string; prompt: string; json?: boolean }):
+    Promise<{ text: string }>;
+}
 ```
 
-## Action Flow
+Adapters: `anthropic` (@anthropic-ai/sdk), `openai` (openai SDK),
+`moonshot` (openai SDK, baseURL `https://api.moonshot.ai/v1`),
+`ollama` (openai SDK, baseURL `http://localhost:11434/v1`),
+`gemini` (@google/genai), `mock` (canned structured output, default — lets the
+loop run with no API key). The active provider comes from settings / env.
 
-```text
-aiws.yaml
-  -> action_registry.load_config
-  -> validate root/path/security/capabilities
-  -> execute prompt_recipe/shell/python/file_index/codex_prompt
-  -> runs/<run_id>/run.json
-  -> artifacts
-  -> inspector/run timeline
-```
+## Supervisor (apps/admin)
 
-## Storage Invariants
+Started by `ops/ariadne.sh start` as a backgrounded daemon. It:
 
-- Workspace data is file-based.
-- Projects live under `<workspace-root>/projects/`.
-- Skills live under `<workspace-root>/skills/`.
-- Sessions store both `messages.jsonl` and `session.md`.
-- Project depth is limited to `project` or `project/subproject`.
-- Private projects are visible to owner/admin accounts.
-- Public projects are visible to logged-in accounts.
+- rotates logs on every start: moves `logs/<name>.log` →
+  `logs/archive/<name>-<timestamp>.log`, opens a fresh file;
+- spawns and pipes to logs: the Ariadne server, and `cloudflared`;
+- captures the `trycloudflare.com` URL from cloudflared output →
+  `run/tunnel-url.txt`;
+- health-checks `GET /healthz`; on crash/unhealthy, restarts with exponential
+  backoff and increments a restart counter;
+- serves the **admin dashboard** on `127.0.0.1:7459` (loopback only): live
+  status, restart history, log tail, and an error analyzer that scans logs,
+  groups errors, and prints plain-language diagnoses.
 
-## Public Surface
-
-Server mode may be exposed through Cloudflare or Tailscale, but diagnostics and local implementation details must remain admin-only or hidden by `AIWS_PUBLIC_DEMO=true`.
+`ariadne.sh` verbs: `start | stop | restart | status | logs | admin`.
+`ops/install-aliases.sh` registers a managed block in `~/.zshrc`.

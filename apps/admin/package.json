@@ -1,0 +1,12 @@
+{
+  "name": "@ariadne/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ariadne/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "*"
+  }
+}

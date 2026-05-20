@@ -1,0 +1,27 @@
+{
+  "name": "ariadne",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ariadne — local-first AI workspace for traceable, repeatable work.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:web": "npm run build --workspace @ariadne/web",
+    "dev:server": "tsx watch apps/server/src/index.ts",
+    "dev:web": "npm run dev --workspace @ariadne/web",
+    "start:server": "tsx apps/server/src/index.ts",
+    "start:supervisor": "tsx apps/admin/src/supervisor.ts",
+    "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p apps/server && tsc --noEmit -p apps/admin && tsc --noEmit -p apps/web"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "@types/node": "^22.18.13"
+  }
+}

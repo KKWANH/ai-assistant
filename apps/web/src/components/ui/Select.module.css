@@ -1,0 +1,71 @@
+/* ── Select wrapper ── */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--muted-foreground));
+}
+
+.required {
+  color: rgb(var(--destructive));
+  margin-left: 0.125rem;
+}
+
+.selectWrap {
+  position: relative;
+}
+
+.chevron {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 0.875rem;
+  width: 0.875rem;
+  color: rgb(var(--muted-foreground));
+  pointer-events: none;
+}
+
+/* ── The <select> itself ── */
+.select {
+  height: 2rem;
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid rgb(var(--border));
+  background-color: rgb(var(--surface-2));
+  padding: 0.25rem 2rem 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  color: rgb(var(--foreground));
+  appearance: none;
+  transition: border-color 100ms, box-shadow 100ms;
+  outline: none;
+}
+
+.select:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--ring));
+}
+
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hasError {
+  border-color: rgb(var(--destructive));
+}
+
+/* ── Hint / error text ── */
+.hint {
+  font-size: 0.75rem;
+  color: rgb(var(--muted-foreground));
+}
+
+.error {
+  font-size: 0.75rem;
+  color: rgb(var(--destructive));
+}

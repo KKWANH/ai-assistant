@@ -1,0 +1,118 @@
+/* ── Button base ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: background-color 100ms, color 100ms, border-color 100ms;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--ring));
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Variants ── */
+.primary {
+  background-color: rgb(var(--accent));
+  color: rgb(var(--accent-foreground));
+}
+.primary:not(:disabled):hover {
+  background-color: color-mix(in srgb, rgb(var(--accent)) 90%, transparent);
+}
+
+.secondary {
+  background-color: rgb(var(--surface-3));
+  color: rgb(var(--foreground));
+  border: 1px solid rgb(var(--border));
+}
+.secondary:not(:disabled):hover {
+  background-color: rgb(var(--muted));
+}
+
+.ghost {
+  background-color: transparent;
+  color: rgb(var(--foreground));
+}
+.ghost:not(:disabled):hover {
+  background-color: rgb(var(--surface-3));
+}
+
+.outline {
+  background-color: transparent;
+  color: rgb(var(--foreground));
+  border: 1px solid rgb(var(--border));
+}
+.outline:not(:disabled):hover {
+  background-color: rgb(var(--surface-3));
+}
+
+.destructive {
+  background-color: rgb(var(--destructive));
+  color: rgb(var(--destructive-foreground));
+}
+.destructive:not(:disabled):hover {
+  background-color: color-mix(in srgb, rgb(var(--destructive)) 90%, transparent);
+}
+
+.subtle {
+  background-color: transparent;
+  color: rgb(var(--muted-foreground));
+}
+.subtle:not(:disabled):hover {
+  color: rgb(var(--foreground));
+  background-color: rgb(var(--surface-2));
+}
+
+/* ── Sizes ── */
+.xs {
+  height: 1.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  font-size: 0.75rem;
+  gap: 0.25rem;
+}
+
+.sm {
+  height: 1.75rem;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+  font-size: 0.75rem;
+  gap: 0.375rem;
+}
+
+.md {
+  height: 2rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 0.875rem;
+  gap: 0.5rem;
+}
+
+.lg {
+  height: 2.25rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  font-size: 0.875rem;
+  gap: 0.5rem;
+}
+
+.icon {
+  height: 2rem;
+  width: 2rem;
+  padding: 0;
+}
+
+/* ── Icon slots ── */
+.iconSlot {
+  flex-shrink: 0;
+}
