@@ -29,8 +29,8 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
   anthropic: "claude-sonnet-4-6",
   openai: "gpt-4o",
-  gemini: "gemini-2.5-flash",
-  moonshot: "moonshot-v1-128k",
+  gemini: "gemini-3.5-flash",
+  moonshot: "kimi-k2.6",
   ollama: "qwen2.5:14b",
   mock: "mock",
 };
@@ -39,15 +39,16 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
 export const MODEL_CHOICES: Record<ProviderId, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
-  gemini: ["gemini-2.5-flash", "gemini-2.5-pro"],
-  moonshot: ["moonshot-v1-128k", "moonshot-v1-32k", "kimi-k2-0711-preview"],
+  gemini: ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
+  moonshot: ["kimi-k2.6", "moonshot-v1-128k", "moonshot-v1-32k"],
   ollama: ["qwen2.5:14b", "qwen2.5:7b", "qwen2.5:32b", "llama3.1:8b"],
   mock: ["mock"],
 };
 
 /**
  * Pricing table: USD per 1 million tokens (input / output).
- * Sources: public list prices as of mid-2025.
+ * Sources: public list prices (2025–2026). Older entries are kept so cost
+ * still resolves for historical usage records.
  * Ollama, mock, and unknown models are free → {input:0, output:0}.
  */
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -60,9 +61,12 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   "gpt-4o-mini":        { input: 0.15,  output: 0.60  },
   "o3-mini":            { input: 1.10,  output: 4.40  },
   // Google Gemini
+  "gemini-3.5-flash":      { input: 1.50, output: 9.00 },
+  "gemini-3.1-flash-lite": { input: 0.10, output: 0.40 },
   "gemini-2.5-flash":   { input: 0.15,  output: 0.60  },
   "gemini-2.5-pro":     { input: 1.25,  output: 10.00 },
   // Moonshot / Kimi
+  "kimi-k2.6":          { input: 0.55,  output: 2.65  },
   "moonshot-v1-128k":   { input: 1.63,  output: 6.53  },
   "moonshot-v1-32k":    { input: 0.81,  output: 3.26  },
   "kimi-k2-0711-preview": { input: 0.60, output: 2.50 },
