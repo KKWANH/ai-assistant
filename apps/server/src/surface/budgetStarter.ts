@@ -11,32 +11,32 @@
  */
 
 export const BUDGET_CSV = `date,category,type,amount
-2026-03-01,Salary,income,5200.00
-2026-03-02,Rent,expense,1650.00
-2026-03-04,Groceries,expense,214.35
-2026-03-07,Utilities,expense,138.90
-2026-03-09,Dining,expense,86.40
-2026-03-12,Transport,expense,72.10
-2026-03-15,Subscriptions,expense,44.97
-2026-03-19,Shopping,expense,159.20
-2026-03-23,Healthcare,expense,95.00
-2026-03-28,Freelance,income,640.00
-2026-04-01,Salary,income,5200.00
-2026-04-02,Rent,expense,1650.00
-2026-04-05,Groceries,expense,238.70
-2026-04-08,Utilities,expense,121.45
-2026-04-11,Dining,expense,112.80
-2026-04-14,Transport,expense,68.55
-2026-04-15,Subscriptions,expense,44.97
-2026-04-20,Shopping,expense,97.60
-2026-04-26,Healthcare,expense,150.00
-2026-05-01,Salary,income,5200.00
-2026-05-02,Rent,expense,1650.00
-2026-05-05,Groceries,expense,201.15
-2026-05-08,Utilities,expense,129.30
-2026-05-10,Dining,expense,94.25
-2026-05-13,Transport,expense,80.40
-2026-05-17,Subscriptions,expense,44.97
+2026-03-01,급여,income,5200.00
+2026-03-02,월세,expense,1650.00
+2026-03-04,장보기,expense,214.35
+2026-03-07,공과금,expense,138.90
+2026-03-09,외식,expense,86.40
+2026-03-12,교통,expense,72.10
+2026-03-15,구독,expense,44.97
+2026-03-19,쇼핑,expense,159.20
+2026-03-23,의료,expense,95.00
+2026-03-28,부수입,income,640.00
+2026-04-01,급여,income,5200.00
+2026-04-02,월세,expense,1650.00
+2026-04-05,장보기,expense,238.70
+2026-04-08,공과금,expense,121.45
+2026-04-11,외식,expense,112.80
+2026-04-14,교통,expense,68.55
+2026-04-15,구독,expense,44.97
+2026-04-20,쇼핑,expense,97.60
+2026-04-26,의료,expense,150.00
+2026-05-01,급여,income,5200.00
+2026-05-02,월세,expense,1650.00
+2026-05-05,장보기,expense,201.15
+2026-05-08,공과금,expense,129.30
+2026-05-10,외식,expense,94.25
+2026-05-13,교통,expense,80.40
+2026-05-17,구독,expense,44.97
 `;
 
 export const SURFACE_TSX = `/**
@@ -182,9 +182,9 @@ export default function BudgetDashboard() {
     void load();
   }, [ariadne]);
 
-  if (loading) return <Centered text="Loading budget..." />;
-  if (error) return <Centered text={"Error: " + error} tone="error" />;
-  if (txns.length === 0) return <Centered text="No rows in budget.csv" />;
+  if (loading) return <Centered text="예산을 불러오는 중..." />;
+  if (error) return <Centered text={"오류: " + error} tone="error" />;
+  if (txns.length === 0) return <Centered text="budget.csv에 행이 없습니다" />;
 
   // Aggregates
   const totalIncome = txns.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
@@ -238,10 +238,10 @@ export default function BudgetDashboard() {
   }
 
   const cols: Array<{ key: SortKey; label: string; align: string }> = [
-    { key: "date", label: "Date", align: "left" },
-    { key: "category", label: "Category", align: "left" },
-    { key: "type", label: "Type", align: "left" },
-    { key: "amount", label: "Amount", align: "right" },
+    { key: "date", label: "날짜", align: "left" },
+    { key: "category", label: "항목", align: "left" },
+    { key: "type", label: "구분", align: "left" },
+    { key: "amount", label: "금액", align: "right" },
   ];
 
   const th = {
@@ -265,47 +265,47 @@ export default function BudgetDashboard() {
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: "20px 24px", maxWidth: "1140px", margin: "0 auto", color: "rgb(var(--foreground))" }}>
-      <h1 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>Budget & Cashflow</h1>
+      <h1 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>예산 및 현금 흐름</h1>
       <p style={{ fontSize: "12px", margin: "4px 0 0", ...muted }}>
-        {txns.length + " transactions across " + months.length + " months · tracked from budget.csv"}
+        {"거래 " + txns.length + "건 · " + months.length + "개월 · budget.csv에서 집계"}
       </p>
 
       {/* KPI row */}
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", margin: "16px 0" }}>
-        <Kpi label="Total Income" value={usd(totalIncome)} color="rgb(var(--success))" />
-        <Kpi label="Total Expense" value={usd(totalExpense)} color="rgb(var(--destructive))" />
+        <Kpi label="총 수입" value={usd(totalIncome)} color="rgb(var(--success))" />
+        <Kpi label="총 지출" value={usd(totalExpense)} color="rgb(var(--destructive))" />
         <Kpi
-          label="Net Savings"
+          label="순저축"
           value={(netSavings >= 0 ? "+" : "") + usd(netSavings)}
-          sub={netSavings >= 0 ? "Saved this period" : "Overspent this period"}
+          sub={netSavings >= 0 ? "이번 기간 저축" : "이번 기간 초과 지출"}
           color={flowColor(netSavings)}
         />
         <Kpi
-          label="Savings Rate"
+          label="저축률"
           value={fmt(savingsRate, 1) + "%"}
-          sub={"of income retained"}
+          sub={"수입 중 저축 비율"}
           color={flowColor(netSavings)}
         />
-        <Kpi label="Top Expense" value={topCategory.label} sub={usd(topCategory.value)} />
+        <Kpi label="최대 지출 항목" value={topCategory.label} sub={usd(topCategory.value)} />
       </div>
 
       {/* Monthly net cashflow */}
       <div style={{ ...cardStyle, marginBottom: "16px", overflowX: "auto" }}>
-        <BarChart data={monthlyNet} title="Net Cashflow by Month" width={1050} height={250} color="rgb(var(--info))" />
+        <BarChart data={monthlyNet} title="월별 순현금흐름" width={1050} height={250} color="rgb(var(--info))" />
       </div>
 
       {/* Expenses by category + running balance */}
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
         <div style={{ ...cardStyle, flex: "1 1 300px", overflowX: "auto" }}>
-          <PieChart data={categoryData} title="Expenses by Category" width={320} height={270} />
+          <PieChart data={categoryData} title="항목별 지출" width={320} height={270} />
         </div>
         <div style={{ ...cardStyle, flex: "2 1 460px", overflowX: "auto" }}>
-          <LineChart data={balanceData} title="Running Balance Over Time" width={640} height={270} color="rgb(var(--accent))" />
+          <LineChart data={balanceData} title="누적 잔액 추이" width={640} height={270} color="rgb(var(--accent))" />
         </div>
       </div>
 
       {/* Transactions table */}
-      <h2 style={{ fontSize: "15px", fontWeight: 600, margin: "0 0 8px" }}>Transactions</h2>
+      <h2 style={{ fontSize: "15px", fontWeight: 600, margin: "0 0 8px" }}>거래 내역</h2>
       <div style={{ ...cardStyle, padding: 0, overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -339,7 +339,7 @@ export default function BudgetDashboard() {
                       background: "rgb(var(--accent))",
                     }}
                   >
-                    {t.type}
+                    {t.type === "income" ? "수입" : "지출"}
                   </span>
                 </td>
                 <td
@@ -359,8 +359,8 @@ export default function BudgetDashboard() {
       </div>
 
       <p style={{ marginTop: "16px", fontSize: "12px", ...muted }}>
-        Edit <code>budget.csv</code> in your workspace, then click <strong>Build</strong> to
-        refresh. Click a column header to sort the transactions.
+        워크스페이스의 <code>budget.csv</code>를 수정한 뒤 <strong>빌드</strong>를 누르면
+        갱신됩니다. 열 머리글을 누르면 거래가 정렬됩니다.
       </p>
     </div>
   );

@@ -10,6 +10,9 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+// Lets `**bold**` / `*italic*` parse when the delimiters touch CJK characters
+// (e.g. `**공**과`) — plain CommonMark flanking rules reject those as emphasis.
+import remarkCjkFriendly from "remark-cjk-friendly";
 import {
   ChevronDown,
   ChevronUp,
@@ -128,7 +131,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
 function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="text-sm text-foreground leading-relaxed">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={markdownComponents}>
         {content}
       </ReactMarkdown>
     </div>

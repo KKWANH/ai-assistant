@@ -13,18 +13,18 @@
  */
 
 export const HOLDINGS_CSV = `symbol,name,asset_type,sector,currency,shares,buy_price,current_price,target_price,headline
-AAPL,Apple Inc.,Stock,Technology,USD,40,150.00,225.00,250.00,"Services revenue hit a record; estimates were lifted into the new product cycle."
-MSFT,Microsoft Corp.,Stock,Technology,USD,25,300.00,475.00,525.00,"Cloud and AI bookings stay strong; margin guidance was reaffirmed."
-NVDA,NVIDIA Corp.,Stock,Technology,USD,30,110.00,178.00,210.00,"Data-center demand still outpaces supply; next-gen parts are ramping."
-VOO,Vanguard S&P 500 ETF,ETF,Diversified,USD,30,400.00,510.00,545.00,"Broad S&P 500 tracker; the expense ratio stays minimal."
-GLD,SPDR Gold Shares,Commodity,Commodities,USD,25,180.00,242.00,255.00,"Gold near record highs as central banks keep adding reserves."
-BTC,Bitcoin,Crypto,Digital Assets,USD,0.4,45000.00,68000.00,80000.00,"Bitcoin consolidates after the halving; ETF inflows remain the swing factor."
-ASML,ASML Holding,Stock,Technology,EUR,10,600.00,720.00,800.00,"Lithography orders are recovering; export-control headlines stay a watch item."
-SAP,SAP SE,Stock,Technology,EUR,20,200.00,250.00,275.00,"Cloud backlog keeps compounding; the operating-margin trajectory is improving."
-MC,LVMH,Stock,Consumer Discretionary,EUR,5,700.00,620.00,640.00,"Luxury demand is soft in key markets; the near-term outlook was trimmed."
-005930,Samsung Electronics,Stock,Technology,KRW,200,65000,80000,95000,"Memory pricing is turning up; HBM capacity is the key swing factor."
-069500,KODEX 200 ETF,ETF,Diversified,KRW,150,33000,38000,42000,"KOSPI 200 fund; broad Korean large-cap exposure in a single holding."
-035420,NAVER Corp.,Stock,Communication Services,KRW,50,200000,164000,210000,"Search-ad growth is slowing; the market is waiting on the AI product roadmap."
+AAPL,Apple Inc.,주식,기술,USD,40,150.00,225.00,250.00,"서비스 매출이 사상 최고치를 기록했고, 새 제품 주기를 앞두고 실적 전망이 상향됐습니다."
+MSFT,Microsoft Corp.,주식,기술,USD,25,300.00,475.00,525.00,"클라우드와 AI 수주가 견조하며, 마진 가이던스가 재확인됐습니다."
+NVDA,NVIDIA Corp.,주식,기술,USD,30,110.00,178.00,210.00,"데이터센터 수요가 여전히 공급을 앞서며, 차세대 제품이 양산에 들어가고 있습니다."
+VOO,Vanguard S&P 500 ETF,ETF,분산투자,USD,30,400.00,510.00,545.00,"S&P 500 전체를 추종하는 광범위한 펀드로, 운용 보수가 매우 낮습니다."
+GLD,SPDR Gold Shares,원자재,원자재,USD,25,180.00,242.00,255.00,"중앙은행이 금 보유를 계속 늘리면서 금값이 사상 최고치 부근입니다."
+BTC,Bitcoin,암호화폐,디지털 자산,USD,0.4,45000.00,68000.00,80000.00,"반감기 이후 비트코인이 횡보 중이며, ETF 자금 유입이 주요 변수입니다."
+ASML,ASML Holding,주식,기술,EUR,10,600.00,720.00,800.00,"리소그래피 장비 수주가 회복 중이며, 수출 규제 뉴스가 관전 포인트입니다."
+SAP,SAP SE,주식,기술,EUR,20,200.00,250.00,275.00,"클라우드 수주 잔고가 계속 쌓이고, 영업이익률 추세가 개선되고 있습니다."
+MC,LVMH,주식,임의소비재,EUR,5,700.00,620.00,640.00,"주요 시장의 명품 수요가 부진해 단기 전망이 하향 조정됐습니다."
+005930,Samsung Electronics,주식,기술,KRW,200,65000,80000,95000,"메모리 가격이 반등하고 있으며, HBM 생산능력이 핵심 변수입니다."
+069500,KODEX 200 ETF,ETF,분산투자,KRW,150,33000,38000,42000,"코스피200 펀드로, 한국 대형주에 폭넓게 분산 투자합니다."
+035420,NAVER Corp.,주식,커뮤니케이션,KRW,50,200000,164000,210000,"검색 광고 성장세가 둔화 중이며, 시장은 AI 제품 로드맵을 기다리고 있습니다."
 `;
 
 export const FX_RATES_CSV = `currency,name,rate,buy_rate
@@ -377,7 +377,7 @@ function priceTrend(buy: number, current: number, symbol: string, labels: string
     const wobble = Math.sin((t * 5.4 + seed) * 1.3) * span * 0.22 * (1 - Math.abs(2 * t - 1));
     out.push({ label: pts[i] || "", value: Math.round((baseV + wobble) * 100) / 100 });
   }
-  if (n > 0) out[n - 1] = { label: pts[n - 1] || "Now", value: current };
+  if (n > 0) out[n - 1] = { label: pts[n - 1] || "현재", value: current };
   return out;
 }
 
@@ -408,8 +408,8 @@ function AssetDetail(props: {
 
   const compareData: Point[] = [
     { label: h.symbol, value: Math.round(h.plPctBase * 10) / 10 },
-    { label: "Portfolio", value: Math.round(portReturn * 10) / 10 },
-    { label: best ? best.symbol : "Best", value: best ? Math.round(best.plPctBase * 10) / 10 : 0 },
+    { label: "포트폴리오", value: Math.round(portReturn * 10) / 10 },
+    { label: best ? best.symbol : "최고", value: best ? Math.round(best.plPctBase * 10) / 10 : 0 },
   ];
 
   const backBtn = {
@@ -429,7 +429,7 @@ function AssetDetail(props: {
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: "20px 24px", maxWidth: "1180px", margin: "0 auto", color: "rgb(var(--foreground))" }}>
       <button onClick={props.onBack} style={backBtn}>
-        {"←  Back to portfolio"}
+        {"←  포트폴리오로 돌아가기"}
       </button>
 
       {/* Asset header */}
@@ -440,40 +440,40 @@ function AssetDetail(props: {
       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
         <Pill text={h.assetType} accent />
         <Pill text={h.sector} />
-        <Pill text={h.currency + " · " + (h.shares.toLocaleString("en-US") + " units")} />
-        <Pill text={"Rank #" + rank + " of " + all.length + " by weight"} />
+        <Pill text={h.currency + " · " + h.shares.toLocaleString("en-US") + "단위"} />
+        <Pill text={"비중 순위 " + rank + " / 전체 " + all.length} />
       </div>
 
       {/* KPI row */}
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", margin: "16px 0" }}>
-        <Kpi label={"Market Value (" + base + ")"} value={money0(h.valueBase, base)} sub={fmt(h.weight, 1) + "% of portfolio"} />
-        <Kpi label={"Cost Basis (" + base + ")"} value={money0(h.costBase, base)} />
+        <Kpi label={"평가 가치 (" + base + ")"} value={money0(h.valueBase, base)} sub={fmt(h.weight, 1) + "% · 포트폴리오 비중"} />
+        <Kpi label={"매입 원가 (" + base + ")"} value={money0(h.costBase, base)} />
         <Kpi
-          label="Total Return"
+          label="총 수익"
           value={signedMoney(h.plBase, base)}
           sub={signedPct(h.plPctBase)}
           color={plColor(h.plBase)}
         />
-        <Kpi label="Price Effect" value={signedMoney(h.priceEffect, base)} color={plColor(h.priceEffect)} sub="from asset price" />
-        <Kpi label="Currency Effect" value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} sub="from exchange rate" />
+        <Kpi label="가격 효과" value={signedMoney(h.priceEffect, base)} color={plColor(h.priceEffect)} sub="자산 가격 변동" />
+        <Kpi label="환율 효과" value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} sub="환율 변동" />
       </div>
 
       {/* Recent price trend + analyst outlook */}
       <div style={{ ...cardStyle, marginBottom: "16px", overflowX: "auto" }}>
-        <SectionTitle>Recent price and outlook</SectionTitle>
-        <LineChart data={trend} title={"Price trend (" + h.currency + ")"} width={1080} height={220} />
+        <SectionTitle>최근 가격과 전망</SectionTitle>
+        <LineChart data={trend} title={"가격 추이 (" + h.currency + ")"} width={1080} height={220} />
         <p style={{ fontSize: "11px", margin: "2px 0 10px", ...muted }}>
-          Illustrative path from average cost to the current price — replace with real history if you track it.
+          평균 매입가에서 현재가까지를 보여 주는 예시 경로입니다 — 실제 가격 이력이 있다면 교체하세요.
         </p>
-        <StatRow label={"Current price (" + h.currency + ")"} value={money(h.price, h.currency)} />
-        <StatRow label={"Analyst target (" + h.currency + ")"} value={money(h.targetPrice, h.currency)} />
-        <StatRow label="Upside to target" value={signedPct(upsidePct)} color={plColor(upsidePct)} />
+        <StatRow label={"현재가 (" + h.currency + ")"} value={money(h.price, h.currency)} />
+        <StatRow label={"애널리스트 목표가 (" + h.currency + ")"} value={money(h.targetPrice, h.currency)} />
+        <StatRow label="목표가까지 여력" value={signedPct(upsidePct)} color={plColor(upsidePct)} />
         <div style={{ marginTop: "10px" }}>
           <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px", ...muted }}>
-            Latest note
+            최근 코멘트
           </div>
           <p style={{ fontSize: "13px", margin: 0, lineHeight: 1.5 }}>
-            {h.headline || "Add a headline column in holdings.csv to show a note here."}
+            {h.headline || "holdings.csv에 headline 열을 추가하면 여기에 코멘트가 표시됩니다."}
           </p>
         </div>
       </div>
@@ -481,56 +481,56 @@ function AssetDetail(props: {
       {/* Detail cards */}
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "16px" }}>
         <div style={{ ...cardStyle, flex: "1 1 320px" }}>
-          <SectionTitle>Position</SectionTitle>
-          <StatRow label="Units held" value={h.shares.toLocaleString("en-US")} />
-          <StatRow label={"Average cost (" + h.currency + ")"} value={money(h.buyPrice, h.currency)} />
-          <StatRow label={"Current price (" + h.currency + ")"} value={money(h.price, h.currency)} />
+          <SectionTitle>보유 현황</SectionTitle>
+          <StatRow label="보유 수량" value={h.shares.toLocaleString("en-US")} />
+          <StatRow label={"평균 매입가 (" + h.currency + ")"} value={money(h.buyPrice, h.currency)} />
+          <StatRow label={"현재가 (" + h.currency + ")"} value={money(h.price, h.currency)} />
           <StatRow
-            label="Price return (local)"
+            label="가격 수익률 (현지 통화)"
             value={signedPct(h.priceReturnPct)}
             color={plColor(h.priceReturnPct)}
           />
-          <StatRow label={"Cost basis (" + h.currency + ")"} value={money0(h.costLocal, h.currency)} />
-          <StatRow label={"Market value (" + h.currency + ")"} value={money0(h.valueLocal, h.currency)} />
+          <StatRow label={"매입 원가 (" + h.currency + ")"} value={money0(h.costLocal, h.currency)} />
+          <StatRow label={"평가 가치 (" + h.currency + ")"} value={money0(h.valueLocal, h.currency)} />
         </div>
 
         <div style={{ ...cardStyle, flex: "1 1 320px" }}>
-          <SectionTitle>Currency and FX</SectionTitle>
-          <StatRow label="Quote currency" value={h.currency} />
-          <StatRow label={"Reporting currency"} value={base} />
-          <StatRow label={"FX rate at purchase"} value={fmt(h.buyRate, h.buyRate < 0.1 ? 6 : 4)} />
-          <StatRow label={"FX rate now"} value={fmt(h.rate, h.rate < 0.1 ? 6 : 4)} />
+          <SectionTitle>통화 및 환율</SectionTitle>
+          <StatRow label="거래 통화" value={h.currency} />
+          <StatRow label={"기준 통화"} value={base} />
+          <StatRow label={"매입 시 환율"} value={fmt(h.buyRate, h.buyRate < 0.1 ? 6 : 4)} />
+          <StatRow label={"현재 환율"} value={fmt(h.rate, h.rate < 0.1 ? 6 : 4)} />
           <StatRow
-            label="FX move since purchase"
-            value={fxMoved ? signedPct(fxChangePct) : "unchanged"}
+            label="매입 후 환율 변동"
+            value={fxMoved ? signedPct(fxChangePct) : "변동 없음"}
             color={fxMoved ? plColor(fxChangePct) : "rgb(var(--muted-foreground))"}
           />
-          <StatRow label={"Currency effect (" + base + ")"} value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} />
+          <StatRow label={"환율 효과 (" + base + ")"} value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} />
         </div>
       </div>
 
       {/* P/L attribution */}
       <div style={{ ...cardStyle, marginBottom: "16px" }}>
-        <SectionTitle>Return attribution</SectionTitle>
+        <SectionTitle>수익 분해</SectionTitle>
         <p style={{ fontSize: "12px", margin: "0 0 8px", ...muted }}>
-          How the position moved from cost basis to its current market value, in {base}.
+          매입 원가에서 현재 평가 가치까지의 변화입니다 (기준 통화 {base}).
         </p>
-        <StatRow label="Cost basis" value={money0(h.costBase, base)} />
-        <StatRow label="Asset price effect" value={signedMoney(h.priceEffect, base)} color={plColor(h.priceEffect)} />
-        <StatRow label="Currency (FX) effect" value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} />
+        <StatRow label="매입 원가" value={money0(h.costBase, base)} />
+        <StatRow label="자산 가격 효과" value={signedMoney(h.priceEffect, base)} color={plColor(h.priceEffect)} />
+        <StatRow label="환율 효과" value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} />
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", padding: "8px 0 0" }}>
-          <span style={{ fontSize: "13px", fontWeight: 700 }}>Market value today</span>
+          <span style={{ fontSize: "13px", fontWeight: 700 }}>현재 평가 가치</span>
           <span style={{ fontSize: "13px", fontWeight: 700 }}>{money0(h.valueBase, base)}</span>
         </div>
       </div>
 
       {/* Comparison */}
       <div style={{ ...cardStyle, overflowX: "auto" }}>
-        <BarChart data={compareData} title="Return % vs portfolio and best" width={760} height={240} />
+        <BarChart data={compareData} title="수익률 % — 포트폴리오·최고 종목 대비" width={760} height={240} />
       </div>
 
       <p style={{ marginTop: "16px", fontSize: "12px", ...muted }}>
-        Edit <code>holdings.csv</code> and <code>fx_rates.csv</code>, then click <strong>Build</strong> to refresh.
+        <code>holdings.csv</code>와 <code>fx_rates.csv</code>를 수정한 뒤 <strong>빌드</strong>를 누르면 갱신됩니다.
       </p>
     </div>
   );
@@ -592,9 +592,9 @@ export default function PortfolioDashboard() {
     void load(false);
   }, [load]);
 
-  if (loading) return <Centered text="Loading portfolio..." />;
-  if (error) return <Centered text={"Error: " + error} tone="error" />;
-  if (rawHoldings.length === 0) return <Centered text="No rows in holdings.csv" />;
+  if (loading) return <Centered text="포트폴리오를 불러오는 중..." />;
+  if (error) return <Centered text={"오류: " + error} tone="error" />;
+  if (rawHoldings.length === 0) return <Centered text="holdings.csv에 행이 없습니다" />;
 
   // Resolve currencies and the base (reporting) currency.
   const fxMap: Record<string, FxRate> = {};
@@ -692,17 +692,17 @@ export default function PortfolioDashboard() {
   }
 
   const cols: Array<{ key: SortKey | null; label: string; align: string }> = [
-    { key: "symbol", label: "Symbol", align: "left" },
-    { key: "assetType", label: "Type", align: "left" },
-    { key: "currency", label: "Cur", align: "left" },
-    { key: null, label: "Units", align: "right" },
-    { key: null, label: "Price", align: "right" },
-    { key: "valueBase", label: "Mkt Value", align: "right" },
-    { key: "weight", label: "Weight", align: "right" },
-    { key: "plBase", label: "Unreal. P/L", align: "right" },
+    { key: "symbol", label: "종목", align: "left" },
+    { key: "assetType", label: "유형", align: "left" },
+    { key: "currency", label: "통화", align: "left" },
+    { key: null, label: "수량", align: "right" },
+    { key: null, label: "가격", align: "right" },
+    { key: "valueBase", label: "평가액", align: "right" },
+    { key: "weight", label: "비중", align: "right" },
+    { key: "plBase", label: "평가손익", align: "right" },
   ];
-  if (fxMode) cols.push({ key: "fxEffect", label: "FX Effect", align: "right" });
-  cols.push({ key: "plPctBase", label: "Return", align: "right" });
+  if (fxMode) cols.push({ key: "fxEffect", label: "환율 효과", align: "right" });
+  cols.push({ key: "plPctBase", label: "수익률", align: "right" });
 
   const th = {
     padding: "8px 10px",
@@ -756,40 +756,40 @@ export default function PortfolioDashboard() {
       {/* Header + toolbar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>Portfolio Analysis</h1>
+          <h1 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>포트폴리오 분석</h1>
           <p style={{ fontSize: "12px", margin: "4px 0 0", ...muted }}>
-            {holdings.length + " positions · " + currencies.length + " currencies · reporting in " + baseCurrency +
-              (lastSync ? " · prices as of " + lastSync : "")}
+            {holdings.length + "개 종목 · " + currencies.length + "개 통화 · 기준 통화 " + baseCurrency +
+              (lastSync ? " · " + lastSync + " 기준가" : "")}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <button onClick={() => void load(true)} disabled={refreshing} style={refreshBtn}>
-            {refreshing ? "⟳  Refreshing…" : "⟳  Refresh prices"}
+            {refreshing ? "⟳  새로고침 중…" : "⟳  현재가 새로고침"}
           </button>
           <button onClick={() => setFxMode(!fxMode)} style={fxBtn}>
-            {(fxMode ? "◉" : "○") + "  Currency analysis"}
+            {(fxMode ? "◉" : "○") + "  환율 분석"}
           </button>
         </div>
       </div>
 
       {/* KPI row */}
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", margin: "16px 0" }}>
-        <Kpi label={"Market Value (" + baseCurrency + ")"} value={money0(totalValue, baseCurrency)} />
-        <Kpi label={"Cost Basis (" + baseCurrency + ")"} value={money0(totalBasis, baseCurrency)} />
+        <Kpi label={"평가 가치 (" + baseCurrency + ")"} value={money0(totalValue, baseCurrency)} />
+        <Kpi label={"매입 원가 (" + baseCurrency + ")"} value={money0(totalBasis, baseCurrency)} />
         <Kpi
-          label="Unrealized P/L"
+          label="평가 손익"
           value={signedMoney(totalPL, baseCurrency)}
           sub={signedPct(totalPLPct)}
           color={plColor(totalPL)}
         />
         <Kpi
-          label="Currency Effect"
+          label="환율 효과"
           value={signedMoney(totalFx, baseCurrency)}
-          sub={totalFx >= 0 ? "FX added value" : "FX reduced value"}
+          sub={totalFx >= 0 ? "환율이 가치를 키움" : "환율이 가치를 줄임"}
           color={plColor(totalFx)}
         />
         <Kpi
-          label="Top Performer"
+          label="최고 수익 종목"
           value={best ? best.symbol : "-"}
           sub={best ? signedPct(best.plPctBase) : ""}
           color={best ? plColor(best.plPctBase) : undefined}
@@ -801,11 +801,11 @@ export default function PortfolioDashboard() {
       {fxMode ? (
         <div style={{ ...cardStyle, marginBottom: "16px", borderColor: "rgb(var(--accent))" }}>
           <p style={{ fontSize: "13px", margin: 0 }}>
-            <strong>Currency analysis on.</strong>{" "}
+            <strong>환율 분석이 켜졌습니다.</strong>{" "}
             <span style={muted}>
-              {"Exchange-rate moves changed portfolio value by " + signedMoney(totalFx, baseCurrency) +
-                ". The value trend below overlays an FX-neutral baseline so the currency effect is visible directly, " +
-                "and the holdings table breaks out each position's FX effect."}
+              {"환율 변동으로 포트폴리오 가치가 " + signedMoney(totalFx, baseCurrency) +
+                "만큼 달라졌습니다. 아래 가치 추이에 환율 영향을 제외한 기준선이 겹쳐 표시되어 환율 효과를 " +
+                "바로 볼 수 있고, 보유 종목 표에는 종목별 환율 효과가 분리되어 나옵니다."}
             </span>
           </p>
         </div>
@@ -817,20 +817,20 @@ export default function PortfolioDashboard() {
           <LineChart
             data={valueSeries}
             compare={fxMode ? constFxSeries : undefined}
-            seriesLabels={["Actual value", "If FX held flat"]}
+            seriesLabels={["실제 가치", "환율 고정 시"]}
             title={
               fxMode
-                ? "Portfolio Value — actual vs. without currency moves (" + baseCurrency + ")"
-                : "Portfolio Value (" + baseCurrency + ")"
+                ? "포트폴리오 가치 — 실제 vs 환율 변동 제외 (" + baseCurrency + ")"
+                : "포트폴리오 가치 (" + baseCurrency + ")"
             }
             width={1090}
             height={260}
           />
           {fxMode ? (
             <p style={{ fontSize: "12px", margin: "8px 4px 2px", lineHeight: 1.5, ...muted }}>
-              {"Solid line: actual value. Dashed line: what the portfolio would be worth if every exchange rate " +
-                "had stayed at its purchase level. The widening gap is the currency effect compounding through the " +
-                "whole portfolio — " + signedMoney(totalFx, baseCurrency) + " to date."}
+              {"실선은 실제 가치, 점선은 모든 환율이 매입 시점 그대로였다면의 가치입니다. " +
+                "두 선이 벌어지는 간격이 포트폴리오 전체에 누적된 환율 효과이며, " +
+                "현재까지 " + signedMoney(totalFx, baseCurrency) + "입니다."}
             </p>
           ) : null}
         </div>
@@ -839,23 +839,23 @@ export default function PortfolioDashboard() {
       {/* Allocation: asset type + currency */}
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "16px" }}>
         <div style={{ ...cardStyle, flex: "1 1 300px", overflowX: "auto" }}>
-          <PieChart data={typeData} title="Allocation by Asset Type" width={340} height={270} />
+          <PieChart data={typeData} title="자산 유형별 배분" width={340} height={270} />
         </div>
         <div style={{ ...cardStyle, flex: "1 1 300px", overflowX: "auto" }}>
-          <PieChart data={curData} title="Exposure by Currency" width={340} height={270} />
+          <PieChart data={curData} title="통화별 노출" width={340} height={270} />
         </div>
       </div>
 
       {/* Return per position */}
       <div style={{ ...cardStyle, marginBottom: "16px", overflowX: "auto" }}>
-        <BarChart data={returnData} title="Return % by Position" width={1090} height={260} />
+        <BarChart data={returnData} title="종목별 수익률 %" width={1090} height={260} />
       </div>
 
       {/* Holdings table */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
-        <SectionTitle>Holdings</SectionTitle>
+        <SectionTitle>보유 종목</SectionTitle>
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          <Chip label="All" active={typeFilter === "all"} onClick={() => setTypeFilter("all")} />
+          <Chip label="전체" active={typeFilter === "all"} onClick={() => setTypeFilter("all")} />
           {assetTypes.map((tname) => (
             <Chip key={tname} label={tname} active={typeFilter === tname} onClick={() => setTypeFilter(tname)} />
           ))}
@@ -906,9 +906,9 @@ export default function PortfolioDashboard() {
       </div>
 
       <p style={{ marginTop: "16px", fontSize: "12px", ...muted }}>
-        Click any holding to open its detail page, or <strong>Refresh prices</strong> to re-read the CSV files.
-        Edit <code>holdings.csv</code>, <code>fx_rates.csv</code> and <code>history.csv</code>, then click{" "}
-        <strong>Build</strong> to recompile. Click a column header to sort.
+        종목을 누르면 상세 페이지가 열리고, <strong>현재가 새로고침</strong>을 누르면 CSV 파일을 다시 읽습니다.
+        <code>holdings.csv</code>, <code>fx_rates.csv</code>, <code>history.csv</code>를 수정한 뒤{" "}
+        <strong>빌드</strong>를 누르면 다시 컴파일됩니다. 열 머리글을 누르면 정렬됩니다.
       </p>
     </div>
   );

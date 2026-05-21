@@ -4,7 +4,7 @@
  *   tsx apps/server/scripts/create-account.ts <username> <password> [displayName] [role] [locale] [mode]
  *
  * Role is "user" unless "admin" is passed.
- * Locale defaults to "en" unless specified (e.g. "ko").
+ * Locale defaults to "ko" unless specified (e.g. "en").
  * Mode is "standard" unless "simple" is passed.
  * Existing usernames are left untouched.
  */
@@ -38,7 +38,7 @@ const account = createAccount(
   password,
   displayName && displayName.trim() !== "" ? displayName : username,
   role === "admin" ? "admin" : "user",
-  locale && locale.trim() !== "" ? locale.trim() : "en",
+  locale && locale.trim() !== "" ? locale.trim() : "ko",
   resolvedMode
 );
 console.log(`Created account "${account.username}" (role: ${account.role}, locale: ${account.locale}, mode: ${account.mode}).`);

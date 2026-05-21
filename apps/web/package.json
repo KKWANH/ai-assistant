@@ -17,13 +17,14 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.35.3",
     "@tanstack/react-query": "^5.62.16",
-    "react-markdown": "^9.0.1",
-    "remark-gfm": "^4.0.0",
     "codemirror": "^6.0.1",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
     "react-router-dom": "^6.28.2",
+    "remark-cjk-friendly": "^2.0.1",
+    "remark-gfm": "^4.0.0",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
