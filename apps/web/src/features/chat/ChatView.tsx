@@ -17,11 +17,13 @@ import {
   MessageSquarePlus,
   Globe,
 } from "lucide-react";
-import type { ChatMessage } from "@ariadne/shared";
+import type { ChatMessage, GenerationStatus } from "@ariadne/shared";
 import {
   useChat,
   useCreateChat,
   useSendMessage,
+  useActiveGeneration,
+  useStopGeneration,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
@@ -117,18 +119,40 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 function MessageList({
   messages,
   streaming,
+  reconnectGen,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
+  reconnectGen: GenerationStatus | null;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const { t } = useT();
 
+  // A generation running on the server that this tab is not live-streaming
+  // (another tab, or a reload mid-generation) — rendered as a streaming
+  // assistant message so the live view resumes seamlessly.
+  const synthetic: ChatMessage | null = reconnectGen
+    ? {
+        id: "__streaming_reconnect",
+        chatId: reconnectGen.chatId,
+        role: "assistant",
+        content: reconnectGen.content,
+        attachments: [],
+        webSearch: false,
+        searchResults: null,
+        agent:
+          reconnectGen.agentSteps.length > 0
+            ? { steps: reconnectGen.agentSteps }
+            : null,
+        createdAt: reconnectGen.startedAt,
+      }
+    : null;
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streaming]);
+  }, [messages, streaming, reconnectGen]);
 
-  if (messages.length === 0 && !streaming) {
+  if (messages.length === 0 && !streaming && !synthetic) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-xs text-muted-foreground italic">
@@ -144,6 +168,7 @@ function MessageList({
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
+        {synthetic && <MessageBubble key={synthetic.id} message={synthetic} />}
         {streaming && messages.length === 0 && <StreamingIndicator statusText="" />}
         <div ref={bottomRef} />
       </div>
@@ -155,12 +180,27 @@ function MessageList({
 function ThreadView({ chatId }: { chatId: string }) {
   const { toast } = useToast();
   const { t } = useT();
+  const qc = useQueryClient();
   const sendMessage = useSendMessage();
+  const stopGeneration = useStopGeneration();
   const { data: chat, isLoading } = useChat(chatId);
+  const { data: activeData } = useActiveGeneration(chatId);
   const [streaming, setStreaming] = useState(false);
 
   // Query cache is the single source of truth — no local messages
   const messages: ChatMessage[] = chat?.messages ?? [];
+  const activeGen = activeData?.active ?? null;
+
+  // When a server generation finishes (active → null), pull the saved message.
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    const isActive = !!activeGen;
+    if (wasActiveRef.current && !isActive) {
+      void qc.invalidateQueries({ queryKey: ["chats", chatId] });
+      void qc.invalidateQueries({ queryKey: ["chats"] });
+    }
+    wasActiveRef.current = isActive;
+  }, [activeGen, chatId, qc]);
 
   if (isLoading) {
     return (
@@ -169,6 +209,12 @@ function ThreadView({ chatId }: { chatId: string }) {
       </div>
     );
   }
+
+  const hasLocalPlaceholder = messages.some((m) => m.id.startsWith("__streaming_"));
+  // Show the reconnect view only for a generation this tab is not streaming.
+  const reconnectGen =
+    activeGen && !streaming && !hasLocalPlaceholder ? activeGen : null;
+  const busy = streaming || hasLocalPlaceholder || !!activeGen;
 
   const handleSend = async (opts: {
     content: string;
@@ -196,16 +242,25 @@ function ThreadView({ chatId }: { chatId: string }) {
       });
     } finally {
       setStreaming(false);
+      // Clear the polled status at once so the reconnect view never flashes.
+      qc.setQueryData(["chat-active", chatId], { active: null });
     }
+  };
+
+  const handleStop = () => {
+    void stopGeneration.mutateAsync(chatId).catch(() => {
+      /* best-effort — the stream ends on its own once aborted */
+    });
   };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <MessageList messages={messages} streaming={streaming} />
+      <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} />
       <div className="shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
         <ChatComposer
           onSend={(opts) => void handleSend(opts)}
-          pending={streaming}
+          pending={busy}
+          onStop={busy ? handleStop : undefined}
         />
       </div>
     </div>

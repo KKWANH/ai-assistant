@@ -69,6 +69,7 @@ export class MockProvider implements AiProvider {
     // Split into ~word chunks and emit with a small delay for realism
     const words = text.split(/(\s+)/);
     for (let i = 0; i < words.length; i++) {
+      if (req.signal?.aborted) break;
       const chunk = words[i] ?? "";
       if (chunk) {
         onDelta(chunk);

@@ -18,7 +18,7 @@ export class AnthropicProvider implements AiProvider {
       max_tokens: 4096,
       system: req.system,
       messages: [{ role: "user", content: req.prompt }],
-    });
+    }, { signal: req.signal });
 
     const content = msg.content[0];
     const raw = content?.type === "text" ? content.text : "";
@@ -38,7 +38,7 @@ export class AnthropicProvider implements AiProvider {
       max_tokens: 4096,
       system: req.system,
       messages: [{ role: "user", content: req.prompt }],
-    });
+    }, { signal: req.signal });
 
     let fullText = "";
     let inThink = false;
@@ -92,7 +92,7 @@ export class AnthropicProvider implements AiProvider {
           ],
         },
       ],
-    });
+    }, { signal: req.signal });
 
     const content = msg.content[0];
     const raw = content?.type === "text" ? content.text : "";

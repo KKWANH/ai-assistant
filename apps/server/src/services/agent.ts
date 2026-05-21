@@ -41,6 +41,8 @@ export interface RunAgentOptions {
   userMessage: string;
   provider: AiProvider;
   emit: (event: ChatStreamEvent) => void;
+  /** Aborts the agent loop and its in-flight provider calls. */
+  signal: AbortSignal;
 }
 
 export interface RunAgentResult {
@@ -51,7 +53,7 @@ export interface RunAgentResult {
 }
 
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
-  const { chat, history, userMessage, provider, emit } = opts;
+  const { chat, history, userMessage, provider, emit, signal } = opts;
 
   // Load custom actions for this workspace (if any)
   let customActions: WorkspaceAction[] = [];
@@ -71,6 +73,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     system: buildPlannerSystem(customActions),
     prompt: buildPlannerPrompt(history, userMessage),
     json: true,
+    signal,
   });
 
   const plan = parsePlan(planRaw, customActions);
@@ -92,6 +95,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     if (!step) continue;
+    if (signal.aborted) break;
 
     // Mark running
     step.status = "running";
@@ -100,7 +104,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     let result: string;
     try {
       result = await withTimeout(
-        runTool(step.tool, step.description, chat, provider, customActions, collectedSources),
+        runTool(step.tool, step.description, chat, provider, customActions, collectedSources, signal),
         STEP_TIMEOUT_MS,
       );
       step.status = "done";
@@ -123,6 +127,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         system: buildReplannerSystem(customActions),
         prompt: buildReplannerPrompt(userMessage, stepResults, remaining),
         json: true,
+        signal,
       }).catch(() => null);
 
       if (revisedRaw) {
@@ -147,22 +152,28 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
   // ── 4. Final synthesis ─────────────────────────────────────────────────
 
-  emit({ type: "status", text: "Synthesising answer…" });
-
   let finalContent = "";
-  await provider.completeStream(
-    {
-      system: buildSynthesisSystem(),
-      prompt: buildSynthesisPrompt(userMessage, stepResults),
-    },
-    (delta) => {
-      finalContent += delta;
-      emit({ type: "delta", text: delta });
-    },
-    (status) => {
-      emit({ type: "status", text: status });
-    },
-  );
+  if (!signal.aborted) {
+    emit({ type: "status", text: "Synthesising answer…" });
+    try {
+      await provider.completeStream(
+        {
+          system: buildSynthesisSystem(),
+          prompt: buildSynthesisPrompt(userMessage, stepResults),
+          signal,
+        },
+        (delta) => {
+          finalContent += delta;
+          emit({ type: "delta", text: delta });
+        },
+        (status) => {
+          emit({ type: "status", text: status });
+        },
+      );
+    } catch {
+      // Aborted (or failed) mid-synthesis — keep whatever streamed so far.
+    }
+  }
 
   const trace: AgentTrace = { steps, summary: plan.summary || undefined };
 
@@ -192,11 +203,12 @@ async function runTool(
   provider: AiProvider,
   customActions: WorkspaceAction[],
   sources: SearchResult[],
+  signal: AbortSignal,
 ): Promise<string> {
   // Check if the tool name matches a custom action id
   const customAction = customActions.find((a) => a.id === tool);
   if (customAction) {
-    return executeCustomAction(customAction, description, chat, provider, sources);
+    return executeCustomAction(customAction, description, chat, provider, sources, signal);
   }
 
   switch (tool) {
@@ -246,6 +258,7 @@ async function runTool(
         system: "You are a visual analysis assistant.",
         prompt: description,
         images: [],
+        signal,
       });
       return text;
     }
@@ -269,6 +282,7 @@ async function runTool(
       const { text } = await provider.complete({
         system: "You are a reasoning assistant. Think through the task carefully and provide a clear, well-structured analysis.",
         prompt: description,
+        signal,
       });
       return text;
     }
@@ -290,6 +304,7 @@ async function executeCustomAction(
   chat: Chat,
   provider: AiProvider,
   sources: SearchResult[],
+  signal: AbortSignal,
 ): Promise<string> {
   switch (action.type) {
     case "run_script": {
@@ -368,6 +383,7 @@ async function executeCustomAction(
       const { text } = await provider.complete({
         system: `You are a formatting assistant. ${constraints ? `Constraints: ${constraints}` : ""}`,
         prompt: `Format the following using this template: ${template}\n\nContent to format:\n${description}`,
+        signal,
       });
       return text;
     }

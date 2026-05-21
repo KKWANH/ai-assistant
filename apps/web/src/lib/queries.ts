@@ -390,6 +390,24 @@ export function useDeleteChat() {
   });
 }
 
+/** Polls whether a generation is in progress for a chat — survives reconnects. */
+export function useActiveGeneration(chatId: string) {
+  return useQuery({
+    queryKey: ["chat-active", chatId] as const,
+    queryFn: () => api.getActiveGeneration(chatId),
+    enabled: !!chatId,
+    refetchInterval: 2000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useStopGeneration() {
+  return useMutation({
+    mutationFn: (chatId: string) => api.stopGeneration(chatId),
+  });
+}
+
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 export function useActions(workspaceId: string) {
@@ -553,6 +571,18 @@ export function useSendMessage() {
             content: m.content || "",
             _streamError: error,
           } as ChatMessage & { _streamError?: string }));
+        },
+
+        onDisconnect: () => {
+          // The stream dropped before completion — the generation keeps
+          // running on the server. Drop the placeholder so the /active poll
+          // resumes the live view, and pull the chat in case it just finished.
+          setCachedChat(qc, chatId, (old) =>
+            old
+              ? { ...old, messages: (old.messages ?? []).filter((m) => m.id !== streamingId) }
+              : old
+          );
+          void qc.invalidateQueries({ queryKey: ["chats", chatId] });
         },
       });
     },

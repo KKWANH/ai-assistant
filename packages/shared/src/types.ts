@@ -410,6 +410,25 @@ export interface AgentTrace {
   summary?: string;
 }
 
+/**
+ * A chat generation running on the server right now. Survives client
+ * disconnect — a reconnecting client polls this to resume the live view.
+ */
+export interface GenerationStatus {
+  chatId: string;
+  /** The assistant message id being generated. */
+  messageId: string;
+  /** ISO timestamp the generation started. */
+  startedAt: string;
+  agentMode: boolean;
+  /** Partial assistant text produced so far. */
+  content: string;
+  /** Latest status line. */
+  statusText: string;
+  /** Partial agent steps (agent mode only). */
+  agentSteps: AgentStep[];
+}
+
 /* ------------------------------------------------------------------ *
  * Chat streaming (SSE event union for POST /api/chats/:id/messages)
  * ------------------------------------------------------------------ */

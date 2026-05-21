@@ -8,6 +8,7 @@ import {
   Paperclip,
   Globe,
   Send,
+  Square,
   X,
   FolderOpen,
   ChevronDown,
@@ -49,6 +50,8 @@ export interface ChatComposerProps {
   }) => void;
   disabled?: boolean;
   pending?: boolean;
+  /** When provided and `pending`, the send button becomes a stop button. */
+  onStop?: () => void;
 }
 
 const IMAGE_TYPES = [
@@ -73,7 +76,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
+export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   // Agent + web search default ON — Ariadne leads with grounded, traceable
@@ -488,18 +491,31 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
             {pending ? t("chat.composer.waiting") : t("chat.composer.hint")}
           </span>
 
-          {/* Send button */}
-          <Button
-            variant="primary"
-            size="sm"
-            className="shrink-0"
-            onClick={handleSend}
-            disabled={!canSend}
-            loading={pending}
-            aria-label={t("chat.composer.send")}
-          >
-            <Send className="h-3.5 w-3.5" />
-          </Button>
+          {/* Send / Stop button */}
+          {pending && onStop ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shrink-0"
+              onClick={onStop}
+              aria-label={t("chat.composer.stop")}
+              title={t("chat.composer.stop")}
+            >
+              <Square className="h-3 w-3 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              className="shrink-0"
+              onClick={handleSend}
+              disabled={!canSend}
+              loading={pending}
+              aria-label={t("chat.composer.send")}
+            >
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

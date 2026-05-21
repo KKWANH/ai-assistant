@@ -34,6 +34,13 @@ import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
+import {
+  beginGeneration,
+  endGeneration,
+  getGenerationStatus,
+  abortGeneration,
+  applyEventToGeneration,
+} from "../services/generations.js";
 import logger from "../logger.js";
 
 // ---------------------------------------------------------------------------
@@ -253,6 +260,20 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         const rawProvider = await getProvider(settings);
         const provider = meteringProvider(rawProvider, assistantMsgId, settings.model);
 
+        // --- Register the generation: it survives client disconnect, and a
+        //     reconnecting client (or a stop request) finds it by chat id ---
+        const controller = new AbortController();
+        const gen = beginGeneration({
+          chatId: chat.id,
+          messageId: assistantMsgId,
+          agentMode: agentMode ?? false,
+          controller,
+        });
+        const emit = (event: ChatStreamEvent): void => {
+          applyEventToGeneration(gen, event);
+          sseEmit(event);
+        };
+
         // --- Agent mode or regular mode ---
         let assistantContent: string;
         let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
@@ -266,19 +287,25 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
               history: historyWithoutCurrent,
               userMessage: content,
               provider,
-              emit: sseEmit,
+              emit,
+              signal: controller.signal,
             });
             assistantContent = agentResult.content;
             agentTrace = agentResult.agent;
             agentSearchResults = agentResult.searchResults;
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            logger.warn({ chatId: chat.id, err }, "Agent loop error");
-            assistantContent = `I encountered an error during the agent loop: ${msg}`;
+            if (controller.signal.aborted) {
+              assistantContent = "";
+            } else {
+              const msg = err instanceof Error ? err.message : String(err);
+              logger.warn({ chatId: chat.id, err }, "Agent loop error");
+              assistantContent = `I encountered an error during the agent loop: ${msg}`;
+            }
           }
         } else {
           // Regular streaming
-          sseEmit({ type: "status", text: "Generating…" });
+          emit({ type: "status", text: "Generating…" });
+          assistantContent = "";
 
           try {
             const hasImages = contextResult.images.length > 0;
@@ -289,34 +316,49 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
                 system: contextResult.system,
                 prompt: contextResult.prompt,
                 images: contextResult.images,
+                signal: controller.signal,
               });
               assistantContent = result.text;
               // Emit the whole text as one delta so the client renders it
-              sseEmit({ type: "delta", text: assistantContent });
+              emit({ type: "delta", text: assistantContent });
             } else {
-              assistantContent = "";
               await provider.completeStream(
                 {
                   system: contextResult.system,
                   prompt: contextResult.prompt,
+                  signal: controller.signal,
                 },
                 (delta) => {
                   assistantContent += delta;
-                  sseEmit({ type: "delta", text: delta });
+                  emit({ type: "delta", text: delta });
                 },
                 (status) => {
-                  sseEmit({ type: "status", text: status });
+                  emit({ type: "status", text: status });
                 },
               );
             }
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            logger.warn({ chatId: chat.id, err }, "AI provider streaming error");
-            assistantContent =
-              "I'm sorry, I encountered an error while generating a response. " +
-              `(${msg}) Please check your provider settings and try again.`;
-            sseEmit({ type: "delta", text: assistantContent });
+            if (controller.signal.aborted) {
+              // Stopped by the user — keep whatever streamed so far.
+            } else {
+              const msg = err instanceof Error ? err.message : String(err);
+              logger.warn({ chatId: chat.id, err }, "AI provider streaming error");
+              assistantContent =
+                "I'm sorry, I encountered an error while generating a response. " +
+                `(${msg}) Please check your provider settings and try again.`;
+              emit({ type: "delta", text: assistantContent });
+            }
           }
+        }
+
+        // If the user stopped before any visible output (no text, no steps),
+        // leave a small marker so the turn doesn't render blank.
+        if (
+          controller.signal.aborted &&
+          !assistantContent.trim() &&
+          (agentTrace?.steps.length ?? 0) === 0
+        ) {
+          assistantContent = "_(stopped)_";
         }
 
         // --- Insert assistant message ---
@@ -342,10 +384,26 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         logger.error({ chatId: chat.id, err }, "Unexpected error in chat SSE handler");
         sseEmit({ type: "error", error: msg });
       } finally {
+        endGeneration(chat.id);
         sseEnd();
       }
     }
   );
+
+  // -------------------------------------------------------------------------
+  // POST /api/chats/:id/stop — abort an in-progress generation
+  // -------------------------------------------------------------------------
+  app.post<{ Params: { id: string } }>("/chats/:id/stop", async (req, reply) => {
+    abortGeneration(req.params.id);
+    return reply.send({ ok: true });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/chats/:id/active — status of an in-progress generation, if any
+  // -------------------------------------------------------------------------
+  app.get<{ Params: { id: string } }>("/chats/:id/active", async (req, reply) => {
+    return reply.send({ active: getGenerationStatus(req.params.id) });
+  });
 
   // -------------------------------------------------------------------------
   // GET /api/uploads/:id

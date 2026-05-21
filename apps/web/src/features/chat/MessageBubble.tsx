@@ -470,12 +470,35 @@ function SearchSources({ results }: { results: SearchResult[] }) {
 }
 
 // ── Streaming status line ─────────────────────────────────────────────────────
-export function StreamingIndicator({ statusText }: { statusText: string }) {
+
+/** Live "M:SS" elapsed timer since `startedAt`; re-renders every second. */
+function useElapsed(startedAt?: string): string {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!startedAt) return;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  if (!startedAt) return "";
+  const ms = Date.now() - new Date(startedAt).getTime();
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60).toString()}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export function StreamingIndicator({
+  statusText,
+  startedAt,
+}: {
+  statusText: string;
+  startedAt?: string;
+}) {
   const { t } = useT();
+  const elapsed = useElapsed(startedAt);
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      <span>{statusText || t("chat.streaming.generating")}</span>
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+      <span className="animate-pulse">{statusText || t("chat.streaming.generating")}</span>
+      {elapsed && <span className="font-mono text-muted-foreground/60">{elapsed}</span>}
     </div>
   );
 }
@@ -541,7 +564,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         {/* Live streaming status (before first delta arrives) */}
         {isStreamingWithNoContent && (
-          <StreamingIndicator statusText={streamStatus} />
+          <StreamingIndicator statusText={streamStatus} startedAt={message.createdAt} />
         )}
 
         {/* Stream error */}
@@ -560,7 +583,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {/* Live streaming cursor at end */}
             {isStreaming && (
               <span className="inline-block ml-0.5 mt-1">
-                <StreamingIndicator statusText={streamStatus} />
+                <StreamingIndicator statusText={streamStatus} startedAt={message.createdAt} />
               </span>
             )}
 

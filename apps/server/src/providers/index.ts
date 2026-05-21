@@ -14,6 +14,8 @@ export interface CompleteRequest {
   system: string;
   prompt: string;
   json?: boolean;
+  /** Abort signal — cancels the underlying provider call when triggered. */
+  signal?: AbortSignal;
 }
 
 export interface CompleteWithImagesRequest extends CompleteRequest {

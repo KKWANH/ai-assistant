@@ -1,58 +1,58 @@
 /**
- * Provider status routes.
+ * Provider status route.
  *
- * GET /api/providers/status — live reachability check for each provider.
- *   - ollama: fetches /api/tags from OLLAMA_BASE_URL with a ~2s timeout.
- *   - anthropic/openai/gemini/moonshot: checks whether the API key env var is set.
+ * GET /api/providers/status — live availability for each provider, as the
+ * shared `ProviderStatus` contract ({ id, label, configured, models }):
+ *   - ollama: fetches /api/tags from OLLAMA_BASE_URL. The timeout is generous
+ *     because a busy Ollama (loading or running a large model) can be slow to
+ *     answer even when perfectly healthy — a short timeout caused false
+ *     "not running" reports.
+ *   - anthropic/openai/gemini/moonshot: API key env var present?
  *   - mock: always available.
  */
 
 import type { FastifyInstance } from "fastify";
 import { PROVIDERS, PROVIDER_LABELS } from "@ariadne/shared";
-import type { ProviderId } from "@ariadne/shared";
+import type { ProviderId, ProviderStatus } from "@ariadne/shared";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+const OLLAMA_TIMEOUT_MS = 8000;
 
-interface ProviderLiveStatus {
-  id: ProviderId;
-  label: string;
-  reachable: boolean;
-  models?: string[];
-  detail?: string;
-}
-
-async function checkOllama(): Promise<ProviderLiveStatus> {
+async function checkOllama(): Promise<ProviderStatus> {
+  const base: ProviderStatus = {
+    id: "ollama",
+    label: PROVIDER_LABELS["ollama"],
+    configured: false,
+    models: [],
+  };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2000);
+  const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
   try {
     const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: controller.signal });
+    if (!res.ok) return base;
+    const data = (await res.json()) as { models?: Array<{ name: string }> };
+    return { ...base, configured: true, models: (data.models ?? []).map((m) => m.name) };
+  } catch {
+    return base;
+  } finally {
     clearTimeout(timer);
-    if (!res.ok) {
-      return { id: "ollama", label: PROVIDER_LABELS["ollama"], reachable: false, detail: `HTTP ${res.status.toString()}` };
-    }
-    const data = await res.json() as { models?: Array<{ name: string }> };
-    const models: string[] = (data.models ?? []).map((m) => m.name);
-    return { id: "ollama", label: PROVIDER_LABELS["ollama"], reachable: true, models };
-  } catch (err) {
-    clearTimeout(timer);
-    const detail = err instanceof Error ? err.message : String(err);
-    return { id: "ollama", label: PROVIDER_LABELS["ollama"], reachable: false, detail };
   }
 }
 
-function checkKeyProvider(id: ProviderId): ProviderLiveStatus {
-  const envMap: Partial<Record<ProviderId, string>> = {
-    anthropic: "ANTHROPIC_API_KEY",
-    openai: "OPENAI_API_KEY",
-    gemini: "GEMINI_API_KEY",
-    moonshot: "MOONSHOT_API_KEY",
-  };
-  const envKey = envMap[id];
-  const configured = envKey ? !!process.env[envKey] : false;
+const KEY_ENV: Partial<Record<ProviderId, string>> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  moonshot: "MOONSHOT_API_KEY",
+};
+
+function checkKeyProvider(id: ProviderId): ProviderStatus {
+  const envKey = KEY_ENV[id];
   return {
     id,
     label: PROVIDER_LABELS[id],
-    reachable: configured,
+    configured: envKey ? !!process.env[envKey] : false,
+    models: [],
   };
 }
 
@@ -60,15 +60,12 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/providers/status
   app.get("/providers/status", async (_req, reply) => {
     const statuses = await Promise.all(
-      PROVIDERS.map(async (id): Promise<ProviderLiveStatus> => {
-        switch (id) {
-          case "ollama":
-            return checkOllama();
-          case "mock":
-            return { id: "mock", label: PROVIDER_LABELS["mock"], reachable: true };
-          default:
-            return checkKeyProvider(id);
+      PROVIDERS.map(async (id): Promise<ProviderStatus> => {
+        if (id === "ollama") return checkOllama();
+        if (id === "mock") {
+          return { id: "mock", label: PROVIDER_LABELS["mock"], configured: true, models: [] };
         }
+        return checkKeyProvider(id);
       })
     );
     return reply.send(statuses);

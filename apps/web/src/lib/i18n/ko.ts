@@ -120,6 +120,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.hint": "↵ 전송 · ⇧↵ 줄바꿈",
   "chat.composer.waiting": "대기 중…",
   "chat.composer.send": "메시지 전송",
+  "chat.composer.stop": "중지",
   "chat.composer.changeModel": "AI 모델 변경",
   "chat.composer.connectWorkspace": "워크스페이스 연결",
   "chat.composer.failedProvider": "프로바이더 변경에 실패했습니다",

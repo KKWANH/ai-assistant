@@ -21,7 +21,7 @@ export class OpenAIProvider implements AiProvider {
         { role: "user", content: req.prompt },
       ],
       ...(req.json ? { response_format: { type: "json_object" } } : {}),
-    });
+    }, { signal: req.signal });
     const raw = res.choices[0]?.message.content ?? "";
     const usage = res.usage
       ? { inputTokens: res.usage.prompt_tokens, outputTokens: res.usage.completion_tokens }
@@ -42,7 +42,7 @@ export class OpenAIProvider implements AiProvider {
       ],
       stream: true,
       stream_options: { include_usage: true },
-    });
+    }, { signal: req.signal });
 
     let fullText = "";
     let inThink = false;
@@ -93,7 +93,7 @@ export class OpenAIProvider implements AiProvider {
           ],
         },
       ],
-    });
+    }, { signal: req.signal });
     const raw = res.choices[0]?.message.content ?? "";
     const usage = res.usage
       ? { inputTokens: res.usage.prompt_tokens, outputTokens: res.usage.completion_tokens }

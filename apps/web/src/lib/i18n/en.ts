@@ -127,6 +127,7 @@ const en = {
   "chat.composer.hint": "↵ send · ⇧↵ newline",
   "chat.composer.waiting": "Waiting…",
   "chat.composer.send": "Send message",
+  "chat.composer.stop": "Stop",
   "chat.composer.changeModel": "Change AI model",
   "chat.composer.connectWorkspace": "Connect a workspace",
   "chat.composer.failedProvider": "Failed to update provider",

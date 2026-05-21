@@ -221,6 +221,19 @@ export const updateChat = (id: string, input: UpdateChatInput) =>
 export const deleteChat = (id: string) =>
   request<{ ok: boolean }>("DELETE", `/chats/${id}`);
 
+// ── In-progress generation (stop / reconnect) ─────────────────────────────────
+import type { GenerationStatus } from "@ariadne/shared";
+
+export interface ActiveGenerationPayload {
+  active: GenerationStatus | null;
+}
+
+export const getActiveGeneration = (chatId: string) =>
+  request<ActiveGenerationPayload>("GET", `/chats/${chatId}/active`);
+
+export const stopGeneration = (chatId: string) =>
+  request<{ ok: boolean }>("POST", `/chats/${chatId}/stop`);
+
 // ── Streaming sendMessage (SSE) ───────────────────────────────────────────────
 import type { ChatStreamEvent } from "@ariadne/shared";
 
@@ -232,6 +245,9 @@ export interface StreamHandlers {
   onAgentStep?: (step: import("@ariadne/shared").AgentStep) => void;
   onDone?: (msg: ChatMessage) => void;
   onError?: (error: string) => void;
+  /** The stream closed before a done/error event — the generation may still
+   *  be running on the server (reconnect via GET /chats/:id/active). */
+  onDisconnect?: () => void;
 }
 
 export async function sendMessage(
@@ -275,6 +291,7 @@ export async function sendMessage(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedTerminal = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -309,9 +326,11 @@ export async function sendMessage(
             handlers.onAgentStep?.(event.step);
             break;
           case "done":
+            receivedTerminal = true;
             handlers.onDone?.(event.message);
             break;
           case "error":
+            receivedTerminal = true;
             handlers.onError?.(event.error);
             break;
         }
@@ -320,6 +339,10 @@ export async function sendMessage(
       }
     }
   }
+
+  // Stream closed with no done/error — a dropped connection. The generation
+  // keeps running on the server; the caller can reconnect via /active.
+  if (!receivedTerminal) handlers.onDisconnect?.();
 }
 
 export const getUploadUrl = (id: string) => `/api/uploads/${id}`;
