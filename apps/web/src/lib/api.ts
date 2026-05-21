@@ -70,6 +70,9 @@ export const getWorkspace = (id: string) =>
 export const updateWorkspace = (id: string, input: UpdateWorkspaceInput) =>
   request<Workspace>("PATCH", `/workspaces/${id}`, input);
 
+export const deleteWorkspace = (id: string) =>
+  request<{ ok: boolean }>("DELETE", `/workspaces/${id}`);
+
 export const scanWorkspace = (id: string) =>
   request<Snapshot>("POST", `/workspaces/${id}/scan`);
 

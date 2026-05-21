@@ -89,6 +89,16 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   return dbGetWorkspace(id);
 }
 
+/** Delete a workspace and all of its derived rows (snapshots, runs, claims, index). */
+export function dbDeleteWorkspace(id: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM claims WHERE run_id IN (SELECT id FROM runs WHERE workspace_id = ?)").run(id);
+  db.prepare("DELETE FROM runs WHERE workspace_id = ?").run(id);
+  db.prepare("DELETE FROM snapshots WHERE workspace_id = ?").run(id);
+  db.prepare("DELETE FROM file_index WHERE workspace_id = ?").run(id);
+  db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+}
+
 function rowToWorkspace(row: Record<string, unknown>): Workspace {
   return {
     id: row["id"] as string,

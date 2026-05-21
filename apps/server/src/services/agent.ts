@@ -13,7 +13,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Chat, ChatMessage, ChatStreamEvent, AgentStep, AgentTrace, AgentTool, WorkspaceAction } from "@ariadne/shared";
+import type { Chat, ChatMessage, ChatStreamEvent, AgentStep, AgentTrace, AgentTool, WorkspaceAction, SearchResult } from "@ariadne/shared";
 import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
 import { performSearch } from "./search.js";
@@ -46,6 +46,8 @@ export interface RunAgentOptions {
 export interface RunAgentResult {
   content: string;
   agent: AgentTrace;
+  /** Web sources gathered across the agent's search steps. */
+  searchResults: SearchResult[] | null;
 }
 
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
@@ -71,11 +73,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     json: true,
   });
 
-  const initialSteps = parsePlanSteps(planRaw, customActions);
-  const steps: AgentStep[] = initialSteps.slice(0, MAX_STEPS).map((s) => ({
+  const plan = parsePlan(planRaw, customActions);
+  const steps: AgentStep[] = plan.steps.slice(0, MAX_STEPS).map((s) => ({
     id: crypto.randomUUID(),
     description: s.description,
     tool: s.tool,
+    note: s.note,
     status: "pending" as const,
   }));
 
@@ -84,6 +87,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   // ── 2. Execute ────────────────────────────────────────────────────────────
 
   const stepResults: string[] = [];
+  const collectedSources: SearchResult[] = [];
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -96,7 +100,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     let result: string;
     try {
       result = await withTimeout(
-        runTool(step.tool, step.description, chat, provider, customActions),
+        runTool(step.tool, step.description, chat, provider, customActions, collectedSources),
         STEP_TIMEOUT_MS,
       );
       step.status = "done";
@@ -122,7 +126,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       }).catch(() => null);
 
       if (revisedRaw) {
-        const revisedSteps = parsePlanSteps(revisedRaw, customActions);
+        const revisedSteps = parsePlan(revisedRaw, customActions).steps;
         if (revisedSteps.length > 0) {
           // Replace remaining steps with revised plan (cap total)
           const newRemaining = revisedSteps
@@ -131,6 +135,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
               id: crypto.randomUUID(),
               description: s.description,
               tool: s.tool,
+              note: s.note,
               status: "pending" as const,
             }));
           steps.splice(i + 1, steps.length - (i + 1), ...newRemaining);
@@ -159,8 +164,21 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     },
   );
 
-  const trace: AgentTrace = { steps };
-  return { content: finalContent, agent: trace };
+  const trace: AgentTrace = { steps, summary: plan.summary || undefined };
+
+  // De-duplicate gathered sources by URL.
+  const seenUrls = new Set<string>();
+  const uniqueSources = collectedSources.filter((s) => {
+    if (seenUrls.has(s.url)) return false;
+    seenUrls.add(s.url);
+    return true;
+  });
+
+  return {
+    content: finalContent,
+    agent: trace,
+    searchResults: uniqueSources.length > 0 ? uniqueSources : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -172,20 +190,22 @@ async function runTool(
   description: string,
   chat: Chat,
   provider: AiProvider,
-  customActions: WorkspaceAction[] = [],
+  customActions: WorkspaceAction[],
+  sources: SearchResult[],
 ): Promise<string> {
   // Check if the tool name matches a custom action id
   const customAction = customActions.find((a) => a.id === tool);
   if (customAction) {
-    return executeCustomAction(customAction, description, chat, provider);
+    return executeCustomAction(customAction, description, chat, provider, sources);
   }
 
   switch (tool) {
     case "web_search": {
       const resp = await performSearch(description);
       if (resp.results.length === 0) return "No results found.";
-      return resp.results
-        .slice(0, 5)
+      const top = resp.results.slice(0, 5);
+      sources.push(...top);
+      return top
         .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
         .join("\n\n");
     }
@@ -269,6 +289,7 @@ async function executeCustomAction(
   description: string,
   chat: Chat,
   provider: AiProvider,
+  sources: SearchResult[],
 ): Promise<string> {
   switch (action.type) {
     case "run_script": {
@@ -332,8 +353,9 @@ async function executeCustomAction(
       const query = action.query ?? description;
       const resp = await performSearch(query);
       if (resp.results.length === 0) return "No search results found.";
-      let result = resp.results
-        .slice(0, 5)
+      const top = resp.results.slice(0, 5);
+      sources.push(...top);
+      let result = top
         .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
         .join("\n\n");
       if (action.constraints) result += `\n\n[Constraints: ${action.constraints}]`;
@@ -372,9 +394,10 @@ function buildPlannerSystem(customActions: WorkspaceAction[] = []): string {
 Given a user task, break it into an ordered list of steps. Each step has:
   - "description": what to do (short, action-oriented)
   - "tool": one of ${builtinTools}${customSection}
+  - "note": a brief one-line rationale — why this step, what it should surface
 
 Use 2–5 steps. Prefer "reason" for pure analysis. Use "web_search" for factual lookup.
-Return ONLY JSON: { "steps": [ { "description": "...", "tool": "..." } ] }
+Return ONLY JSON: { "summary": "<one line describing your overall approach>", "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
 This is a plan-and-execute agent. Do not add commentary outside the JSON.`;
 }
 
@@ -395,8 +418,9 @@ function buildReplannerSystem(customActions: WorkspaceAction[] = []): string {
 Given the user task, completed step results so far, and the remaining planned steps,
 revise the remaining steps if needed based on what was learned.
 
-Return ONLY JSON: { "steps": [ { "description": "...", "tool": "..." } ] }
+Return ONLY JSON: { "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
 "tool" must be one of: ${builtinTools}${customSection}
+Each step's "note" is a brief one-line rationale.
 If no changes are needed, return the same steps unchanged.`;
 }
 
@@ -435,27 +459,37 @@ Based on these findings, provide a comprehensive answer to the original task.`;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parsePlanSteps(
-  raw: string,
-  customActions: WorkspaceAction[] = [],
-): Array<{ description: string; tool: AgentTool }> {
+interface ParsedPlan {
+  steps: Array<{ description: string; tool: AgentTool; note?: string }>;
+  summary: string;
+}
+
+function parsePlan(raw: string, customActions: WorkspaceAction[] = []): ParsedPlan {
   try {
-    const jsonStr = extractJson(raw);
-    const parsed = JSON.parse(jsonStr) as { steps?: unknown[] };
-    if (!Array.isArray(parsed.steps)) return [];
+    const parsed = JSON.parse(extractJson(raw)) as {
+      steps?: unknown[];
+      summary?: unknown;
+    };
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+    if (!Array.isArray(parsed.steps)) return { steps: [], summary };
     const validTools = new Set<string>([
       "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
       ...customActions.map((a) => a.id),
     ]);
-    return parsed.steps
-      .filter((s): s is { description: string; tool: string } =>
+    const steps = parsed.steps
+      .filter((s): s is { description: string; tool: string; note?: unknown } =>
         typeof (s as { description?: unknown }).description === "string" &&
         typeof (s as { tool?: unknown }).tool === "string" &&
         validTools.has((s as { tool: string }).tool)
       )
-      .map((s) => ({ description: s.description, tool: s.tool as AgentTool }));
+      .map((s) => ({
+        description: s.description,
+        tool: s.tool as AgentTool,
+        note: typeof s.note === "string" && s.note.trim() ? s.note.trim() : undefined,
+      }));
+    return { steps, summary };
   } catch {
-    return [];
+    return { steps: [], summary: "" };
   }
 }
 

@@ -6,7 +6,8 @@
  * - Agent messages: live step checklist above the final markdown answer.
  * - Streaming state: live status line / token cursor while generating.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -14,6 +15,8 @@ import {
   ChevronUp,
   ExternalLink,
   File,
+  FileSpreadsheet,
+  Download,
   Globe,
   Check,
   X,
@@ -26,7 +29,7 @@ import {
   Play,
   AlertCircle,
 } from "lucide-react";
-import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTool } from "@ariadne/shared";
+import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTrace, AgentTool } from "@ariadne/shared";
 import { Badge } from "../../components/ui/Badge";
 import { useT } from "../../lib/i18n";
 import * as api from "../../lib/api";
@@ -167,21 +170,28 @@ function AgentStepRow({ step }: { step: AgentStep }) {
 
   return (
     <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-2 py-1 rounded">
-        <StepStatusIcon status={step.status} />
-        <ToolIcon tool={step.tool} />
-        <span
-          className={[
-            "text-xs flex-1 leading-snug",
-            step.status === "done" ? "text-foreground/80" : "text-foreground",
-            step.status === "failed" ? "line-through text-muted-foreground" : "",
-          ].join(" ")}
-        >
-          {step.description}
-        </span>
+      <div className="flex items-start gap-2 py-1 rounded">
+        <span className="mt-0.5 shrink-0"><StepStatusIcon status={step.status} /></span>
+        <span className="mt-0.5 shrink-0"><ToolIcon tool={step.tool} /></span>
+        <div className="flex-1 min-w-0">
+          <span
+            className={[
+              "block text-xs leading-snug",
+              step.status === "done" ? "text-foreground/80" : "text-foreground",
+              step.status === "failed" ? "line-through text-muted-foreground" : "",
+            ].join(" ")}
+          >
+            {step.description}
+          </span>
+          {step.note && (
+            <span className="block text-[11px] text-muted-foreground leading-snug mt-0.5">
+              {step.note}
+            </span>
+          )}
+        </div>
         {canExpand && (
           <button
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? (
@@ -193,7 +203,7 @@ function AgentStepRow({ step }: { step: AgentStep }) {
         )}
       </div>
       {expanded && step.result && (
-        <div className="ml-8 pl-2 border-l border-border text-xs text-muted-foreground leading-relaxed py-0.5">
+        <div className="ml-8 pl-2 border-l border-border text-xs text-muted-foreground leading-relaxed py-0.5 whitespace-pre-wrap">
           {step.result}
         </div>
       )}
@@ -202,8 +212,9 @@ function AgentStepRow({ step }: { step: AgentStep }) {
 }
 
 // ── Agent checklist ───────────────────────────────────────────────────────────
-function AgentChecklist({ steps }: { steps: AgentStep[] }) {
+function AgentChecklist({ trace }: { trace: AgentTrace }) {
   const { t } = useT();
+  const steps = trace.steps;
   const [collapsed, setCollapsed] = useState(false);
   const doneCount = steps.filter((s) => s.status === "done" || s.status === "failed").length;
   const isRunning = steps.some((s) => s.status === "running");
@@ -229,47 +240,180 @@ function AgentChecklist({ steps }: { steps: AgentStep[] }) {
         )}
       </button>
       {!collapsed && (
-        <div className="px-3 pb-2 flex flex-col gap-0.5 divide-y divide-border/40">
-          {steps.map((step) => (
-            <AgentStepRow key={step.id} step={step} />
-          ))}
+        <div className="px-3 pb-2">
+          {trace.summary && (
+            <p className="text-[11px] text-muted-foreground leading-snug pt-0.5 pb-2 mb-1 border-b border-border/40">
+              {trace.summary}
+            </p>
+          )}
+          <div className="flex flex-col gap-0.5 divide-y divide-border/40">
+            {steps.map((step) => (
+              <AgentStepRow key={step.id} step={step} />
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+// ── Attachment preview helpers ────────────────────────────────────────────────
+const TEXT_PREVIEW_EXT = [
+  "txt", "text", "md", "markdown", "csv", "tsv", "json", "yaml", "yml",
+  "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "sh", "bash",
+  "html", "css", "scss", "xml", "sql", "toml", "ini", "log", "conf",
+];
+
+function fileExt(name: string): string {
+  return (name.split(".").pop() ?? "").toLowerCase();
+}
+
+type PreviewKind = "image" | "pdf" | "text" | "other";
+
+function previewKind(att: ChatAttachment): PreviewKind {
+  if (att.kind === "image") return "image";
+  const ext = fileExt(att.name);
+  if (att.mediaType === "application/pdf" || ext === "pdf") return "pdf";
+  if (att.mediaType.startsWith("text/") || TEXT_PREVIEW_EXT.includes(ext)) return "text";
+  return "other";
+}
+
+function FileTypeIcon({ att }: { att: ChatAttachment }) {
+  const cls = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
+  const ext = fileExt(att.name);
+  if (["csv", "tsv", "xlsx", "xls"].includes(ext)) return <FileSpreadsheet className={cls} />;
+  const kind = previewKind(att);
+  if (kind === "text" || kind === "pdf") return <FileText className={cls} />;
+  return <File className={cls} />;
+}
+
+// ── Attachment viewer modal ───────────────────────────────────────────────────
+function AttachmentViewer({ att, onClose }: { att: ChatAttachment; onClose: () => void }) {
+  const { t } = useT();
+  const url = api.getUploadUrl(att.id);
+  const kind = previewKind(att);
+  const [text, setText] = useState<string | null>(null);
+  const [textError, setTextError] = useState(false);
+
+  useEffect(() => {
+    if (kind !== "text") return;
+    let cancelled = false;
+    fetch(url)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error("fetch failed"))))
+      .then((tx) => { if (!cancelled) setText(tx); })
+      .catch(() => { if (!cancelled) setTextError(true); });
+    return () => { cancelled = true; };
+  }, [kind, url]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="flex flex-col w-full max-w-3xl max-h-[85vh] rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 px-4 h-11 shrink-0 border-b border-border">
+          <FileTypeIcon att={att} />
+          <span className="flex-1 truncate text-sm font-medium text-foreground">{att.name}</span>
+          <a
+            href={url}
+            download={att.name}
+            className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+            title={t("chat.attachment.download")}
+          >
+            <Download className="h-4 w-4" />
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto bg-surface-2">
+          {kind === "image" && (
+            <div className="flex items-center justify-center h-full p-4">
+              <img src={url} alt={att.name} className="max-w-full max-h-full object-contain rounded" />
+            </div>
+          )}
+          {kind === "pdf" && (
+            <iframe src={url} title={att.name} className="w-full h-[72vh] border-0 bg-white" />
+          )}
+          {kind === "text" &&
+            (text !== null ? (
+              <pre className="p-4 text-xs font-mono text-foreground whitespace-pre-wrap break-words">
+                {text}
+              </pre>
+            ) : textError ? (
+              <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+                {t("chat.attachment.previewFailed")}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ))}
+          {kind === "other" && (
+            <div className="flex flex-col items-center justify-center gap-3 h-56 px-8 text-center">
+              <File className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">{t("chat.attachment.noPreview")}</p>
+              <a
+                href={url}
+                download={att.name}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent text-accent-foreground text-xs font-medium hover:bg-accent/90 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {t("chat.attachment.download")}
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Attachment thumbnail/chip ─────────────────────────────────────────────────
 function AttachmentItem({ att }: { att: ChatAttachment }) {
-  if (att.kind === "image") {
-    return (
-      <a
-        href={api.getUploadUrl(att.id)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block"
-      >
-        <img
-          src={api.getUploadUrl(att.id)}
-          alt={att.name}
-          className="max-w-[200px] max-h-[160px] rounded-lg border border-border object-cover"
-        />
-        <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[200px]">
-          {att.name}
-        </p>
-      </a>
-    );
-  }
+  const [open, setOpen] = useState(false);
   return (
-    <a
-      href={api.getUploadUrl(att.id)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-2 hover:bg-surface-3 transition-colors text-xs"
-    >
-      <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <span className="truncate max-w-[160px] text-foreground">{att.name}</span>
-    </a>
+    <>
+      {att.kind === "image" ? (
+        <button type="button" onClick={() => setOpen(true)} className="block text-left group">
+          <img
+            src={api.getUploadUrl(att.id)}
+            alt={att.name}
+            className="max-w-[220px] max-h-[180px] rounded-lg border border-border object-cover group-hover:opacity-90 transition-opacity"
+          />
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
+            {att.name}
+          </p>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-2 hover:bg-surface-3 transition-colors text-xs"
+        >
+          <FileTypeIcon att={att} />
+          <span className="truncate max-w-[160px] text-foreground">{att.name}</span>
+        </button>
+      )}
+      {open && <AttachmentViewer att={att} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -384,15 +528,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   if (isAssistant) {
-    const agentSteps = message.agent?.steps;
+    const agentTrace = message.agent;
     const hasContent = message.content.length > 0;
     const isStreamingWithNoContent = isStreaming && !hasContent;
 
     return (
       <div className="flex flex-col items-start gap-1 group w-full">
         {/* Agent checklist */}
-        {agentSteps && agentSteps.length > 0 && (
-          <AgentChecklist steps={agentSteps} />
+        {agentTrace && agentTrace.steps.length > 0 && (
+          <AgentChecklist trace={agentTrace} />
         )}
 
         {/* Live streaming status (before first delta arrives) */}

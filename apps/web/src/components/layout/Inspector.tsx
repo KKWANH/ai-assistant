@@ -200,7 +200,7 @@ export function Inspector() {
 
   return (
     <aside
-      className="w-64 shrink-0 border-l border-inspector-border bg-inspector overflow-y-auto"
+      className="hidden lg:block w-64 shrink-0 border-l border-inspector-border bg-inspector overflow-y-auto"
       aria-label={t("inspector.title")}
     >
       <div className="h-10 shrink-0 flex items-center px-3 border-b border-inspector-border">

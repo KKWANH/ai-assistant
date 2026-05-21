@@ -1,11 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <!-- Ariadne — a spun web (minimal corner web). -->
-  <rect width="32" height="32" rx="7.5" fill="#6366f1"/>
-  <g fill="none" stroke="#ffffff" stroke-width="2.3"
+  <!-- Ariadne — a spun web. Monochrome. -->
+  <rect width="32" height="32" rx="7" fill="#18181b"/>
+  <g fill="none" stroke="#fafafa" stroke-width="2.4"
      stroke-linecap="round" stroke-linejoin="round">
-    <!-- four radial spokes from the anchor corner -->
-    <path d="M7 25 7 7 M7 25 16 9 M7 25 24 17 M7 25 25 25"/>
-    <!-- one connecting thread -->
-    <path d="M7 13 14 14.5 20.5 19 23 25"/>
+    <!-- three radial spokes from the anchor corner -->
+    <path d="M8 24 8 6 M8 24 24 7 M8 24 26 22"/>
+    <!-- two connecting threads -->
+    <path d="M8 16 15 16.5 16 23"/>
+    <path d="M8 10 20.5 11 22 22.5"/>
   </g>
 </svg>

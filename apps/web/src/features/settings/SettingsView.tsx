@@ -53,7 +53,7 @@ export function SettingsView() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-5 max-w-lg overflow-y-auto h-full">
+    <div className="flex flex-col gap-6 p-5 sm:p-6 w-full max-w-3xl mx-auto overflow-y-auto h-full">
       <PageHeader
         icon={<SettingsIcon className="h-5 w-5" />}
         title={t("settings.title")}

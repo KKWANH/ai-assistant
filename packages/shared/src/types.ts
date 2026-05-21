@@ -398,12 +398,16 @@ export interface AgentStep {
   description: string;
   tool: AgentTool;
   status: "pending" | "running" | "done" | "failed";
+  /** One-line rationale — why this step, what it looks for. Explainability. */
+  note?: string;
   /** Short summary of the step's result, set once done/failed. */
   result?: string;
 }
 
 export interface AgentTrace {
   steps: AgentStep[];
+  /** One-line summary of the overall approach taken. */
+  summary?: string;
 }
 
 /* ------------------------------------------------------------------ *

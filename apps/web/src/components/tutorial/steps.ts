@@ -25,6 +25,12 @@ export function getTourSteps(t: TFn): TourStep[] {
       target: "new-chat",
     },
     {
+      id: "composer",
+      title: t("tutorial.composer.title"),
+      body: t("tutorial.composer.body"),
+      target: "composer",
+    },
+    {
       id: "workspaces",
       title: t("tutorial.workspaces.title"),
       body: t("tutorial.workspaces.body"),
@@ -39,7 +45,11 @@ export function getTourSteps(t: TFn): TourStep[] {
       id: "evidence",
       title: t("tutorial.evidence.title"),
       body: t("tutorial.evidence.body"),
-      target: "inspector-toggle",
+    },
+    {
+      id: "actions",
+      title: t("tutorial.actions.title"),
+      body: t("tutorial.actions.body"),
     },
     {
       id: "command",

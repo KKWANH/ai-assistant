@@ -83,6 +83,14 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Mobile: drop the desktop ~25% up-scale back to native sizing so the
+   rem-based layout fits a phone screen. Matches Tailwind's `md` breakpoint. */
+@media (max-width: 767px) {
+  html {
+    font-size: 16px;
+  }
+}
+
 body {
   background-color: rgb(var(--background));
   color: rgb(var(--foreground));

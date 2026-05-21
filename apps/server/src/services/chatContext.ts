@@ -18,7 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared";
 import type { ProviderImage } from "../providers/index.js";
-import { dbGetLatestSnapshot } from "../db/repo.js";
+import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
 
@@ -86,7 +86,7 @@ export async function buildChatContext(
     }
   }
 
-  // 3. Workspace manifest summary
+  // 3. Workspace context — file index + inline content of key files
   if (chat.workspaceId) {
     const snapshot = dbGetLatestSnapshot(chat.workspaceId);
     if (snapshot && snapshot.files.length > 0) {
@@ -98,11 +98,20 @@ export async function buildChatContext(
       });
       const more = snapshot.files.length > 60 ? `\n  … and ${(snapshot.files.length - 60).toString()} more files` : "";
       parts.push(
-        `--- Workspace context (${snapshot.fileCount.toString()} files, last scanned ${snapshot.createdAt}) ---\n` +
+        `--- Workspace file index (${snapshot.fileCount.toString()} files, last scanned ${snapshot.createdAt}) ---\n` +
           manifestLines.join("\n") +
-          more +
-          "\n\nNote: deep analysis of these files can be done by running a Template from the Workspaces section."
+          more
       );
+
+      // Inline the content of the smallest text files so the model can
+      // reason over the workspace itself, not just its file list.
+      const ws = dbGetWorkspace(chat.workspaceId);
+      if (ws) {
+        const fileContent = readWorkspaceFiles(ws.rootPath, snapshot.files);
+        if (fileContent) {
+          parts.push(`--- Workspace file contents ---\n${fileContent}`);
+        }
+      }
     }
   }
 
@@ -119,8 +128,9 @@ export async function buildChatContext(
   const system =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
-    "If the user has attached a workspace, you have access to a summary of its files; " +
-    "for deep analysis, suggest running the appropriate Template from the Workspaces view. " +
+    "When a workspace is attached you receive its file index plus the contents of its " +
+    "key files — read them directly to answer; for a full structured deliverable, " +
+    "suggest running the appropriate Template. " +
     "Be concise and direct. Format your response in clear Markdown when helpful.";
 
   return { system, prompt, images, searchResults };
@@ -132,6 +142,48 @@ export async function buildChatContext(
 
 export interface AttachmentRef {
   uploadId: string;
+}
+
+// Extensions whose content is worth embedding verbatim into chat context.
+const EMBEDDABLE_EXT = new Set([
+  "md", "markdown", "txt", "text", "csv", "tsv", "json", "yaml", "yml",
+  "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "java", "sh", "bash",
+  "html", "css", "scss", "xml", "sql", "toml", "ini", "env", "log", "conf",
+]);
+
+/**
+ * Read the smallest non-sensitive text files of a workspace and return them
+ * as one labelled block, under a fixed character budget.
+ */
+function readWorkspaceFiles(rootPath: string, files: FileMeta[]): string {
+  const root = path.resolve(rootPath);
+  const candidates = files
+    .filter((f) => {
+      if (f.sensitive) return false;
+      const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
+      return EMBEDDABLE_EXT.has(ext);
+    })
+    .sort((a, b) => a.size - b.size)
+    .slice(0, 8);
+
+  const blocks: string[] = [];
+  let budget = 14_000;
+  for (const f of candidates) {
+    if (budget <= 200) break;
+    try {
+      const abs = path.resolve(root, f.path);
+      // Stay within the workspace root — never follow a traversal.
+      if (abs !== root && !abs.startsWith(root + path.sep)) continue;
+      let text = fs.readFileSync(abs, "utf-8");
+      const cap = Math.min(3_000, budget);
+      if (text.length > cap) text = text.slice(0, cap) + "\n[...truncated...]";
+      budget -= text.length;
+      blocks.push(`### ${f.path}\n${text}`);
+    } catch {
+      /* unreadable — skip */
+    }
+  }
+  return blocks.join("\n\n");
 }
 
 function buildHistoryText(history: ChatMessage[]): string {

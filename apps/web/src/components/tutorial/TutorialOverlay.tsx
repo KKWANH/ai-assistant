@@ -31,9 +31,12 @@ export function TutorialOverlay() {
 
   const TOUR_STEPS = getTourSteps(t);
 
-  // Auto-launch once, on the very first visit.
+  // Auto-launch once, on the very first visit. Skipped on small screens —
+  // the tour spotlights desktop sidebar/top-bar targets.
   useEffect(() => {
-    if (!localStorage.getItem(SEEN_KEY)) setTutorialOpen(true);
+    if (!localStorage.getItem(SEEN_KEY) && window.innerWidth >= 768) {
+      setTutorialOpen(true);
+    }
   }, [setTutorialOpen]);
 
   // Reset to the first step whenever the tour (re)opens.

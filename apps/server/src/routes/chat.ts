@@ -15,7 +15,7 @@
 
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent } from "@ariadne/shared";
+import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult } from "@ariadne/shared";
 import { CreateChatSchema, UpdateChatSchema, PostMessageSchema } from "@ariadne/shared";
 import type { PostAttachmentInput } from "@ariadne/shared";
 import {
@@ -234,7 +234,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           contextResult = await buildChatContext(chat, historyWithoutCurrent, {
             content,
             attachments: attachmentRefs,
-            webSearch: webSearch ?? false,
+            // In agent mode the agent runs its own web_search steps — skip the
+            // duplicate pre-search here.
+            webSearch: agentMode ? false : (webSearch ?? false),
           });
         } catch (err) {
           logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
@@ -254,6 +256,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         // --- Agent mode or regular mode ---
         let assistantContent: string;
         let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
+        let agentSearchResults: SearchResult[] | null = null;
 
         if (agentMode) {
           // Agent plan-and-execute loop
@@ -267,6 +270,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
             });
             assistantContent = agentResult.content;
             agentTrace = agentResult.agent;
+            agentSearchResults = agentResult.searchResults;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             logger.warn({ chatId: chat.id, err }, "Agent loop error");
@@ -323,7 +327,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           content: assistantContent,
           attachments: [],
           webSearch: false,
-          searchResults: contextResult.searchResults,
+          searchResults: agentSearchResults ?? contextResult.searchResults,
           agent: agentTrace,
           createdAt: now(),
         };

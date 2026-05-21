@@ -76,8 +76,10 @@ function fileToBase64(file: File): Promise<string> {
 export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [webSearch, setWebSearch] = useState(false);
-  const [agentMode, setAgentMode] = useState(false);
+  // Agent + web search default ON — Ariadne leads with grounded, traceable
+  // answers. Both are sticky: a conscious toggle-off persists.
+  const [webSearch, setWebSearch] = useState(true);
+  const [agentMode, setAgentMode] = useState(true);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,8 +172,8 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
 
     setContent("");
     setAttachments([]);
-    setWebSearch(false);
-    // Keep agentMode sticky — user consciously toggled it
+    // webSearch & agentMode stay sticky — they default on, and a user's
+    // conscious toggle should persist across messages.
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -184,7 +186,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
   const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-tour="composer">
       {/* Attachment previews */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-1">
@@ -248,11 +250,13 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
         />
 
         {/* Toolbar */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-end gap-1.5">
+          {/* Controls — wrap to a second row on narrow screens */}
+          <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
           {/* Attach */}
           <button
             type="button"
-            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
+            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
             title={t("chat.composer.attachFiles")}
@@ -276,7 +280,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
           <button
             type="button"
             className={[
-              "flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+              "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
               webSearch
                 ? "text-accent bg-accent/10 border border-accent/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
@@ -293,7 +297,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
           <button
             type="button"
             className={[
-              "flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+              "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
               agentMode
                 ? "text-accent bg-accent/10 border border-accent/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
@@ -307,7 +311,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
           </button>
 
           {/* Workspace selector */}
-          <div className="relative">
+          <div className="relative max-md:static shrink-0">
             <button
               type="button"
               className={[
@@ -333,7 +337,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
                   className="fixed inset-0 z-10"
                   onClick={() => setWsMenuOpen(false)}
                 />
-                <div className="absolute bottom-full left-0 mb-1 z-20 w-52 rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                <div className="absolute bottom-full left-0 mb-1 z-20 w-52 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
                   <button
                     className="w-full text-left px-3 py-1.5 text-muted-foreground hover:bg-surface-3 hover:text-foreground transition-colors"
                     onClick={() => {
@@ -376,7 +380,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
           </div>
 
           {/* Model selector */}
-          <div className="relative">
+          <div className="relative max-md:static shrink-0">
             <button
               type="button"
               className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
@@ -397,7 +401,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
                   className="fixed inset-0 z-10"
                   onClick={() => setModelMenuOpen(false)}
                 />
-                <div className="absolute bottom-full left-0 mb-1 z-20 w-64 rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                <div className="absolute bottom-full left-0 mb-1 z-20 w-64 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
                   {/* Ollama reachability notice */}
                   {currentProvider === "ollama" && !ollamaReachable && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 text-warning border-b border-border">
@@ -477,10 +481,10 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
             )}
           </div>
 
-          <div className="flex-1" />
+          </div>
 
           {/* Hint */}
-          <span className="text-[10px] text-muted-foreground hidden sm:block">
+          <span className="shrink-0 self-center text-[10px] text-muted-foreground hidden sm:block">
             {pending ? t("chat.composer.waiting") : t("chat.composer.hint")}
           </span>
 
@@ -488,6 +492,7 @@ export function ChatComposer({ onSend, disabled, pending }: ChatComposerProps) {
           <Button
             variant="primary"
             size="sm"
+            className="shrink-0"
             onClick={handleSend}
             disabled={!canSend}
             loading={pending}

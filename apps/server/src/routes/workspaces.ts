@@ -9,14 +9,15 @@ import {
   dbInsertWorkspace,
   dbListWorkspaces,
   dbUpdateWorkspace,
+  dbDeleteWorkspace,
   dbGetLatestSnapshot,
 } from "../db/repo.js";
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
-import { HOLDINGS_CSV, SURFACE_TSX } from "../surface/portfolioStarter.js";
+import { HOLDINGS_CSV, HISTORY_CSV, SURFACE_TSX } from "../surface/portfolioStarter.js";
 import logger from "../logger.js";
-import { canAccessWorkspace, requireWorkspace } from "./workspaceGuard.js";
+import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
 export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces
@@ -61,8 +62,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     // Scaffold portfolio starter if requested
     if (starter === "portfolio") {
       try {
-        // Write sample CSV at workspace root
+        // Write sample CSVs at workspace root
         fs.writeFileSync(path.join(rootPath, "holdings.csv"), HOLDINGS_CSV, "utf-8");
+        fs.writeFileSync(path.join(rootPath, "history.csv"), HISTORY_CSV, "utf-8");
         // Write surface source
         writeSurface(rootPath, SURFACE_TSX);
         // Attempt to build immediately (best-effort; failures are non-fatal)
@@ -96,6 +98,24 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
     const updated = dbUpdateWorkspace(req.params.id, parsed.data);
     return reply.send(updated);
+  });
+
+  // DELETE /api/workspaces/:id — LOCAL access only (workspace files are left intact)
+  app.delete<{ Params: { id: string } }>("/workspaces/:id", async (req, reply) => {
+    if (
+      await rejectRemoteAccess(
+        "Deleting a workspace is not permitted from remote access. Connect locally to manage workspaces.",
+        req,
+        reply,
+      )
+    )
+      return;
+
+    const workspace = await requireWorkspace(req.params.id, req, reply);
+    if (!workspace) return;
+
+    dbDeleteWorkspace(req.params.id);
+    return reply.send({ ok: true });
   });
 
   // POST /api/workspaces/:id/scan

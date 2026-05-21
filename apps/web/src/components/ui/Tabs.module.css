@@ -4,11 +4,19 @@
   align-items: center;
   gap: 0.125rem;
   border-bottom: 1px solid rgb(var(--border));
+  /* Scroll horizontally on narrow screens instead of wrapping tab labels. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.list::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── TabsTrigger ── */
 .trigger {
   position: relative;
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 500;

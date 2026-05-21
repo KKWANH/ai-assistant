@@ -1,5 +1,5 @@
 /**
- * AppShell — chat-first redesign.
+ * AppShell — chat-first, responsive redesign.
  *
  * Sidebar IA:
  *   [+ New chat]          ← prominent, top
@@ -7,18 +7,21 @@
  *   ──────────────
  *   Workspaces            ← list + new
  *   Runs (recent)         ← standard mode only
- *   Search
  *   ──────────────
  *   Settings · User · Logout  ← pinned bottom
  *
  * Simple mode: hides Templates/Runs/Scripts/surface-edit/Command-menu
  * power features, keeping chat, workspaces, search, settings, logout.
  *
- * Top bar: Ariadne wordmark + breadcrumb + ⌘K + theme + help + inspector toggle.
- * Right Inspector: stays for workspace/run screens; hidden on chat screen.
+ * Top bar: brand (→ home) + breadcrumb · search · ⌘K · theme · help ·
+ * user · inspector toggle.
+ *
+ * Responsive: below `md` the sidebar collapses to an off-canvas drawer
+ * driven by a hamburger toggle; the Inspector is shown only at `lg`+.
+ * Right Inspector: contextual — only on workspace/template/run detail screens.
  */
 import { type ReactNode, useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, matchPath } from "react-router-dom";
 import {
   FolderOpen,
   Play,
@@ -36,6 +39,8 @@ import {
   MessageSquarePlus,
   Trash2,
   Globe,
+  Menu,
+  X,
 } from "lucide-react";
 import { useUIStore } from "../../lib/store";
 import {
@@ -45,6 +50,7 @@ import {
   useLogout,
   useChats,
   useDeleteChat,
+  useDeleteWorkspace,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { SidebarItem } from "../ui/SidebarItem";
@@ -57,6 +63,26 @@ import type { AccountMode } from "@ariadne/shared";
 
 export interface AppShellProps {
   children: ReactNode;
+}
+
+/** Monochrome Ariadne web mark — inherits the current text color. */
+function Logo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 24 8 6 M8 24 24 7 M8 24 26 22" />
+      <path d="M8 16 15 16.5 16 23" />
+      <path d="M8 10 20.5 11 22 22.5" />
+    </svg>
+  );
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -81,11 +107,14 @@ export function AppShell({ children }: AppShellProps) {
   const { data: me } = useMe();
   const logout = useLogout();
   const deleteChat = useDeleteChat();
+  const deleteWorkspace = useDeleteWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useT();
 
   const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
+  const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const accountMode: AccountMode = me?.account.mode ?? "standard";
   const isSimple = accountMode === "simple";
@@ -102,6 +131,11 @@ export function AppShell({ children }: AppShellProps) {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [setCommandMenuOpen, isSimple]);
+
+  // Close the mobile drawer on any route change.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
 
   const activeChatId = location.pathname.startsWith("/chat/")
     ? location.pathname.split("/chat/")[1]
@@ -172,48 +206,94 @@ export function AppShell({ children }: AppShellProps) {
     })) ?? []),
   ];
 
-  // Determine if we're on a chat route — hide inspector for pure chat screens
+  // Determine if we're on a chat route — used for the breadcrumb.
   const onChatRoute =
     location.pathname === "/" || location.pathname.startsWith("/chat/");
 
-  const showInspector = inspectorOpen && !onChatRoute && !isSimple;
+  // The Inspector is contextual: only workspace / template / run detail
+  // screens have metadata to show. The toggle appears only there, so it
+  // never looks broken on a screen where it would do nothing.
+  const inspectorRoute =
+    !!matchPath("/workspaces/:id", location.pathname) ||
+    !!matchPath("/templates/:id", location.pathname) ||
+    !!matchPath("/runs/:id", location.pathname) ||
+    !!matchPath("/runs/:id/context", location.pathname);
+  const inspectorAvailable = inspectorRoute && !isSimple;
+  const showInspector = inspectorOpen && inspectorAvailable;
+
+  const goHome = () => {
+    setSidebarSection("chat");
+    setMobileNavOpen(false);
+    navigate("/");
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top Bar */}
-      <header className="h-10 shrink-0 flex items-center justify-between px-3 border-b border-topbar-border bg-topbar">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-topbar-foreground tracking-tight">
-            Ariadne
+      <header className="h-10 shrink-0 flex items-center justify-between gap-2 px-2 sm:px-3 border-b border-topbar-border bg-topbar">
+        <div className="flex items-center gap-1 min-w-0">
+          {/* Mobile drawer toggle */}
+          <span className="flex md:hidden">
+            <IconButton
+              label={t("nav.openMenu")}
+              size="sm"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="h-4 w-4" />
+            </IconButton>
           </span>
+          {/* Brand — links to home */}
+          <button
+            onClick={goHome}
+            title={t("nav.home")}
+            className="flex items-center gap-1.5 shrink-0 rounded-md px-1.5 py-1 hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Logo className="h-4 w-4 text-topbar-foreground" />
+            <span className="text-sm font-semibold text-topbar-foreground tracking-tight">
+              Ariadne
+            </span>
+          </button>
           {activeWorkspaceId && workspaces && !onChatRoute && (
-            <>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="hidden sm:flex items-center gap-1.5 min-w-0">
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-xs text-muted-foreground truncate max-w-[160px]">
                 {workspaces.find((w) => w.id === activeWorkspaceId)?.name}
               </span>
-            </>
+            </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {/* ⌘K hint — standard mode only */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* ⌘K hint — standard mode, ≥md */}
           {!isSimple && (
             <kbd
               data-tour="command-hint"
-              className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground border border-border rounded-md font-mono"
+              className="hidden md:flex items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground border border-border rounded-md font-mono"
             >
               ⌘K
             </kbd>
           )}
-          {/* Help — standard mode only */}
+          {/* Search */}
+          <IconButton
+            label={t("nav.search")}
+            size="sm"
+            onClick={() => {
+              setSidebarSection("search");
+              navigate("/search");
+            }}
+          >
+            <Search className="h-3.5 w-3.5" />
+          </IconButton>
+          {/* Help — standard mode, ≥sm */}
           {!isSimple && (
-            <IconButton
-              label={t("nav.helpAndTutorial")}
-              size="sm"
-              onClick={() => setTutorialOpen(true)}
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-            </IconButton>
+            <span className="hidden sm:flex">
+              <IconButton
+                label={t("nav.helpAndTutorial")}
+                size="sm"
+                onClick={() => setTutorialOpen(true)}
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </IconButton>
+            </span>
           )}
           <IconButton label={t("nav.toggleTheme")} size="sm" onClick={toggleTheme}>
             {theme === "dark" ? (
@@ -227,42 +307,81 @@ export function AppShell({ children }: AppShellProps) {
               <span className="hidden sm:block text-xs text-muted-foreground px-1 select-none">
                 {me.account.displayName}
               </span>
-              <IconButton
-                label={t("nav.signOut")}
-                size="sm"
-                onClick={() => void logout.mutateAsync()}
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </IconButton>
+              <span className="hidden sm:flex">
+                <IconButton
+                  label={t("nav.signOut")}
+                  size="sm"
+                  onClick={() => void logout.mutateAsync()}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </IconButton>
+              </span>
             </>
           )}
-          {/* Inspector toggle — standard mode only */}
-          {!isSimple && (
-            <IconButton
-              label={t("nav.toggleInspector")}
-              size="sm"
-              onClick={toggleInspector}
-              data-tour="inspector-toggle"
-            >
-              <PanelRight className="h-3.5 w-3.5" />
-            </IconButton>
+          {/* Inspector toggle — only where it has an effect, ≥lg */}
+          {inspectorAvailable && (
+            <span className="hidden lg:flex">
+              <IconButton
+                label={t("nav.toggleInspector")}
+                size="sm"
+                onClick={toggleInspector}
+                data-tour="inspector-toggle"
+              >
+                <PanelRight className="h-3.5 w-3.5" />
+              </IconButton>
+            </span>
           )}
         </div>
       </header>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
+        {/* Mobile drawer backdrop */}
+        {mobileNavOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/50 md:hidden"
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Sidebar — static column ≥md, off-canvas drawer below md */}
         <nav
-          className="w-52 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden"
+          className={[
+            "w-52 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden",
+            "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:w-64 max-md:shadow-2xl",
+            "max-md:transition-transform max-md:duration-200 max-md:ease-out",
+            mobileNavOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
+          ].join(" ")}
           aria-label={t("nav.ariaLabel")}
         >
+          {/* Mobile drawer header */}
+          <div className="md:hidden flex items-center justify-between h-10 pl-2 pr-1 border-b border-sidebar-border shrink-0">
+            <button
+              onClick={goHome}
+              className="flex items-center gap-1.5 rounded-md px-1 py-1 hover:bg-surface-3 transition-colors"
+            >
+              <Logo className="h-4 w-4 text-foreground" />
+              <span className="text-sm font-semibold text-foreground tracking-tight">
+                Ariadne
+              </span>
+            </button>
+            <IconButton
+              label={t("nav.closeMenu")}
+              size="sm"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </IconButton>
+          </div>
+
           {/* New Chat button — prominent top action */}
           <div className="px-2 pt-2.5 pb-2 shrink-0">
             <button
               data-tour="new-chat"
               onClick={() => {
                 setSidebarSection("chat");
+                setMobileNavOpen(false);
                 navigate("/");
               }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -289,6 +408,7 @@ export function AppShell({ children }: AppShellProps) {
                       active={activeChatId === chat.id}
                       onClick={() => {
                         setSidebarSection("chat");
+                        setMobileNavOpen(false);
                         navigate(`/chat/${chat.id}`);
                       }}
                     />
@@ -327,7 +447,10 @@ export function AppShell({ children }: AppShellProps) {
                 <IconButton
                   label={t("nav.newWorkspace")}
                   size="xs"
-                  onClick={() => setCreateWorkspaceOpen(true)}
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setCreateWorkspaceOpen(true);
+                  }}
                   data-tour="new-workspace"
                 >
                   <Plus className="h-3 w-3" />
@@ -336,25 +459,46 @@ export function AppShell({ children }: AppShellProps) {
               {workspaces && workspaces.length > 0 ? (
                 workspaces.map((ws) => (
                   <div key={ws.id}>
-                    <SidebarItem
-                      label={ws.name}
-                      icon={<FolderOpen className="h-3.5 w-3.5" />}
-                      active={
-                        activeWorkspaceId === ws.id &&
-                        location.pathname.startsWith("/workspaces/")
-                      }
-                      onClick={() => {
-                        setActiveWorkspaceId(ws.id);
-                        setSidebarSection("workspaces");
-                        navigate(`/workspaces/${ws.id}`);
-                      }}
-                      meta={ws.visibility === "public" ? (
-                        <span className="flex items-center gap-0.5 text-[9px] text-accent font-medium">
-                          <Globe className="h-2.5 w-2.5" />
-                          {t("workspace.visibility.publicBadge")}
-                        </span>
-                      ) : undefined}
-                    />
+                    <div
+                      className="relative group"
+                      onMouseEnter={() => setHoveredWorkspaceId(ws.id)}
+                      onMouseLeave={() => setHoveredWorkspaceId(null)}
+                    >
+                      <SidebarItem
+                        label={ws.name}
+                        icon={<FolderOpen className="h-3.5 w-3.5" />}
+                        active={
+                          activeWorkspaceId === ws.id &&
+                          location.pathname.startsWith("/workspaces/")
+                        }
+                        onClick={() => {
+                          setActiveWorkspaceId(ws.id);
+                          setSidebarSection("workspaces");
+                          setMobileNavOpen(false);
+                          navigate(`/workspaces/${ws.id}`);
+                        }}
+                        meta={ws.visibility === "public" && hoveredWorkspaceId !== ws.id ? (
+                          <span className="flex items-center gap-0.5 text-[9px] text-accent font-medium">
+                            <Globe className="h-2.5 w-2.5" />
+                            {t("workspace.visibility.publicBadge")}
+                          </span>
+                        ) : undefined}
+                      />
+                      {hoveredWorkspaceId === ws.id && (
+                        <button
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void deleteWorkspace.mutateAsync(ws.id).then(() => {
+                              if (activeWorkspaceId === ws.id) navigate("/");
+                            });
+                          }}
+                          aria-label={t("nav.deleteWorkspace")}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                     {/* Scripts link — standard mode only */}
                     {!isSimple &&
                       activeWorkspaceId === ws.id &&
@@ -362,9 +506,10 @@ export function AppShell({ children }: AppShellProps) {
                         <SidebarItem
                           label={t("nav.scripts")}
                           icon={<Terminal className="h-3 w-3" />}
-                          onClick={() =>
-                            navigate(`/workspaces/${ws.id}/scripts`)
-                          }
+                          onClick={() => {
+                            setMobileNavOpen(false);
+                            navigate(`/workspaces/${ws.id}/scripts`);
+                          }}
                           className="pl-5 text-[11px]"
                         />
                       )}
@@ -373,7 +518,10 @@ export function AppShell({ children }: AppShellProps) {
               ) : (
                 <button
                   className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md"
-                  onClick={() => setCreateWorkspaceOpen(true)}
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setCreateWorkspaceOpen(true);
+                  }}
                 >
                   {t("nav.addWorkspace")}
                 </button>
@@ -396,6 +544,7 @@ export function AppShell({ children }: AppShellProps) {
                         className="w-full flex flex-col px-2 py-1.5 rounded-md text-left text-xs transition-colors duration-100 text-sidebar-foreground hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={() => {
                           setActiveRunId(run.id);
+                          setMobileNavOpen(false);
                           navigate(`/runs/${run.id}`);
                         }}
                       >
@@ -416,23 +565,15 @@ export function AppShell({ children }: AppShellProps) {
             )}
           </div>
 
-          {/* Bottom: Search + Settings + User */}
+          {/* Bottom: Settings + User */}
           <div className="shrink-0 px-2 pb-2 pt-1 border-t border-sidebar-border">
-            <SidebarItem
-              label={t("nav.search")}
-              icon={<Search className="h-3.5 w-3.5" />}
-              active={sidebarSection === "search"}
-              onClick={() => {
-                setSidebarSection("search");
-                navigate("/search");
-              }}
-            />
             <SidebarItem
               label={t("nav.settings")}
               icon={<Settings className="h-3.5 w-3.5" />}
               active={sidebarSection === "settings"}
               onClick={() => {
                 setSidebarSection("settings");
+                setMobileNavOpen(false);
                 navigate("/settings");
               }}
             />
@@ -461,7 +602,7 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex-1 overflow-hidden flex flex-col">{children}</div>
         </main>
 
-        {/* Right Inspector — hidden on chat routes and in simple mode */}
+        {/* Right Inspector — contextual; rendered ≥lg */}
         {showInspector && <Inspector />}
       </div>
 

@@ -92,6 +92,16 @@ export function useUpdateWorkspace() {
   });
 }
 
+export function useDeleteWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteWorkspace(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.workspaces });
+    },
+  });
+}
+
 // ── Templates ────────────────────────────────────────────────────────────────
 export function useTemplates() {
   return useQuery({
