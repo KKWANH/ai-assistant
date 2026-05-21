@@ -12,23 +12,23 @@
  * hex — so the surface is fully legible in both dark and light mode.
  */
 
-export const HOLDINGS_CSV = `symbol,name,asset_type,sector,currency,shares,buy_price,current_price
-AAPL,Apple Inc.,Stock,Technology,USD,50,145.30,224.80
-MSFT,Microsoft Corp.,Stock,Technology,USD,30,290.00,478.90
-NVDA,NVIDIA Corp.,Stock,Technology,USD,20,145.00,178.40
-JPM,JPMorgan Chase & Co.,Stock,Financials,USD,40,145.00,248.60
-VOO,Vanguard S&P 500 ETF,ETF,Diversified,USD,35,380.00,512.30
-QQQ,Invesco QQQ Trust,ETF,Technology,USD,18,360.00,498.70
-GLD,SPDR Gold Shares,Commodity,Commodities,USD,30,178.00,242.10
-TLT,iShares 20+ Year Treasury,Bond,Fixed Income,USD,25,98.00,88.40
-BTC,Bitcoin,Crypto,Digital Assets,USD,0.5,42000.00,68500.00
-ASML,ASML Holding,Stock,Technology,EUR,8,580.00,712.00
-MC,LVMH,Stock,Consumer Discretionary,EUR,6,720.00,645.00
-005930,Samsung Electronics,Stock,Technology,KRW,150,68000,79500
-069500,KODEX 200 ETF,ETF,Diversified,KRW,80,34000,38200
-7203,Toyota Motor,Stock,Consumer Discretionary,JPY,100,2100,2980
-SHEL,Shell plc,Stock,Energy,GBP,60,24.50,28.90
-CSPX,iShares Core S&P 500 ETF,ETF,Diversified,GBP,15,42.00,58.30
+export const HOLDINGS_CSV = `symbol,name,asset_type,sector,currency,shares,buy_price,current_price,target_price,headline
+AAPL,Apple Inc.,Stock,Technology,USD,50,145.30,224.80,250.00,"Services revenue hit a record; estimates lifted into the new product cycle."
+MSFT,Microsoft Corp.,Stock,Technology,USD,30,290.00,478.90,525.00,"Cloud and AI bookings stay strong; margin guidance reaffirmed."
+NVDA,NVIDIA Corp.,Stock,Technology,USD,20,145.00,178.40,210.00,"Data-center demand still outpaces supply; next-gen parts are ramping."
+JPM,JPMorgan Chase & Co.,Stock,Financials,USD,40,145.00,248.60,250.00,"Net interest income resilient; the bank flags a cautious credit outlook."
+VOO,Vanguard S&P 500 ETF,ETF,Diversified,USD,35,380.00,512.30,540.00,"Broad S&P 500 tracker; the expense ratio stays minimal."
+QQQ,Invesco QQQ Trust,ETF,Technology,USD,18,360.00,498.70,520.00,"Nasdaq-100 fund; heavy mega-cap weighting keeps volatility elevated."
+GLD,SPDR Gold Shares,Commodity,Commodities,USD,30,178.00,242.10,255.00,"Gold near record highs as central banks keep adding reserves."
+TLT,iShares 20+ Year Treasury,Bond,Fixed Income,USD,25,98.00,88.40,95.00,"Long Treasuries pressured by higher-for-longer rates; duration risk is high."
+BTC,Bitcoin,Crypto,Digital Assets,USD,0.5,42000.00,68500.00,75000.00,"Bitcoin consolidates after the halving; ETF inflows remain the swing factor."
+ASML,ASML Holding,Stock,Technology,EUR,8,580.00,712.00,780.00,"Lithography order book is recovering; export-control news is a watch item."
+MC,LVMH,Stock,Consumer Discretionary,EUR,6,720.00,645.00,620.00,"Luxury demand soft in key markets; the near-term outlook was trimmed."
+005930,Samsung Electronics,Stock,Technology,KRW,150,68000,79500,92000,"Memory pricing is turning up; HBM capacity is the key swing factor."
+069500,KODEX 200 ETF,ETF,Diversified,KRW,80,34000,38200,41000,"KOSPI 200 fund; broad Korean large-cap exposure in one holding."
+7203,Toyota Motor,Stock,Consumer Discretionary,JPY,100,2100,2980,3200,"Hybrid demand is strong; a weaker yen keeps flattering export earnings."
+SHEL,Shell plc,Stock,Energy,GBP,60,24.50,28.90,32.00,"Cash flow robust on steady energy prices; the buyback pace is maintained."
+CSPX,iShares Core S&P 500 ETF,ETF,Diversified,GBP,15,42.00,58.30,62.00,"Accumulating S&P 500 fund; dividends are reinvested rather than paid out."
 `;
 
 export const FX_RATES_CSV = `currency,name,rate,buy_rate
@@ -92,6 +92,8 @@ interface RawHolding {
   shares: number;
   buyPrice: number;
   price: number;
+  targetPrice: number;
+  headline: string;
 }
 
 interface FxRate {
@@ -207,6 +209,8 @@ function parseHoldings(rows: Record<string, string>[]): RawHolding[] {
       shares: num(r["shares"]),
       buyPrice: num(r["buy_price"]),
       price: num(r["current_price"]),
+      targetPrice: num(r["target_price"]),
+      headline: (r["headline"] || "").trim(),
     }))
     .filter((h) => h.symbol.length > 0);
 }
@@ -362,10 +366,37 @@ function SectionTitle(props: { children: string }) {
 
 // -- Asset detail page -------------------------------------------------------
 
-function AssetDetail(props: { holding: Holding; holdings: Holding[]; baseCurrency: string; onBack: () => void }) {
+/** An illustrative price path from average cost to the current price.
+ *  Deterministic per symbol — it is a demo trend, not real market history. */
+function priceTrend(buy: number, current: number, symbol: string, labels: string[]): Point[] {
+  const pts = labels.length >= 2 ? labels : ["", "", "", "", "", "", "", ""];
+  const n = pts.length;
+  let seed = 0;
+  for (let i = 0; i < symbol.length; i++) seed += symbol.charCodeAt(i);
+  const span = Math.abs(current - buy) || Math.abs(current) * 0.06 || 1;
+  const out: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = n > 1 ? i / (n - 1) : 1;
+    const baseV = buy + (current - buy) * t;
+    const wobble = Math.sin((t * 5.4 + seed) * 1.3) * span * 0.22 * (1 - Math.abs(2 * t - 1));
+    out.push({ label: pts[i] || "", value: Math.round((baseV + wobble) * 100) / 100 });
+  }
+  if (n > 0) out[n - 1] = { label: pts[n - 1] || "Now", value: current };
+  return out;
+}
+
+function AssetDetail(props: {
+  holding: Holding;
+  holdings: Holding[];
+  baseCurrency: string;
+  onBack: () => void;
+  trendLabels: string[];
+}) {
   const h = props.holding;
   const all = props.holdings;
   const base = props.baseCurrency;
+  const upsidePct = h.price > 0 ? ((h.targetPrice - h.price) / h.price) * 100 : 0;
+  const trend = priceTrend(h.buyPrice, h.price, h.symbol, props.trendLabels);
 
   const totalCost = all.reduce((s, x) => s + x.costBase, 0);
   const totalValue = all.reduce((s, x) => s + x.valueBase, 0);
@@ -429,6 +460,26 @@ function AssetDetail(props: { holding: Holding; holdings: Holding[]; baseCurrenc
         />
         <Kpi label="Price Effect" value={signedMoney(h.priceEffect, base)} color={plColor(h.priceEffect)} sub="from asset price" />
         <Kpi label="Currency Effect" value={signedMoney(h.fxEffect, base)} color={plColor(h.fxEffect)} sub="from exchange rate" />
+      </div>
+
+      {/* Recent price trend + analyst outlook */}
+      <div style={{ ...cardStyle, marginBottom: "16px", overflowX: "auto" }}>
+        <SectionTitle>Recent price and outlook</SectionTitle>
+        <LineChart data={trend} title={"Price trend (" + h.currency + ")"} width={1080} height={220} />
+        <p style={{ fontSize: "11px", margin: "2px 0 10px", ...muted }}>
+          Illustrative path from average cost to the current price — replace with real history if you track it.
+        </p>
+        <StatRow label={"Current price (" + h.currency + ")"} value={money(h.price, h.currency)} />
+        <StatRow label={"Analyst target (" + h.currency + ")"} value={money(h.targetPrice, h.currency)} />
+        <StatRow label="Upside to target" value={signedPct(upsidePct)} color={plColor(upsidePct)} />
+        <div style={{ marginTop: "10px" }}>
+          <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px", ...muted }}>
+            Latest note
+          </div>
+          <p style={{ fontSize: "13px", margin: 0, lineHeight: 1.5 }}>
+            {h.headline || "Add a headline column in holdings.csv to show a note here."}
+          </p>
+        </div>
       </div>
 
       {/* Detail cards */}
@@ -561,6 +612,7 @@ export default function PortfolioDashboard() {
           holdings={holdings}
           baseCurrency={baseCurrency}
           onBack={() => setView({ page: "overview" })}
+          trendLabels={history.map((p) => p.label).slice(-8)}
         />
       );
     }

@@ -9,6 +9,8 @@
   cursor: pointer;
   border: none;
   text-decoration: none;
+  /* A button label is a unit — never wrap it mid-word (e.g. Korean 이전/다음). */
+  white-space: nowrap;
 }
 
 .btn:focus-visible {
