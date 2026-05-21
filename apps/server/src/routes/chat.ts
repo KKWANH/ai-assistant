@@ -35,6 +35,7 @@ import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { decideWebSearch } from "../services/triage.js";
+import { resolveOllamaModel } from "../services/ollamaModels.js";
 import {
   beginGeneration,
   endGeneration,
@@ -301,8 +302,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           assistantContent = noProviderKeyMessage(settings.provider, req.account?.locale);
           emit({ type: "delta", text: assistantContent });
         } else {
-          const rawProvider = await getProvider(settings);
-          const provider = meteringProvider(rawProvider, assistantMsgId, settings.model);
+          // Local-first: run on whatever Ollama model is actually installed.
+          const model =
+            settings.provider === "ollama"
+              ? await resolveOllamaModel(settings.model)
+              : settings.model;
+          const rawProvider = await getProvider({ provider: settings.provider, model });
+          const provider = meteringProvider(rawProvider, assistantMsgId, model);
 
           if (agentMode) {
             // Agent plan-and-execute loop (it runs its own web_search steps).

@@ -16,16 +16,13 @@ output you can trust and re-run over time.
 
 ## Why "Ariadne"?
 
-In the Greek myth, Ariadne gave Theseus a ball of thread — a *clew* — so he
-could walk into the Labyrinth, face what was inside, and still find his way
-back out. "Ariadne's thread" has since come to mean any method that keeps a
-complete, retraceable record of the path taken through a maze of choices.
+In Greek myth, Ariadne's thread is what let Theseus retrace his way back out of
+the Labyrinth — so "Ariadne's thread" came to mean any method that keeps a
+traceable record of the path through a maze.
 
-A folder of documents is a labyrinth. Ariadne walks it for you and never lets
-go of the thread: every brief it produces carries the files it read, a
-claim-to-source map, a run trace, and a diff from the last run — so you can
-always follow the thread back to exactly where an answer came from. The mark —
-a web spun outward from a single centre — is that thread, drawn.
+That is what this tool is for: every answer keeps a thread back to its sources
+— the files it read, a claim-to-source map, a run trace, and a diff from the
+last run.
 
 ---
 
@@ -147,17 +144,19 @@ whenever your machine and the daemon are running.
 
 ## AI providers
 
-The default provider is `mock`, which returns schema-correct output so the full
-loop runs with no API key. Switch in Settings, in the chat composer, or via `.env`:
+Ariadne is local-first: out of the box it runs on the models already installed
+in your local **Ollama** — no key, no setup, nothing to type. The active model
+is resolved to whatever Ollama actually has. Switch provider or model from the
+chat composer, in Settings, or via `.env`:
 
 | Provider | Configuration |
 |---|---|
+| `ollama` | default — local models, no key; the installed model is auto-detected |
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `openai` | `OPENAI_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
 | `moonshot` | `MOONSHOT_API_KEY` (Kimi) |
-| `ollama` | local models, no key — live reachability is checked |
-| `mock` | default; no key |
+| `mock` | no key — schema-correct stub output for testing |
 
 Token usage is captured from every provider response, priced per model, and
 reported per run and cumulatively.

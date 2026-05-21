@@ -22,16 +22,16 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 };
 
 /**
- * Default model per provider. The Ollama default is sized for a 24GB Mac
- * mini — qwen2.5:14b runs comfortably in unified memory. qwen2.5:32b also
- * fits at q4 but leaves little headroom.
+ * Default model per provider. The Ollama default is only a hint — the server
+ * resolves it to whatever model is actually installed on the machine (see
+ * resolveOllamaModel), so a fresh install runs on local models with no setup.
  */
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
   anthropic: "claude-sonnet-4-6",
   openai: "gpt-4o",
   gemini: "gemini-3.5-flash",
   moonshot: "kimi-k2.6",
-  ollama: "qwen2.5:14b",
+  ollama: "qwen3:8b",
   mock: "mock",
 };
 
@@ -41,7 +41,7 @@ export const MODEL_CHOICES: Record<ProviderId, string[]> = {
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
   gemini: ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
   moonshot: ["kimi-k2.6", "moonshot-v1-128k", "moonshot-v1-32k"],
-  ollama: ["qwen2.5:14b", "qwen2.5:7b", "qwen2.5:32b", "llama3.1:8b"],
+  ollama: ["qwen3:8b", "qwen3:4b", "qwen3:0.6b"],
   mock: ["mock"],
 };
 
@@ -70,11 +70,10 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   "moonshot-v1-128k":   { input: 1.63,  output: 6.53  },
   "moonshot-v1-32k":    { input: 0.81,  output: 3.26  },
   "kimi-k2-0711-preview": { input: 0.60, output: 2.50 },
-  // Ollama (local) — free
-  "qwen2.5:14b":        { input: 0, output: 0 },
-  "qwen2.5:7b":         { input: 0, output: 0 },
-  "qwen2.5:32b":        { input: 0, output: 0 },
-  "llama3.1:8b":        { input: 0, output: 0 },
+  // Ollama (local) — free. Any unlisted local model also resolves to free.
+  "qwen3:8b":           { input: 0, output: 0 },
+  "qwen3:4b":           { input: 0, output: 0 },
+  "qwen3:0.6b":         { input: 0, output: 0 },
   // Mock — free
   "mock":               { input: 0, output: 0 },
 };

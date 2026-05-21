@@ -16,6 +16,7 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { ensureAriadneFolder, scriptsDir, writeScript } from "../ariadneFolder.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+import { scriptEnv } from "../services/scriptEnv.js";
 
 const SCRIPT_NAME_RE = /^[a-zA-Z0-9_\-]+\.(sh|py)$/;
 const MAX_OUTPUT_BYTES = 64 * 1024; // 64 KB output cap
@@ -143,7 +144,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
 
         const proc = spawn(runner.cmd, [...runner.args, filePath], {
           cwd: workspace.rootPath,
-          env: { ...process.env },
+          env: scriptEnv(),
         });
 
         const timer = setTimeout(() => {

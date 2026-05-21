@@ -107,7 +107,7 @@ export async function buildChatContext(
       // reason over the workspace itself, not just its file list.
       const ws = dbGetWorkspace(chat.workspaceId);
       if (ws) {
-        const fileContent = readWorkspaceFiles(ws.rootPath, snapshot.files);
+        const fileContent = await readWorkspaceFiles(ws.rootPath, snapshot.files);
         if (fileContent) {
           parts.push(`--- Workspace file contents ---\n${fileContent}`);
         }
@@ -157,7 +157,7 @@ const EMBEDDABLE_EXT = new Set([
  * Read the smallest non-sensitive text files of a workspace and return them
  * as one labelled block, under a fixed character budget.
  */
-function readWorkspaceFiles(rootPath: string, files: FileMeta[]): string {
+async function readWorkspaceFiles(rootPath: string, files: FileMeta[]): Promise<string> {
   const root = path.resolve(rootPath);
   const candidates = files
     .filter((f) => {
@@ -168,22 +168,31 @@ function readWorkspaceFiles(rootPath: string, files: FileMeta[]): string {
     .sort((a, b) => a.size - b.size)
     .slice(0, 8);
 
-  const blocks: string[] = [];
-  let budget = 14_000;
-  for (const f of candidates) {
-    if (budget <= 200) break;
-    try {
+  // Read the candidates concurrently and off the event loop, then apply the
+  // character budget in size order.
+  const reads = await Promise.all(
+    candidates.map(async (f): Promise<{ path: string; text: string } | null> => {
       const abs = path.resolve(root, f.path);
       // Stay within the workspace root — never follow a traversal.
-      if (abs !== root && !abs.startsWith(root + path.sep)) continue;
-      let text = fs.readFileSync(abs, "utf-8");
-      const cap = Math.min(3_000, budget);
-      if (text.length > cap) text = text.slice(0, cap) + "\n[...truncated...]";
-      budget -= text.length;
-      blocks.push(`### ${f.path}\n${text}`);
-    } catch {
-      /* unreadable — skip */
-    }
+      if (abs !== root && !abs.startsWith(root + path.sep)) return null;
+      try {
+        return { path: f.path, text: await fs.promises.readFile(abs, "utf-8") };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const blocks: string[] = [];
+  let budget = 14_000;
+  for (const r of reads) {
+    if (!r) continue;
+    if (budget <= 200) break;
+    let text = r.text;
+    const cap = Math.min(3_000, budget);
+    if (text.length > cap) text = text.slice(0, cap) + "\n[...truncated...]";
+    budget -= text.length;
+    blocks.push(`### ${r.path}\n${text}`);
   }
   return blocks.join("\n\n");
 }

@@ -28,7 +28,8 @@ export function ensureDirs(): void {
 function resolveDefaultProvider(): ProviderId {
   const env = process.env.ARIADNE_PROVIDER;
   if (env && PROVIDERS.includes(env as ProviderId)) return env as ProviderId;
-  return "mock";
+  // Local-first: a fresh install runs on the machine's own Ollama models.
+  return "ollama";
 }
 
 export function getActiveSettings(): Settings {

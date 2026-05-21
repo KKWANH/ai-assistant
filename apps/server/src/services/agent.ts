@@ -21,6 +21,7 @@ import { focusedRead } from "../gasp/filter.js";
 import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { createRun } from "../runs/engine.js";
 import { loadWorkspaceActions } from "./actions.js";
+import { scriptEnv } from "./scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import logger from "../logger.js";
 
@@ -355,7 +356,7 @@ async function executeCustomAction(
       return new Promise<string>((resolve) => {
         let out = "";
         let err = "";
-        const proc = spawn(cmd, [scriptPath], { cwd: ws.rootPath, env: { ...process.env } });
+        const proc = spawn(cmd, [scriptPath], { cwd: ws.rootPath, env: scriptEnv() });
         const timer = setTimeout(() => { proc.kill("SIGTERM"); resolve("[Script timed out]"); }, 30_000);
         proc.stdout.on("data", (c: Buffer) => { out += c.toString("utf-8"); });
         proc.stderr.on("data", (c: Buffer) => { err += c.toString("utf-8"); });

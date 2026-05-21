@@ -14,29 +14,18 @@
 import type { FastifyInstance } from "fastify";
 import { PROVIDERS, PROVIDER_LABELS } from "@ariadne/shared";
 import type { ProviderId, ProviderStatus } from "@ariadne/shared";
-
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
-const OLLAMA_TIMEOUT_MS = 8000;
+import { listOllamaModels } from "../services/ollamaModels.js";
 
 async function checkOllama(): Promise<ProviderStatus> {
-  const base: ProviderStatus = {
+  // listOllamaModels() returns [] when the daemon is unreachable, so a
+  // non-empty list is the signal that Ollama is up and has usable models.
+  const models = await listOllamaModels();
+  return {
     id: "ollama",
     label: PROVIDER_LABELS["ollama"],
-    configured: false,
-    models: [],
+    configured: models.length > 0,
+    models,
   };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: controller.signal });
-    if (!res.ok) return base;
-    const data = (await res.json()) as { models?: Array<{ name: string }> };
-    return { ...base, configured: true, models: (data.models ?? []).map((m) => m.name) };
-  } catch {
-    return base;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 const KEY_ENV: Partial<Record<ProviderId, string>> = {

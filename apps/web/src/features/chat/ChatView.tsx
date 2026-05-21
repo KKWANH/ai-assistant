@@ -149,7 +149,9 @@ function MessageList({
     : null;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Instant (not smooth) — during streaming this fires on every token, and
+    // a queued smooth animation just fights itself into jank.
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, streaming, reconnectGen]);
 
   if (messages.length === 0 && !streaming && !synthetic) {
