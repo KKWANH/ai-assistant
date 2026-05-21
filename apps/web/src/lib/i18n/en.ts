@@ -91,20 +91,20 @@ const en = {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "What would you like to do?",
-  "chat.empty.subtitle": "Ariadne turns your files and folders into source-backed, traceable work. Start by typing a question, attaching files, or picking an action below.",
+  "chat.empty.subtitle": "A local AI workspace with traceable sources.",
   "chat.empty.startNew": "Or start a new conversation",
   "chat.empty.sendToStart": "Send a message to start the conversation.",
 
   "chat.example.files.title": "Attach files and ask questions",
-  "chat.example.files.body": "Upload PDFs, docs, spreadsheets, or images — Ariadne reads them and answers precisely.",
+  "chat.example.files.body": "PDF · doc · spreadsheet · image",
   "chat.example.workspace.title": "Connect a workspace folder",
-  "chat.example.workspace.body": "Attach a local folder in the composer to ground the conversation in your files.",
+  "chat.example.workspace.body": "Ground the chat in a local folder",
   "chat.example.workspace.action": "New workspace",
   "chat.example.template.title": "Run a repeatable template",
-  "chat.example.template.body": "Use a Template to produce a structured brief, evidence pack, or re-run diff from your files.",
+  "chat.example.template.body": "Turn files into a structured output",
   "chat.example.template.action": "Go to workspaces",
   "chat.example.web.title": "Search the web",
-  "chat.example.web.body": "Toggle web search in the composer to ground your question in live results.",
+  "chat.example.web.body": "Answer from live search results",
 
   "chat.failed.send": "Failed to send message",
   "chat.failed.create": "Failed to create chat",

@@ -39,6 +39,8 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
   <style>
     :root { ${tokensCss} }
     *, *::before, *::after { box-sizing: border-box; }
+    /* Let the browser render native UI (scrollbars, controls) for this theme. */
+    html { color-scheme: ${theme}; }
     html, body {
       margin: 0;
       padding: 0;
@@ -47,6 +49,15 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
       color: rgb(var(--foreground));
     }
     #surface-root { padding: 0; }
+    /* Themed scrollbars — match the main app, no default light bars. */
+    * { scrollbar-width: thin; scrollbar-color: rgb(var(--border-strong)) transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgb(var(--border-strong));
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgb(var(--muted-foreground)); }
   </style>
 </head>
 <body>

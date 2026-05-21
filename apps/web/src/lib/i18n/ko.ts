@@ -84,20 +84,20 @@ const ko: Record<TranslationKey, string> = {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "무엇을 도와드릴까요?",
-  "chat.empty.subtitle": "Ariadne는 파일과 폴더를 출처가 추적되는 결과물로 만들어 드립니다. 질문을 입력하거나, 파일을 첨부하거나, 아래 작업을 선택해 시작해 보세요.",
+  "chat.empty.subtitle": "출처가 추적되는 로컬 AI 워크스페이스",
   "chat.empty.startNew": "새 대화 시작하기",
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
 
   "chat.example.files.title": "파일 첨부 후 질문하기",
-  "chat.example.files.body": "PDF, 문서, 스프레드시트, 이미지를 업로드하면 Ariadne가 내용을 읽고 정확하게 답변해 드립니다.",
+  "chat.example.files.body": "PDF · 문서 · 스프레드시트 · 이미지",
   "chat.example.workspace.title": "워크스페이스 폴더 연결",
-  "chat.example.workspace.body": "작성기에서 로컬 폴더를 첨부하면 실제 파일을 바탕으로 대화를 이어갈 수 있습니다.",
+  "chat.example.workspace.body": "로컬 폴더를 대화에 연결",
   "chat.example.workspace.action": "새 워크스페이스",
   "chat.example.template.title": "반복 사용 가능한 템플릿 실행",
-  "chat.example.template.body": "템플릿을 사용하면 파일에서 정리된 브리핑, 근거 묶음, 재실행 비교를 만들 수 있습니다.",
+  "chat.example.template.body": "파일에서 정리된 결과물 생성",
   "chat.example.template.action": "워크스페이스로 이동",
   "chat.example.web.title": "웹 검색",
-  "chat.example.web.body": "작성기에서 웹 검색을 켜면 실시간 검색 결과를 바탕으로 답변을 받을 수 있습니다.",
+  "chat.example.web.body": "실시간 검색 결과로 답변",
 
   "chat.failed.send": "메시지 전송에 실패했습니다",
   "chat.failed.create": "대화를 만들 수 없습니다",
