@@ -97,7 +97,7 @@ export function ContextPickView() {
   };
 
   return (
-    <div className="flex flex-col gap-5 p-5 max-w-2xl overflow-y-auto h-full">
+    <div className="flex flex-col gap-5 p-5 overflow-y-auto h-full">
       {/* Step indicator + back nav */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

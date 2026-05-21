@@ -104,7 +104,7 @@ function BriefTab({ runId }: { runId: string }) {
     );
   return (
     <article
-      className="prose text-sm leading-relaxed"
+      className="prose max-w-none text-sm leading-relaxed"
       dangerouslySetInnerHTML={{ __html: mdToHtml(brief.markdown) }}
     />
   );

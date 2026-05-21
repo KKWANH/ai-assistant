@@ -121,7 +121,9 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
 </body>
 </html>`;
 
-      return reply.type("text/html").send(html);
+      // The host embeds live theme tokens and references a mutable bundle —
+      // never cache it, or edits/rebuilds won't show up.
+      return reply.type("text/html").header("Cache-Control", "no-store").send(html);
     }
   );
 
@@ -142,11 +144,13 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .status(404)
           .type("application/javascript")
+          .header("Cache-Control", "no-store")
           .send(`// Bundle not built yet. POST /api/workspaces/${req.params.workspaceId}/surface/build to compile.`);
       }
 
+      // The bundle is rebuilt in place at a stable URL — never cache it.
       const js = fs.readFileSync(bundlePath, "utf-8");
-      return reply.type("application/javascript").send(js);
+      return reply.type("application/javascript").header("Cache-Control", "no-store").send(js);
     }
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, FileText, BarChart2, Globe, Lock } from "lucide-react";
+import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock } from "lucide-react";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
@@ -13,7 +13,35 @@ import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import { FolderPicker } from "./FolderPicker";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
-type Starter = "blank" | "portfolio";
+type Starter = "blank" | "portfolio" | "budget" | "reading";
+
+/** Workspace templates shown in the picker — Blank plus ready-made example projects. */
+const TEMPLATE_OPTIONS = [
+  {
+    id: "blank",
+    icon: FileText,
+    labelKey: "workspace.dialog.starterBlank",
+    descKey: "workspace.dialog.starterBlankDesc",
+  },
+  {
+    id: "portfolio",
+    icon: BarChart2,
+    labelKey: "workspace.dialog.starterPortfolio",
+    descKey: "workspace.dialog.starterPortfolioDesc",
+  },
+  {
+    id: "budget",
+    icon: Wallet,
+    labelKey: "workspace.dialog.starterBudget",
+    descKey: "workspace.dialog.starterBudgetDesc",
+  },
+  {
+    id: "reading",
+    icon: BookOpen,
+    labelKey: "workspace.dialog.starterReading",
+    descKey: "workspace.dialog.starterReadingDesc",
+  },
+] as const;
 
 export function CreateWorkspaceDialog() {
   const { createWorkspaceOpen, setCreateWorkspaceOpen, setActiveWorkspaceId } =
@@ -112,40 +140,36 @@ export function CreateWorkspaceDialog() {
           )}
         </div>
 
-        {/* Starter choice */}
+        {/* Template choice */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted-foreground">
             {t("workspace.dialog.starterLabel")}
           </label>
           <div className="grid grid-cols-2 gap-2">
-            <Card
-              interactive
-              selected={starter === "blank"}
-              className="flex items-start gap-3 px-3 py-3 cursor-pointer"
-              onClick={() => setStarter("blank")}
-            >
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-foreground">{t("workspace.dialog.starterBlank")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {t("workspace.dialog.starterBlankDesc")}
-                </p>
-              </div>
-            </Card>
-            <Card
-              interactive
-              selected={starter === "portfolio"}
-              className="flex items-start gap-3 px-3 py-3 cursor-pointer"
-              onClick={() => setStarter("portfolio")}
-            >
-              <BarChart2 className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-foreground">{t("workspace.dialog.starterPortfolio")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {t("workspace.dialog.starterPortfolioDesc")}
-                </p>
-              </div>
-            </Card>
+            {TEMPLATE_OPTIONS.map((tpl) => {
+              const Icon = tpl.icon;
+              const isSelected = starter === tpl.id;
+              return (
+                <Card
+                  key={tpl.id}
+                  interactive
+                  selected={isSelected}
+                  className="flex items-start gap-3 px-3 py-3 cursor-pointer"
+                  onClick={() => setStarter(tpl.id)}
+                >
+                  <Icon
+                    className={[
+                      "h-4 w-4 shrink-0 mt-0.5",
+                      isSelected ? "text-accent" : "text-muted-foreground",
+                    ].join(" ")}
+                  />
+                  <div>
+                    <p className="text-xs font-medium text-foreground">{t(tpl.labelKey)}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{t(tpl.descKey)}</p>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </div>
 
@@ -200,6 +224,9 @@ export function CreateWorkspaceDialog() {
               <label className="text-xs font-medium text-muted-foreground">
                 {t("workspace.dialog.includeLabel")}
               </label>
+              <p className="text-[11px] leading-snug text-muted-foreground/80">
+                {t("workspace.dialog.includeHelp")}
+              </p>
               <textarea
                 className="h-24 w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-xs font-mono text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={include}
@@ -211,6 +238,9 @@ export function CreateWorkspaceDialog() {
               <label className="text-xs font-medium text-muted-foreground">
                 {t("workspace.dialog.excludeLabel")}
               </label>
+              <p className="text-[11px] leading-snug text-muted-foreground/80">
+                {t("workspace.dialog.excludeHelp")}
+              </p>
               <textarea
                 className="h-24 w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-xs font-mono text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={exclude}

@@ -15,9 +15,31 @@ import {
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
-import { HOLDINGS_CSV, HISTORY_CSV, SURFACE_TSX } from "../surface/portfolioStarter.js";
+import * as portfolioStarter from "../surface/portfolioStarter.js";
+import * as budgetStarter from "../surface/budgetStarter.js";
+import * as readingStarter from "../surface/readingStarter.js";
 import logger from "../logger.js";
 import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+
+/** Sample files + custom surface scaffolded for each non-blank workspace template. */
+const STARTERS: Record<string, { files: Record<string, string>; surface: string }> = {
+  portfolio: {
+    files: {
+      "holdings.csv": portfolioStarter.HOLDINGS_CSV,
+      "fx_rates.csv": portfolioStarter.FX_RATES_CSV,
+      "history.csv": portfolioStarter.HISTORY_CSV,
+    },
+    surface: portfolioStarter.SURFACE_TSX,
+  },
+  budget: {
+    files: { "budget.csv": budgetStarter.BUDGET_CSV },
+    surface: budgetStarter.SURFACE_TSX,
+  },
+  reading: {
+    files: { "library.csv": readingStarter.LIBRARY_CSV },
+    surface: readingStarter.SURFACE_TSX,
+  },
+};
 
 export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces
@@ -59,20 +81,19 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     dbInsertWorkspace(workspace);
     ensureAriadneFolder(rootPath);
 
-    // Scaffold portfolio starter if requested
-    if (starter === "portfolio") {
+    // Scaffold a starter template if requested (best-effort; failures are non-fatal)
+    const starterDef = starter && starter !== "blank" ? STARTERS[starter] : undefined;
+    if (starterDef) {
       try {
-        // Write sample CSVs at workspace root
-        fs.writeFileSync(path.join(rootPath, "holdings.csv"), HOLDINGS_CSV, "utf-8");
-        fs.writeFileSync(path.join(rootPath, "history.csv"), HISTORY_CSV, "utf-8");
-        // Write surface source
-        writeSurface(rootPath, SURFACE_TSX);
-        // Attempt to build immediately (best-effort; failures are non-fatal)
+        for (const [filename, content] of Object.entries(starterDef.files)) {
+          fs.writeFileSync(path.join(rootPath, filename), content, "utf-8");
+        }
+        writeSurface(rootPath, starterDef.surface);
         buildSurface(rootPath).catch((err: unknown) => {
-          logger.warn({ err }, "Portfolio starter surface build failed");
+          logger.warn({ err, starter }, "Starter surface build failed");
         });
       } catch (err) {
-        logger.warn({ err }, "Failed to scaffold portfolio starter files");
+        logger.warn({ err, starter }, "Failed to scaffold starter template files");
       }
     }
 

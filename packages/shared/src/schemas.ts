@@ -7,8 +7,8 @@ export const CreateWorkspaceSchema = z.object({
   rootPath: z.string().min(1),
   include: z.array(z.string()).optional(),
   exclude: z.array(z.string()).optional(),
-  /** Optional starter that scaffolds example files (e.g. a Portfolio surface). */
-  starter: z.enum(["blank", "portfolio"]).optional(),
+  /** Optional template that scaffolds example files + a custom surface. */
+  starter: z.enum(["blank", "portfolio", "budget", "reading"]).optional(),
   visibility: z.enum(["private", "public"]).optional(),
 });
 export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceSchema>;

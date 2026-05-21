@@ -158,6 +158,20 @@ const PALETTE = [
   "rgb(var(--accent))",
 ];
 
+/**
+ * Compact axis-label formatter: 136314 → "136.3k", 2_400_000 → "2.4M".
+ * Keeps small integers exact and rounds fractional values to one decimal so
+ * finance-scale charts stay readable.
+ */
+function compactNum(v: number): string {
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(1) + "B";
+  if (a >= 1e6) return (v / 1e6).toFixed(1) + "M";
+  if (a >= 1e3) return (v / 1e3).toFixed(1) + "k";
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(1);
+}
+
 // ── LineChart ──────────────────────────────────────────────────────────────
 
 export interface LineChartProps {
@@ -208,7 +222,7 @@ export function LineChart({ data, width = 480, height = 240, title, color }: Lin
             <g key={t}>
               <line x1={0} y1={yp} x2={W} y2={yp} stroke={gridColor} strokeDasharray="4 2" />
               <text x={-6} y={yp + 4} textAnchor="end" fontSize={10} fill={mutedColor}>
-                {v.toFixed(1)}
+                {compactNum(v)}
               </text>
             </g>
           );
@@ -250,18 +264,28 @@ export interface BarChartProps {
 
 export function BarChart({ data, width = 480, height = 240, title, color }: BarChartProps) {
   const barColor = color ?? CV.accent;
+  const negColor = "rgb(var(--destructive))";
   const textColor = CV.foreground;
   const mutedColor = CV.mutedFg;
   const gridColor = CV.border;
 
   if (!data.length) return <svg width={width} height={height} />;
 
-  const PAD = { top: title ? 32 : 16, right: 16, bottom: 40, left: 48 };
+  const PAD = { top: title ? 32 : 16, right: 16, bottom: 40, left: 52 };
   const W = width - PAD.left - PAD.right;
   const H = height - PAD.top - PAD.bottom;
 
-  const maxV = Math.max(...data.map((d) => d.value), 0);
+  // Scale spans min..max so negative values render below a zero baseline.
+  const values = data.map((d) => d.value);
+  const maxV = Math.max(...values, 0);
+  const minV = Math.min(...values, 0);
+  const range = maxV - minV || 1;
+  const y = (v: number) => H - ((v - minV) / range) * H;
+  const zeroY = y(0);
   const barW = Math.max(4, W / data.length - 4);
+
+  // Ticks: show the zero line explicitly only when values cross it.
+  const ticks = minV < 0 ? [maxV, 0, minV] : [maxV, maxV / 2, 0];
 
   return (
     <svg width={width} height={height} style={{ fontFamily: "sans-serif", overflow: "visible" }}>
@@ -272,25 +296,33 @@ export function BarChart({ data, width = 480, height = 240, title, color }: BarC
       )}
       <g transform={`translate(${PAD.left},${PAD.top})`}>
         {/* Y gridlines */}
-        {[0, 0.5, 1].map((t) => {
-          const v = t * maxV;
-          const yp = H - (maxV > 0 ? (v / maxV) * H : 0);
+        {ticks.map((v, i) => {
+          const yp = y(v);
           return (
-            <g key={t}>
+            <g key={i}>
               <line x1={0} y1={yp} x2={W} y2={yp} stroke={gridColor} strokeDasharray="4 2" />
               <text x={-6} y={yp + 4} textAnchor="end" fontSize={10} fill={mutedColor}>
-                {v.toFixed(1)}
+                {compactNum(v)}
               </text>
             </g>
           );
         })}
         {data.map((d, i) => {
-          const bh = maxV > 0 ? (d.value / maxV) * H : 0;
+          const vy = y(d.value);
+          const top = Math.min(vy, zeroY);
+          const bh = Math.abs(vy - zeroY);
           const bx = (i / data.length) * W + 2;
-          const by = H - bh;
           return (
             <g key={i}>
-              <rect x={bx} y={by} width={barW} height={bh} fill={barColor} rx={2} opacity={0.85} />
+              <rect
+                x={bx}
+                y={top}
+                width={barW}
+                height={Math.max(bh, 0)}
+                fill={d.value < 0 ? negColor : barColor}
+                rx={2}
+                opacity={0.85}
+              />
               <text
                 x={bx + barW / 2}
                 y={H + 14}
@@ -303,7 +335,8 @@ export function BarChart({ data, width = 480, height = 240, title, color }: BarC
             </g>
           );
         })}
-        <line x1={0} y1={H} x2={W} y2={H} stroke={gridColor} />
+        {/* Zero baseline */}
+        <line x1={0} y1={zeroY} x2={W} y2={zeroY} stroke={gridColor} />
       </g>
     </svg>
   );
