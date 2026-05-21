@@ -181,9 +181,18 @@ export interface LineChartProps {
   title?: string;
   /** Override line colour — should be a CSS colour string using var(--token). */
   color?: string;
+  /**
+   * Optional second series, drawn as a dimmer dashed line behind `data`. Use it
+   * for a baseline / what-if comparison (e.g. portfolio value with currency
+   * moves removed). It should share x-labels and length with `data`; the y-scale
+   * spans both series so the gap between the two lines is meaningful.
+   */
+  compare?: Array<{ label: string; value: number }>;
+  /** Legend labels for the [primary, compare] series — shown when `compare` is set. */
+  seriesLabels?: [string, string];
 }
 
-export function LineChart({ data, width = 480, height = 240, title, color }: LineChartProps) {
+export function LineChart({ data, width = 480, height = 240, title, color, compare, seriesLabels }: LineChartProps) {
   const lineColor = color ?? CV.accent;
   const textColor = CV.foreground;
   const mutedColor = CV.mutedFg;
@@ -191,11 +200,16 @@ export function LineChart({ data, width = 480, height = 240, title, color }: Lin
 
   if (!data.length) return <svg width={width} height={height} />;
 
-  const PAD = { top: title ? 32 : 16, right: 16, bottom: 32, left: 48 };
+  const cmp = compare && compare.length === data.length ? compare : null;
+  const [primaryLabel, compareLabel] = seriesLabels ?? ["Actual", "Baseline"];
+
+  const PAD = { top: cmp ? 46 : title ? 32 : 16, right: 16, bottom: 32, left: 48 };
   const W = width - PAD.left - PAD.right;
   const H = height - PAD.top - PAD.bottom;
 
-  const values = data.map((d) => d.value);
+  const values = cmp
+    ? data.map((d) => d.value).concat(cmp.map((d) => d.value))
+    : data.map((d) => d.value);
   const minV = Math.min(...values);
   const maxV = Math.max(...values);
   const range = maxV - minV || 1;
@@ -204,6 +218,18 @@ export function LineChart({ data, width = 480, height = 240, title, color }: Lin
   const y = (v: number) => H - ((v - minV) / range) * H;
 
   const points = data.map((d, i) => `${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(" ");
+  const comparePoints = cmp
+    ? cmp.map((d, i) => `${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(" ")
+    : "";
+
+  // Legend geometry — centre two entries in a row below the title.
+  const SWATCH = 16;
+  const entryW = (s: string) => SWATCH + 6 + s.length * 5.6;
+  const legendGap = 20;
+  const legendW = entryW(primaryLabel) + legendGap + entryW(compareLabel);
+  const legendX = (width - legendW) / 2;
+  const legendY = 30;
+  const compareEntryX = legendX + entryW(primaryLabel) + legendGap;
 
   return (
     <svg width={width} height={height} style={{ fontFamily: "sans-serif", overflow: "visible" }}>
@@ -211,6 +237,26 @@ export function LineChart({ data, width = 480, height = 240, title, color }: Lin
         <text x={width / 2} y={14} textAnchor="middle" fontSize={13} fontWeight={600} fill={textColor}>
           {title}
         </text>
+      )}
+      {cmp && (
+        <g>
+          <line x1={legendX} y1={legendY - 3} x2={legendX + SWATCH} y2={legendY - 3} stroke={lineColor} strokeWidth={2.5} />
+          <text x={legendX + SWATCH + 6} y={legendY} fontSize={10} fill={mutedColor}>
+            {primaryLabel}
+          </text>
+          <line
+            x1={compareEntryX}
+            y1={legendY - 3}
+            x2={compareEntryX + SWATCH}
+            y2={legendY - 3}
+            stroke={mutedColor}
+            strokeWidth={2}
+            strokeDasharray="5 3"
+          />
+          <text x={compareEntryX + SWATCH + 6} y={legendY} fontSize={10} fill={mutedColor}>
+            {compareLabel}
+          </text>
+        </g>
       )}
       <g transform={`translate(${PAD.left},${PAD.top})`}>
         {/* Y-axis */}
@@ -229,18 +275,23 @@ export function LineChart({ data, width = 480, height = 240, title, color }: Lin
         })}
         {/* X-axis labels */}
         {data.map((d, i) => (
-          <text
-            key={i}
-            x={x(i)}
-            y={H + 16}
-            textAnchor="middle"
-            fontSize={10}
-            fill={mutedColor}
-          >
+          <text key={i} x={x(i)} y={H + 16} textAnchor="middle" fontSize={10} fill={mutedColor}>
             {d.label.length > 6 ? `${d.label.slice(0, 5)}…` : d.label}
           </text>
         ))}
-        {/* Line */}
+        {/* Compare line — drawn first so the primary series sits on top */}
+        {cmp && (
+          <polyline
+            points={comparePoints}
+            fill="none"
+            stroke={mutedColor}
+            strokeWidth={2}
+            strokeDasharray="5 3"
+            strokeLinejoin="round"
+            opacity={0.8}
+          />
+        )}
+        {/* Primary line */}
         <polyline points={points} fill="none" stroke={lineColor} strokeWidth={2} strokeLinejoin="round" />
         {/* Dots */}
         {data.map((d, i) => (

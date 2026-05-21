@@ -13,45 +13,39 @@
  */
 
 export const HOLDINGS_CSV = `symbol,name,asset_type,sector,currency,shares,buy_price,current_price,target_price,headline
-AAPL,Apple Inc.,Stock,Technology,USD,50,145.30,224.80,250.00,"Services revenue hit a record; estimates lifted into the new product cycle."
-MSFT,Microsoft Corp.,Stock,Technology,USD,30,290.00,478.90,525.00,"Cloud and AI bookings stay strong; margin guidance reaffirmed."
-NVDA,NVIDIA Corp.,Stock,Technology,USD,20,145.00,178.40,210.00,"Data-center demand still outpaces supply; next-gen parts are ramping."
-JPM,JPMorgan Chase & Co.,Stock,Financials,USD,40,145.00,248.60,250.00,"Net interest income resilient; the bank flags a cautious credit outlook."
-VOO,Vanguard S&P 500 ETF,ETF,Diversified,USD,35,380.00,512.30,540.00,"Broad S&P 500 tracker; the expense ratio stays minimal."
-QQQ,Invesco QQQ Trust,ETF,Technology,USD,18,360.00,498.70,520.00,"Nasdaq-100 fund; heavy mega-cap weighting keeps volatility elevated."
-GLD,SPDR Gold Shares,Commodity,Commodities,USD,30,178.00,242.10,255.00,"Gold near record highs as central banks keep adding reserves."
-TLT,iShares 20+ Year Treasury,Bond,Fixed Income,USD,25,98.00,88.40,95.00,"Long Treasuries pressured by higher-for-longer rates; duration risk is high."
-BTC,Bitcoin,Crypto,Digital Assets,USD,0.5,42000.00,68500.00,75000.00,"Bitcoin consolidates after the halving; ETF inflows remain the swing factor."
-ASML,ASML Holding,Stock,Technology,EUR,8,580.00,712.00,780.00,"Lithography order book is recovering; export-control news is a watch item."
-MC,LVMH,Stock,Consumer Discretionary,EUR,6,720.00,645.00,620.00,"Luxury demand soft in key markets; the near-term outlook was trimmed."
-005930,Samsung Electronics,Stock,Technology,KRW,150,68000,79500,92000,"Memory pricing is turning up; HBM capacity is the key swing factor."
-069500,KODEX 200 ETF,ETF,Diversified,KRW,80,34000,38200,41000,"KOSPI 200 fund; broad Korean large-cap exposure in one holding."
-7203,Toyota Motor,Stock,Consumer Discretionary,JPY,100,2100,2980,3200,"Hybrid demand is strong; a weaker yen keeps flattering export earnings."
-SHEL,Shell plc,Stock,Energy,GBP,60,24.50,28.90,32.00,"Cash flow robust on steady energy prices; the buyback pace is maintained."
-CSPX,iShares Core S&P 500 ETF,ETF,Diversified,GBP,15,42.00,58.30,62.00,"Accumulating S&P 500 fund; dividends are reinvested rather than paid out."
+AAPL,Apple Inc.,Stock,Technology,USD,40,150.00,225.00,250.00,"Services revenue hit a record; estimates were lifted into the new product cycle."
+MSFT,Microsoft Corp.,Stock,Technology,USD,25,300.00,475.00,525.00,"Cloud and AI bookings stay strong; margin guidance was reaffirmed."
+NVDA,NVIDIA Corp.,Stock,Technology,USD,30,110.00,178.00,210.00,"Data-center demand still outpaces supply; next-gen parts are ramping."
+VOO,Vanguard S&P 500 ETF,ETF,Diversified,USD,30,400.00,510.00,545.00,"Broad S&P 500 tracker; the expense ratio stays minimal."
+GLD,SPDR Gold Shares,Commodity,Commodities,USD,25,180.00,242.00,255.00,"Gold near record highs as central banks keep adding reserves."
+BTC,Bitcoin,Crypto,Digital Assets,USD,0.4,45000.00,68000.00,80000.00,"Bitcoin consolidates after the halving; ETF inflows remain the swing factor."
+ASML,ASML Holding,Stock,Technology,EUR,10,600.00,720.00,800.00,"Lithography orders are recovering; export-control headlines stay a watch item."
+SAP,SAP SE,Stock,Technology,EUR,20,200.00,250.00,275.00,"Cloud backlog keeps compounding; the operating-margin trajectory is improving."
+MC,LVMH,Stock,Consumer Discretionary,EUR,5,700.00,620.00,640.00,"Luxury demand is soft in key markets; the near-term outlook was trimmed."
+005930,Samsung Electronics,Stock,Technology,KRW,200,65000,80000,95000,"Memory pricing is turning up; HBM capacity is the key swing factor."
+069500,KODEX 200 ETF,ETF,Diversified,KRW,150,33000,38000,42000,"KOSPI 200 fund; broad Korean large-cap exposure in a single holding."
+035420,NAVER Corp.,Stock,Communication Services,KRW,50,200000,164000,210000,"Search-ad growth is slowing; the market is waiting on the AI product roadmap."
 `;
 
 export const FX_RATES_CSV = `currency,name,rate,buy_rate
 USD,US Dollar,1.0000,1.0000
-EUR,Euro,1.0850,1.0550
-GBP,British Pound,1.2700,1.2400
-JPY,Japanese Yen,0.00650,0.00690
-KRW,Korean Won,0.000730,0.000760
+EUR,Euro,1.1200,1.0500
+KRW,Korean Won,0.000690,0.000800
 `;
 
 export const HISTORY_CSV = `date,value,fx_effect
-2025-06,99100,30
-2025-07,103400,8
-2025-08,100700,-22
-2025-09,109200,-58
-2025-10,114100,-86
-2025-11,110800,-108
-2025-12,118600,-132
-2026-01,123900,-158
-2026-02,120400,-178
-2026-03,128700,-192
-2026-04,132500,-200
-2026-05,136314,-205
+2025-06,90100,80
+2025-07,93600,-90
+2025-08,91400,-300
+2025-09,97000,-560
+2025-10,99900,-760
+2025-11,98400,-980
+2025-12,103900,-1210
+2026-01,107300,-1440
+2026-02,103600,-1620
+2026-03,108500,-1850
+2026-04,110900,-2040
+2026-05,112532,-2218
 `;
 
 export const SURFACE_TSX = `/**
@@ -59,11 +53,13 @@ export const SURFACE_TSX = `/**
  *
  * Reads holdings.csv, fx_rates.csv and history.csv, then renders KPIs, a value
  * trend, currency exposure, allocation, per-position returns and a sortable
- * holdings table. Click any holding to open a detailed asset page. Toggle
- * "Currency analysis" to break out how exchange-rate moves affected returns.
+ * holdings table. "Refresh prices" re-reads the CSV files; click any holding to
+ * open a detailed asset page. Toggle "Currency analysis" to overlay an
+ * FX-neutral baseline on the value trend and break out each position's FX effect.
  *
  * Data model
- *   holdings.csv  symbol,name,asset_type,sector,currency,shares,buy_price,current_price
+ *   holdings.csv  symbol,name,asset_type,sector,currency,shares,buy_price,
+ *                 current_price,target_price,headline
  *   fx_rates.csv  currency,name,rate,buy_rate   (rate = base-currency units per 1 unit)
  *   history.csv   date,value,fx_effect          (value + cumulative currency effect)
  *
@@ -79,7 +75,7 @@ export const SURFACE_TSX = `/**
  * --warning, --info.
  */
 
-import { useState, useEffect, useAriadne, LineChart, BarChart, PieChart } from "@ariadne/surface";
+import { useState, useEffect, useCallback, useAriadne, LineChart, BarChart, PieChart } from "@ariadne/surface";
 
 // -- Types -------------------------------------------------------------------
 
@@ -548,6 +544,8 @@ export default function PortfolioDashboard() {
   const [fxRates, setFxRates] = useState<FxRate[]>([]);
   const [history, setHistory] = useState<HistPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSync, setLastSync] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [view, setView] = useState<View>({ page: "overview" });
@@ -557,8 +555,12 @@ export default function PortfolioDashboard() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [hoverSym, setHoverSym] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
+  // Read every CSV file. Called once on mount and again by the Refresh button —
+  // the surface is sandboxed, so "refresh" re-reads the files rather than
+  // fetching live quotes. holdings.csv always carries the current price.
+  const load = useCallback(
+    async (isRefresh: boolean) => {
+      if (isRefresh) setRefreshing(true);
       try {
         const csv = await ariadne.readCsv("holdings.csv");
         setRawHoldings(parseHoldings(csv.rows));
@@ -574,14 +576,21 @@ export default function PortfolioDashboard() {
         } catch {
           /* history.csv is optional */
         }
+        setError(null);
+        setLastSync(new Date().toLocaleTimeString("en-US", { hour12: false }));
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
-    }
-    void load();
-  }, [ariadne]);
+    },
+    [ariadne]
+  );
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
 
   if (loading) return <Centered text="Loading portfolio..." />;
   if (error) return <Centered text={"Error: " + error} tone="error" />;
@@ -654,9 +663,10 @@ export default function PortfolioDashboard() {
     .sort((a, b) => b.plPctBase - a.plPctBase)
     .map((h) => ({ label: h.symbol, value: Math.round(h.plPctBase * 10) / 10 }));
 
-  // Trend series.
+  // Trend series. constFxSeries removes the currency effect (value − cumulative
+  // fx_effect) — the FX-neutral baseline the value chart overlays in FX mode.
   const valueSeries: Point[] = history.map((p) => ({ label: p.label, value: p.value }));
-  const fxSeries: Point[] = history.map((p) => ({ label: p.label, value: p.fxEffect }));
+  const constFxSeries: Point[] = history.map((p) => ({ label: p.label, value: p.value - p.fxEffect }));
 
   // Asset-type filter chips.
   const assetTypes = Object.keys(typeMap).sort();
@@ -726,19 +736,40 @@ export default function PortfolioDashboard() {
     color: fxMode ? "rgb(var(--accent-foreground))" : "rgb(var(--muted-foreground))",
   };
 
+  const refreshBtn = {
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    padding: "7px 13px",
+    fontSize: "12px",
+    fontWeight: 600,
+    cursor: refreshing ? "default" : "pointer",
+    borderRadius: "8px",
+    border: "1px solid rgb(var(--border))",
+    background: "transparent",
+    color: "rgb(var(--muted-foreground))",
+    opacity: refreshing ? 0.55 : 1,
+  };
+
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: "20px 24px", maxWidth: "1180px", margin: "0 auto", color: "rgb(var(--foreground))" }}>
-      {/* Header + currency-analysis toggle */}
+      {/* Header + toolbar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: "20px", fontWeight: 700, margin: 0 }}>Portfolio Analysis</h1>
           <p style={{ fontSize: "12px", margin: "4px 0 0", ...muted }}>
-            {holdings.length + " positions · " + currencies.length + " currencies · reporting in " + baseCurrency}
+            {holdings.length + " positions · " + currencies.length + " currencies · reporting in " + baseCurrency +
+              (lastSync ? " · prices as of " + lastSync : "")}
           </p>
         </div>
-        <button onClick={() => setFxMode(!fxMode)} style={fxBtn}>
-          {(fxMode ? "◉" : "○") + "  Currency analysis"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <button onClick={() => void load(true)} disabled={refreshing} style={refreshBtn}>
+            {refreshing ? "⟳  Refreshing…" : "⟳  Refresh prices"}
+          </button>
+          <button onClick={() => setFxMode(!fxMode)} style={fxBtn}>
+            {(fxMode ? "◉" : "○") + "  Currency analysis"}
+          </button>
+        </div>
       </div>
 
       {/* KPI row */}
@@ -773,29 +804,35 @@ export default function PortfolioDashboard() {
             <strong>Currency analysis on.</strong>{" "}
             <span style={muted}>
               {"Exchange-rate moves changed portfolio value by " + signedMoney(totalFx, baseCurrency) +
-                ". The trend below adds a cumulative currency-effect line, and the holdings table breaks out each position's FX effect."}
+                ". The value trend below overlays an FX-neutral baseline so the currency effect is visible directly, " +
+                "and the holdings table breaks out each position's FX effect."}
             </span>
           </p>
         </div>
       ) : null}
 
-      {/* Value trend */}
+      {/* Portfolio value trend — in currency mode it overlays the FX-neutral baseline */}
       {valueSeries.length > 1 ? (
         <div style={{ ...cardStyle, marginBottom: "16px", overflowX: "auto" }}>
-          <LineChart data={valueSeries} title={"Portfolio Value (" + baseCurrency + ")"} width={1090} height={250} />
-        </div>
-      ) : null}
-
-      {/* Currency-effect trend (FX mode) */}
-      {fxMode && fxSeries.length > 1 ? (
-        <div style={{ ...cardStyle, marginBottom: "16px", overflowX: "auto" }}>
           <LineChart
-            data={fxSeries}
-            title={"Cumulative Currency Effect (" + baseCurrency + ")"}
+            data={valueSeries}
+            compare={fxMode ? constFxSeries : undefined}
+            seriesLabels={["Actual value", "If FX held flat"]}
+            title={
+              fxMode
+                ? "Portfolio Value — actual vs. without currency moves (" + baseCurrency + ")"
+                : "Portfolio Value (" + baseCurrency + ")"
+            }
             width={1090}
-            height={220}
-            color="rgb(var(--info))"
+            height={260}
           />
+          {fxMode ? (
+            <p style={{ fontSize: "12px", margin: "8px 4px 2px", lineHeight: 1.5, ...muted }}>
+              {"Solid line: actual value. Dashed line: what the portfolio would be worth if every exchange rate " +
+                "had stayed at its purchase level. The widening gap is the currency effect compounding through the " +
+                "whole portfolio — " + signedMoney(totalFx, baseCurrency) + " to date."}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -869,8 +906,9 @@ export default function PortfolioDashboard() {
       </div>
 
       <p style={{ marginTop: "16px", fontSize: "12px", ...muted }}>
-        Click any holding to open its detail page. Edit <code>holdings.csv</code>, <code>fx_rates.csv</code> and{" "}
-        <code>history.csv</code>, then click <strong>Build</strong> to refresh. Click a column header to sort.
+        Click any holding to open its detail page, or <strong>Refresh prices</strong> to re-read the CSV files.
+        Edit <code>holdings.csv</code>, <code>fx_rates.csv</code> and <code>history.csv</code>, then click{" "}
+        <strong>Build</strong> to recompile. Click a column header to sort.
       </p>
     </div>
   );
