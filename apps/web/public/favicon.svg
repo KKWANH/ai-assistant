@@ -1,12 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <!-- Ariadne — a spun web. Monochrome. -->
+  <!-- Ariadne — a web spun outward from the centre: the clew (thread) that
+       traces every path through the labyrinth. -->
   <rect width="32" height="32" rx="7" fill="#18181b"/>
-  <g fill="none" stroke="#fafafa" stroke-width="2.4"
+  <g fill="none" stroke="#fafafa" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
-    <!-- three radial spokes from the anchor corner -->
-    <path d="M8 24 8 6 M8 24 24 7 M8 24 26 22"/>
-    <!-- two connecting threads -->
-    <path d="M8 16 15 16.5 16 23"/>
-    <path d="M8 10 20.5 11 22 22.5"/>
+    <!-- six spokes radiating from the centre -->
+    <path d="M16 16 16 4.5M16 16 26 10.3M16 16 26 21.7M16 16 16 27.5M16 16 6 21.7M16 16 6 10.3"/>
+    <!-- outer thread -->
+    <path d="M16 4.5 26 10.3 26 21.7 16 27.5 6 21.7 6 10.3Z"/>
+    <!-- inner thread -->
+    <path d="M16 9.5 21.6 12.8 21.6 19.3 16 22.5 10.4 19.3 10.4 12.8Z"/>
   </g>
+  <circle cx="16" cy="16" r="1.7" fill="#fafafa"/>
 </svg>

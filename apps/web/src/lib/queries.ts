@@ -560,6 +560,8 @@ export function useSendMessage() {
               messages: [...msgs, finalMsg],
             };
           });
+          // Clean finish — clear the reconnect poll so its view never flashes.
+          qc.setQueryData(["chat-active", chatId], { active: null });
           // Invalidate the chat list so the sidebar title updates
           void qc.invalidateQueries({ queryKey: ["chats"] });
         },
@@ -571,18 +573,20 @@ export function useSendMessage() {
             content: m.content || "",
             _streamError: error,
           } as ChatMessage & { _streamError?: string }));
+          qc.setQueryData(["chat-active", chatId], { active: null });
         },
 
         onDisconnect: () => {
           // The stream dropped before completion — the generation keeps
-          // running on the server. Drop the placeholder so the /active poll
-          // resumes the live view, and pull the chat in case it just finished.
-          setCachedChat(qc, chatId, (old) =>
-            old
-              ? { ...old, messages: (old.messages ?? []).filter((m) => m.id !== streamingId) }
-              : old
-          );
-          void qc.invalidateQueries({ queryKey: ["chats", chatId] });
+          // running on the server. KEEP the placeholder (with its streamed-
+          // so-far content) so nothing visibly vanishes; mark it so ThreadView
+          // reconciles it from the /active poll, then refetches the saved
+          // message once the generation finishes.
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({
+            ...m,
+            _disconnected: true,
+          } as ChatMessage & { _disconnected?: boolean }));
+          void qc.invalidateQueries({ queryKey: ["chat-active", chatId] });
         },
       });
     },

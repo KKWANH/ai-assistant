@@ -40,11 +40,14 @@ export interface PendingAttachment {
   previewUrl?: string;
 }
 
+/** Web-search mode: off (never), auto (the server decides), on (always). */
+export type WebSearchMode = "off" | "auto" | "on";
+
 export interface ChatComposerProps {
   onSend: (opts: {
     content: string;
     attachments: PostAttachmentInput[];
-    webSearch: boolean;
+    webSearch: WebSearchMode;
     workspaceId: string | null;
     agentMode: boolean;
   }) => void;
@@ -79,10 +82,10 @@ function fileToBase64(file: File): Promise<string> {
 export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  // Agent + web search default ON — Ariadne leads with grounded, traceable
-  // answers. Both are sticky: a conscious toggle-off persists.
-  const [webSearch, setWebSearch] = useState(true);
-  const [agentMode, setAgentMode] = useState(true);
+  // Plain chat is the default: agent mode is opt-in, web search is "auto"
+  // (the server decides per message). Both stay sticky across messages.
+  const [webMode, setWebMode] = useState<WebSearchMode>("auto");
+  const [agentMode, setAgentMode] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,8 +118,12 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
   const handleProviderChange = async (provider: ProviderId) => {
     const models = modelOptionsForProvider(provider);
     const model = models[0] ?? DEFAULT_MODELS[provider] ?? provider;
+    const configured = providerStatus?.find((s) => s.id === provider)?.configured ?? false;
     try {
       await updateSettings.mutateAsync({ provider, model });
+      if (!configured) {
+        toast({ title: t("chat.composer.providerNoKey"), variant: "warning" });
+      }
     } catch {
       toast({ title: t("chat.composer.failedProvider"), variant: "error" });
     }
@@ -168,15 +175,14 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
         mediaType: a.mediaType,
         dataBase64: a.dataBase64,
       })),
-      webSearch,
+      webSearch: webMode,
       workspaceId: chatComposerWorkspaceId,
       agentMode,
     });
 
     setContent("");
     setAttachments([]);
-    // webSearch & agentMode stay sticky — they default on, and a user's
-    // conscious toggle should persist across messages.
+    // webMode & agentMode stay sticky across messages within a chat.
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -279,21 +285,29 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
             }}
           />
 
-          {/* Web search toggle */}
+          {/* Web search toggle — cycles Off → Auto → On */}
           <button
             type="button"
             className={[
               "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-              webSearch
+              webMode !== "off"
                 ? "text-accent bg-accent/10 border border-accent/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
             ].join(" ")}
-            onClick={() => setWebSearch((v) => !v)}
+            onClick={() =>
+              setWebMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
+            }
             disabled={disabled}
-            title={webSearch ? t("chat.composer.webSearchOn") : t("chat.composer.enableWebSearch")}
+            title={t("chat.composer.webSearchCycle")}
           >
             <Globe className="h-3.5 w-3.5" />
-            <span>{webSearch ? t("chat.composer.webOn") : t("chat.composer.web")}</span>
+            <span>
+              {webMode === "on"
+                ? t("chat.composer.webOn")
+                : webMode === "auto"
+                  ? t("chat.composer.webAuto")
+                  : t("chat.composer.web")}
+            </span>
           </button>
 
           {/* Agent mode toggle */}

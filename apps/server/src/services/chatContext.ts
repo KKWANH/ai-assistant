@@ -131,7 +131,9 @@ export async function buildChatContext(
     "When a workspace is attached you receive its file index plus the contents of its " +
     "key files — read them directly to answer; for a full structured deliverable, " +
     "suggest running the appropriate Template. " +
-    "Be concise and direct. Format your response in clear Markdown when helpful.";
+    "Always reply in the same language the user writes in. " +
+    "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
+    "and do not add bracketed citation markers like [1].";
 
   return { system, prompt, images, searchResults };
 }

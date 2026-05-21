@@ -85,6 +85,32 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     status: "pending" as const,
   }));
 
+  // Simple message — the planner decided no tools/research are needed.
+  // Skip the plan-and-execute loop and answer directly.
+  if (steps.length === 0) {
+    emit({ type: "status", text: "Answering…" });
+    let direct = "";
+    try {
+      await provider.completeStream(
+        {
+          system: buildDirectSystem(),
+          prompt: buildDirectPrompt(history, userMessage),
+          signal,
+        },
+        (delta) => {
+          direct += delta;
+          emit({ type: "delta", text: delta });
+        },
+        (status) => {
+          emit({ type: "status", text: status });
+        },
+      );
+    } catch {
+      // Aborted (or failed) mid-stream — keep whatever streamed so far.
+    }
+    return { content: direct, agent: { steps: [] }, searchResults: null };
+  }
+
   emit({ type: "agent_plan", steps: [...steps] });
 
   // ── 2. Execute ────────────────────────────────────────────────────────────
@@ -407,13 +433,20 @@ function buildPlannerSystem(customActions: WorkspaceAction[] = []): string {
         .join("\n")}`
     : "";
   return `You are an agent planner for the Ariadne AI workspace tool.
-Given a user task, break it into an ordered list of steps. Each step has:
+First decide whether the task needs a multi-step plan at all.
+
+If it is a simple question, greeting, small talk, or anything you can answer
+directly from general knowledge without tools or research, return an EMPTY
+steps array — the task will be answered directly:
+  { "summary": "Answer directly — no tools needed", "steps": [] }
+
+Otherwise, break it into an ordered list of 2–5 steps. Each step has:
   - "description": what to do (short, action-oriented)
   - "tool": one of ${builtinTools}${customSection}
   - "note": a brief one-line rationale — why this step, what it should surface
 
-Use 2–5 steps. Prefer "reason" for pure analysis. Use "web_search" for factual lookup.
-Return ONLY JSON: { "summary": "<one line describing your overall approach>", "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
+Prefer "reason" for pure analysis. Use "web_search" for factual lookup.
+Return ONLY JSON: { "summary": "<one line describing your approach>", "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
 This is a plan-and-execute agent. Do not add commentary outside the JSON.`;
 }
 
@@ -456,10 +489,28 @@ ${JSON.stringify(remainingSteps.map((s) => ({ description: s.description, tool: 
 Revise the remaining steps if warranted by what you have learned. Return JSON.`;
 }
 
+/** System + prompt for the direct-answer path (planner returned no steps). */
+function buildDirectSystem(): string {
+  return `You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.
+Answer the user's message directly and helpfully.
+Always reply in the same language the user writes in.
+Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block.`;
+}
+
+function buildDirectPrompt(history: ChatMessage[], userMessage: string): string {
+  const historyStr = history
+    .slice(-6)
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 600)}`)
+    .join("\n");
+  return `${historyStr ? `Recent conversation:\n${historyStr}\n\n` : ""}User: ${userMessage}`;
+}
+
 function buildSynthesisSystem(): string {
   return `You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.
 Your role: synthesise the results of a completed research plan into a clear, helpful answer.
-Format your response in Markdown. Be concise and direct. Reference specific findings where relevant.`;
+Always reply in the same language the user writes in.
+Be concise and direct. Reference specific findings where relevant.
+Write your answer as normal Markdown prose — never wrap the whole reply in a code block, and do not add bracketed citation markers like [1].`;
 }
 
 function buildSynthesisPrompt(userMessage: string, stepResults: string[]): string {

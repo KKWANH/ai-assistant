@@ -65,7 +65,8 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-/** Monochrome Ariadne web mark — inherits the current text color. */
+/** Monochrome Ariadne web mark — a web spun outward from the centre.
+ *  Inherits the current text color. */
 function Logo({ className }: { className?: string }) {
   return (
     <svg
@@ -73,14 +74,15 @@ function Logo({ className }: { className?: string }) {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.4}
+      strokeWidth={2.1}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M8 24 8 6 M8 24 24 7 M8 24 26 22" />
-      <path d="M8 16 15 16.5 16 23" />
-      <path d="M8 10 20.5 11 22 22.5" />
+      <path d="M16 16 16 4.5M16 16 26 10.3M16 16 26 21.7M16 16 16 27.5M16 16 6 21.7M16 16 6 10.3" />
+      <path d="M16 4.5 26 10.3 26 21.7 16 27.5 6 21.7 6 10.3Z" />
+      <path d="M16 9.5 21.6 12.8 21.6 19.3 16 22.5 10.4 19.3 10.4 12.8Z" />
+      <circle cx="16" cy="16" r="2" fill="currentColor" stroke="none" />
     </svg>
   );
 }

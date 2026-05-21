@@ -16,8 +16,8 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult } from "@ariadne/shared";
-import { CreateChatSchema, UpdateChatSchema, PostMessageSchema } from "@ariadne/shared";
-import type { PostAttachmentInput } from "@ariadne/shared";
+import { CreateChatSchema, UpdateChatSchema, PostMessageSchema, PROVIDER_LABELS } from "@ariadne/shared";
+import type { PostAttachmentInput, ProviderId } from "@ariadne/shared";
 import {
   dbCreateChat,
   dbListChats,
@@ -29,11 +29,12 @@ import {
 } from "../db/repo.js";
 import { getProvider } from "../providers/index.js";
 import { meteringProvider } from "../runs/engine.js";
-import { getActiveSettings } from "../config.js";
+import { getActiveSettings, isProviderConfigured } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
+import { decideWebSearch } from "../services/triage.js";
 import {
   beginGeneration,
   endGeneration,
@@ -58,6 +59,34 @@ function newId(): string {
 function autoTitle(content: string): string {
   const trimmed = content.trim().replace(/\s+/g, " ");
   return trimmed.length <= 40 ? trimmed : trimmed.slice(0, 40) + "…";
+}
+
+/** Plain-language message when the active provider has no API key. */
+function noProviderKeyMessage(provider: ProviderId, locale: string | undefined): string {
+  const label = PROVIDER_LABELS[provider];
+  if (locale === "ko") {
+    return (
+      `현재 선택된 AI 제공자 '${label}'에 API 키가 설정되어 있지 않아 답변을 만들 수 없습니다.\n\n` +
+      `채팅 입력창 아래 모델 메뉴에서 키가 필요 없는 **Ollama**(로컬 모델)나 **Mock**으로 바꾸거나, ` +
+      `\`.env\` 파일에 해당 제공자의 API 키를 추가해 주세요.`
+    );
+  }
+  return (
+    `The selected AI provider "${label}" has no API key configured, so I can't generate a response.\n\n` +
+    `Switch to a keyless provider — **Ollama** (local) or **Mock** — in the model menu below the chat box, ` +
+    `or add the provider's API key to your \`.env\` file.`
+  );
+}
+
+/** Turn a raw provider/SDK error into a plain-language message. */
+function friendlyProviderError(err: unknown, provider: ProviderId, locale: string | undefined): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/api[\s-]?key|authentication|unauthoriz|\b401\b/i.test(raw)) {
+    return noProviderKeyMessage(provider, locale);
+  }
+  return locale === "ko"
+    ? "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도하거나, 채팅 입력창의 모델 설정을 확인해 주세요."
+    : "Something went wrong while generating a response. Please try again in a moment, or check the model settings in the chat box.";
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +215,16 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // Keep the SSE stream alive through quiet periods (agent planning, a
+      // slow first token) so a proxy or tunnel never drops an idle stream.
+      const heartbeat = setInterval(() => {
+        try {
+          raw.write(": keep-alive\n\n");
+        } catch {
+          // client gone
+        }
+      }, 15_000);
+
       try {
         // --- Save attachments to disk and build ChatAttachment[] ---
         const chatAttachments: ChatAttachment[] = [];
@@ -214,7 +253,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           role: "user",
           content,
           attachments: chatAttachments,
-          webSearch: webSearch ?? false,
+          webSearch: webSearch === "on",
           searchResults: null,
           agent: null,
           createdAt: now(),
@@ -231,37 +270,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           dbUpdateChat(chat.id, { title: newTitle, updatedAt: now() });
         }
 
-        // --- Build context ---
+        // --- Settings + generation registration ---
         const settings = getActiveSettings();
         const historyWithoutCurrent = history.filter((m) => m.id !== userMsgId);
-        sseEmit({ type: "status", text: "Building context…" });
-
-        let contextResult;
-        try {
-          contextResult = await buildChatContext(chat, historyWithoutCurrent, {
-            content,
-            attachments: attachmentRefs,
-            // In agent mode the agent runs its own web_search steps — skip the
-            // duplicate pre-search here.
-            webSearch: agentMode ? false : (webSearch ?? false),
-          });
-        } catch (err) {
-          logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
-          contextResult = {
-            system: "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.",
-            prompt: `User: ${content}`,
-            images: [],
-            searchResults: null,
-          };
-        }
-
-        // --- Get provider ---
         const assistantMsgId = newId();
-        const rawProvider = await getProvider(settings);
-        const provider = meteringProvider(rawProvider, assistantMsgId, settings.model);
 
-        // --- Register the generation: it survives client disconnect, and a
-        //     reconnecting client (or a stop request) finds it by chat id ---
+        // The generation survives client disconnect; a reconnecting client
+        // (or a stop request) finds it by chat id.
         const controller = new AbortController();
         const gen = beginGeneration({
           chatId: chat.id,
@@ -274,79 +289,112 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           sseEmit(event);
         };
 
-        // --- Agent mode or regular mode ---
+        // --- Produce the answer: no-key notice, agent loop, or regular chat ---
         let assistantContent: string;
         let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
         let agentSearchResults: SearchResult[] | null = null;
+        let contextSearchResults: SearchResult[] | null = null;
 
-        if (agentMode) {
-          // Agent plan-and-execute loop
-          try {
-            const agentResult = await runAgent({
-              chat,
-              history: historyWithoutCurrent,
-              userMessage: content,
-              provider,
-              emit,
-              signal: controller.signal,
-            });
-            assistantContent = agentResult.content;
-            agentTrace = agentResult.agent;
-            agentSearchResults = agentResult.searchResults;
-          } catch (err) {
-            if (controller.signal.aborted) {
-              assistantContent = "";
-            } else {
-              const msg = err instanceof Error ? err.message : String(err);
-              logger.warn({ chatId: chat.id, err }, "Agent loop error");
-              assistantContent = `I encountered an error during the agent loop: ${msg}`;
-            }
-          }
+        if (!isProviderConfigured(settings.provider)) {
+          // No API key for the selected provider — explain it plainly rather
+          // than letting a raw SDK auth error reach the user.
+          assistantContent = noProviderKeyMessage(settings.provider, req.account?.locale);
+          emit({ type: "delta", text: assistantContent });
         } else {
-          // Regular streaming
-          emit({ type: "status", text: "Generating…" });
-          assistantContent = "";
+          const rawProvider = await getProvider(settings);
+          const provider = meteringProvider(rawProvider, assistantMsgId, settings.model);
 
-          try {
-            const hasImages = contextResult.images.length > 0;
-
-            if (hasImages && provider.completeWithImages) {
-              // Vision call — no streaming for images (fall back to complete)
-              const result = await provider.completeWithImages({
-                system: contextResult.system,
-                prompt: contextResult.prompt,
-                images: contextResult.images,
+          if (agentMode) {
+            // Agent plan-and-execute loop (it runs its own web_search steps).
+            try {
+              const agentResult = await runAgent({
+                chat,
+                history: historyWithoutCurrent,
+                userMessage: content,
+                provider,
+                emit,
                 signal: controller.signal,
               });
-              assistantContent = result.text;
-              // Emit the whole text as one delta so the client renders it
-              emit({ type: "delta", text: assistantContent });
-            } else {
-              await provider.completeStream(
-                {
+              assistantContent = agentResult.content;
+              agentTrace = agentResult.agent;
+              agentSearchResults = agentResult.searchResults;
+            } catch (err) {
+              if (controller.signal.aborted) {
+                assistantContent = "";
+              } else {
+                logger.warn({ chatId: chat.id, err }, "Agent loop error");
+                assistantContent = friendlyProviderError(err, settings.provider, req.account?.locale);
+                emit({ type: "delta", text: assistantContent });
+              }
+            }
+          } else {
+            // Regular streaming chat. Resolve web search: off | on | auto.
+            const webMode = webSearch ?? "off";
+            let doWebSearch = webMode === "on";
+            if (webMode === "auto" && hasContent) {
+              emit({ type: "status", text: "Checking whether a web search helps…" });
+              doWebSearch = await decideWebSearch(provider, content, controller.signal);
+            }
+
+            emit({ type: "status", text: "Building context…" });
+            let contextResult;
+            try {
+              contextResult = await buildChatContext(chat, historyWithoutCurrent, {
+                content,
+                attachments: attachmentRefs,
+                webSearch: doWebSearch,
+              });
+            } catch (err) {
+              logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
+              contextResult = {
+                system:
+                  "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
+                  "Always reply in the same language the user writes in.",
+                prompt: `User: ${content}`,
+                images: [],
+                searchResults: null,
+              };
+            }
+            contextSearchResults = contextResult.searchResults;
+
+            emit({ type: "status", text: "Generating…" });
+            assistantContent = "";
+            try {
+              const hasImages = contextResult.images.length > 0;
+              if (hasImages && provider.completeWithImages) {
+                // Vision call — no streaming for images.
+                const result = await provider.completeWithImages({
                   system: contextResult.system,
                   prompt: contextResult.prompt,
+                  images: contextResult.images,
                   signal: controller.signal,
-                },
-                (delta) => {
-                  assistantContent += delta;
-                  emit({ type: "delta", text: delta });
-                },
-                (status) => {
-                  emit({ type: "status", text: status });
-                },
-              );
-            }
-          } catch (err) {
-            if (controller.signal.aborted) {
-              // Stopped by the user — keep whatever streamed so far.
-            } else {
-              const msg = err instanceof Error ? err.message : String(err);
-              logger.warn({ chatId: chat.id, err }, "AI provider streaming error");
-              assistantContent =
-                "I'm sorry, I encountered an error while generating a response. " +
-                `(${msg}) Please check your provider settings and try again.`;
-              emit({ type: "delta", text: assistantContent });
+                });
+                assistantContent = result.text;
+                emit({ type: "delta", text: assistantContent });
+              } else {
+                await provider.completeStream(
+                  {
+                    system: contextResult.system,
+                    prompt: contextResult.prompt,
+                    signal: controller.signal,
+                  },
+                  (delta) => {
+                    assistantContent += delta;
+                    emit({ type: "delta", text: delta });
+                  },
+                  (status) => {
+                    emit({ type: "status", text: status });
+                  },
+                );
+              }
+            } catch (err) {
+              if (controller.signal.aborted) {
+                // Stopped by the user — keep whatever streamed so far.
+              } else {
+                logger.warn({ chatId: chat.id, err }, "AI provider streaming error");
+                assistantContent = friendlyProviderError(err, settings.provider, req.account?.locale);
+                emit({ type: "delta", text: assistantContent });
+              }
             }
           }
         }
@@ -369,7 +417,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           content: assistantContent,
           attachments: [],
           webSearch: false,
-          searchResults: agentSearchResults ?? contextResult.searchResults,
+          searchResults: agentSearchResults ?? contextSearchResults,
           agent: agentTrace,
           createdAt: now(),
         };
@@ -384,6 +432,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         logger.error({ chatId: chat.id, err }, "Unexpected error in chat SSE handler");
         sseEmit({ type: "error", error: msg });
       } finally {
+        clearInterval(heartbeat);
         endGeneration(chat.id);
         sseEnd();
       }

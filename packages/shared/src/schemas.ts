@@ -113,7 +113,8 @@ export type PostAttachmentInput = z.infer<typeof PostAttachmentSchema>;
 export const PostMessageSchema = z.object({
   content: z.string(),
   attachments: z.array(PostAttachmentSchema).optional(),
-  webSearch: z.boolean().optional(),
+  /** Web search mode: off (never), auto (the server decides), on (always). */
+  webSearch: z.enum(["off", "auto", "on"]).optional(),
   /** Run this message through the plan-and-execute agent loop. */
   agentMode: z.boolean().optional(),
 });

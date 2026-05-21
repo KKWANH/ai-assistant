@@ -17,7 +17,7 @@ import {
   MessageSquarePlus,
   Globe,
 } from "lucide-react";
-import type { ChatMessage, GenerationStatus } from "@ariadne/shared";
+import type { Chat, ChatMessage, GenerationStatus } from "@ariadne/shared";
 import {
   useChat,
   useCreateChat,
@@ -29,7 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
-import { ChatComposer } from "./ChatComposer";
+import { ChatComposer, type WebSearchMode } from "./ChatComposer";
 import { MessageBubble, StreamingIndicator } from "./MessageBubble";
 import { Card } from "../../components/ui/Card";
 
@@ -202,6 +202,49 @@ function ThreadView({ chatId }: { chatId: string }) {
     wasActiveRef.current = isActive;
   }, [activeGen, chatId, qc]);
 
+  // Keep a disconnected placeholder reconciled with the server-side
+  // generation: feed it the /active poll while it runs, then pull the saved
+  // message once it ends. Without this, a dropped stream looks like the
+  // answer vanished.
+  const reconciledRef = useRef<string | null>(null);
+  useEffect(() => {
+    const placeholder = messages.find(
+      (m) =>
+        m.id.startsWith("__streaming_") &&
+        (m as ChatMessage & { _disconnected?: boolean })._disconnected,
+    );
+    if (!placeholder) {
+      reconciledRef.current = null;
+      return;
+    }
+    if (activeGen) {
+      reconciledRef.current = null;
+      if (placeholder.content === activeGen.content) return;
+      qc.setQueryData<Chat>(["chats", chatId], (old) =>
+        old
+          ? {
+              ...old,
+              messages: (old.messages ?? []).map((m) =>
+                m.id === placeholder.id
+                  ? {
+                      ...m,
+                      content: activeGen.content || m.content,
+                      agent:
+                        activeGen.agentSteps.length > 0
+                          ? { steps: activeGen.agentSteps }
+                          : m.agent,
+                    }
+                  : m,
+              ),
+            }
+          : old,
+      );
+    } else if (reconciledRef.current !== placeholder.id) {
+      reconciledRef.current = placeholder.id;
+      void qc.invalidateQueries({ queryKey: ["chats", chatId] });
+    }
+  }, [activeGen, messages, chatId, qc]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center flex-1">
@@ -219,7 +262,7 @@ function ThreadView({ chatId }: { chatId: string }) {
   const handleSend = async (opts: {
     content: string;
     attachments: { name: string; mediaType: string; dataBase64: string }[];
-    webSearch: boolean;
+    webSearch: WebSearchMode;
     workspaceId: string | null;
     agentMode: boolean;
   }) => {
@@ -242,8 +285,6 @@ function ThreadView({ chatId }: { chatId: string }) {
       });
     } finally {
       setStreaming(false);
-      // Clear the polled status at once so the reconnect view never flashes.
-      qc.setQueryData(["chat-active", chatId], { active: null });
     }
   };
 
@@ -288,7 +329,7 @@ export function ChatView() {
   const handleSend = async (opts: {
     content: string;
     attachments: { name: string; mediaType: string; dataBase64: string }[];
-    webSearch: boolean;
+    webSearch: WebSearchMode;
     workspaceId: string | null;
     agentMode: boolean;
   }) => {

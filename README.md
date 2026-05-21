@@ -14,6 +14,21 @@ output you can trust and re-run over time.
 
 ---
 
+## Why "Ariadne"?
+
+In the Greek myth, Ariadne gave Theseus a ball of thread — a *clew* — so he
+could walk into the Labyrinth, face what was inside, and still find his way
+back out. "Ariadne's thread" has since come to mean any method that keeps a
+complete, retraceable record of the path taken through a maze of choices.
+
+A folder of documents is a labyrinth. Ariadne walks it for you and never lets
+go of the thread: every brief it produces carries the files it read, a
+claim-to-source map, a run trace, and a diff from the last run — so you can
+always follow the thread back to exactly where an answer came from. The mark —
+a web spun outward from a single centre — is that thread, drawn.
+
+---
+
 ## How it runs
 
 The server runs on your machine and reads your local folders. A Cloudflare Tunnel

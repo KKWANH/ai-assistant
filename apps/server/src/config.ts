@@ -54,7 +54,8 @@ function buildSettings(provider: ProviderId, model: string): Settings {
   return { provider, model, providers };
 }
 
-function isProviderConfigured(id: ProviderId): boolean {
+/** Whether a provider can be used without further setup (API key present, or keyless). */
+export function isProviderConfigured(id: ProviderId): boolean {
   switch (id) {
     case "anthropic": return !!process.env.ANTHROPIC_API_KEY;
     case "openai": return !!process.env.OPENAI_API_KEY;
