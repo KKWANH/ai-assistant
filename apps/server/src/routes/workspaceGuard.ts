@@ -1,10 +1,8 @@
 /**
- * Shared workspace access-control helpers.
+ * Shared access-control helpers.
  *
- * Rules:
- *   - Owner (created_by === account.id) → always allowed
- *   - Admin + visibility === "public"   → allowed
- *   - Otherwise                         → denied
+ * Content is private by default: every account sees only what it created.
+ * An admin sees everything. The built-in tutorial workspace is public.
  */
 
 import type { FastifyRequest, FastifyReply } from "fastify";
@@ -12,12 +10,19 @@ import type { Workspace, Account } from "@ariadne/shared";
 import { TUTORIAL_WORKSPACE_ID } from "@ariadne/shared";
 import { dbGetWorkspace } from "../db/repo.js";
 
+/**
+ * Owner-or-admin check — the basis for "private by default" content access.
+ * An account sees what it created; an admin sees everything.
+ */
+export function isOwnerOrAdmin(createdBy: string | null, account: Account): boolean {
+  if (account.role === "admin") return true;
+  return createdBy != null && createdBy === account.id;
+}
+
 export function canAccessWorkspace(workspace: Workspace, account: Account): boolean {
   // The built-in tutorial workspace is visible to everyone.
   if (workspace.id === TUTORIAL_WORKSPACE_ID) return true;
-  if (workspace.createdBy === account.id) return true;
-  if (workspace.visibility === "public" && account.role === "admin") return true;
-  return false;
+  return isOwnerOrAdmin(workspace.createdBy, account);
 }
 
 /**

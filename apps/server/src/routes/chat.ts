@@ -36,6 +36,7 @@ import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { decideWebSearch, generateChatTitle } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
+import { isOwnerOrAdmin } from "./workspaceGuard.js";
 import {
   beginGeneration,
   endGeneration,
@@ -98,8 +99,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // -------------------------------------------------------------------------
   // GET /api/chats
   // -------------------------------------------------------------------------
-  app.get("/chats", async (_req, reply) => {
-    return reply.send(dbListChats());
+  app.get("/chats", async (req, reply) => {
+    // Private by default — an account sees only its own chats; admin sees all.
+    return reply.send(dbListChats().filter((c) => isOwnerOrAdmin(c.createdBy, req.account)));
   });
 
   // -------------------------------------------------------------------------
@@ -130,6 +132,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/chats/:id", async (req, reply) => {
     const chat = dbGetChat(req.params.id);
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     return reply.send(chat);
   });
 

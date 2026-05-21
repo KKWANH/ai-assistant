@@ -9,11 +9,15 @@ import {
 } from "../db/repo.js";
 import { createRun, confirmContext, getContextPick } from "../runs/engine.js";
 import { readArtifact } from "../ariadneFolder.js";
+import { isOwnerOrAdmin } from "./workspaceGuard.js";
 
 export async function runRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/runs?workspaceId=
   app.get<{ Querystring: { workspaceId?: string } }>("/runs", async (req, reply) => {
-    const runs = dbListRuns(req.query.workspaceId);
+    // Private by default — an account sees only its own runs; admin sees all.
+    const runs = dbListRuns(req.query.workspaceId).filter((r) =>
+      isOwnerOrAdmin(r.createdBy, req.account),
+    );
     return reply.send(runs);
   });
 
@@ -37,6 +41,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/runs/:id", async (req, reply) => {
     const run = dbGetRun(req.params.id);
     if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     return reply.send(run);
   });
 
