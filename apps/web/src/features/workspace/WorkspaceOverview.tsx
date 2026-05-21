@@ -27,6 +27,7 @@ import {
   Globe,
   Lock,
   Zap,
+  MessageSquare,
 } from "lucide-react";
 
 import {
@@ -37,6 +38,8 @@ import {
   useTemplates,
   useSurface,
   useUpdateWorkspace,
+  useChats,
+  useCreateChat,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { Button } from "../../components/ui/Button";
@@ -119,6 +122,8 @@ export function WorkspaceOverview() {
   const { data: runs } = useRuns(id ?? undefined);
   const { data: templates } = useTemplates();
   const { data: surfaceData } = useSurface(id ?? "");
+  const { data: chats } = useChats();
+  const createChat = useCreateChat();
 
   if (wsLoading || !ws) {
     return (
@@ -151,6 +156,17 @@ export function WorkspaceOverview() {
       toast({ title: t("workspace.visibility.failed"), variant: "error" });
     }
   };
+
+  const handleNewChatHere = async () => {
+    try {
+      const chat = await createChat.mutateAsync({ workspaceId: ws.id });
+      navigate(`/chat/${chat.id}`);
+    } catch {
+      toast({ title: t("workspace.chats.failed"), variant: "error" });
+    }
+  };
+
+  const workspaceChats = (chats ?? []).filter((c) => c.workspaceId === ws.id);
 
   const lastScan = ws.lastScanAt
     ? new Date(ws.lastScanAt).toLocaleString()
@@ -340,6 +356,49 @@ export function WorkspaceOverview() {
                 {t("workspace.runs.getStarted")}
               </Button>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* Conversations linked to this workspace */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+            {t("workspace.chats.title")}
+          </h2>
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
+            loading={createChat.isPending}
+            onClick={() => void handleNewChatHere()}
+          >
+            {t("workspace.chats.new")}
+          </Button>
+        </div>
+        {workspaceChats.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            {workspaceChats.map((c) => (
+              <Card
+                key={c.id}
+                interactive
+                className="flex items-center gap-3 px-4 py-2.5"
+                onClick={() => navigate(`/chat/${c.id}`)}
+              >
+                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-sm text-foreground truncate flex-1">
+                  {c.title || t("commandMenu.untitledChat")}
+                </span>
+                <span className="text-[10px] text-muted-foreground shrink-0">
+                  {new Date(c.updatedAt).toLocaleDateString()}
+                </span>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border border-dashed px-6 py-6 text-center">
+            <p className="text-xs text-muted-foreground">{t("workspace.chats.empty")}</p>
           </div>
         )}
       </section>

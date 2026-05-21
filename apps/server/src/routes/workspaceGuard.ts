@@ -9,9 +9,12 @@
 
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { Workspace, Account } from "@ariadne/shared";
+import { TUTORIAL_WORKSPACE_ID } from "@ariadne/shared";
 import { dbGetWorkspace } from "../db/repo.js";
 
 export function canAccessWorkspace(workspace: Workspace, account: Account): boolean {
+  // The built-in tutorial workspace is visible to everyone.
+  if (workspace.id === TUTORIAL_WORKSPACE_ID) return true;
   if (workspace.createdBy === account.id) return true;
   if (workspace.visibility === "public" && account.role === "admin") return true;
   return false;

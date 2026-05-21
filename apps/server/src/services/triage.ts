@@ -39,3 +39,36 @@ export async function decideWebSearch(
     return false;
   }
 }
+
+/**
+ * Write a short title for a new chat from its opening message. Returns "" on
+ * any failure — the caller keeps the plain truncated fallback title.
+ */
+export async function generateChatTitle(
+  provider: AiProvider,
+  userMessage: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const trimmed = userMessage.trim();
+  if (trimmed.length < 2) return "";
+  try {
+    const { text } = await provider.complete({
+      system:
+        "Write a very short title (3 to 6 words) for a conversation that opens with the " +
+        "message below. Use the same language as the message. Reply with ONLY the title — " +
+        "no quotes, no surrounding punctuation, no explanation.",
+      prompt: trimmed.slice(0, 800),
+      signal,
+    });
+    const firstLine =
+      text
+        .replace(/<think>[\s\S]*?<\/think>/gi, "") // drop reasoning blocks (qwen etc.)
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.length > 0) ?? "";
+    const title = firstLine.replace(/^["'`*#\s]+|["'`*\s.]+$/g, "").trim();
+    return title.length > 64 ? title.slice(0, 64).trim() : title;
+  } catch {
+    return "";
+  }
+}

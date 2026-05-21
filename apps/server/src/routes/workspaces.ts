@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { CreateWorkspaceSchema, UpdateWorkspaceSchema } from "@ariadne/shared";
-import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
+import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE, TUTORIAL_WORKSPACE_ID } from "@ariadne/shared";
 import type { Workspace } from "@ariadne/shared";
 import {
   dbInsertWorkspace,
@@ -134,6 +134,12 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
     const workspace = await requireWorkspace(req.params.id, req, reply);
     if (!workspace) return;
+
+    if (workspace.id === TUTORIAL_WORKSPACE_ID) {
+      return reply
+        .status(403)
+        .send({ error: "The built-in tutorial workspace cannot be deleted." });
+    }
 
     dbDeleteWorkspace(req.params.id);
     return reply.send({ ok: true });

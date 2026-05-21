@@ -120,6 +120,9 @@ export const DEFAULT_EXCLUDE = [
   "*.env",
 ];
 
+/** Id of the built-in, non-deletable tutorial workspace seeded on first boot. */
+export const TUTORIAL_WORKSPACE_ID = "ariadne-tutorial";
+
 /** Sensitive path patterns excluded by default (PRODUCT_PLAN §12). */
 export const SENSITIVE_PATTERNS = [
   "*.env",

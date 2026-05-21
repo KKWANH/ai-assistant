@@ -69,7 +69,10 @@ export function TutorialOverlay() {
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [tutorialOpen, step, current]);
+    // Depend on `step`, not `current` — getTourSteps() returns a fresh array
+    // each render, so `current` changes identity constantly and would re-run
+    // this effect (re-scrolling the target) on every render.
+  }, [tutorialOpen, step]);
 
   if (!tutorialOpen || !current) return null;
 

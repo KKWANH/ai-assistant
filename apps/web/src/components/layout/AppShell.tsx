@@ -38,6 +38,8 @@ import {
   MessageSquare,
   MessageSquarePlus,
   Trash2,
+  MoreHorizontal,
+  Pencil,
   Globe,
   Menu,
   X,
@@ -50,6 +52,7 @@ import {
   useLogout,
   useChats,
   useDeleteChat,
+  useUpdateChat,
   useDeleteWorkspace,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
@@ -59,7 +62,8 @@ import { Badge } from "../ui/Badge";
 import { CommandMenu } from "../ui/CommandMenu";
 import type { CommandItem } from "../ui/CommandMenu";
 import { Inspector } from "./Inspector";
-import type { AccountMode } from "@ariadne/shared";
+import { TUTORIAL_WORKSPACE_ID } from "@ariadne/shared";
+import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
 export interface AppShellProps {
   children: ReactNode;
@@ -87,6 +91,156 @@ function Logo({ className }: { className?: string }) {
   );
 }
 
+/** A sidebar chat row — opens the chat; a ⋯ menu renames, moves, or deletes it. */
+function ChatRow({
+  chat,
+  active,
+  workspaces,
+  closeMobileNav,
+}: {
+  chat: Chat;
+  active: boolean;
+  workspaces: Workspace[] | undefined;
+  closeMobileNav: () => void;
+}) {
+  const navigate = useNavigate();
+  const { t } = useT();
+  const { setSidebarSection } = useUIStore();
+  const deleteChat = useDeleteChat();
+  const updateChat = useUpdateChat();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(chat.title);
+
+  const commitRename = () => {
+    const title = draft.trim();
+    setRenaming(false);
+    if (title && title !== chat.title) {
+      void updateChat.mutateAsync({ id: chat.id, input: { title } });
+    } else {
+      setDraft(chat.title);
+    }
+  };
+
+  if (renaming) {
+    return (
+      <div className="px-1 py-0.5">
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            // Enter blurs → onBlur commits once (avoids a double commit).
+            if (e.key === "Enter") e.currentTarget.blur();
+            else if (e.key === "Escape") {
+              setDraft(chat.title);
+              setRenaming(false);
+            }
+          }}
+          className="w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={t("nav.renameChat")}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative group">
+      <SidebarItem
+        label={chat.title || t("commandMenu.untitledChat")}
+        icon={<MessageSquare className="h-3.5 w-3.5" />}
+        active={active}
+        onClick={() => {
+          setSidebarSection("chat");
+          closeMobileNav();
+          navigate(`/chat/${chat.id}`);
+        }}
+      />
+      <button
+        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-opacity opacity-0 group-hover:opacity-100"
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((v) => !v);
+        }}
+        aria-label={t("nav.chatOptions")}
+      >
+        <MoreHorizontal className="h-3.5 w-3.5" />
+      </button>
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+          <div className="absolute right-1 top-9 z-30 w-56 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+            <button
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
+              onClick={() => {
+                setMenuOpen(false);
+                setDraft(chat.title);
+                setRenaming(true);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5 shrink-0" />
+              {t("nav.renameChat")}
+            </button>
+            <button
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-destructive hover:bg-surface-3 transition-colors"
+              onClick={() => {
+                setMenuOpen(false);
+                void deleteChat.mutateAsync(chat.id).then(() => {
+                  if (active) navigate("/");
+                });
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 shrink-0" />
+              {t("nav.deleteChat")}
+            </button>
+            <div className="border-t border-border mt-1 pt-1">
+              <p className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                {t("nav.moveToWorkspace")}
+              </p>
+              <button
+                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-3 transition-colors"
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (chat.workspaceId != null) {
+                    void updateChat.mutateAsync({ id: chat.id, input: { workspaceId: null } });
+                  }
+                }}
+              >
+                <span className={chat.workspaceId == null ? "text-accent" : "text-foreground"}>
+                  {t("chat.composer.noneGeneral")}
+                </span>
+              </button>
+              {(workspaces ?? []).map((ws) => (
+                <button
+                  key={ws.id}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-3 transition-colors"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (chat.workspaceId !== ws.id) {
+                      void updateChat.mutateAsync({ id: chat.id, input: { workspaceId: ws.id } });
+                    }
+                  }}
+                >
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span
+                    className={[
+                      "truncate",
+                      chat.workspaceId === ws.id ? "text-accent" : "text-foreground",
+                    ].join(" ")}
+                  >
+                    {ws.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function AppShell({ children }: AppShellProps) {
   const {
     activeWorkspaceId,
@@ -108,13 +262,11 @@ export function AppShell({ children }: AppShellProps) {
   const { data: chats } = useChats();
   const { data: me } = useMe();
   const logout = useLogout();
-  const deleteChat = useDeleteChat();
   const deleteWorkspace = useDeleteWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useT();
 
-  const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
   const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -398,37 +550,13 @@ export function AppShell({ children }: AppShellProps) {
             <div className="px-2 pb-1">
               {chats && chats.length > 0 ? (
                 chats.slice(0, 20).map((chat) => (
-                  <div
+                  <ChatRow
                     key={chat.id}
-                    className="relative group"
-                    onMouseEnter={() => setHoveredChatId(chat.id)}
-                    onMouseLeave={() => setHoveredChatId(null)}
-                  >
-                    <SidebarItem
-                      label={chat.title || t("commandMenu.untitledChat")}
-                      icon={<MessageSquare className="h-3.5 w-3.5" />}
-                      active={activeChatId === chat.id}
-                      onClick={() => {
-                        setSidebarSection("chat");
-                        setMobileNavOpen(false);
-                        navigate(`/chat/${chat.id}`);
-                      }}
-                    />
-                    {hoveredChatId === chat.id && (
-                      <button
-                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void deleteChat.mutateAsync(chat.id).then(() => {
-                            if (activeChatId === chat.id) navigate("/");
-                          });
-                        }}
-                        aria-label={t("nav.deleteChat")}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
+                    chat={chat}
+                    active={activeChatId === chat.id}
+                    workspaces={workspaces}
+                    closeMobileNav={() => setMobileNavOpen(false)}
+                  />
                 ))
               ) : (
                 <p className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -486,7 +614,7 @@ export function AppShell({ children }: AppShellProps) {
                           </span>
                         ) : undefined}
                       />
-                      {hoveredWorkspaceId === ws.id && (
+                      {hoveredWorkspaceId === ws.id && ws.id !== TUTORIAL_WORKSPACE_ID && (
                         <button
                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
                           onClick={(e) => {

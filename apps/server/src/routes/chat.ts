@@ -34,7 +34,7 @@ import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
-import { decideWebSearch } from "../services/triage.js";
+import { decideWebSearch, generateChatTitle } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
 import {
   beginGeneration,
@@ -295,6 +295,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
         let agentSearchResults: SearchResult[] | null = null;
         let contextSearchResults: SearchResult[] | null = null;
+        let generatedTitle: string | null = null;
 
         if (!isProviderConfigured(settings.provider)) {
           // No API key for the selected provider — explain it plainly rather
@@ -403,6 +404,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
               }
             }
           }
+
+          // First message of a fresh chat — upgrade the placeholder title to
+          // a short LLM-written summary of the user's opening message.
+          if (isFirstMessage && isDefaultTitle && hasContent && assistantContent.trim()) {
+            const title = await generateChatTitle(provider, content, controller.signal);
+            if (title) generatedTitle = title;
+          }
         }
 
         // If the user stopped before any visible output (no text, no steps),
@@ -429,8 +437,11 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         };
         dbInsertMessage(assistantMsg);
 
-        // --- Bump chat updated_at ---
-        dbUpdateChat(chat.id, { updatedAt: now() });
+        // --- Bump chat updated_at (and apply the generated title, if any) ---
+        dbUpdateChat(chat.id, {
+          updatedAt: now(),
+          ...(generatedTitle ? { title: generatedTitle } : {}),
+        });
 
         sseEmit({ type: "done", message: assistantMsg });
       } catch (err) {

@@ -28,6 +28,7 @@ import { surfaceRoutes } from "./routes/surface.js";
 import { surfaceHostRoutes } from "./routes/surfaceHost.js";
 import { actionRoutes } from "./routes/actions.js";
 import { seedAdmin } from "./auth/accounts.js";
+import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
 import { validateSession } from "./auth/sessions.js";
 import { accessContext } from "./auth/context.js";
 
@@ -74,8 +75,9 @@ async function bootstrap(): Promise<void> {
   ensureDirs();
   openDb(PATHS.db);
 
-  // Seed admin account on first boot
+  // Seed the admin account + the built-in tutorial workspace on first boot
   seedAdmin();
+  ensureTutorialWorkspace();
 
   // Retrieve or generate cookie signing secret
   let cookieSecret = dbGetSetting("cookie_secret");
