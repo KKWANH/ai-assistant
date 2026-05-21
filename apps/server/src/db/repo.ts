@@ -15,6 +15,10 @@ import type {
   ChatAttachment,
   SearchResult,
   AgentTrace,
+  Report,
+  ReportType,
+  ReportStatus,
+  ReportTriage,
 } from "@ariadne/shared";
 import { getDb } from "./index.js";
 
@@ -504,6 +508,85 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
       ? (JSON.parse(row["agent_json"] as string) as AgentTrace)
       : null,
     createdAt: row["created_at"] as string,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+const REPORT_SELECT = `
+  SELECT r.*, a.display_name AS created_by_name
+  FROM reports r
+  LEFT JOIN accounts a ON a.id = r.created_by
+`;
+
+export function dbInsertReport(r: Report): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO reports (id,type,title,description,created_by,created_at,status)
+     VALUES (?,?,?,?,?,?,?)`
+  ).run(r.id, r.type, r.title, r.description, r.createdBy ?? null, r.createdAt, r.status);
+}
+
+export function dbListReports(status?: ReportStatus): Report[] {
+  const db = getDb();
+  const rows = status
+    ? (db.prepare(`${REPORT_SELECT} WHERE r.status = ? ORDER BY r.created_at DESC`).all(status) as Record<string, unknown>[])
+    : (db.prepare(`${REPORT_SELECT} ORDER BY r.created_at DESC`).all() as Record<string, unknown>[]);
+  return rows.map(rowToReport);
+}
+
+export function dbGetReport(id: string): Report | null {
+  const db = getDb();
+  const row = db.prepare(`${REPORT_SELECT} WHERE r.id = ?`).get(id) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return rowToReport(row);
+}
+
+export function dbSetReportTriage(id: string, triage: ReportTriage, triagedAt: string): void {
+  const db = getDb();
+  db.prepare("UPDATE reports SET triage_json = ?, triaged_at = ? WHERE id = ?").run(
+    JSON.stringify(triage),
+    triagedAt,
+    id
+  );
+}
+
+export function dbDecideReport(
+  id: string,
+  status: "rejected" | "filed",
+  decidedBy: string,
+  decidedAt: string,
+  githubUrl: string | null
+): Report | null {
+  const db = getDb();
+  db.prepare("UPDATE reports SET status = ?, decided_by = ?, decided_at = ?, github_url = ? WHERE id = ?").run(
+    status,
+    decidedBy,
+    decidedAt,
+    githubUrl,
+    id
+  );
+  return dbGetReport(id);
+}
+
+function rowToReport(row: Record<string, unknown>): Report {
+  const triageJson = row["triage_json"] as string | null | undefined;
+  return {
+    id: row["id"] as string,
+    type: row["type"] as ReportType,
+    title: row["title"] as string,
+    description: row["description"] as string,
+    createdBy: (row["created_by"] as string | null) ?? null,
+    createdByName: (row["created_by_name"] as string | null) ?? null,
+    createdAt: row["created_at"] as string,
+    status: row["status"] as ReportStatus,
+    triage: triageJson ? (JSON.parse(triageJson) as ReportTriage) : null,
+    triagedAt: (row["triaged_at"] as string | null) ?? null,
+    decidedBy: (row["decided_by"] as string | null) ?? null,
+    decidedAt: (row["decided_at"] as string | null) ?? null,
+    githubUrl: (row["github_url"] as string | null) ?? null,
   };
 }
 

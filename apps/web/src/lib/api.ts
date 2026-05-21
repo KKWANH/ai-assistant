@@ -18,6 +18,7 @@ import type {
   ScriptContent,
   ScriptRunResult,
   SearchResponse,
+  Report,
 } from "@ariadne/shared";
 import type {
   CreateWorkspaceInput,
@@ -26,6 +27,7 @@ import type {
   ConfirmContextInput,
   UpdateSettingsInput,
   LoginInput,
+  CreateReportInput,
 } from "@ariadne/shared";
 
 const BASE = "/api";
@@ -201,6 +203,16 @@ export const runScript = (workspaceId: string, name: string) =>
 // ── Search ────────────────────────────────────────────────────────────────────
 export const search = (query: string) =>
   request<SearchResponse>("POST", "/search", { query });
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+export const getReports = (status?: string) =>
+  request<Report[]>("GET", `/reports${status ? `?status=${status}` : ""}`);
+
+export const createReport = (input: CreateReportInput) =>
+  request<Report>("POST", "/reports", input);
+
+export const decideReport = (id: string, decision: "file" | "reject") =>
+  request<Report>("POST", `/reports/${id}/decision`, { decision });
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 import type { Chat, ChatMessage } from "@ariadne/shared";

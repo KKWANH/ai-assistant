@@ -21,6 +21,12 @@ export function ensureDirs(): void {
   fs.mkdirSync(PATHS.run, { recursive: true });
 }
 
+/**
+ * GitHub repo (owner/name) used to build pre-filled "new issue" URLs when an
+ * admin files a reviewed user report. Override with the GITHUB_REPO env var.
+ */
+export const GITHUB_REPO = process.env.GITHUB_REPO ?? "KKWANH/ai-assistant";
+
 // ---------------------------------------------------------------------------
 // Active provider/model — persisted in the DB settings table
 // ---------------------------------------------------------------------------

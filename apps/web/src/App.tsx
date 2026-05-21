@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialog";
+import { ReportDialog } from "./features/reports/ReportDialog";
 import { TutorialOverlay } from "./components/tutorial/TutorialOverlay";
 import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
@@ -56,6 +57,11 @@ const SearchView = lazy(() =>
     default: m.SearchView,
   }))
 );
+const ReportsQueueView = lazy(() =>
+  import("./features/reports/ReportsQueueView").then((m) => ({
+    default: m.ReportsQueueView,
+  }))
+);
 
 /** Centered spinner — used as the Suspense fallback while a route chunk loads. */
 function RouteFallback() {
@@ -96,6 +102,7 @@ function AppContent() {
             {/* Utility */}
             <Route path="/settings" element={<SettingsView />} />
             <Route path="/search" element={<SearchView />} />
+            <Route path="/reports" element={<ReportsQueueView />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -103,6 +110,7 @@ function AppContent() {
         </Suspense>
       </AppShell>
       <CreateWorkspaceDialog />
+      <ReportDialog />
       <TutorialOverlay />
     </>
   );

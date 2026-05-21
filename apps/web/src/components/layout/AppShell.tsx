@@ -32,6 +32,7 @@ import {
   Plus,
   ChevronRight,
   HelpCircle,
+  Flag,
   LogOut,
   Search,
   Terminal,
@@ -253,6 +254,7 @@ export function AppShell({ children }: AppShellProps) {
     theme,
     toggleTheme,
     setCreateWorkspaceOpen,
+    setReportDialogOpen,
     setCommandMenuOpen,
     setTutorialOpen,
   } = useUIStore();
@@ -449,6 +451,14 @@ export function AppShell({ children }: AppShellProps) {
               </IconButton>
             </span>
           )}
+          {/* Report a problem — available to everyone */}
+          <IconButton
+            label={t("nav.report")}
+            size="sm"
+            onClick={() => setReportDialogOpen(true)}
+          >
+            <Flag className="h-3.5 w-3.5" />
+          </IconButton>
           <IconButton label={t("nav.toggleTheme")} size="sm" onClick={toggleTheme}>
             {theme === "dark" ? (
               <Sun className="h-3.5 w-3.5" />
@@ -695,8 +705,20 @@ export function AppShell({ children }: AppShellProps) {
             )}
           </div>
 
-          {/* Bottom: Settings + User */}
+          {/* Bottom: Reports (admin) + Settings + User */}
           <div className="shrink-0 px-2 pb-2 pt-1 border-t border-sidebar-border">
+            {me?.account.role === "admin" && (
+              <SidebarItem
+                label={t("nav.reportsQueue")}
+                icon={<Flag className="h-3.5 w-3.5" />}
+                active={sidebarSection === "reports"}
+                onClick={() => {
+                  setSidebarSection("reports");
+                  setMobileNavOpen(false);
+                  navigate("/reports");
+                }}
+              />
+            )}
             <SidebarItem
               label={t("nav.settings")}
               icon={<Settings className="h-3.5 w-3.5" />}

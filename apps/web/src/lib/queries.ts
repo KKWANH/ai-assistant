@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { Run, RunStatus, Chat, ChatMessage, AgentStep } from "@ariadne/shared";
+import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report } from "@ariadne/shared";
 import * as api from "./api";
 
 // ── Query keys ───────────────────────────────────────────────────────────────
@@ -425,6 +425,41 @@ export function useSaveActions(workspaceId: string) {
     mutationFn: (source: string) => api.saveActions(workspaceId, source),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["actions", workspaceId] });
+    },
+  });
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export function useReports(status?: string) {
+  return useQuery({
+    queryKey: ["reports", status ?? "all"] as const,
+    queryFn: () => api.getReports(status),
+    // Poll while a pending report is still awaiting background triage.
+    refetchInterval: (query) => {
+      const data = query.state.data as Report[] | undefined;
+      return data?.some((r) => r.status === "pending" && !r.triage) ? 4000 : false;
+    },
+  });
+}
+
+export function useCreateReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createReport,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["reports"] });
+    },
+  });
+}
+
+export function useDecideReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, decision }: { id: string; decision: "file" | "reject" }) =>
+      api.decideReport(id, decision),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["reports"] });
     },
   });
 }

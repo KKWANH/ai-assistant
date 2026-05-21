@@ -12,7 +12,8 @@ export type SidebarSection =
   | "runs"
   | "artifacts"
   | "settings"
-  | "search";
+  | "search"
+  | "reports";
 
 export interface UIStore {
   // Sidebar
@@ -55,6 +56,10 @@ export interface UIStore {
   // Create workspace dialog
   createWorkspaceOpen: boolean;
   setCreateWorkspaceOpen: (open: boolean) => void;
+
+  // Report-a-problem dialog
+  reportDialogOpen: boolean;
+  setReportDialogOpen: (open: boolean) => void;
 
   // Tutorial / guided tour
   tutorialOpen: boolean;
@@ -117,6 +122,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   createWorkspaceOpen: false,
   setCreateWorkspaceOpen: (open) => set({ createWorkspaceOpen: open }),
+
+  reportDialogOpen: false,
+  setReportDialogOpen: (open) => set({ reportDialogOpen: open }),
 
   tutorialOpen: false,
   setTutorialOpen: (open) => set({ tutorialOpen: open }),

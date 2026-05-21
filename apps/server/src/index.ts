@@ -27,6 +27,7 @@ import { accountRoutes } from "./routes/account.js";
 import { surfaceRoutes } from "./routes/surface.js";
 import { surfaceHostRoutes } from "./routes/surfaceHost.js";
 import { actionRoutes } from "./routes/actions.js";
+import { reportRoutes } from "./routes/reports.js";
 import { seedAdmin } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
 import { validateSession } from "./auth/sessions.js";
@@ -151,6 +152,7 @@ async function bootstrap(): Promise<void> {
       await api.register(accountRoutes);
       await api.register(surfaceRoutes);
       await api.register(actionRoutes);
+      await api.register(reportRoutes);
     },
     { prefix: "/api" }
   );

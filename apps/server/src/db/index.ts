@@ -151,6 +151,24 @@ function runMigrations(db: DatabaseSync): void {
     );
   `);
 
+  // Reports table — user-submitted feedback awaiting triage + admin review (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id          TEXT PRIMARY KEY,
+      type        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      description TEXT NOT NULL,
+      created_by  TEXT,
+      created_at  TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      triage_json TEXT,
+      triaged_at  TEXT,
+      decided_by  TEXT,
+      decided_at  TEXT,
+      github_url  TEXT
+    );
+  `);
+
   // Guarded ALTER TABLE: add agent_json to chat_messages if missing
   const chatMsgColumns = db
     .prepare("PRAGMA table_info(chat_messages)")

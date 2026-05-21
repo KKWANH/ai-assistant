@@ -87,6 +87,20 @@ export const SearchSchema = z.object({
 });
 export type SearchInput = z.infer<typeof SearchSchema>;
 
+/** POST /api/reports — anyone may submit a bug report / suggestion. */
+export const CreateReportSchema = z.object({
+  type: z.enum(["bug", "suggestion", "other"]),
+  title: z.string().min(3).max(160),
+  description: z.string().min(10).max(4000),
+});
+export type CreateReportInput = z.infer<typeof CreateReportSchema>;
+
+/** POST /api/reports/:id/decision — admin files the report as an issue or rejects it. */
+export const ReportDecisionSchema = z.object({
+  decision: z.enum(["file", "reject"]),
+});
+export type ReportDecisionInput = z.infer<typeof ReportDecisionSchema>;
+
 /** POST /api/chats */
 export const CreateChatSchema = z.object({
   title: z.string().max(200).optional(),

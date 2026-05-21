@@ -300,6 +300,48 @@ export interface AuthInfo {
 }
 
 /* ------------------------------------------------------------------ *
+ * Reports — user-submitted feedback, triaged before becoming GitHub issues
+ * ------------------------------------------------------------------ */
+
+export type ReportType = "bug" | "suggestion" | "other";
+
+/** pending = awaiting admin review · rejected = dismissed · filed = sent to GitHub. */
+export type ReportStatus = "pending" | "rejected" | "filed";
+
+/** LLM auto-triage verdict attached to a report shortly after submission. */
+export interface ReportTriage {
+  /** file = issue-worthy · review = borderline · discard = low quality / not actionable. */
+  verdict: "file" | "review" | "discard";
+  /** Short category label, e.g. "bug", "ui", "feature". */
+  category: string;
+  /** A cleaned-up issue title an admin can file as-is. */
+  suggestedTitle: string;
+  /** A formatted issue body in Markdown. */
+  suggestedBody: string;
+  /** One-line reasoning for the verdict. */
+  reason: string;
+}
+
+export interface Report {
+  id: string;
+  type: ReportType;
+  title: string;
+  description: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdAt: string;
+  status: ReportStatus;
+  /** Auto-triage result; null until triage finishes (it runs in the background). */
+  triage: ReportTriage | null;
+  triagedAt: string | null;
+  /** The admin who filed or rejected the report. */
+  decidedBy: string | null;
+  decidedAt: string | null;
+  /** The pre-filled GitHub "new issue" URL recorded when the report was filed. */
+  githubUrl: string | null;
+}
+
+/* ------------------------------------------------------------------ *
  * Usage & cost summary
  * ------------------------------------------------------------------ */
 
