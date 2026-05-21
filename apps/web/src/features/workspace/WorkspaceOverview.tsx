@@ -449,8 +449,9 @@ export function WorkspaceOverview() {
   return (
     /* h-full + flex-col so the surface tab can flex-1 fill */
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header strip — always visible, does NOT scroll */}
-      <div className="shrink-0 px-5 pt-5 pb-3 border-b border-border bg-background max-w-5xl w-full mx-auto self-stretch">
+      {/* Header strip — always visible, does NOT scroll. Full-width px-5 so its
+          left edge lines up with the tab bar below. */}
+      <div className="shrink-0 px-5 pt-5 pb-3 border-b border-border bg-background">
         <PageHeader
           icon={<FolderOpen className="h-5 w-5" />}
           title={ws.name}

@@ -53,7 +53,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     }
     return (
       <code
-        className="px-1 rounded bg-surface-3 font-mono text-xs text-foreground"
+        className="px-1 rounded bg-surface-3 border border-border font-mono text-xs text-foreground"
         {...props}
       >
         {children}
@@ -120,7 +120,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-accent hover:underline"
+        className="text-foreground underline underline-offset-2 decoration-foreground/40 hover:decoration-foreground"
       >
         {children}
       </a>
@@ -540,7 +540,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
             {time}
           </span>
-          <div className="max-w-[540px] rounded-2xl rounded-br-sm px-3.5 py-2.5 bg-accent text-accent-foreground text-sm leading-relaxed">
+          <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed">
             {message.content}
             {message.webSearch && (
               <Badge variant="default" className="ml-2 text-[10px] opacity-70">
