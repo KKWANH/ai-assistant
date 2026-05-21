@@ -490,6 +490,8 @@ export interface Chat {
   /** Optional workspace the chat is grounded in. */
   workspaceId: string | null;
   createdBy: string | null;
+  /** Display name of the account that started the chat (JOIN-resolved). */
+  createdByName: string | null;
   createdAt: string;
   updatedAt: string;
   /** Populated by GET /api/chats/:id. */

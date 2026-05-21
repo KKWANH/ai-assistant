@@ -33,6 +33,16 @@ import { ChatComposer, type WebSearchMode } from "./ChatComposer";
 import { MessageBubble, StreamingIndicator } from "./MessageBubble";
 import { Card } from "../../components/ui/Card";
 
+/** Format a chat's creation timestamp for the "started" line, localised. */
+function formatStarted(iso: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(locale === "ko" ? "ko-KR" : "en-US", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+}
+
 // ── Empty state (new chat / no chat selected) ─────────────────────────────────
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   const navigate = useNavigate();
@@ -120,13 +130,15 @@ function MessageList({
   messages,
   streaming,
   reconnectGen,
+  chat,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
   reconnectGen: GenerationStatus | null;
+  chat: Chat | undefined;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const { t } = useT();
+  const { t, locale } = useT();
 
   // A generation running on the server that this tab is not live-streaming
   // (another tab, or a reload mid-generation) — rendered as a streaming
@@ -167,6 +179,15 @@ function MessageList({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="flex flex-col gap-6 px-5 py-5 max-w-4xl mx-auto">
+        {chat && (
+          <div className="text-center text-xs text-muted-foreground">
+            {chat.createdByName && (
+              <span className="font-medium text-foreground/70">{chat.createdByName}</span>
+            )}
+            {chat.createdByName ? "  ·  " : ""}
+            {formatStarted(chat.createdAt, locale)}
+          </div>
+        )}
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
@@ -298,7 +319,7 @@ function ThreadView({ chatId }: { chatId: string }) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} />
+      <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
       <div className="shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
         <ChatComposer
           onSend={(opts) => void handleSend(opts)}

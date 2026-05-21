@@ -119,6 +119,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       title: title?.trim() || "New chat",
       workspaceId: workspaceId ?? null,
       createdBy: req.account?.id ?? null,
+      createdByName: req.account?.displayName ?? null,
       createdAt: ts,
       updatedAt: ts,
     };

@@ -404,17 +404,23 @@ export function dbCreateChat(c: Chat): void {
   ).run(c.id, c.title, c.workspaceId ?? null, c.createdBy ?? null, c.createdAt, c.updatedAt);
 }
 
+const CHAT_SELECT = `
+  SELECT c.*, a.display_name AS created_by_name
+  FROM chats c
+  LEFT JOIN accounts a ON a.id = c.created_by
+`;
+
 export function dbListChats(): Chat[] {
   const db = getDb();
   const rows = db
-    .prepare("SELECT * FROM chats ORDER BY updated_at DESC")
+    .prepare(`${CHAT_SELECT} ORDER BY c.updated_at DESC`)
     .all() as Record<string, unknown>[];
   return rows.map(rowToChat);
 }
 
 export function dbGetChat(id: string): Chat | null {
   const db = getDb();
-  const row = db.prepare("SELECT * FROM chats WHERE id = ?").get(id) as
+  const row = db.prepare(`${CHAT_SELECT} WHERE c.id = ?`).get(id) as
     | Record<string, unknown>
     | undefined;
   if (!row) return null;
@@ -457,6 +463,7 @@ function rowToChat(row: Record<string, unknown>): Chat {
     title: row["title"] as string,
     workspaceId: (row["workspace_id"] as string | null) ?? null,
     createdBy: (row["created_by"] as string | null) ?? null,
+    createdByName: (row["created_by_name"] as string | null) ?? null,
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
   };
