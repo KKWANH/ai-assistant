@@ -1,14 +1,13 @@
 /**
- * ActionsEditor — visual block editor for workspace custom actions.
+ * ActionsEditor — pipeline builder for workspace actions.
  *
- * Custom actions are agent tools defined per workspace. Instead of hand-writing
- * `.ariadne/actions.yaml`, the user assembles colour-coded blocks: pick a type,
- * fill a few fields, snap new blocks in between. Blocks serialise to YAML and
- * save through the existing endpoint; a read-only YAML preview shows the result.
- *
- * Remote users get 403 on save → auto read-only.
+ * Each action is an ordered pipeline of blocks (ask AI, web analysis, run
+ * script, read file); block N's output feeds block N+1. The user assembles
+ * blocks per action; everything serialises to `.ariadne/actions.yaml` and
+ * saves through the existing endpoint. Remote users get 403 on save →
+ * auto read-only.
  */
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Zap,
   Save,
@@ -19,43 +18,68 @@ import {
   ChevronsUpDown,
   Lock,
   AlertCircle,
+  Sparkles,
+  Search,
   Terminal,
   FileText,
-  Search,
-  Sparkles,
-  Code2,
   Play,
+  Code2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { WorkspaceAction, ActionType } from "@ariadne/shared";
+import type { ActionDef, ActionBlock, BlockType } from "@ariadne/shared";
 import type { TranslationKey } from "../../lib/i18n/en";
 import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
-import { useActions, useSaveActions, useRunAction } from "../../lib/queries";
+import { useActionDefs, useSaveActions, useRunAction } from "../../lib/queries";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 
-// ── Per-type metadata ─────────────────────────────────────────────────────────
+// ── Per-block-type metadata ────────────────────────────────────────────────────
 
-interface TypeMeta {
+interface BlockMeta {
   labelKey: TranslationKey;
   hintKey: TranslationKey;
-  field: "script" | "path" | "query" | "template";
+  /** The single config key this block edits. */
+  field: string;
   fieldLabelKey: TranslationKey;
-  fieldPlaceholder: string;
+  placeholder: string;
+  multiline: boolean;
   icon: LucideIcon;
   strip: string;
   chip: string;
 }
 
-const TYPE_META: Record<ActionType, TypeMeta> = {
+const BLOCK_META: Record<BlockType, BlockMeta> = {
+  ask_ai: {
+    labelKey: "actions.type.ask_ai",
+    hintKey: "actions.type.ask_ai.hint",
+    field: "prompt",
+    fieldLabelKey: "actions.field.prompt",
+    placeholder: "이전 단계 결과를 3줄로 요약해줘",
+    multiline: true,
+    icon: Sparkles,
+    strip: "bg-accent",
+    chip: "border-accent/40 bg-accent/15 text-accent",
+  },
+  web_analysis: {
+    labelKey: "actions.type.web_analysis",
+    hintKey: "actions.type.web_analysis.hint",
+    field: "query",
+    fieldLabelKey: "actions.field.query",
+    placeholder: "latest pricing for …",
+    multiline: false,
+    icon: Search,
+    strip: "bg-success",
+    chip: "border-success/40 bg-success/15 text-success",
+  },
   run_script: {
     labelKey: "actions.type.run_script",
     hintKey: "actions.type.run_script.hint",
     field: "script",
     fieldLabelKey: "actions.field.script",
-    fieldPlaceholder: "build-report.sh",
+    placeholder: "build-report.sh",
+    multiline: false,
     icon: Terminal,
     strip: "bg-warning",
     chip: "border-warning/40 bg-warning/15 text-warning",
@@ -65,39 +89,19 @@ const TYPE_META: Record<ActionType, TypeMeta> = {
     hintKey: "actions.type.read_file.hint",
     field: "path",
     fieldLabelKey: "actions.field.path",
-    fieldPlaceholder: "data/notes.md",
+    placeholder: "data/notes.md",
+    multiline: false,
     icon: FileText,
     strip: "bg-info",
     chip: "border-info/40 bg-info/15 text-info",
   },
-  web_search: {
-    labelKey: "actions.type.web_search",
-    hintKey: "actions.type.web_search.hint",
-    field: "query",
-    fieldLabelKey: "actions.field.query",
-    fieldPlaceholder: "latest pricing for …",
-    icon: Search,
-    strip: "bg-success",
-    chip: "border-success/40 bg-success/15 text-success",
-  },
-  format: {
-    labelKey: "actions.type.format",
-    hintKey: "actions.type.format.hint",
-    field: "template",
-    fieldLabelKey: "actions.field.template",
-    fieldPlaceholder: "## Summary\n- bullet points",
-    icon: Sparkles,
-    strip: "bg-accent",
-    chip: "border-accent/40 bg-accent/15 text-accent",
-  },
 };
 
-const ACTION_TYPES: ActionType[] = ["run_script", "read_file", "web_search", "format"];
+const BLOCK_TYPES: BlockType[] = ["ask_ai", "web_analysis", "run_script", "read_file"];
 
 // ── YAML serialiser ────────────────────────────────────────────────────────────
-// actions.yaml is a fixed, shallow structure with string-only values, so a
-// double-quoted scalar (with \n / \" / \\ escapes) round-trips safely through
-// the server's YAML parser — no YAML library needed on the client.
+// actions.yaml is a shallow, string-only structure, so a double-quoted scalar
+// (with \n / \" / \\ escapes) round-trips safely through the server's parser.
 
 function yamlScalar(s: string): string {
   return (
@@ -111,21 +115,39 @@ function yamlScalar(s: string): string {
   );
 }
 
-function serializeActions(actions: WorkspaceAction[]): string {
+function serializeActionDefs(actions: ActionDef[]): string {
   if (actions.length === 0) return "actions: []\n";
   const lines: string[] = ["actions:"];
   for (const a of actions) {
     lines.push("  - id: " + yamlScalar(a.id));
     lines.push("    name: " + yamlScalar(a.name));
     lines.push("    description: " + yamlScalar(a.description));
-    lines.push("    type: " + yamlScalar(a.type));
-    if (a.script) lines.push("    script: " + yamlScalar(a.script));
-    if (a.path) lines.push("    path: " + yamlScalar(a.path));
-    if (a.query) lines.push("    query: " + yamlScalar(a.query));
-    if (a.template) lines.push("    template: " + yamlScalar(a.template));
-    if (a.constraints) lines.push("    constraints: " + yamlScalar(a.constraints));
+    if (a.category) lines.push("    category: " + yamlScalar(a.category));
+    if (a.blocks.length === 0) {
+      lines.push("    blocks: []");
+      continue;
+    }
+    lines.push("    blocks:");
+    for (const b of a.blocks) {
+      lines.push("      - type: " + yamlScalar(b.type));
+      const keys = Object.keys(b.config);
+      if (keys.length === 0) {
+        lines.push("        config: {}");
+      } else {
+        lines.push("        config:");
+        for (const k of keys) {
+          lines.push("          " + k + ": " + yamlScalar(b.config[k] ?? ""));
+        }
+      }
+    }
   }
   return lines.join("\n") + "\n";
+}
+
+let blockSeq = 0;
+function freshBlock(type: BlockType): ActionBlock {
+  blockSeq += 1;
+  return { id: `b${Date.now().toString(36)}${blockSeq.toString(36)}`, type, config: {} };
 }
 
 const inputCls =
@@ -133,28 +155,14 @@ const inputCls =
   "placeholder:text-muted-foreground focus:outline-none focus:border-border-strong " +
   "focus:ring-1 focus:ring-ring transition-colors";
 
-// ── Field row ──────────────────────────────────────────────────────────────────
+// ── Block-type picker menu ─────────────────────────────────────────────────────
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="flex items-baseline gap-1.5 flex-wrap">
-        <span className="text-[11px] font-semibold text-foreground">{label}</span>
-        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-// ── Type picker menu ───────────────────────────────────────────────────────────
-
-function TypeMenu({
+function BlockTypeMenu({
   onPick,
   onClose,
   align = "left",
 }: {
-  onPick: (t: ActionType) => void;
+  onPick: (t: BlockType) => void;
   onClose: () => void;
   align?: "left" | "center";
 }) {
@@ -164,8 +172,8 @@ function TypeMenu({
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} aria-hidden="true" />
       <div className={`absolute ${pos} top-full mt-1 z-40 w-64 rounded-lg border border-border bg-card shadow-lg py-1`}>
-        {ACTION_TYPES.map((ty) => {
-          const m = TYPE_META[ty];
+        {BLOCK_TYPES.map((ty) => {
+          const m = BLOCK_META[ty];
           const Icon = m.icon;
           return (
             <button
@@ -192,112 +200,60 @@ function TypeMenu({
   );
 }
 
-// ── Insert bar — snap a new block in between ───────────────────────────────────
+// ── A single block row inside an action's pipeline ─────────────────────────────
 
-function InsertBar({ onInsert }: { onInsert: (t: ActionType) => void }) {
-  const { t } = useT();
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative flex items-center justify-center py-1">
-      <div className="absolute inset-x-6 top-1/2 h-px bg-border" />
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-label={t("actions.insertAction")}
-          title={t("actions.insertAction")}
-          className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-border bg-background text-muted-foreground hover:text-accent hover:border-accent transition-colors"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-        {open && <TypeMenu align="center" onPick={onInsert} onClose={() => setOpen(false)} />}
-      </div>
-    </div>
-  );
-}
-
-// ── A single action block ──────────────────────────────────────────────────────
-
-function ActionBlock({
-  action,
+function BlockRow({
+  block,
   index,
   total,
   readOnly,
-  invalid,
-  runDisabled,
-  onChange,
   onChangeType,
-  onRemove,
+  onChangeConfig,
   onMove,
-  onRun,
+  onRemove,
 }: {
-  action: WorkspaceAction;
+  block: ActionBlock;
   index: number;
   total: number;
   readOnly: boolean;
-  invalid: boolean;
-  runDisabled: boolean;
-  onChange: (patch: Partial<WorkspaceAction>) => void;
-  onChangeType: (t: ActionType) => void;
-  onRemove: () => void;
+  onChangeType: (t: BlockType) => void;
+  onChangeConfig: (key: string, value: string) => void;
   onMove: (dir: -1 | 1) => void;
-  onRun: () => void;
+  onRemove: () => void;
 }) {
   const { t } = useT();
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
-  const meta = TYPE_META[action.type];
+  const [menuOpen, setMenuOpen] = useState(false);
+  const meta = BLOCK_META[block.type];
   const Icon = meta.icon;
-  const typeFieldValue = (action[meta.field] ?? "") as string;
-
-  function setTypeField(value: string) {
-    const patch: Partial<WorkspaceAction> = {};
-    patch[meta.field] = value;
-    onChange(patch);
-  }
+  const value = block.config[meta.field] ?? "";
 
   return (
-    <div
-      className={[
-        "relative flex rounded-xl border bg-surface-1 overflow-hidden",
-        invalid ? "border-destructive/50" : "border-border",
-      ].join(" ")}
-    >
-      {/* Colour strip */}
-      <div className={`w-1.5 shrink-0 ${meta.strip}`} />
-      <div className="flex-1 min-w-0 p-3 flex flex-col gap-2.5">
-        {/* Header: type chip + name + controls */}
+    <div className="flex rounded-lg border border-border bg-surface-1 overflow-hidden">
+      <div className={`w-1 shrink-0 ${meta.strip}`} />
+      <div className="flex-1 min-w-0 p-2.5 flex flex-col gap-2">
         <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+            {(index + 1).toString()}
+          </span>
           <div className="relative shrink-0">
             <button
               type="button"
               disabled={readOnly}
-              onClick={() => setTypeMenuOpen((v) => !v)}
+              onClick={() => setMenuOpen((v) => !v)}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold border ${meta.chip} disabled:opacity-60`}
             >
               <Icon className="h-3 w-3" />
               {t(meta.labelKey)}
               <ChevronsUpDown className="h-3 w-3 opacity-70" />
             </button>
-            {typeMenuOpen && (
-              <TypeMenu onPick={(ty) => onChangeType(ty)} onClose={() => setTypeMenuOpen(false)} />
+            {menuOpen && (
+              <BlockTypeMenu onPick={onChangeType} onClose={() => setMenuOpen(false)} />
             )}
           </div>
-          <input
-            className={`${inputCls} flex-1 font-medium`}
-            value={action.name}
-            placeholder={t("actions.namePlaceholder")}
-            disabled={readOnly}
-            onChange={(e) => onChange({ name: e.target.value })}
-          />
+          <span className="text-[11px] text-muted-foreground truncate flex-1">
+            {t(meta.hintKey)}
+          </span>
           <div className="flex items-center gap-0.5 shrink-0">
-            <IconButton
-              label={t("actions.run")}
-              size="xs"
-              disabled={runDisabled}
-              onClick={onRun}
-            >
-              <Play className="h-3.5 w-3.5 text-accent" />
-            </IconButton>
             <IconButton
               label={t("actions.moveUp")}
               size="xs"
@@ -319,72 +275,35 @@ function ActionBlock({
             </IconButton>
           </div>
         </div>
-
-        {/* ID + description */}
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
-          <div className="sm:w-44 shrink-0">
-            <Field label={t("actions.field.id")} hint={t("actions.field.idHint")}>
-              <input
-                className={`${inputCls} font-mono`}
-                value={action.id}
-                disabled={readOnly}
-                onChange={(e) => onChange({ id: e.target.value })}
-              />
-            </Field>
-          </div>
-          <div className="flex-1 min-w-0">
-            <Field label={t("actions.field.description")}>
-              <input
-                className={inputCls}
-                value={action.description}
-                placeholder={t("actions.descPlaceholder")}
-                disabled={readOnly}
-                onChange={(e) => onChange({ description: e.target.value })}
-              />
-            </Field>
-          </div>
-        </div>
-
-        {/* Type-specific field */}
-        <Field label={t(meta.fieldLabelKey)} hint={t(meta.hintKey)}>
-          {action.type === "format" ? (
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-semibold text-foreground">{t(meta.fieldLabelKey)}</span>
+          {meta.multiline ? (
             <textarea
               rows={2}
-              className={`${inputCls} font-mono resize-y`}
-              value={typeFieldValue}
-              placeholder={meta.fieldPlaceholder}
+              className={`${inputCls} resize-y`}
+              value={value}
+              placeholder={meta.placeholder}
               disabled={readOnly}
-              onChange={(e) => setTypeField(e.target.value)}
+              onChange={(e) => onChangeConfig(meta.field, e.target.value)}
             />
           ) : (
             <input
               className={`${inputCls} font-mono`}
-              value={typeFieldValue}
-              placeholder={meta.fieldPlaceholder}
+              value={value}
+              placeholder={meta.placeholder}
               disabled={readOnly}
-              onChange={(e) => setTypeField(e.target.value)}
+              onChange={(e) => onChangeConfig(meta.field, e.target.value)}
             />
           )}
-        </Field>
-
-        {/* Constraints */}
-        <Field label={t("actions.field.constraints")}>
-          <input
-            className={inputCls}
-            value={action.constraints ?? ""}
-            placeholder={t("actions.constraintsPlaceholder")}
-            disabled={readOnly}
-            onChange={(e) => onChange({ constraints: e.target.value })}
-          />
-        </Field>
+        </label>
       </div>
     </div>
   );
 }
 
-// ── Add-action button (opens the type menu) ────────────────────────────────────
+// ── Add-block button ───────────────────────────────────────────────────────────
 
-function AddActionButton({ onAdd }: { onAdd: (t: ActionType) => void }) {
+function AddBlockButton({ onAdd }: { onAdd: (t: BlockType) => void }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
@@ -392,41 +311,133 @@ function AddActionButton({ onAdd }: { onAdd: (t: ActionType) => void }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border text-xs font-medium text-muted-foreground hover:text-accent hover:border-accent transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-accent hover:border-accent transition-colors"
       >
-        <Plus className="h-3.5 w-3.5" />
-        {t("actions.addAction")}
+        <Plus className="h-3 w-3" />
+        {t("actions.addBlock")}
       </button>
-      {open && <TypeMenu onPick={onAdd} onClose={() => setOpen(false)} />}
+      {open && <BlockTypeMenu onPick={onAdd} onClose={() => setOpen(false)} />}
     </div>
   );
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
+// ── A single action card (name + description + block pipeline) ─────────────────
 
-function EmptyState({ onAdd, readOnly }: { onAdd: (t: ActionType) => void; readOnly: boolean }) {
+function ActionCard({
+  action,
+  readOnly,
+  invalid,
+  running,
+  onChange,
+  onRemove,
+  onRun,
+  onBlocksChange,
+}: {
+  action: ActionDef;
+  readOnly: boolean;
+  invalid: boolean;
+  running: boolean;
+  onChange: (patch: Partial<ActionDef>) => void;
+  onRemove: () => void;
+  onRun: () => void;
+  onBlocksChange: (blocks: ActionBlock[]) => void;
+}) {
   const { t } = useT();
-  const [open, setOpen] = useState(false);
+
+  function setBlock(i: number, next: ActionBlock) {
+    onBlocksChange(action.blocks.map((b, j) => (j === i ? next : b)));
+  }
+  function changeType(i: number, type: BlockType) {
+    setBlock(i, { ...action.blocks[i]!, type, config: {} });
+  }
+  function changeConfig(i: number, key: string, value: string) {
+    const b = action.blocks[i]!;
+    setBlock(i, { ...b, config: { ...b.config, [key]: value } });
+  }
+  function moveBlock(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= action.blocks.length) return;
+    const next = [...action.blocks];
+    const tmp = next[i]!;
+    next[i] = next[j]!;
+    next[j] = tmp;
+    onBlocksChange(next);
+  }
+  function removeBlock(i: number) {
+    onBlocksChange(action.blocks.filter((_, j) => j !== i));
+  }
+  function addBlock(type: BlockType) {
+    onBlocksChange([...action.blocks, freshBlock(type)]);
+  }
+
   return (
-    <div className="rounded-xl border border-dashed border-border px-6 py-10 flex flex-col items-center gap-3 text-center">
-      <Zap className="h-7 w-7 text-muted-foreground" />
-      <div>
-        <p className="text-sm font-medium text-foreground">{t("actions.empty.title")}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">{t("actions.empty.body")}</p>
+    <div
+      className={[
+        "rounded-xl border bg-surface-1 p-3.5 flex flex-col gap-3",
+        invalid ? "border-destructive/50" : "border-border",
+      ].join(" ")}
+    >
+      {/* Action header */}
+      <div className="flex items-center gap-2">
+        <Zap className="h-4 w-4 text-accent shrink-0" />
+        <input
+          className={`${inputCls} flex-1 font-medium`}
+          value={action.name}
+          placeholder={t("actions.namePlaceholder")}
+          disabled={readOnly}
+          onChange={(e) => onChange({ name: e.target.value })}
+        />
+        <IconButton
+          label={t("actions.run")}
+          size="sm"
+          disabled={running}
+          onClick={onRun}
+        >
+          <Play className="h-4 w-4 text-accent" />
+        </IconButton>
+        <IconButton
+          label={t("actions.deleteAction")}
+          size="sm"
+          disabled={readOnly}
+          onClick={onRemove}
+        >
+          <Trash2 className="h-4 w-4" />
+        </IconButton>
       </div>
-      {!readOnly && (
-        <div className="relative">
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus className="h-3.5 w-3.5" />}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {t("actions.addAction")}
-          </Button>
-          {open && <TypeMenu align="center" onPick={onAdd} onClose={() => setOpen(false)} />}
+      <input
+        className={inputCls}
+        value={action.description}
+        placeholder={t("actions.descPlaceholder")}
+        disabled={readOnly}
+        onChange={(e) => onChange({ description: e.target.value })}
+      />
+
+      {/* Block pipeline */}
+      <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-border">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pl-2">
+          {t("actions.blockPipeline")}
+        </span>
+        <div className="flex flex-col gap-1.5 pl-2">
+          {action.blocks.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">{t("actions.noBlocks")}</p>
+          ) : (
+            action.blocks.map((b, i) => (
+              <BlockRow
+                key={b.id}
+                block={b}
+                index={i}
+                total={action.blocks.length}
+                readOnly={readOnly}
+                onChangeType={(ty) => changeType(i, ty)}
+                onChangeConfig={(k, v) => changeConfig(i, k, v)}
+                onMove={(dir) => moveBlock(i, dir)}
+                onRemove={() => removeBlock(i)}
+              />
+            ))
+          )}
+          {!readOnly && <AddBlockButton onAdd={addBlock} />}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -440,26 +451,25 @@ export interface ActionsEditorProps {
 export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
   const { t } = useT();
   const { toast } = useToast();
-  const { data: actionsData, isLoading } = useActions(workspaceId);
+  const navigate = useNavigate();
+  const { data: defs, isLoading } = useActionDefs(workspaceId);
   const saveActions = useSaveActions(workspaceId);
   const runAction = useRunAction();
-  const navigate = useNavigate();
 
-  const [blocks, setBlocks] = useState<WorkspaceAction[]>([]);
+  const [actions, setActions] = useState<ActionDef[]>([]);
   const [dirty, setDirty] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showYaml, setShowYaml] = useState(false);
   const initedRef = useRef(false);
 
-  // Initialise the block list once, when the workspace's actions first load.
   useEffect(() => {
-    if (!initedRef.current && actionsData) {
-      setBlocks(actionsData.actions);
-      setParseError(actionsData.error);
+    if (!initedRef.current && defs) {
+      setActions(defs.actions);
+      setParseError(defs.error);
       initedRef.current = true;
     }
-  }, [actionsData]);
+  }, [defs]);
 
   if (isLoading) {
     return (
@@ -469,60 +479,39 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
     );
   }
 
-  function commit(next: WorkspaceAction[]) {
-    setBlocks(next);
+  function commit(next: ActionDef[]) {
+    setActions(next);
     setDirty(true);
   }
 
-  function updateBlock(i: number, patch: Partial<WorkspaceAction>) {
-    commit(blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)));
+  function updateAction(i: number, patch: Partial<ActionDef>) {
+    commit(actions.map((a, j) => (j === i ? { ...a, ...patch } : a)));
   }
-
-  function changeType(i: number, type: ActionType) {
-    // Drop type-specific fields when switching type; keep constraints.
-    commit(
-      blocks.map((b, j) =>
-        j === i
-          ? { id: b.id, name: b.name, description: b.description, type, constraints: b.constraints }
-          : b,
-      ),
-    );
+  function setBlocks(i: number, blocks: ActionBlock[]) {
+    commit(actions.map((a, j) => (j === i ? { ...a, blocks } : a)));
   }
-
-  function removeBlock(i: number) {
-    commit(blocks.filter((_, j) => j !== i));
+  function removeAction(i: number) {
+    commit(actions.filter((_, j) => j !== i));
   }
-
-  function moveBlock(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= blocks.length) return;
-    const next = [...blocks];
-    const a = next[i]!;
-    next[i] = next[j]!;
-    next[j] = a;
-    commit(next);
-  }
-
-  function insertBlock(index: number, type: ActionType) {
-    const ids = new Set(blocks.map((b) => b.id));
-    let n = blocks.length + 1;
-    let id = "action_" + String(n);
+  function addAction() {
+    const ids = new Set(actions.map((a) => a.id));
+    let n = actions.length + 1;
+    let id = "action-" + n.toString();
     while (ids.has(id)) {
       n += 1;
-      id = "action_" + String(n);
+      id = "action-" + n.toString();
     }
-    const fresh: WorkspaceAction = { id, name: t("actions.newActionName"), description: "", type };
-    const next = [...blocks];
-    next.splice(index, 0, fresh);
-    commit(next);
+    commit([
+      ...actions,
+      { id, name: t("actions.newActionName"), description: "", category: "", blocks: [freshBlock("ask_ai")] },
+    ]);
   }
 
   async function handleSave() {
     try {
-      const result = await saveActions.mutateAsync(serializeActions(blocks));
-      setBlocks(result.actions);
-      setParseError(result.error);
+      await saveActions.mutateAsync(serializeActionDefs(actions));
       setDirty(false);
+      setParseError(null);
       toast({ title: t("actions.saved"), variant: "success" });
     } catch (err) {
       const e = err as Error & { status?: number };
@@ -535,19 +524,22 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
     }
   }
 
-  async function handleRun(action: WorkspaceAction) {
+  async function handleRun(action: ActionDef) {
+    if (dirty) {
+      toast({ title: t("actions.saveBeforeRun"), variant: "error" });
+      return;
+    }
     try {
       const run = await runAction.mutateAsync({ workspaceId, actionId: action.id });
       navigate(`/runs/${run.id}`);
     } catch (err) {
-      const e = err as Error;
-      toast({ title: t("actions.runFailed"), description: e.message, variant: "error" });
+      toast({ title: t("actions.runFailed"), description: (err as Error).message, variant: "error" });
     }
   }
 
   const invalid = new Set<number>();
-  blocks.forEach((b, i) => {
-    if (!b.id.trim() || !b.name.trim()) invalid.add(i);
+  actions.forEach((a, i) => {
+    if (!a.id.trim() || !a.name.trim()) invalid.add(i);
   });
 
   return (
@@ -591,7 +583,7 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
         </Button>
       </div>
 
-      {/* Parse error from a previously hand-edited file */}
+      {/* Parse error from a hand-edited file */}
       {parseError && (
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-destructive/30 bg-destructive/5">
           <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
@@ -604,36 +596,45 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
         </div>
       )}
 
-      {/* Blocks */}
-      {blocks.length === 0 ? (
-        <EmptyState onAdd={(ty) => insertBlock(0, ty)} readOnly={readOnly} />
+      {/* Action cards */}
+      {actions.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border px-6 py-10 flex flex-col items-center gap-3 text-center">
+          <Zap className="h-7 w-7 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium text-foreground">{t("actions.empty.title")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">{t("actions.empty.body")}</p>
+          </div>
+          {!readOnly && (
+            <Button variant="primary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={addAction}>
+              {t("actions.addAction")}
+            </Button>
+          )}
+        </div>
       ) : (
-        <div className="flex flex-col">
-          <InsertBar onInsert={(ty) => insertBlock(0, ty)} />
-          {blocks.map((b, i) => (
-            <div key={i}>
-              <ActionBlock
-                action={b}
-                index={i}
-                total={blocks.length}
-                readOnly={readOnly}
-                invalid={invalid.has(i)}
-                runDisabled={invalid.has(i) || dirty || runAction.isPending}
-                onChange={(patch) => updateBlock(i, patch)}
-                onChangeType={(ty) => changeType(i, ty)}
-                onRemove={() => removeBlock(i)}
-                onMove={(dir) => moveBlock(i, dir)}
-                onRun={() => void handleRun(b)}
-              />
-              <InsertBar onInsert={(ty) => insertBlock(i + 1, ty)} />
-            </div>
+        <div className="flex flex-col gap-3">
+          {actions.map((a, i) => (
+            <ActionCard
+              key={a.id}
+              action={a}
+              readOnly={readOnly}
+              invalid={invalid.has(i)}
+              running={runAction.isPending}
+              onChange={(patch) => updateAction(i, patch)}
+              onRemove={() => removeAction(i)}
+              onRun={() => void handleRun(a)}
+              onBlocksChange={(blocks) => setBlocks(i, blocks)}
+            />
           ))}
         </div>
       )}
 
       {/* Add action */}
-      {blocks.length > 0 && !readOnly && (
-        <AddActionButton onAdd={(ty) => insertBlock(blocks.length, ty)} />
+      {actions.length > 0 && !readOnly && (
+        <div className="self-start">
+          <Button variant="secondary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={addAction}>
+            {t("actions.addAction")}
+          </Button>
+        </div>
       )}
 
       {/* Read-only YAML preview */}
@@ -643,7 +644,7 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
             .ariadne/actions.yaml · {t("actions.yamlReadonly")}
           </div>
           <pre className="p-3 text-xs font-mono text-foreground bg-surface-1 overflow-x-auto whitespace-pre">
-            {serializeActions(blocks)}
+            {serializeActionDefs(actions)}
           </pre>
         </div>
       )}

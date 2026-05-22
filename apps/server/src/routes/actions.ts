@@ -11,7 +11,8 @@
 import type { FastifyInstance } from "fastify";
 import { ActionsPutSchema, CreateActionRunSchema } from "@ariadne/shared";
 import { ensureAriadneFolder, writeActionsYaml } from "../ariadneFolder.js";
-import { loadWorkspaceActions } from "../services/actions.js";
+import { loadWorkspaceActions, loadActionDefs } from "../services/actions.js";
+import { BUILTIN_TEMPLATES } from "../runs/templates.js";
 import { createActionRun } from "../runs/actionEngine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
@@ -56,6 +57,20 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     // Return the parsed result so the client knows if there are validation errors
     const result = loadWorkspaceActions(workspace.rootPath);
     return reply.send(result);
+  });
+
+  // GET /api/workspaces/:id/action-defs — the unified "create & run" list:
+  // built-in templates (scoped to the workspace category) + custom actions.
+  app.get<{ Params: { id: string } }>("/workspaces/:id/action-defs", async (req, reply) => {
+    const workspace = await requireWorkspace(req.params.id, req, reply);
+    if (!workspace) return;
+
+    ensureAriadneFolder(workspace.rootPath);
+    const templates = workspace.category
+      ? BUILTIN_TEMPLATES.filter((tmpl) => tmpl.category === workspace.category)
+      : BUILTIN_TEMPLATES;
+    const { actions, error } = loadActionDefs(workspace.rootPath);
+    return reply.send({ templates, actions, error });
   });
 
   // POST /api/workspaces/:id/actions/:actionId/run — run a block-pipeline action

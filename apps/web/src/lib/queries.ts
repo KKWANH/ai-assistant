@@ -467,12 +467,22 @@ export function useActions(workspaceId: string) {
   });
 }
 
+export function useActionDefs(workspaceId: string) {
+  return useQuery({
+    queryKey: ["action-defs", workspaceId] as const,
+    queryFn: () => api.getActionDefs(workspaceId),
+    enabled: !!workspaceId,
+    retry: false,
+  });
+}
+
 export function useSaveActions(workspaceId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (source: string) => api.saveActions(workspaceId, source),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["actions", workspaceId] });
+      void qc.invalidateQueries({ queryKey: ["action-defs", workspaceId] });
     },
   });
 }

@@ -179,13 +179,23 @@ export const getUsage = () =>
   request<UsageSummary>("GET", "/usage");
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-import type { WorkspaceAction } from "@ariadne/shared";
+import type { WorkspaceAction, ActionDef } from "@ariadne/shared";
 
 export interface ActionsPayload {
   source: string;
   actions: WorkspaceAction[];
   error: string | null;
 }
+
+/** The unified create-and-run list: built-in templates + custom block actions. */
+export interface ActionDefsPayload {
+  templates: Template[];
+  actions: ActionDef[];
+  error: string | null;
+}
+
+export const getActionDefs = (workspaceId: string) =>
+  request<ActionDefsPayload>("GET", `/workspaces/${workspaceId}/action-defs`);
 
 export const getActions = (workspaceId: string) =>
   request<ActionsPayload>("GET", `/workspaces/${workspaceId}/actions`);

@@ -36,7 +36,8 @@ import {
   useSnapshot,
   useScanWorkspace,
   useRuns,
-  useTemplates,
+  useActionDefs,
+  useRunAction,
   useSurface,
   useUpdateWorkspace,
   useChats,
@@ -174,10 +175,11 @@ export function WorkspaceOverview() {
   const { data: ws, isLoading: wsLoading } = useWorkspace(id ?? "");
   const { data: snapshot } = useSnapshot(id ?? "");
   const { data: runs } = useRuns(id ?? undefined);
-  const { data: templates } = useTemplates();
+  const { data: actionDefs } = useActionDefs(id ?? "");
   const { data: surfaceData } = useSurface(id ?? "");
   const { data: chats } = useChats();
   const createChat = useCreateChat();
+  const runAction = useRunAction();
 
   if (wsLoading) {
     return (
@@ -223,6 +225,15 @@ export function WorkspaceOverview() {
     }
   };
 
+  const handleRunAction = async (actionId: string) => {
+    try {
+      const run = await runAction.mutateAsync({ workspaceId: ws.id, actionId });
+      navigate(`/runs/${run.id}`);
+    } catch {
+      toast({ title: t("actions.runFailed"), variant: "error" });
+    }
+  };
+
   const workspaceChats = (chats ?? []).filter((c) => c.workspaceId === ws.id);
 
   const lastScan = ws.lastScanAt
@@ -231,12 +242,11 @@ export function WorkspaceOverview() {
 
   const hasSnapshot = !!snapshot;
   const hasRuns = runs && runs.length > 0;
-  // Surface only the templates relevant to this workspace's category; a
-  // workspace with no category (null) shows every template.
-  const visibleTemplates = (templates ?? []).filter(
-    (tmpl) => !ws.category || tmpl.category === ws.category,
-  );
-  const hasTemplates = visibleTemplates.length > 0;
+  // The unified create-and-run list: built-in templates (category-scoped on the
+  // server) plus the workspace's own block-pipeline actions.
+  const templates = actionDefs?.templates ?? [];
+  const customActions = actionDefs?.actions ?? [];
+  const hasCreatables = templates.length > 0 || customActions.length > 0;
   const hasSurface = surfaceData?.state?.exists ?? false;
 
   // ── Standard overview content (templates + runs) ──────────────────────────
@@ -293,9 +303,9 @@ export function WorkspaceOverview() {
           </p>
         </div>
 
-        {hasTemplates ? (
+        {hasCreatables ? (
           <div className="grid grid-cols-1 gap-2">
-            {visibleTemplates.map((tmpl) => (
+            {templates.map((tmpl) => (
               <Card
                 key={tmpl.id}
                 interactive
@@ -326,6 +336,35 @@ export function WorkspaceOverview() {
                     <ArrowRight className="h-3 w-3" />
                   </button>
                 </div>
+              </Card>
+            ))}
+            {customActions.map((action) => (
+              <Card
+                key={action.id}
+                interactive
+                className="flex items-center gap-4 px-4 py-3.5 group"
+                onClick={() => void handleRunAction(action.id)}
+              >
+                <div className="h-8 w-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                  <Zap className="h-4 w-4 text-accent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{action.name}</p>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {action.description ||
+                      t("workspace.create.actionDesc", { n: action.blocks.length })}
+                  </p>
+                </div>
+                <button
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent text-accent-foreground text-xs font-medium hover:bg-accent/90 transition-colors shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleRunAction(action.id);
+                  }}
+                >
+                  {t("workspace.create.runBtn")}
+                  <Play className="h-3 w-3" />
+                </button>
               </Card>
             ))}
           </div>
@@ -406,13 +445,13 @@ export function WorkspaceOverview() {
             <p className="text-xs text-muted-foreground mb-4">
               {t("workspace.runs.empty.body")}
             </p>
-            {hasTemplates && (
+            {templates.length > 0 && (
               <Button
                 variant="primary"
                 size="sm"
                 leftIcon={<Play className="h-3.5 w-3.5" />}
                 onClick={() =>
-                  navigate(`/templates/${visibleTemplates[0]!.id}?workspaceId=${ws.id}`)
+                  navigate(`/templates/${templates[0]!.id}?workspaceId=${ws.id}`)
                 }
               >
                 {t("workspace.runs.getStarted")}
