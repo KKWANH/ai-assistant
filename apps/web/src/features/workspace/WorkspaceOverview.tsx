@@ -29,6 +29,7 @@ import {
   Zap,
   MessageSquare,
   Database,
+  Pencil,
 } from "lucide-react";
 
 import {
@@ -74,7 +75,7 @@ function EditorFallback() {
   );
 }
 
-/** The workspace name in the page header — double-click to rename inline. */
+/** The workspace name in the page header — click the pencil (or double-click the name) to rename. */
 function WorkspaceTitle({ workspaceId, name }: { workspaceId: string; name: string }) {
   const { t } = useT();
   const updateWorkspace = useUpdateWorkspace();
@@ -89,6 +90,11 @@ function WorkspaceTitle({ workspaceId, name }: { workspaceId: string; name: stri
     } else {
       setDraft(name);
     }
+  };
+
+  const startRename = () => {
+    setDraft(name);
+    setRenaming(true);
   };
 
   if (renaming) {
@@ -112,15 +118,22 @@ function WorkspaceTitle({ workspaceId, name }: { workspaceId: string; name: stri
   }
 
   return (
-    <span
-      onDoubleClick={() => {
-        setDraft(name);
-        setRenaming(true);
-      }}
-      title={t("workspace.renameHint")}
-      className="-mx-1 cursor-text rounded px-1 transition-colors hover:bg-surface-3"
-    >
-      {name}
+    <span className="group inline-flex min-w-0 items-center gap-1.5">
+      <span
+        onDoubleClick={startRename}
+        title={t("workspace.renameHint")}
+        className="-mx-1 min-w-0 truncate cursor-text rounded px-1 transition-colors hover:bg-surface-3"
+      >
+        {name}
+      </span>
+      <button
+        onClick={startRename}
+        aria-label={t("workspace.rename")}
+        title={t("workspace.rename")}
+        className="shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
     </span>
   );
 }

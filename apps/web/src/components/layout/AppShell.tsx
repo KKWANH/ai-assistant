@@ -20,7 +20,7 @@
  * driven by a hamburger toggle; the Inspector is shown only at `lg`+.
  * Right Inspector: contextual — only on workspace/template/run detail screens.
  */
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import {
   FolderOpen,
@@ -297,6 +297,34 @@ export function AppShell({ children }: AppShellProps) {
     ? location.pathname.split("/chat/")[1]
     : null;
 
+  // Split chats: global (no workspace) vs grouped by workspace.
+  // The top list now only shows global conversations, keeping the sidebar's
+  // mental model clean — workspace chats live under their workspace.
+  const { globalChats, chatsByWorkspace } = useMemo(() => {
+    const global: Chat[] = [];
+    const byWs = new Map<string, Chat[]>();
+    for (const chat of chats ?? []) {
+      if (chat.workspaceId == null) {
+        global.push(chat);
+      } else {
+        const list = byWs.get(chat.workspaceId) ?? [];
+        list.push(chat);
+        byWs.set(chat.workspaceId, list);
+      }
+    }
+    return { globalChats: global, chatsByWorkspace: byWs };
+  }, [chats]);
+
+  // Show a workspace's nested chats when the user is anywhere inside that
+  // workspace (overview, scripts, or one of its chats).
+  const activeChat = activeChatId
+    ? (chats ?? []).find((c) => c.id === activeChatId)
+    : null;
+  const expandedWorkspaceId =
+    location.pathname.startsWith("/workspaces/") && activeWorkspaceId
+      ? activeWorkspaceId
+      : activeChat?.workspaceId ?? null;
+
   const commandItems: CommandItem[] = isSimple ? [] : [
     {
       id: "new-chat",
@@ -433,6 +461,7 @@ export function AppShell({ children }: AppShellProps) {
           {/* Search */}
           <IconButton
             label={t("nav.search")}
+            description={t("nav.search.desc")}
             size="sm"
             onClick={() => {
               setSidebarSection("search");
@@ -446,6 +475,7 @@ export function AppShell({ children }: AppShellProps) {
             <span className="hidden sm:flex relative">
               <IconButton
                 label={t("nav.helpAndTutorial")}
+                description={t("nav.helpAndTutorial.desc")}
                 size="sm"
                 onClick={() => setHelpMenuOpen((v) => !v)}
                 data-tour="help-button"
@@ -487,12 +517,18 @@ export function AppShell({ children }: AppShellProps) {
           {/* Report a problem — available to everyone */}
           <IconButton
             label={t("nav.report")}
+            description={t("nav.report.desc")}
             size="sm"
             onClick={() => setReportDialogOpen(true)}
           >
             <Flag className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton label={t("nav.toggleTheme")} size="sm" onClick={toggleTheme}>
+          <IconButton
+            label={t("nav.toggleTheme")}
+            description={t("nav.toggleTheme.desc")}
+            size="sm"
+            onClick={toggleTheme}
+          >
             {theme === "dark" ? (
               <Sun className="h-3.5 w-3.5" />
             ) : (
@@ -507,6 +543,7 @@ export function AppShell({ children }: AppShellProps) {
               <span className="hidden sm:flex">
                 <IconButton
                   label={t("nav.signOut")}
+                  description={t("nav.signOut.desc")}
                   size="sm"
                   onClick={() => void logout.mutateAsync()}
                 >
@@ -520,6 +557,7 @@ export function AppShell({ children }: AppShellProps) {
             <span className="hidden lg:flex">
               <IconButton
                 label={t("nav.toggleInspector")}
+                description={t("nav.toggleInspector.desc")}
                 size="sm"
                 onClick={toggleInspector}
                 data-tour="inspector-toggle"
@@ -589,11 +627,11 @@ export function AppShell({ children }: AppShellProps) {
             </Link>
           </div>
 
-          {/* Chats list */}
+          {/* Chats list — global conversations only; workspace chats live under their workspace */}
           <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
             <div className="px-2 pb-1">
-              {chats && chats.length > 0 ? (
-                chats.slice(0, 20).map((chat) => (
+              {globalChats && globalChats.length > 0 ? (
+                globalChats.slice(0, 20).map((chat) => (
                   <ChatRow
                     key={chat.id}
                     chat={chat}
@@ -684,6 +722,21 @@ export function AppShell({ children }: AppShellProps) {
                           onClick={() => setMobileNavOpen(false)}
                           className="pl-5 text-[11px]"
                         />
+                      )}
+                    {/* Workspace chats — nested under the expanded workspace */}
+                    {expandedWorkspaceId === ws.id &&
+                      (chatsByWorkspace.get(ws.id)?.length ?? 0) > 0 && (
+                        <div className="pl-3">
+                          {chatsByWorkspace.get(ws.id)!.slice(0, 10).map((chat) => (
+                            <ChatRow
+                              key={chat.id}
+                              chat={chat}
+                              active={activeChatId === chat.id}
+                              workspaces={workspaces}
+                              closeMobileNav={() => setMobileNavOpen(false)}
+                            />
+                          ))}
+                        </div>
                       )}
                   </div>
                 ))

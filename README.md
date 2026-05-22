@@ -1,16 +1,60 @@
 # Ariadne
 
-Local-first AI workspace for traceable, repeatable work.
+**An AI workspace that lives on your machine — and keeps a thread back to its sources.**
 
-Ariadne runs on your own machine and turns local folders into source-backed work
-briefs. Every brief it produces carries the files it read, a claim-to-source map,
-a list of unsupported claims, a folder snapshot, a run trace, and a diff from the
-previous run — stored in a portable, human-readable `.ariadne/` folder.
+Ariadne turns your local folders into source-backed work briefs. Every answer it
+produces carries the files it read, a claim-to-source map, a list of unsupported
+claims, a folder snapshot, a run trace, and a diff from the previous run —
+stored in a portable, human-readable `.ariadne/` folder.
 
 It is not just a chat assistant. You can chat — with streaming replies, file and
 image attachments, web search, and an optional plan-and-execute agent — but the
 deeper unit of work is a **run**: a reproducible, inspectable, evidence-backed
 output you can trust and re-run over time.
+
+---
+
+## Highlights
+
+- 💬 **Streaming chat** — markdown rendered in place, file & image attachments,
+  optional web search, and an *agent mode* that plans, runs tools, and revises
+  its plan as results come in.
+- ⚡ **Custom actions** — compose named pipelines per workspace (read a file →
+  ask AI → search the web → run a script) and launch them in one click. Ariadne
+  also suggests a matching action in chat when your message looks like the job.
+- 📊 **Custom surfaces** — write a TypeScript dashboard for any workspace
+  (`.ariadne/surface.tsx`) that runs in a sandboxed iframe. Ships a Portfolio
+  example with live FX and stock quotes.
+- 🧾 **Evidence-backed runs** — pick a folder, pick a template, approve which
+  files Ariadne reads, get a brief with every claim mapped to a source — plus a
+  diff from the last run, so you can re-run as the folder changes.
+- 🔒 **Yours, locally** — your files, your models (Ollama out of the box; bring
+  your own API keys for hosted models). The server runs on your machine; only
+  you can edit the surfaces and scripts, even when the URL is public.
+
+---
+
+## Screenshots
+
+The views worth showing off. See
+[`docs/screenshots/README.md`](docs/screenshots/README.md) for what each shot
+should show; drop the PNGs at the listed paths and they render inline.
+
+![Portfolio dashboard](docs/screenshots/portfolio.png)
+![Data tab](docs/screenshots/data-tab.png)
+![Actions editor](docs/screenshots/actions-editor.png)
+![Action run view](docs/screenshots/action-run.png)
+![Chat intent suggestion](docs/screenshots/intent-chip.png)
+![Agent mode](docs/screenshots/agent-mode.png)
+
+| Screenshot | Path |
+|---|---|
+| Portfolio dashboard — custom surface with live FX and quotes | `docs/screenshots/portfolio.png` |
+| Workspace Data tab — editable CSV-as-a-table | `docs/screenshots/data-tab.png` |
+| Actions editor — composing a block pipeline | `docs/screenshots/actions-editor.png` |
+| Action run view — per-block timeline + final output | `docs/screenshots/action-run.png` |
+| Chat intent-suggestion chip | `docs/screenshots/intent-chip.png` |
+| Agent mode — plan and execute | `docs/screenshots/agent-mode.png` |
 
 ---
 
@@ -160,30 +204,6 @@ chat composer, in Settings, or via `.env`:
 
 Token usage is captured from every provider response, priced per model, and
 reported per run and cumulatively.
-
----
-
-## Screenshots
-
-The views worth showing off. Drop PNGs at the listed paths and they render
-inline. See [`docs/screenshots/README.md`](docs/screenshots/README.md) for
-what each shot should show.
-
-| Screenshot | Path |
-|---|---|
-| Portfolio dashboard — custom surface with live FX and quotes | `docs/screenshots/portfolio.png` |
-| Workspace Data tab — editable CSV-as-a-table | `docs/screenshots/data-tab.png` |
-| Actions editor — composing a block pipeline | `docs/screenshots/actions-editor.png` |
-| Action run view — per-block timeline + final output | `docs/screenshots/action-run.png` |
-| Chat intent-suggestion chip | `docs/screenshots/intent-chip.png` |
-| Agent mode — plan and execute | `docs/screenshots/agent-mode.png` |
-
-![Portfolio dashboard](docs/screenshots/portfolio.png)
-![Data tab](docs/screenshots/data-tab.png)
-![Actions editor](docs/screenshots/actions-editor.png)
-![Action run view](docs/screenshots/action-run.png)
-![Chat intent suggestion](docs/screenshots/intent-chip.png)
-![Agent mode](docs/screenshots/agent-mode.png)
 
 ---
 

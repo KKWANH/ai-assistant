@@ -33,7 +33,13 @@ export function PageHeader({
           {icon && (
             <span className="shrink-0 text-muted-foreground">{icon}</span>
           )}
-          <span className="truncate">{title}</span>
+          {/* String titles get plain truncation; ReactNode titles handle their own
+              layout (e.g. an inline rename pencil that must stay visible). */}
+          {typeof title === "string" ? (
+            <span className="truncate">{title}</span>
+          ) : (
+            <span className="min-w-0 flex items-center">{title}</span>
+          )}
         </h1>
         {description && (
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
