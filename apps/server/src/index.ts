@@ -69,6 +69,8 @@ function findAdminAccount(): Account | null {
     locale: (row["locale"] as string | null) ?? "en",
     mode: ((row["mode"] as string | null) ?? "standard") as import("@ariadne/shared").AccountMode,
     createdAt: row["created_at"] as string,
+    context: (row["context"] as string | null) ?? "",
+    contextUpdatedAt: (row["context_updated_at"] as string | null) ?? null,
   };
 }
 

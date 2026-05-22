@@ -168,6 +168,9 @@ export const setLocale = (locale: string) =>
 export const setMode = (mode: "standard" | "simple") =>
   request<{ ok: boolean }>("PUT", "/account/mode", { mode });
 
+export const setAccountContext = (context: string) =>
+  request<{ ok: boolean }>("PUT", "/account/context", { context });
+
 // ── Usage ─────────────────────────────────────────────────────────────────────
 export const getUsage = () =>
   request<UsageSummary>("GET", "/usage");

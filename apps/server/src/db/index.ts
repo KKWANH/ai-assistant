@@ -212,6 +212,14 @@ function runMigrations(db: DatabaseSync): void {
     db.exec("ALTER TABLE accounts ADD COLUMN mode TEXT");
   }
 
+  // Guarded ALTER TABLE: add context + context_updated_at to accounts if missing
+  if (!accountColumns.some((c) => c.name === "context")) {
+    db.exec("ALTER TABLE accounts ADD COLUMN context TEXT");
+  }
+  if (!accountColumns.some((c) => c.name === "context_updated_at")) {
+    db.exec("ALTER TABLE accounts ADD COLUMN context_updated_at TEXT");
+  }
+
   // Guarded ALTER TABLE: add visibility to workspaces if missing (NULL → "private")
   if (!wsColumns.some((c) => c.name === "visibility")) {
     db.exec("ALTER TABLE workspaces ADD COLUMN visibility TEXT");

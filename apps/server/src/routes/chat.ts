@@ -34,6 +34,7 @@ import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
+import { extractAccountContextInBackground } from "../services/accountContext.js";
 import { decideWebSearch, generateChatTitle } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
 import { isOwnerOrAdmin } from "./workspaceGuard.js";
@@ -327,6 +328,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
                 provider,
                 emit,
                 signal: controller.signal,
+                accountContext: req.account?.context,
               });
               assistantContent = agentResult.content;
               agentTrace = agentResult.agent;
@@ -356,7 +358,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
                 content,
                 attachments: attachmentRefs,
                 webSearch: doWebSearch,
-              });
+              }, req.account?.context);
             } catch (err) {
               logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
               contextResult = {
@@ -442,6 +444,10 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           createdAt: now(),
         };
         dbInsertMessage(assistantMsg);
+
+        // Fold any durable facts from this conversation into the user's saved
+        // profile — background, throttled, best-effort (never blocks the chat).
+        setImmediate(() => void extractAccountContextInBackground(req.account.id, chat.id));
 
         // --- Bump chat updated_at (and apply the generated title, if any) ---
         dbUpdateChat(chat.id, {

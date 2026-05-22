@@ -261,6 +261,16 @@ export function useUpdateMode() {
   });
 }
 
+export function useUpdateContext() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (context: string) => api.setAccountContext(context),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
+  });
+}
+
 // ── Usage ─────────────────────────────────────────────────────────────────────
 export function useUsage() {
   return useQuery({

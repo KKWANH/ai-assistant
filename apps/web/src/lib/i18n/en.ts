@@ -636,6 +636,16 @@ const en = {
   "settings.mode.saved": "Mode updated",
   "settings.mode.failed": "Failed to update mode",
 
+  // Account context / profile
+  "settings.context.heading": "Your profile",
+  "settings.context.description": "What the assistant knows about you — your role, interests, and ongoing work. It is built automatically from your conversations, and you can edit it here. It is added to every chat to personalise replies.",
+  "settings.context.placeholder": "e.g. Product designer working on a fintech app; prefers concise, direct answers…",
+  "settings.context.save": "Save",
+  "settings.context.saved": "Profile saved",
+  "settings.context.failed": "Could not save the profile",
+  "settings.context.autoNote": "Last updated {time}",
+  "settings.context.neverUpdated": "Not updated yet — it fills in as you chat",
+
   // ── Badge labels ────────────────────────────────────────────────────────────
   "badge.sensitive": "Sensitive",
   "badge.largeFile": "Large File",

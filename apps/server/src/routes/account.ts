@@ -1,13 +1,14 @@
 /**
  * Account self-management routes.
  *
- * PUT /api/account/locale — update the authenticated user's locale preference.
- * PUT /api/account/mode   — update the authenticated user's UI mode (standard|simple).
+ * PUT /api/account/locale  — update the authenticated user's locale preference.
+ * PUT /api/account/mode    — update the authenticated user's UI mode (standard|simple).
+ * PUT /api/account/context — update the authenticated user's saved profile.
  */
 
 import type { FastifyInstance } from "fastify";
-import { UpdateLocaleSchema, UpdateModeSchema } from "@ariadne/shared";
-import { updateAccountLocale, updateAccountMode } from "../auth/accounts.js";
+import { UpdateLocaleSchema, UpdateModeSchema, UpdateContextSchema } from "@ariadne/shared";
+import { updateAccountLocale, updateAccountMode, updateAccountContext } from "../auth/accounts.js";
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/account/locale
@@ -33,6 +34,25 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const updated = updateAccountMode(req.account.id, parsed.data.mode);
+    if (!updated) {
+      return reply.status(404).send({ error: "Account not found" });
+    }
+
+    return reply.send(updated);
+  });
+
+  // PUT /api/account/context
+  app.put("/account/context", async (req, reply) => {
+    const parsed = UpdateContextSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });
+    }
+
+    const updated = updateAccountContext(
+      req.account.id,
+      parsed.data.context,
+      new Date().toISOString()
+    );
     if (!updated) {
       return reply.status(404).send({ error: "Account not found" });
     }

@@ -40,6 +40,12 @@ export const UpdateModeSchema = z.object({
 });
 export type UpdateModeInput = z.infer<typeof UpdateModeSchema>;
 
+/** PUT /api/account/context — the user's saved profile text. */
+export const UpdateContextSchema = z.object({
+  context: z.string().max(2000),
+});
+export type UpdateContextInput = z.infer<typeof UpdateContextSchema>;
+
 /** PUT /api/workspaces/:id/actions — raw YAML source of the action defs. */
 export const ActionsPutSchema = z.object({
   source: z.string(),

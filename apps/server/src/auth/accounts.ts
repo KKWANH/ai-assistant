@@ -17,6 +17,8 @@ function rowToAccount(row: Record<string, unknown>): Account {
     locale: (row["locale"] as string | null) ?? "en",
     mode: ((row["mode"] as string | null) ?? "standard") as AccountMode,
     createdAt: row["created_at"] as string,
+    context: (row["context"] as string | null) ?? "",
+    contextUpdatedAt: (row["context_updated_at"] as string | null) ?? null,
   };
 }
 
@@ -62,7 +64,7 @@ export function createAccount(
     `INSERT INTO accounts (id, username, password_hash, salt, display_name, role, created_at, locale, mode)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(id, username, hash, salt, displayName, role, createdAt, locale, mode);
-  return { id, username, displayName, role, locale, mode, createdAt };
+  return { id, username, displayName, role, locale, mode, createdAt, context: "", contextUpdatedAt: null };
 }
 
 /** Update the locale of an existing account. Returns the updated Account, or null if not found. */
@@ -76,6 +78,21 @@ export function updateAccountLocale(accountId: string, locale: string): Account 
 export function updateAccountMode(accountId: string, mode: AccountMode): Account | null {
   const db = getDb();
   db.prepare("UPDATE accounts SET mode = ? WHERE id = ?").run(mode, accountId);
+  return findAccountById(accountId);
+}
+
+/** Update an account's saved profile context. Returns the updated Account, or null. */
+export function updateAccountContext(
+  accountId: string,
+  context: string,
+  updatedAt: string
+): Account | null {
+  const db = getDb();
+  db.prepare("UPDATE accounts SET context = ?, context_updated_at = ? WHERE id = ?").run(
+    context,
+    updatedAt,
+    accountId
+  );
   return findAccountById(accountId);
 }
 

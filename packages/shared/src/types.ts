@@ -290,6 +290,10 @@ export interface Account {
   /** "simple" = streamlined UI for non-technical users. */
   mode: AccountMode;
   createdAt: string;
+  /** Saved profile — durable facts about the user, injected into chat prompts. */
+  context: string;
+  /** ISO timestamp of the last context update (auto or manual); null if never. */
+  contextUpdatedAt: string | null;
 }
 
 export type AccessContext = "local" | "remote";

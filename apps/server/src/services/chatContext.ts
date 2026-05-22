@@ -33,6 +33,18 @@ export interface ChatContextResult {
   searchResults: SearchResult[] | null;
 }
 
+/** Append the user's saved profile to a system prompt (no-op when empty). */
+export function appendUserProfile(system: string, accountContext: string | undefined): string {
+  const c = accountContext?.trim();
+  if (!c) return system;
+  return (
+    system +
+    "\n\nAbout the user (their saved profile — use it to personalise your replies; " +
+    "do not quote it back verbatim):\n" +
+    c
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main builder
 // ---------------------------------------------------------------------------
@@ -40,7 +52,8 @@ export interface ChatContextResult {
 export async function buildChatContext(
   chat: Chat,
   history: ChatMessage[],
-  userMessage: { content: string; attachments?: AttachmentRef[]; webSearch?: boolean }
+  userMessage: { content: string; attachments?: AttachmentRef[]; webSearch?: boolean },
+  accountContext?: string
 ): Promise<ChatContextResult> {
   const parts: string[] = [];
   const images: ProviderImage[] = [];
@@ -135,7 +148,7 @@ export async function buildChatContext(
     "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
     "and do not add bracketed citation markers like [1].";
 
-  return { system, prompt, images, searchResults };
+  return { system: appendUserProfile(system, accountContext), prompt, images, searchResults };
 }
 
 // ---------------------------------------------------------------------------

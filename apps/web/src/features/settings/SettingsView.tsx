@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Settings as SettingsIcon,
   CheckCircle,
@@ -9,12 +10,22 @@ import {
   Star,
   Languages,
   Layers,
+  Brain,
 } from "lucide-react";
 import { PROVIDERS, PROVIDER_LABELS } from "@ariadne/shared";
 import type { AccountMode } from "@ariadne/shared";
-import { useSettings, useUsage, useProviderStatus, useMe, useUpdateMode } from "../../lib/queries";
+import {
+  useSettings,
+  useUsage,
+  useProviderStatus,
+  useMe,
+  useUpdateMode,
+  useUpdateContext,
+} from "../../lib/queries";
 import { useT, LOCALES, type Locale } from "../../lib/i18n";
 import { Card } from "../../components/ui/Card";
+import { Button } from "../../components/ui/Button";
+import { Textarea } from "../../components/ui/Textarea";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
 
@@ -26,6 +37,12 @@ export function SettingsView() {
   const { t, locale, setLocale } = useT();
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
+  const updateContext = useUpdateContext();
+  const [contextDraft, setContextDraft] = useState("");
+  // Sync the editable draft when the saved profile loads or changes.
+  useEffect(() => {
+    setContextDraft(me?.account.context ?? "");
+  }, [me?.account.context]);
 
   const handleLocaleChange = async (next: Locale) => {
     try {
@@ -41,6 +58,15 @@ export function SettingsView() {
       toast({ title: t("settings.mode.saved"), variant: "success" });
     } catch {
       toast({ title: t("settings.mode.failed"), variant: "error" });
+    }
+  };
+
+  const handleContextSave = async () => {
+    try {
+      await updateContext.mutateAsync(contextDraft.trim());
+      toast({ title: t("settings.context.saved"), variant: "success" });
+    } catch {
+      toast({ title: t("settings.context.failed"), variant: "error" });
     }
   };
 
@@ -197,6 +223,45 @@ export function SettingsView() {
                 {m === "standard" ? t("settings.mode.standard") : t("settings.mode.simple")}
               </button>
             ))}
+          </div>
+        </Card>
+      </section>
+
+      {/* My profile — saved account context, auto-updated + manually editable */}
+      <section>
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+          <Brain className="h-3.5 w-3.5" />
+          {t("settings.context.heading")}
+        </h2>
+        <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">{t("settings.context.description")}</p>
+          <Textarea
+            value={contextDraft}
+            onChange={(e) => setContextDraft(e.target.value)}
+            placeholder={t("settings.context.placeholder")}
+            rows={5}
+            maxLength={2000}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] text-muted-foreground">
+              {me?.account.contextUpdatedAt
+                ? t("settings.context.autoNote", {
+                    time: new Date(me.account.contextUpdatedAt).toLocaleString(),
+                  })
+                : t("settings.context.neverUpdated")}
+            </p>
+            <Button
+              variant="primary"
+              size="sm"
+              className="shrink-0"
+              onClick={() => void handleContextSave()}
+              disabled={
+                updateContext.isPending || contextDraft === (me?.account.context ?? "")
+              }
+              loading={updateContext.isPending}
+            >
+              {t("settings.context.save")}
+            </Button>
           </div>
         </Card>
       </section>

@@ -17,6 +17,7 @@ import type { Chat, ChatMessage, ChatStreamEvent, AgentStep, AgentTrace, AgentTo
 import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
 import { performSearch } from "./search.js";
+import { appendUserProfile } from "./chatContext.js";
 import { focusedRead } from "../gasp/filter.js";
 import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { createRun } from "../runs/engine.js";
@@ -44,6 +45,8 @@ export interface RunAgentOptions {
   emit: (event: ChatStreamEvent) => void;
   /** Aborts the agent loop and its in-flight provider calls. */
   signal: AbortSignal;
+  /** The user's saved profile, injected into the answer prompts. */
+  accountContext?: string;
 }
 
 export interface RunAgentResult {
@@ -54,7 +57,7 @@ export interface RunAgentResult {
 }
 
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
-  const { chat, history, userMessage, provider, emit, signal } = opts;
+  const { chat, history, userMessage, provider, emit, signal, accountContext } = opts;
 
   // Load custom actions for this workspace (if any)
   let customActions: WorkspaceAction[] = [];
@@ -94,7 +97,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     try {
       await provider.completeStream(
         {
-          system: buildDirectSystem(),
+          system: buildDirectSystem(accountContext),
           prompt: buildDirectPrompt(history, userMessage),
           signal,
         },
@@ -192,7 +195,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     try {
       await provider.completeStream(
         {
-          system: buildSynthesisSystem(),
+          system: buildSynthesisSystem(accountContext),
           prompt: buildSynthesisPrompt(userMessage, stepResults),
           signal,
         },
@@ -498,11 +501,14 @@ Revise the remaining steps if warranted by what you have learned. Return JSON.`;
 }
 
 /** System + prompt for the direct-answer path (planner returned no steps). */
-function buildDirectSystem(): string {
-  return `You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.
+function buildDirectSystem(accountContext?: string): string {
+  return appendUserProfile(
+    `You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.
 Answer the user's message directly and helpfully.
 Always reply in the same language the user writes in.
-Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block.`;
+Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block.`,
+    accountContext,
+  );
 }
 
 function buildDirectPrompt(history: ChatMessage[], userMessage: string): string {
@@ -513,12 +519,15 @@ function buildDirectPrompt(history: ChatMessage[], userMessage: string): string 
   return `${historyStr ? `Recent conversation:\n${historyStr}\n\n` : ""}User: ${userMessage}`;
 }
 
-function buildSynthesisSystem(): string {
-  return `You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.
+function buildSynthesisSystem(accountContext?: string): string {
+  return appendUserProfile(
+    `You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant.
 Your role: synthesise the results of a completed research plan into a clear, helpful answer.
 Always reply in the same language the user writes in.
 Be concise and direct. Reference specific findings where relevant.
-Write your answer as normal Markdown prose — never wrap the whole reply in a code block, and do not add bracketed citation markers like [1].`;
+Write your answer as normal Markdown prose — never wrap the whole reply in a code block, and do not add bracketed citation markers like [1].`,
+    accountContext,
+  );
 }
 
 function buildSynthesisPrompt(userMessage: string, stepResults: string[]): string {

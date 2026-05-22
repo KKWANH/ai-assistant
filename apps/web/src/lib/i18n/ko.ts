@@ -629,6 +629,16 @@ const ko: Record<TranslationKey, string> = {
   "settings.mode.saved": "모드가 변경되었습니다",
   "settings.mode.failed": "모드 변경에 실패했습니다",
 
+  // 계정 컨텍스트 / 프로필
+  "settings.context.heading": "내 프로필",
+  "settings.context.description": "비서가 당신에 대해 아는 내용 — 역할·관심사·진행 중인 작업입니다. 대화에서 자동으로 채워지며, 여기서 직접 고칠 수 있습니다. 모든 대화에 더해져 답변을 개인화합니다.",
+  "settings.context.placeholder": "예: 핀테크 앱을 만드는 프로덕트 디자이너, 간결하고 직접적인 답변 선호…",
+  "settings.context.save": "저장",
+  "settings.context.saved": "프로필이 저장되었습니다",
+  "settings.context.failed": "프로필을 저장하지 못했습니다",
+  "settings.context.autoNote": "마지막 갱신 {time}",
+  "settings.context.neverUpdated": "아직 갱신되지 않음 — 대화하면서 채워집니다",
+
   // ── Badge labels ────────────────────────────────────────────────────────────
   "badge.sensitive": "민감",
   "badge.largeFile": "대용량",
