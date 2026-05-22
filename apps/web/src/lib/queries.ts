@@ -308,6 +308,25 @@ export function useSaveScript(workspaceId: string) {
   });
 }
 
+export function useWorkspaceFile(workspaceId: string, path: string) {
+  return useQuery({
+    queryKey: ["workspace-file", workspaceId, path] as const,
+    queryFn: () => api.getWorkspaceFile(workspaceId, path),
+    enabled: !!workspaceId && !!path,
+  });
+}
+
+export function useSaveWorkspaceFile(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, content }: { path: string; content: string }) =>
+      api.saveWorkspaceFile(workspaceId, path, content),
+    onSuccess: (_, { path }) => {
+      void qc.invalidateQueries({ queryKey: ["workspace-file", workspaceId, path] });
+    },
+  });
+}
+
 export function useRunScript(workspaceId: string) {
   return useMutation({
     mutationFn: (name: string) => api.runScript(workspaceId, name),

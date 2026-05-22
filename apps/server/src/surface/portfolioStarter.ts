@@ -554,6 +554,7 @@ export default function PortfolioDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>("valueBase");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [hoverSym, setHoverSym] = useState<string | null>(null);
+  const [baseOverride, setBaseOverride] = useState<string | null>(null);
 
   // Read every CSV file. Called once on mount and again by the Refresh button —
   // the surface is sandboxed, so "refresh" re-reads the files rather than
@@ -596,17 +597,19 @@ export default function PortfolioDashboard() {
   if (error) return <Centered text={"오류: " + error} tone="error" />;
   if (rawHoldings.length === 0) return <Centered text="holdings.csv에 행이 없습니다" />;
 
-  // Resolve currencies and the base (reporting) currency.
+  // Resolve currencies and the base (reporting) currency. The base auto-detects
+  // as whichever currency has rate 1; the header dropdown can override it.
   const fxMap: Record<string, FxRate> = {};
   for (const f of fxRates) fxMap[f.currency] = f;
-  let baseCurrency = "USD";
+  let autoBase = "USD";
   for (const f of fxRates) {
     if (Math.abs(f.rate - 1) < 1e-9) {
-      baseCurrency = f.currency;
+      autoBase = f.currency;
       break;
     }
   }
-  if (!fxMap[baseCurrency] && fxRates.length > 0) baseCurrency = fxRates[0].currency;
+  if (!fxMap[autoBase] && fxRates.length > 0) autoBase = fxRates[0].currency;
+  const baseCurrency = baseOverride && fxMap[baseOverride] ? baseOverride : autoBase;
   const baseRate = fxMap[baseCurrency] ? fxMap[baseCurrency].rate : 1;
 
   const holdings = enrich(rawHoldings, fxMap, baseRate);
@@ -751,6 +754,18 @@ export default function PortfolioDashboard() {
     opacity: refreshing ? 0.55 : 1,
   };
 
+  const baseSelect = {
+    padding: "7px 11px",
+    fontSize: "12px",
+    fontWeight: 600,
+    cursor: "pointer",
+    borderRadius: "8px",
+    border: "1px solid rgb(var(--border))",
+    background: "transparent",
+    color: "rgb(var(--muted-foreground))",
+    fontFamily: "inherit",
+  };
+
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", padding: "20px 24px", maxWidth: "1180px", margin: "0 auto", color: "rgb(var(--foreground))" }}>
       {/* Header + toolbar */}
@@ -763,6 +778,20 @@ export default function PortfolioDashboard() {
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {fxRates.length > 1 ? (
+            <select
+              value={baseCurrency}
+              onChange={(e) => setBaseOverride(e.target.value)}
+              style={baseSelect}
+              title="평가 기준 통화"
+            >
+              {fxRates.map((f) => (
+                <option key={f.currency} value={f.currency}>
+                  {"기준 통화: " + f.currency}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button onClick={() => void load(true)} disabled={refreshing} style={refreshBtn}>
             {refreshing ? "⟳  새로고침 중…" : "⟳  현재가 새로고침"}
           </button>

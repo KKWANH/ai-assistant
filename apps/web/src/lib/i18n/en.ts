@@ -208,6 +208,17 @@ const en = {
   "workspace.surface.addBody": "Write a TypeScript component that reads your files, shows charts, and triggers runs — all in one interactive view.",
   "workspace.surface.addBtn": "Add screen",
 
+  // Data tab — view & edit CSV data files
+  "workspace.data.tab": "Data",
+  "workspace.data.heading": "Data files",
+  "workspace.data.description": "View and edit this workspace's CSV data files as tables.",
+  "workspace.data.scanPrompt": "Scan this workspace to list its data files.",
+  "workspace.data.empty": "No CSV files found in this workspace.",
+  "workspace.data.saved": "File saved",
+  "workspace.data.saveFailed": "Couldn't save the file",
+  "workspace.data.readOnly": "Read-only — connect locally to edit data files.",
+  "workspace.data.unsaved": "Unsaved changes",
+
   // Create workspace dialog
   "workspace.dialog.title": "New Workspace",
   "workspace.dialog.description": "Connect a local folder to start a traceable workspace.",

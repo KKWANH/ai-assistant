@@ -152,6 +152,9 @@ export const buildSurface = (workspaceId: string) =>
 export const getWorkspaceFile = (workspaceId: string, path: string) =>
   request<{ content: string }>("GET", `/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}`);
 
+export const saveWorkspaceFile = (workspaceId: string, path: string, content: string) =>
+  request<{ ok: boolean }>("PUT", `/workspaces/${workspaceId}/file`, { path, content });
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const login = (input: LoginInput) =>
   request<AuthInfo>("POST", "/auth/login", input);

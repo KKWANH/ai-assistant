@@ -201,6 +201,17 @@ const ko: Record<TranslationKey, string> = {
   "workspace.surface.addBody": "파일을 읽고, 차트를 표시하고, 실행을 트리거하는 TypeScript 컴포넌트를 작성해 인터랙티브 화면을 만들 수 있습니다.",
   "workspace.surface.addBtn": "화면 추가",
 
+  // Data tab — view & edit CSV data files
+  "workspace.data.tab": "데이터",
+  "workspace.data.heading": "데이터 파일",
+  "workspace.data.description": "이 워크스페이스의 CSV 데이터 파일을 표로 보고 편집합니다.",
+  "workspace.data.scanPrompt": "데이터 파일 목록을 보려면 이 워크스페이스를 스캔하세요.",
+  "workspace.data.empty": "이 워크스페이스에서 CSV 파일을 찾지 못했습니다.",
+  "workspace.data.saved": "파일을 저장했습니다",
+  "workspace.data.saveFailed": "파일을 저장하지 못했습니다",
+  "workspace.data.readOnly": "읽기 전용 — 데이터 파일을 편집하려면 로컬에서 접속하세요.",
+  "workspace.data.unsaved": "저장하지 않은 변경",
+
   // Create workspace dialog
   "workspace.dialog.title": "새 워크스페이스",
   "workspace.dialog.description": "로컬 폴더를 연결해 추적 가능한 워크스페이스를 시작하세요.",

@@ -136,4 +136,56 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({ content });
     }
   );
+
+  // PUT /api/workspaces/:id/file — overwrite a data file in the workspace root.
+  // LOCAL access only; restricted to plain data file types; never touches .ariadne.
+  app.put<{ Params: { id: string }; Body: { path?: string; content?: string } }>(
+    "/workspaces/:id/file",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Editing workspace files is not permitted from remote access. Connect locally to edit.",
+          req,
+          reply,
+        )
+      )
+        return;
+
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const relPath = req.body?.path;
+      const content = req.body?.content;
+      if (typeof relPath !== "string" || !relPath || typeof content !== "string") {
+        return reply.status(400).send({ error: "path and content are required" });
+      }
+      if (!/\.(csv|tsv|txt|json|md|ya?ml)$/i.test(relPath)) {
+        return reply
+          .status(400)
+          .send({ error: "Only data files (csv, tsv, txt, json, md, yaml) may be edited" });
+      }
+
+      const root = path.resolve(workspace.rootPath);
+      const resolved = path.resolve(root, relPath);
+      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+        return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+      const ariadneDir = path.join(root, ".ariadne");
+      if (resolved === ariadneDir || resolved.startsWith(ariadneDir + path.sep)) {
+        return reply.status(403).send({ error: "The .ariadne folder is managed and cannot be edited here" });
+      }
+      if (!fs.existsSync(resolved)) {
+        return reply.status(404).send({ error: "File not found" });
+      }
+
+      try {
+        fs.writeFileSync(resolved, content, "utf-8");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: "Failed to write file", detail: msg });
+      }
+
+      return reply.send({ ok: true });
+    }
+  );
 }
