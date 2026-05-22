@@ -35,9 +35,22 @@ export async function ensureDemoWorkspace(): Promise<void> {
     const rootPath = path.join(PATHS.home, "demo-portfolio");
     fs.mkdirSync(rootPath, { recursive: true });
 
-    // CSV data is seeded only on first creation — never clobber user edits.
-    if (!exists) {
-      fs.writeFileSync(path.join(rootPath, "holdings.csv"), HOLDINGS_CSV, "utf-8");
+    // CSV data is seeded on first creation and left alone afterwards so Data-tab
+    // edits survive. Exception — a one-time schema upgrade: an older demo whose
+    // holdings.csv predates the quote_symbol column (added for live quotes) is
+    // re-seeded so live market data resolves correctly.
+    const holdingsPath = path.join(rootPath, "holdings.csv");
+    let needsSeed = !exists;
+    if (exists) {
+      try {
+        const firstLine = fs.readFileSync(holdingsPath, "utf-8").split("\n")[0] ?? "";
+        if (!firstLine.includes("quote_symbol")) needsSeed = true;
+      } catch {
+        needsSeed = true;
+      }
+    }
+    if (needsSeed) {
+      fs.writeFileSync(holdingsPath, HOLDINGS_CSV, "utf-8");
       fs.writeFileSync(path.join(rootPath, "fx_rates.csv"), FX_RATES_CSV, "utf-8");
       fs.writeFileSync(path.join(rootPath, "history.csv"), HISTORY_CSV, "utf-8");
     }

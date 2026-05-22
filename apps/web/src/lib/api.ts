@@ -210,6 +210,25 @@ export const runScript = (workspaceId: string, name: string) =>
 export const search = (query: string) =>
   request<SearchResponse>("POST", "/search", { query });
 
+// ── Market data (live quotes + FX) ────────────────────────────────────────────
+export interface Quote {
+  symbol: string;
+  price: number;
+  currency: string;
+}
+
+export const getQuotes = (symbols: string[]) =>
+  request<{ quotes: Quote[] }>(
+    "GET",
+    `/market/quotes?symbols=${encodeURIComponent(symbols.join(","))}`,
+  );
+
+export const getFxRates = (base: string, currencies: string[]) =>
+  request<{ base: string; rates: Record<string, number> }>(
+    "GET",
+    `/market/fx?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(currencies.join(","))}`,
+  );
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 export const getReports = (status?: string) =>
   request<Report[]>("GET", `/reports${status ? `?status=${status}` : ""}`);

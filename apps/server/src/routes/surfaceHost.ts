@@ -87,6 +87,8 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
      *   listRuns()
      *   runTemplate(id, input)
      *   getRun(runId)
+     *   getQuotes(symbols)          → Array<{ symbol, price, currency }>
+     *   getFxRates(base, currencies) → Record<currency, rate>
      *   getTheme()      → { mode }  (colours come from CSS vars)
      */
     (function () {
@@ -113,6 +115,8 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
         listRuns: function () { return call('listRuns', []); },
         runTemplate: function (id, input) { return call('runTemplate', [id, input]); },
         getRun: function (id) { return call('getRun', [id]); },
+        getQuotes: function (symbols) { return call('getQuotes', [symbols]); },
+        getFxRates: function (base, currencies) { return call('getFxRates', [base, currencies]); },
         getTheme: function () { return Promise.resolve(window.__ariadneTheme); },
       };
     })();

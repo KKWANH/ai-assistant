@@ -132,6 +132,18 @@ async function handleBridgeRequest(
       return api.getRun(runId);
     }
 
+    case "getQuotes": {
+      const [symbols] = args as [string[]];
+      const res = await api.getQuotes(symbols ?? []);
+      return res.quotes;
+    }
+
+    case "getFxRates": {
+      const [base, currencies] = args as [string, string[]];
+      const res = await api.getFxRates(base ?? "USD", currencies ?? []);
+      return res.rates;
+    }
+
     default:
       throw new Error(`Unknown method: ${method}`);
   }

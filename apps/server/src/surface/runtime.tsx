@@ -32,6 +32,8 @@
  *   listRuns()                → Run[]
  *   runTemplate(id, input)    → Run
  *   getRun(runId)             → Run
+ *   getQuotes(symbols)            → Array<{ symbol, price, currency }>
+ *   getFxRates(base, currencies)  → Record<currency, rate>
  *   getTheme()                → { mode }  (colours from CSS vars)
  *
  * ──────────────────────────────────────────────────────────────────────────────
@@ -51,6 +53,12 @@ export interface CsvData {
   rows: Record<string, string>[];
 }
 
+export interface Quote {
+  symbol: string;
+  price: number;
+  currency: string;
+}
+
 export interface AriadneTheme {
   /** "dark" or "light" — colours come from CSS custom properties. */
   mode: "dark" | "light";
@@ -64,6 +72,10 @@ export interface AriadneSDK {
   listRuns(): Promise<unknown[]>;
   runTemplate(id: string, input: Record<string, string>): Promise<unknown>;
   getRun(runId: string): Promise<unknown>;
+  /** Live stock/crypto quotes for the given symbols (best-effort; may be partial). */
+  getQuotes(symbols: string[]): Promise<Quote[]>;
+  /** Live FX rates relative to `base` — units of base per 1 unit of each currency. */
+  getFxRates(base: string, currencies: string[]): Promise<Record<string, number>>;
   /** Returns the current theme mode. Colours come from CSS custom properties. */
   theme: AriadneTheme;
 }
@@ -126,6 +138,9 @@ export function useAriadne(): AriadneSDK {
     listRuns: () => callHost<unknown[]>("listRuns", []),
     runTemplate: (id: string, input: Record<string, string>) => callHost<unknown>("runTemplate", [id, input]),
     getRun: (runId: string) => callHost<unknown>("getRun", [runId]),
+    getQuotes: (symbols: string[]) => callHost<Quote[]>("getQuotes", [symbols]),
+    getFxRates: (base: string, currencies: string[]) =>
+      callHost<Record<string, number>>("getFxRates", [base, currencies]),
     theme: detectTheme(),
   });
   return sdk.current;

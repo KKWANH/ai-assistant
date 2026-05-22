@@ -12,19 +12,19 @@
  * hex — so the surface is fully legible in both dark and light mode.
  */
 
-export const HOLDINGS_CSV = `symbol,name,asset_type,sector,currency,shares,buy_price,current_price,target_price,headline
-AAPL,Apple Inc.,주식,기술,USD,40,150.00,225.00,250.00,"서비스 매출이 사상 최고치를 기록했고, 새 제품 주기를 앞두고 실적 전망이 상향됐습니다."
-MSFT,Microsoft Corp.,주식,기술,USD,25,300.00,475.00,525.00,"클라우드와 AI 수주가 견조하며, 마진 가이던스가 재확인됐습니다."
-NVDA,NVIDIA Corp.,주식,기술,USD,30,110.00,178.00,210.00,"데이터센터 수요가 여전히 공급을 앞서며, 차세대 제품이 양산에 들어가고 있습니다."
-VOO,Vanguard S&P 500 ETF,ETF,분산투자,USD,30,400.00,510.00,545.00,"S&P 500 전체를 추종하는 광범위한 펀드로, 운용 보수가 매우 낮습니다."
-GLD,SPDR Gold Shares,원자재,원자재,USD,25,180.00,242.00,255.00,"중앙은행이 금 보유를 계속 늘리면서 금값이 사상 최고치 부근입니다."
-BTC,Bitcoin,암호화폐,디지털 자산,USD,0.4,45000.00,68000.00,80000.00,"반감기 이후 비트코인이 횡보 중이며, ETF 자금 유입이 주요 변수입니다."
-ASML,ASML Holding,주식,기술,EUR,10,600.00,720.00,800.00,"리소그래피 장비 수주가 회복 중이며, 수출 규제 뉴스가 관전 포인트입니다."
-SAP,SAP SE,주식,기술,EUR,20,200.00,250.00,275.00,"클라우드 수주 잔고가 계속 쌓이고, 영업이익률 추세가 개선되고 있습니다."
-MC,LVMH,주식,임의소비재,EUR,5,700.00,620.00,640.00,"주요 시장의 명품 수요가 부진해 단기 전망이 하향 조정됐습니다."
-005930,Samsung Electronics,주식,기술,KRW,200,65000,80000,95000,"메모리 가격이 반등하고 있으며, HBM 생산능력이 핵심 변수입니다."
-069500,KODEX 200 ETF,ETF,분산투자,KRW,150,33000,38000,42000,"코스피200 펀드로, 한국 대형주에 폭넓게 분산 투자합니다."
-035420,NAVER Corp.,주식,커뮤니케이션,KRW,50,200000,164000,210000,"검색 광고 성장세가 둔화 중이며, 시장은 AI 제품 로드맵을 기다리고 있습니다."
+export const HOLDINGS_CSV = `symbol,name,asset_type,sector,currency,shares,buy_price,current_price,target_price,quote_symbol,headline
+AAPL,Apple Inc.,주식,기술,USD,40,150.00,225.00,250.00,AAPL,"서비스 매출이 사상 최고치를 기록했고, 새 제품 주기를 앞두고 실적 전망이 상향됐습니다."
+MSFT,Microsoft Corp.,주식,기술,USD,25,300.00,475.00,525.00,MSFT,"클라우드와 AI 수주가 견조하며, 마진 가이던스가 재확인됐습니다."
+NVDA,NVIDIA Corp.,주식,기술,USD,30,110.00,178.00,210.00,NVDA,"데이터센터 수요가 여전히 공급을 앞서며, 차세대 제품이 양산에 들어가고 있습니다."
+VOO,Vanguard S&P 500 ETF,ETF,분산투자,USD,30,400.00,510.00,545.00,VOO,"S&P 500 전체를 추종하는 광범위한 펀드로, 운용 보수가 매우 낮습니다."
+GLD,SPDR Gold Shares,원자재,원자재,USD,25,180.00,242.00,255.00,GLD,"중앙은행이 금 보유를 계속 늘리면서 금값이 사상 최고치 부근입니다."
+BTC,Bitcoin,암호화폐,디지털 자산,USD,0.4,45000.00,68000.00,80000.00,BTC-USD,"반감기 이후 비트코인이 횡보 중이며, ETF 자금 유입이 주요 변수입니다."
+ASML,ASML Holding,주식,기술,EUR,10,600.00,720.00,800.00,ASML.AS,"리소그래피 장비 수주가 회복 중이며, 수출 규제 뉴스가 관전 포인트입니다."
+SAP,SAP SE,주식,기술,EUR,20,200.00,250.00,275.00,SAP.DE,"클라우드 수주 잔고가 계속 쌓이고, 영업이익률 추세가 개선되고 있습니다."
+MC,LVMH,주식,임의소비재,EUR,5,700.00,620.00,640.00,MC.PA,"주요 시장의 명품 수요가 부진해 단기 전망이 하향 조정됐습니다."
+005930,Samsung Electronics,주식,기술,KRW,200,65000,80000,95000,005930.KS,"메모리 가격이 반등하고 있으며, HBM 생산능력이 핵심 변수입니다."
+069500,KODEX 200 ETF,ETF,분산투자,KRW,150,33000,38000,42000,069500.KS,"코스피200 펀드로, 한국 대형주에 폭넓게 분산 투자합니다."
+035420,NAVER Corp.,주식,커뮤니케이션,KRW,50,200000,164000,210000,035420.KS,"검색 광고 성장세가 둔화 중이며, 시장은 AI 제품 로드맵을 기다리고 있습니다."
 `;
 
 export const FX_RATES_CSV = `currency,name,rate,buy_rate
@@ -90,6 +90,7 @@ interface RawHolding {
   price: number;
   targetPrice: number;
   headline: string;
+  quoteSymbol: string;
 }
 
 interface FxRate {
@@ -207,6 +208,7 @@ function parseHoldings(rows: Record<string, string>[]): RawHolding[] {
       price: num(r["current_price"]),
       targetPrice: num(r["target_price"]),
       headline: (r["headline"] || "").trim(),
+      quoteSymbol: (r["quote_symbol"] || "").trim(),
     }))
     .filter((h) => h.symbol.length > 0);
 }
@@ -555,21 +557,24 @@ export default function PortfolioDashboard() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [hoverSym, setHoverSym] = useState<string | null>(null);
   const [baseOverride, setBaseOverride] = useState<string | null>(null);
+  const [dataMode, setDataMode] = useState<"live" | "sample">("sample");
 
-  // Read every CSV file. Called once on mount and again by the Refresh button —
-  // the surface is sandboxed, so "refresh" re-reads the files rather than
-  // fetching live quotes. holdings.csv always carries the current price.
+  // Read every CSV file, then overlay live market data when available. Called
+  // once on mount and again by the Refresh button. holdings.csv / fx_rates.csv
+  // carry sample values; live quotes and FX rates replace them best-effort.
   const load = useCallback(
     async (isRefresh: boolean) => {
       if (isRefresh) setRefreshing(true);
       try {
         const csv = await ariadne.readCsv("holdings.csv");
-        setRawHoldings(parseHoldings(csv.rows));
+        const holdings = parseHoldings(csv.rows);
+
+        let fx: FxRate[] = [];
         try {
-          const fx = await ariadne.readCsv("fx_rates.csv");
-          setFxRates(parseFx(fx.rows));
+          const fxCsv = await ariadne.readCsv("fx_rates.csv");
+          fx = parseFx(fxCsv.rows);
         } catch {
-          /* fx_rates.csv is optional — without it everything is treated as base currency */
+          /* fx_rates.csv is optional — without it everything is base currency */
         }
         try {
           const hist = await ariadne.readCsv("history.csv");
@@ -577,6 +582,51 @@ export default function PortfolioDashboard() {
         } catch {
           /* history.csv is optional */
         }
+
+        // Overlay live data. Best-effort: on any failure the CSV values stand,
+        // so the dashboard never breaks just because the market feed is down.
+        let liveCount = 0;
+        try {
+          const symbols = holdings.map((h) => h.quoteSymbol || h.symbol);
+          const quotes = await ariadne.getQuotes(symbols);
+          const quoteMap: Record<string, { price: number; currency: string }> = {};
+          for (const q of quotes) quoteMap[q.symbol.toUpperCase()] = q;
+          for (const h of holdings) {
+            const q = quoteMap[(h.quoteSymbol || h.symbol).toUpperCase()];
+            // Skip a quote whose currency disagrees with the holding (bad mapping).
+            if (q && q.price > 0 && (!q.currency || q.currency === h.currency)) {
+              h.price = q.price;
+              liveCount += 1;
+            }
+          }
+        } catch {
+          /* keep CSV prices */
+        }
+        if (fx.length > 0) {
+          try {
+            let fxBase = "USD";
+            for (const f of fx) {
+              if (Math.abs(f.rate - 1) < 1e-9) {
+                fxBase = f.currency;
+                break;
+              }
+            }
+            const rates = await ariadne.getFxRates(fxBase, fx.map((f) => f.currency));
+            for (const f of fx) {
+              const r = rates[f.currency];
+              if (typeof r === "number" && isFinite(r) && r > 0) {
+                f.rate = r;
+                liveCount += 1;
+              }
+            }
+          } catch {
+            /* keep CSV rates */
+          }
+        }
+
+        setRawHoldings(holdings);
+        setFxRates(fx);
+        setDataMode(liveCount > 0 ? "live" : "sample");
         setError(null);
         setLastSync(new Date().toLocaleTimeString("en-US", { hour12: false }));
       } catch (e) {
@@ -775,6 +825,10 @@ export default function PortfolioDashboard() {
           <p style={{ fontSize: "12px", margin: "4px 0 0", ...muted }}>
             {holdings.length + "개 종목 · " + currencies.length + "개 통화 · 기준 통화 " + baseCurrency +
               (lastSync ? " · " + lastSync + " 기준가" : "")}
+            {" · "}
+            <span style={{ fontWeight: 600, color: dataMode === "live" ? "rgb(var(--success))" : "rgb(var(--muted-foreground))" }}>
+              {dataMode === "live" ? "● 라이브 시세" : "○ 샘플 데이터"}
+            </span>
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -935,9 +989,10 @@ export default function PortfolioDashboard() {
       </div>
 
       <p style={{ marginTop: "16px", fontSize: "12px", ...muted }}>
-        종목을 누르면 상세 페이지가 열리고, <strong>현재가 새로고침</strong>을 누르면 CSV 파일을 다시 읽습니다.
-        <code>holdings.csv</code>, <code>fx_rates.csv</code>, <code>history.csv</code>를 수정한 뒤{" "}
-        <strong>빌드</strong>를 누르면 다시 컴파일됩니다. 열 머리글을 누르면 정렬됩니다.
+        종목을 누르면 상세 페이지가 열리고, <strong>현재가 새로고침</strong>을 누르면 라이브 시세·환율을
+        다시 받아옵니다. 시세를 받지 못하면 CSV의 값을 그대로 씁니다.{" "}
+        <code>holdings.csv</code>의 <code>quote_symbol</code> 열은 시세 조회용 티커입니다
+        (예: 005930 → 005930.KS, BTC → BTC-USD). 열 머리글을 누르면 정렬됩니다.
       </p>
     </div>
   );
