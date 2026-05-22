@@ -72,13 +72,13 @@ export interface I18nProviderProps {
 
 export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => {
-    // Priority: prop from server → localStorage → "ko" (Korean is the default).
+    // Priority: prop from server → localStorage → "en" (English is the default).
     const fromProp = initialLocale as Locale | undefined;
     const fromStorage = localStorage.getItem(STORAGE_KEY) as Locale | undefined;
     const candidate = fromProp ?? fromStorage;
     return candidate && LOCALES.includes(candidate as Locale)
       ? (candidate as Locale)
-      : "ko";
+      : "en";
   });
 
   // Mirror initial locale to localStorage on first render

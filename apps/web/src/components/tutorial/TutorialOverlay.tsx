@@ -8,6 +8,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import { useUIStore } from "../../lib/store";
 import { useT } from "../../lib/i18n";
@@ -28,6 +29,7 @@ export function TutorialOverlay() {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const { t } = useT();
+  const navigate = useNavigate();
 
   const TOUR_STEPS = getTourSteps(t);
 
@@ -74,6 +76,19 @@ export function TutorialOverlay() {
     // this effect (re-scrolling the target) on every render.
   }, [tutorialOpen, step]);
 
+  // Escape closes the tour (same as Skip).
+  useEffect(() => {
+    if (!tutorialOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        localStorage.setItem(SEEN_KEY, "1");
+        setTutorialOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [tutorialOpen, setTutorialOpen]);
+
   if (!tutorialOpen || !current) return null;
 
   const isLast = step === TOUR_STEPS.length - 1;
@@ -112,8 +127,9 @@ export function TutorialOverlay() {
   }
 
   return createPortal(
-    // The outer layer captures pointer events so the app is inert mid-tour.
-    <div className="fixed inset-0 z-[100]">
+    // The outer layer captures pointer events so the app is inert mid-tour;
+    // clicking the dimmed area (anywhere but the card) dismisses the tour.
+    <div className="fixed inset-0 z-[100]" onClick={finish}>
       {rect ? (
         // Spotlight: dimmer (huge box-shadow) + bright accent ring + glow.
         <div
@@ -133,7 +149,7 @@ export function TutorialOverlay() {
         <div className="absolute inset-0 bg-black/70" />
       )}
 
-      <div className="absolute" style={cardStyle}>
+      <div className="absolute" style={cardStyle} onClick={(e) => e.stopPropagation()}>
         {/* Pointer toward the target */}
         {rect && (
           <div
@@ -197,9 +213,22 @@ export function TutorialOverlay() {
                 </Button>
               )}
               {isLast ? (
-                <Button variant="primary" size="sm" type="button" onClick={finish}>
-                  {t("tutorial.done")}
-                </Button>
+                <>
+                  <Button variant="ghost" size="sm" type="button" onClick={finish}>
+                    {t("tutorial.done")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      finish();
+                      navigate("/tutorial");
+                    }}
+                  >
+                    {t("tutorial.viewFull")}
+                  </Button>
+                </>
               ) : (
                 <Button
                   variant="primary"

@@ -28,9 +28,10 @@ import {
 } from "@ariadne/shared";
 import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
+import { Tooltip } from "../../components/ui/Tooltip";
 import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
-import { modelInfo } from "../../lib/modelInfo";
+import { modelInfo, modelPrice } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import {
@@ -250,6 +251,34 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
   const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending;
   const editingAtt = editingIndex !== null ? attachments[editingIndex] ?? null : null;
 
+  // Rich hover tooltip for the model picker — friendly name, what it's good
+  // at, relative speed, and price (exact $ in standard mode, a tier in easy).
+  const currentModelInfo = modelInfo(currentModel);
+  const currentModelPrice = modelPrice(currentModel);
+  const modelIsFree =
+    currentModelPrice !== null &&
+    currentModelPrice.inUsd === 0 &&
+    currentModelPrice.outUsd === 0;
+  const modelTooltip = (
+    <div className="flex flex-col gap-1">
+      <span className="font-semibold text-foreground">{currentModelInfo.label}</span>
+      <span className="text-muted-foreground">{t(currentModelInfo.traitKey)}</span>
+      <span className="text-[11px] text-muted-foreground">
+        {t("model.tip.speed")}: {t(`model.speed.${currentModelInfo.speed}`)}
+      </span>
+      <span className="text-[11px] text-muted-foreground">
+        {modelIsFree
+          ? t("model.price.free")
+          : !isSimple && currentModelPrice
+            ? t("model.price.perMillion", {
+                in: `$${currentModelPrice.inUsd}`,
+                out: `$${currentModelPrice.outUsd}`,
+              })
+            : `${t("model.tip.cost")}: ${t(`model.cost.${currentModelInfo.costTier}`)}`}
+      </span>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-2" data-tour="composer">
       {/* Pasted tab-separated text → offer to make it a table file */}
@@ -373,16 +402,17 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
           {/* Controls — wrap to a second row on narrow screens */}
           <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
           {/* Attach */}
-          <button
-            type="button"
-            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
-            title={t("chat.composer.attachFiles")}
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-            <span className="sr-only">{t("chat.composer.attachFiles")}</span>
-          </button>
+          <Tooltip content={t("chat.composer.attachFiles")} className="shrink-0">
+            <button
+              type="button"
+              className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              <span className="sr-only">{t("chat.composer.attachFiles")}</span>
+            </button>
+          </Tooltip>
           <input
             ref={fileInputRef}
             type="file"
@@ -396,67 +426,70 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
           />
 
           {/* Web search toggle — cycles Off → Auto → On */}
-          <button
-            type="button"
-            className={[
-              "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-              webMode !== "off"
-                ? "text-accent bg-accent/10 border border-accent/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
-            ].join(" ")}
-            onClick={() =>
-              setWebMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
-            }
-            disabled={disabled}
-            title={t("chat.composer.webSearchCycle")}
-          >
-            <Globe className="h-3.5 w-3.5" />
-            <span>
-              {webMode === "on"
-                ? t("chat.composer.webOn")
-                : webMode === "auto"
-                  ? t("chat.composer.webAuto")
-                  : t("chat.composer.web")}
-            </span>
-          </button>
-
-          {/* Agent mode toggle */}
-          <button
-            type="button"
-            className={[
-              "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-              agentMode
-                ? "text-accent bg-accent/10 border border-accent/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
-            ].join(" ")}
-            onClick={() => setAgentMode((v) => !v)}
-            disabled={disabled}
-            title={agentMode ? t("chat.composer.agentOn") : t("chat.composer.enableAgent")}
-          >
-            <Bot className="h-3.5 w-3.5" />
-            <span>{agentMode ? t("chat.composer.agentOn") : t("chat.composer.agent")}</span>
-          </button>
-
-          {/* Workspace selector */}
-          <div className="relative max-md:static shrink-0">
+          <Tooltip content={t("chat.composer.webSearchCycle")} className="shrink-0">
             <button
               type="button"
               className={[
-                "flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-                selectedWs
+                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                webMode !== "off"
                   ? "text-accent bg-accent/10 border border-accent/20"
                   : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
               ].join(" ")}
-              onClick={() => setWsMenuOpen((v) => !v)}
+              onClick={() =>
+                setWebMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
+              }
               disabled={disabled}
-              title={t("chat.composer.connectWorkspace")}
             >
-              <FolderOpen className="h-3.5 w-3.5" />
-              <span className="max-w-[100px] truncate">
-                {selectedWs ? selectedWs.name : t("chat.composer.workspace")}
+              <Globe className="h-3.5 w-3.5" />
+              <span>
+                {webMode === "on"
+                  ? t("chat.composer.webOn")
+                  : webMode === "auto"
+                    ? t("chat.composer.webAuto")
+                    : t("chat.composer.web")}
               </span>
-              <ChevronDown className="h-3 w-3" />
             </button>
+          </Tooltip>
+
+          {/* Agent mode toggle */}
+          <Tooltip content={t("composer.tip.agent")} rich className="shrink-0">
+            <button
+              type="button"
+              className={[
+                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                agentMode
+                  ? "text-accent bg-accent/10 border border-accent/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
+              ].join(" ")}
+              onClick={() => setAgentMode((v) => !v)}
+              disabled={disabled}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              <span>{agentMode ? t("chat.composer.agentOn") : t("chat.composer.agent")}</span>
+            </button>
+          </Tooltip>
+
+          {/* Workspace selector */}
+          <div className="relative max-md:static shrink-0">
+            <Tooltip content={t("chat.composer.connectWorkspace")}>
+              <button
+                type="button"
+                className={[
+                  "flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                  selectedWs
+                    ? "text-accent bg-accent/10 border border-accent/20"
+                    : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
+                ].join(" ")}
+                onClick={() => setWsMenuOpen((v) => !v)}
+                disabled={disabled}
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                <span className="max-w-[100px] truncate">
+                  {selectedWs ? selectedWs.name : t("chat.composer.workspace")}
+                </span>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </Tooltip>
 
             {wsMenuOpen && (
               <>
@@ -508,19 +541,20 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
 
           {/* Model selector */}
           <div className="relative max-md:static shrink-0">
-            <button
-              type="button"
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
-              onClick={() => setModelMenuOpen((v) => !v)}
-              disabled={disabled || updateSettings.isPending}
-              title={t("chat.composer.changeModel")}
-            >
-              <Cpu className="h-3.5 w-3.5" />
-              <span className={isSimple ? "max-w-[130px] truncate" : "max-w-[80px] truncate font-mono"}>
-                {isSimple ? modelInfo(currentModel).label : currentModel}
-              </span>
-              <ChevronDown className="h-3 w-3" />
-            </button>
+            <Tooltip content={modelTooltip} rich>
+              <button
+                type="button"
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
+                onClick={() => setModelMenuOpen((v) => !v)}
+                disabled={disabled || updateSettings.isPending}
+              >
+                <Cpu className="h-3.5 w-3.5" />
+                <span className={isSimple ? "max-w-[130px] truncate" : "max-w-[80px] truncate font-mono"}>
+                  {isSimple ? currentModelInfo.label : currentModel}
+                </span>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </Tooltip>
 
             {modelMenuOpen && (
               <>
@@ -603,7 +637,7 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
                                   m === currentModel ? "text-accent/80" : "text-muted-foreground",
                                 ].join(" ")}
                               >
-                                {modelInfo(m).trait}
+                                {t(modelInfo(m).traitKey)}
                               </span>
                             </>
                           ) : (

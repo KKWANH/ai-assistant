@@ -10,13 +10,19 @@
 
 import type { SearchResponse } from "@ariadne/shared";
 
-export async function performSearch(query: string): Promise<SearchResponse> {
+/** Combine an optional caller signal with an 8-second network timeout. */
+function fetchSignal(signal: AbortSignal | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(8000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+export async function performSearch(query: string, signal?: AbortSignal): Promise<SearchResponse> {
   const tavilyKey = process.env.TAVILY_API_KEY;
   const braveKey = process.env.BRAVE_API_KEY;
 
   if (tavilyKey) {
     try {
-      return await searchTavily(query, tavilyKey);
+      return await searchTavily(query, tavilyKey, signal);
     } catch {
       // fall through to next provider
     }
@@ -24,14 +30,14 @@ export async function performSearch(query: string): Promise<SearchResponse> {
 
   if (braveKey) {
     try {
-      return await searchBrave(query, braveKey);
+      return await searchBrave(query, braveKey, signal);
     } catch {
       // fall through to fallback
     }
   }
 
   try {
-    return await searchDuckDuckGo(query);
+    return await searchDuckDuckGo(query, signal);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
@@ -42,7 +48,7 @@ export async function performSearch(query: string): Promise<SearchResponse> {
   }
 }
 
-async function searchTavily(query: string, apiKey: string): Promise<SearchResponse> {
+async function searchTavily(query: string, apiKey: string, signal?: AbortSignal): Promise<SearchResponse> {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: {
@@ -55,7 +61,7 @@ async function searchTavily(query: string, apiKey: string): Promise<SearchRespon
       search_depth: "basic",
       include_raw_content: false,
     }),
-    signal: AbortSignal.timeout(8000),
+    signal: fetchSignal(signal),
   });
 
   if (!res.ok) {
@@ -76,7 +82,7 @@ async function searchTavily(query: string, apiKey: string): Promise<SearchRespon
   };
 }
 
-async function searchBrave(query: string, apiKey: string): Promise<SearchResponse> {
+async function searchBrave(query: string, apiKey: string, signal?: AbortSignal): Promise<SearchResponse> {
   const url = new URL("https://api.search.brave.com/res/v1/web/search");
   url.searchParams.set("q", query);
   url.searchParams.set("count", "8");
@@ -87,7 +93,7 @@ async function searchBrave(query: string, apiKey: string): Promise<SearchRespons
       "Accept-Encoding": "gzip",
       "X-Subscription-Token": apiKey,
     },
-    signal: AbortSignal.timeout(8000),
+    signal: fetchSignal(signal),
   });
 
   if (!res.ok) {
@@ -108,7 +114,7 @@ async function searchBrave(query: string, apiKey: string): Promise<SearchRespons
   };
 }
 
-async function searchDuckDuckGo(query: string): Promise<SearchResponse> {
+async function searchDuckDuckGo(query: string, signal?: AbortSignal): Promise<SearchResponse> {
   const url = new URL("https://html.duckduckgo.com/html/");
   url.searchParams.set("q", query);
 
@@ -118,7 +124,7 @@ async function searchDuckDuckGo(query: string): Promise<SearchResponse> {
       Accept: "text/html",
     },
     redirect: "follow",
-    signal: AbortSignal.timeout(8000),
+    signal: fetchSignal(signal),
   });
 
   if (!res.ok) {

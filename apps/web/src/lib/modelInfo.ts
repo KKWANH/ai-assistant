@@ -1,59 +1,104 @@
 /**
- * Friendly display names + one-line characteristics for AI models.
+ * Friendly display info for AI models — used by the model picker and its
+ * hover tooltip.
  *
- * Simple ("easy") mode shows these instead of raw model ids, so a
- * non-technical user can pick a model by what it is good at rather than by
- * an opaque identifier like "qwen3:8b".
+ * `modelInfo()` returns a friendly label, an i18n trait key, and relative
+ * speed / cost tiers. `modelPrice()` returns the exact API list price.
+ * Human-readable descriptions live in the i18n dictionaries; this module only
+ * holds keys and identifiers so it stays language-neutral.
  */
+import type { TranslationKey } from "./i18n/en";
+
+export type ModelSpeed = "fast" | "normal" | "slow";
+export type ModelCostTier = "low" | "mid" | "premium";
 
 export interface ModelInfo {
-  /** A readable name, e.g. "클로드 소네트". */
+  /** Friendly brand name, e.g. "Claude Opus" — a proper noun, not translated. */
   label: string;
-  /** One-line characteristic — what this model is good for. */
-  trait: string;
+  /** i18n key for the one-line characteristic. */
+  traitKey: TranslationKey;
+  /** Relative response speed. */
+  speed: ModelSpeed;
+  /** Relative cost tier — shown in easy mode instead of an exact price. */
+  costTier: ModelCostTier;
+}
+
+/** Exact API list price, USD per 1M tokens. Both 0 → free (runs locally). */
+export interface ModelPrice {
+  inUsd: number;
+  outUsd: number;
 }
 
 const KNOWN: Record<string, ModelInfo> = {
   // Anthropic Claude
-  "claude-opus-4-7": { label: "클로드 오푸스", trait: "가장 정교한 추론 — 복잡하고 어려운 작업에" },
-  "claude-sonnet-4-6": { label: "클로드 소네트", trait: "품질과 속도가 균형 잡힌 범용 모델" },
-  "claude-haiku-4-5": { label: "클로드 하이쿠", trait: "빠르고 가벼운 응답에" },
+  "claude-opus-4-7":   { label: "Claude Opus",   traitKey: "model.trait.opus",   speed: "slow",   costTier: "premium" },
+  "claude-sonnet-4-6": { label: "Claude Sonnet", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid" },
+  "claude-haiku-4-5":  { label: "Claude Haiku",  traitKey: "model.trait.haiku",  speed: "fast",   costTier: "low" },
   // OpenAI
-  "gpt-4o": { label: "GPT-4o", trait: "이미지까지 다루는 범용 모델" },
-  "gpt-4o-mini": { label: "GPT-4o 미니", trait: "빠르고 저렴한 경량 모델" },
-  "o3-mini": { label: "o3 미니", trait: "추론에 특화된 경량 모델" },
+  "gpt-4o":      { label: "GPT-4o",      traitKey: "model.trait.gpt4o",     speed: "normal", costTier: "mid" },
+  "gpt-4o-mini": { label: "GPT-4o mini", traitKey: "model.trait.gpt4oMini", speed: "fast",   costTier: "low" },
+  "o3-mini":     { label: "o3-mini",     traitKey: "model.trait.o3mini",    speed: "normal", costTier: "low" },
   // Google Gemini
-  "gemini-3.5-flash": { label: "제미나이 플래시", trait: "빠른 범용 모델" },
-  "gemini-3.1-flash-lite": { label: "제미나이 플래시 라이트", trait: "가장 빠르고 가벼운 모델" },
+  "gemini-3.5-flash":      { label: "Gemini Flash",      traitKey: "model.trait.geminiFlash",     speed: "fast", costTier: "mid" },
+  "gemini-3.1-flash-lite": { label: "Gemini Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low" },
   // Moonshot / Kimi
-  "kimi-k2.6": { label: "키미 K2", trait: "긴 문서를 다루는 데 강한 모델" },
+  "kimi-k2.6": { label: "Kimi K2", traitKey: "model.trait.kimi", speed: "normal", costTier: "low" },
   // Ollama (local)
-  "qwen3:8b": { label: "큐원 3 (8B)", trait: "추론·분석에 강한 표준 로컬 모델" },
-  "qwen3:4b": { label: "큐원 3 (4B)", trait: "조금 더 빠른 가벼운 로컬 모델" },
-  "qwen3:0.6b": { label: "큐원 3 (0.6B)", trait: "가장 빠르지만 단순한 작업용" },
+  "qwen3:8b":   { label: "Qwen 3 (8B)",   traitKey: "model.trait.qwen8b",  speed: "normal", costTier: "low" },
+  "qwen3:4b":   { label: "Qwen 3 (4B)",   traitKey: "model.trait.qwen4b",  speed: "fast",   costTier: "low" },
+  "qwen3:0.6b": { label: "Qwen 3 (0.6B)", traitKey: "model.trait.qwen06b", speed: "fast",   costTier: "low" },
   // Mock
-  mock: { label: "목업", trait: "API 키 없이 쓰는 테스트용" },
+  mock: { label: "Mock", traitKey: "model.trait.mock", speed: "fast", costTier: "low" },
 };
 
-/** Derive a label + trait for a model not in the known table (e.g. a local
- *  Ollama model the user installed themselves). The size token in the name,
- *  if any, gives a rough speed/capability hint. */
+/**
+ * Exact API list prices, USD per 1M tokens (input / output).
+ * From official pricing pages, checked 2026-05-22:
+ *   Anthropic — platform.claude.com/docs/en/about-claude/pricing
+ *   OpenAI    — openai.com/api/pricing
+ *   Google    — ai.google.dev/gemini-api/docs/pricing
+ *   Moonshot  — kimi.com (Kimi K2.6)
+ * Local Ollama models and the mock provider run for free → { 0, 0 }.
+ * When adding a new model, look up its current price on the provider's page.
+ */
+const MODEL_PRICING: Record<string, ModelPrice> = {
+  "claude-opus-4-7":       { inUsd: 5,    outUsd: 25 },
+  "claude-sonnet-4-6":     { inUsd: 3,    outUsd: 15 },
+  "claude-haiku-4-5":      { inUsd: 1,    outUsd: 5 },
+  "gpt-4o":                { inUsd: 2.5,  outUsd: 10 },
+  "gpt-4o-mini":           { inUsd: 0.15, outUsd: 0.6 },
+  "o3-mini":               { inUsd: 1.1,  outUsd: 4.4 },
+  "gemini-3.5-flash":      { inUsd: 1.5,  outUsd: 9 },
+  "gemini-3.1-flash-lite": { inUsd: 0.25, outUsd: 1.5 },
+  "kimi-k2.6":             { inUsd: 0.6,  outUsd: 2.5 },
+  "qwen3:8b":   { inUsd: 0, outUsd: 0 },
+  "qwen3:4b":   { inUsd: 0, outUsd: 0 },
+  "qwen3:0.6b": { inUsd: 0, outUsd: 0 },
+  mock:         { inUsd: 0, outUsd: 0 },
+};
+
+/** Derive info for a model not in the table (e.g. a user-installed Ollama model).
+ *  The size token in the name, if any, gives a rough speed hint. */
 function derive(id: string): ModelInfo {
   const sizeMatch = id.match(/(\d+(?:\.\d+)?)\s*b\b/i);
   if (sizeMatch && sizeMatch[1]) {
     const n = parseFloat(sizeMatch[1]);
-    const trait =
-      n >= 30
-        ? "큰 규모의 로컬 모델 — 더 똑똑하지만 느릴 수 있음"
-        : n >= 7
-          ? "표준 규모의 로컬 모델"
-          : "작고 빠른 로컬 모델 — 단순한 작업에";
-    return { label: id, trait };
+    if (n >= 30) return { label: id, traitKey: "model.trait.deriveLarge", speed: "slow", costTier: "low" };
+    if (n >= 7) return { label: id, traitKey: "model.trait.deriveMid", speed: "normal", costTier: "low" };
+    return { label: id, traitKey: "model.trait.deriveSmall", speed: "fast", costTier: "low" };
   }
-  return { label: id, trait: "로컬에서 실행되는 AI 모델" };
+  return { label: id, traitKey: "model.trait.deriveGeneric", speed: "normal", costTier: "low" };
 }
 
 /** Friendly display info for a model id. Never throws. */
 export function modelInfo(id: string): ModelInfo {
   return KNOWN[id] ?? derive(id);
+}
+
+/**
+ * Exact price for a model, or null when unknown. Any unlisted Ollama-style id
+ * (`name:tag`) is treated as a free local model.
+ */
+export function modelPrice(id: string): ModelPrice | null {
+  return MODEL_PRICING[id] ?? (id.includes(":") ? { inUsd: 0, outUsd: 0 } : null);
 }

@@ -136,6 +136,12 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         <MessageSquarePlus className="h-4 w-4" />
         {t("chat.empty.startNew")}
       </button>
+      <button
+        className="mt-2 text-xs text-accent hover:underline"
+        onClick={() => navigate("/tutorial")}
+      >
+        {t("chat.empty.tutorialLink")} →
+      </button>
     </div>
   );
 }

@@ -32,6 +32,8 @@ import {
   Plus,
   ChevronRight,
   HelpCircle,
+  Compass,
+  BookOpen,
   Flag,
   LogOut,
   Search,
@@ -271,6 +273,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
   const accountMode: AccountMode = me?.account.mode ?? "standard";
   const isSimple = accountMode === "simple";
@@ -326,9 +329,9 @@ export function AppShell({ children }: AppShellProps) {
       id: "tutorial",
       label: t("commandMenu.tutorial"),
       description: t("commandMenu.tutorialDesc"),
-      icon: <HelpCircle className="h-4 w-4" />,
+      icon: <BookOpen className="h-4 w-4" />,
       section: t("commandMenu.sectionApp"),
-      onSelect: () => setTutorialOpen(true),
+      onSelect: () => navigate("/tutorial"),
     },
     ...(workspaces?.map((ws) => ({
       id: `ws-${ws.id}`,
@@ -439,16 +442,47 @@ export function AppShell({ children }: AppShellProps) {
           >
             <Search className="h-3.5 w-3.5" />
           </IconButton>
-          {/* Help — standard mode, ≥sm */}
+          {/* Help — guided tour or the full tutorial page; standard mode, ≥sm */}
           {!isSimple && (
-            <span className="hidden sm:flex">
+            <span className="hidden sm:flex relative">
               <IconButton
                 label={t("nav.helpAndTutorial")}
                 size="sm"
-                onClick={() => setTutorialOpen(true)}
+                onClick={() => setHelpMenuOpen((v) => !v)}
+                data-tour="help-button"
               >
                 <HelpCircle className="h-3.5 w-3.5" />
               </IconButton>
+              {helpMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setHelpMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-9 z-40 w-52 rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                    <button
+                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
+                      onClick={() => {
+                        setHelpMenuOpen(false);
+                        setTutorialOpen(true);
+                      }}
+                    >
+                      <Compass className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      {t("nav.guidedTour")}
+                    </button>
+                    <button
+                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
+                      onClick={() => {
+                        setHelpMenuOpen(false);
+                        navigate("/tutorial");
+                      }}
+                    >
+                      <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      {t("nav.fullTutorial")}
+                    </button>
+                  </div>
+                </>
+              )}
             </span>
           )}
           {/* Report a problem — available to everyone */}

@@ -11,6 +11,10 @@ export interface TooltipProps {
   children: ReactNode;
   side?: "top" | "bottom" | "left" | "right";
   delay?: number;
+  /** Multi-line card style — relaxes the default single-line bubble. */
+  rich?: boolean;
+  /** Extra class for the wrapper (e.g. flex sizing inside a toolbar). */
+  className?: string;
 }
 
 const sideClass: Record<NonNullable<TooltipProps["side"]>, string> = {
@@ -25,6 +29,8 @@ export function Tooltip({
   children,
   side = "top",
   delay = 400,
+  rich = false,
+  className,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,7 +47,7 @@ export function Tooltip({
 
   return (
     <div
-      className={styles["wrapper"]!}
+      className={className ? `${styles["wrapper"]!} ${className}` : styles["wrapper"]!}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
@@ -51,7 +57,9 @@ export function Tooltip({
       {visible && (
         <div
           role="tooltip"
-          className={[styles["bubble"]!, sideClass[side]].join(" ")}
+          className={[styles["bubble"]!, sideClass[side], rich ? styles["rich"]! : ""]
+            .filter(Boolean)
+            .join(" ")}
         >
           {content}
         </div>

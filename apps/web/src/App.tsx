@@ -62,6 +62,11 @@ const ReportsQueueView = lazy(() =>
     default: m.ReportsQueueView,
   }))
 );
+const TutorialPage = lazy(() =>
+  import("./features/tutorial/TutorialPage").then((m) => ({
+    default: m.TutorialPage,
+  }))
+);
 
 /** Centered spinner — used as the Suspense fallback while a route chunk loads. */
 function RouteFallback() {
@@ -103,6 +108,7 @@ function AppContent() {
             <Route path="/settings" element={<SettingsView />} />
             <Route path="/search" element={<SearchView />} />
             <Route path="/reports" element={<ReportsQueueView />} />
+            <Route path="/tutorial" element={<TutorialPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

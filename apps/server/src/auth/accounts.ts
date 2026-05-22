@@ -14,7 +14,7 @@ function rowToAccount(row: Record<string, unknown>): Account {
     username: row["username"] as string,
     displayName: row["display_name"] as string,
     role: row["role"] as string,
-    locale: (row["locale"] as string | null) ?? "ko",
+    locale: (row["locale"] as string | null) ?? "en",
     mode: ((row["mode"] as string | null) ?? "standard") as AccountMode,
     createdAt: row["created_at"] as string,
   };
@@ -51,7 +51,7 @@ export function createAccount(
   password: string,
   displayName: string,
   role: "admin" | "user" = "user",
-  locale = "ko",
+  locale = "en",
   mode: AccountMode = "standard"
 ): Account {
   const db = getDb();

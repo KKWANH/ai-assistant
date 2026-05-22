@@ -7,7 +7,7 @@
  *   3. Re-plan — after each step, let the provider revise remaining steps.
  *   4. Final  — stream a synthesis of all step results.
  *
- * Safety: max 8 steps total, per-step timeout of 30 s, failed tools keep loop alive.
+ * Safety: max 8 steps total, per-step timeout of 60 s, failed tools keep loop alive.
  */
 
 import crypto from "node:crypto";
@@ -30,7 +30,7 @@ import logger from "../logger.js";
 // ---------------------------------------------------------------------------
 
 const MAX_STEPS = 8;
-const STEP_TIMEOUT_MS = 30_000;
+const STEP_TIMEOUT_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -129,10 +129,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     emit({ type: "agent_step", step: { ...step } });
 
     let result: string;
+    // Per-step abort — fires if the agent is cancelled OR this step times
+    // out, so the tool's in-flight LLM / network call is actually stopped.
+    const stepCtl = new AbortController();
+    const stepSignal = AbortSignal.any([signal, stepCtl.signal]);
     try {
       result = await withTimeout(
-        runTool(step.tool, step.description, chat, provider, customActions, collectedSources, signal),
+        runTool(step.tool, step.description, chat, provider, customActions, collectedSources, stepSignal),
         STEP_TIMEOUT_MS,
+        stepCtl,
       );
       step.status = "done";
       step.result = result.slice(0, 400);
@@ -140,7 +145,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       const msg = err instanceof Error ? err.message : String(err);
       logger.warn({ stepId: step.id, tool: step.tool, err: msg }, "agent step failed");
       step.status = "failed";
-      step.result = `Tool failed: ${msg.slice(0, 200)}`;
+      step.result = /timed out/i.test(msg)
+        ? "This step ran over the time limit and was skipped — continuing."
+        : `Tool failed: ${msg.slice(0, 200)}`;
       result = step.result;
     }
 
@@ -240,7 +247,7 @@ async function runTool(
 
   switch (tool) {
     case "web_search": {
-      const resp = await performSearch(description);
+      const resp = await performSearch(description, signal);
       if (resp.results.length === 0) return "No results found.";
       const top = resp.results.slice(0, 5);
       sources.push(...top);
@@ -393,7 +400,7 @@ async function executeCustomAction(
 
     case "web_search": {
       const query = action.query ?? description;
-      const resp = await performSearch(query);
+      const resp = await performSearch(query, signal);
       if (resp.results.length === 0) return "No search results found.";
       const top = resp.results.slice(0, 5);
       sources.push(...top);
@@ -573,9 +580,12 @@ async function safeComplete(
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+/** Race a promise against a timeout. On timeout, aborts `ctl` so the tool's
+ *  in-flight work can stop, then rejects. */
+function withTimeout<T>(promise: Promise<T>, ms: number, ctl: AbortController): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
+      ctl.abort();
       reject(new Error(`Tool timed out after ${ms.toString()}ms`));
     }, ms);
     promise.then(

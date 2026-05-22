@@ -1,4 +1,6 @@
-/** Guided-tour step definitions — chat-first IA. `target` matches a `data-tour` attribute. */
+/** Guided-tour step definitions — chat-first IA. `target` matches a `data-tour` attribute.
+ *  The overlay is the lightweight "where is it" orientation; the deeper "what is
+ *  it and why" lives on the /tutorial page, which the last step links to. */
 import type { TranslationKey } from "../../lib/i18n/en";
 
 export interface TourStep {
@@ -34,28 +36,19 @@ export function getTourSteps(t: TFn): TourStep[] {
       id: "workspaces",
       title: t("tutorial.workspaces.title"),
       body: t("tutorial.workspaces.body"),
-      target: "new-workspace",
-    },
-    {
-      id: "run",
-      title: t("tutorial.run.title"),
-      body: t("tutorial.run.body"),
-    },
-    {
-      id: "evidence",
-      title: t("tutorial.evidence.title"),
-      body: t("tutorial.evidence.body"),
-    },
-    {
-      id: "actions",
-      title: t("tutorial.actions.title"),
-      body: t("tutorial.actions.body"),
+      target: "workspaces-section",
     },
     {
       id: "command",
       title: t("tutorial.command.title"),
       body: t("tutorial.command.body"),
       target: "command-hint",
+    },
+    {
+      id: "help",
+      title: t("tutorial.help.title"),
+      body: t("tutorial.help.body"),
+      target: "help-button",
     },
     {
       id: "done",
