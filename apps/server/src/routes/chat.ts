@@ -26,7 +26,9 @@ import {
   dbDeleteChat,
   dbInsertMessage,
   dbListMessages,
+  dbGetWorkspace,
 } from "../db/repo.js";
+import { loadActionDefs } from "../services/actions.js";
 import { getProvider } from "../providers/index.js";
 import { meteringProvider } from "../runs/engine.js";
 import { getActiveSettings, isProviderConfigured } from "../config.js";
@@ -35,7 +37,7 @@ import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
-import { decideWebSearch, generateChatTitle } from "../services/triage.js";
+import { decideWebSearch, detectActionIntent, generateChatTitle } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
 import { isOwnerOrAdmin } from "./workspaceGuard.js";
 import {
@@ -317,6 +319,27 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
               : settings.model;
           const rawProvider = await getProvider({ provider: settings.provider, model });
           const provider = meteringProvider(rawProvider, assistantMsgId, model);
+
+          // Best-effort: surface a relevant workspace action as a chat
+          // suggestion. Runs in parallel with the answer — never blocks it.
+          if (chat.workspaceId) {
+            const ws = dbGetWorkspace(chat.workspaceId);
+            if (ws) {
+              const { actions } = loadActionDefs(ws.rootPath);
+              if (actions.length > 0) {
+                void detectActionIntent(provider, content, actions, controller.signal)
+                  .then((s) => {
+                    if (s) emit({
+                      type: "intent_suggestion",
+                      actionId: s.actionId,
+                      actionName: s.actionName,
+                      reason: s.reason,
+                    });
+                  })
+                  .catch(() => { /* fail-open */ });
+              }
+            }
+          }
 
           if (agentMode) {
             // Agent plan-and-execute loop (it runs its own web_search steps).

@@ -18,6 +18,8 @@ import {
   Cpu,
   AlertCircle,
   Bot,
+  Zap,
+  Play,
 } from "lucide-react";
 import type { PostAttachmentInput } from "@ariadne/shared";
 import {
@@ -67,6 +69,10 @@ export interface ChatComposerProps {
   pending?: boolean;
   /** When provided and `pending`, the send button becomes a stop button. */
   onStop?: () => void;
+  /** When set, render a chip above the composer suggesting a matched action. */
+  suggestion?: { actionId: string; actionName: string; reason: string } | null;
+  onRunSuggestion?: () => void;
+  onDismissSuggestion?: () => void;
 }
 
 const IMAGE_TYPES = [
@@ -91,7 +97,15 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposerProps) {
+export function ChatComposer({
+  onSend,
+  disabled,
+  pending,
+  onStop,
+  suggestion,
+  onRunSuggestion,
+  onDismissSuggestion,
+}: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   // Plain chat is the default: agent mode is opt-in, web search is "auto"
@@ -281,6 +295,35 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
 
   return (
     <div className="flex flex-col gap-2" data-tour="composer">
+      {/* Detected intent → suggest running a matching workspace action */}
+      {suggestion && (
+        <div className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-xs">
+          <Zap className="h-3.5 w-3.5 shrink-0 text-accent" />
+          <span className="flex-1 min-w-0 text-foreground truncate">
+            <span className="font-medium">{suggestion.actionName}</span>
+            {suggestion.reason ? (
+              <span className="ml-1.5 text-muted-foreground">· {suggestion.reason}</span>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            onClick={onRunSuggestion}
+            className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 font-medium text-accent-foreground hover:bg-accent/90"
+          >
+            <Play className="h-3 w-3" />
+            {t("composer.intent.run")}
+          </button>
+          <button
+            type="button"
+            onClick={onDismissSuggestion}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={t("composer.intent.dismiss")}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Pasted tab-separated text → offer to make it a table file */}
       {tablePaste && (
         <div className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-xs">

@@ -756,6 +756,8 @@ const en = {
   "composer.tablePaste": "Make the pasted table into a table file?",
   "composer.tablePaste.convert": "Convert to table",
   "composer.tablePaste.dismiss": "Dismiss",
+  "composer.intent.run": "Run",
+  "composer.intent.dismiss": "Dismiss",
   "composer.editTable": "Edit table",
 
   // Composer button tooltips + model picker info

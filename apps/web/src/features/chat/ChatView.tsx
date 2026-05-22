@@ -24,6 +24,7 @@ import {
   useSendMessage,
   useActiveGeneration,
   useStopGeneration,
+  useRunAction,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
@@ -226,7 +227,12 @@ function ThreadView({ chatId }: { chatId: string }) {
   const { toast } = useToast();
   const { t } = useT();
   const qc = useQueryClient();
-  const sendMessage = useSendMessage();
+  const navigate = useNavigate();
+  const runAction = useRunAction();
+  const [suggestion, setSuggestion] = useState<
+    { actionId: string; actionName: string; reason: string } | null
+  >(null);
+  const sendMessage = useSendMessage({ onIntentSuggestion: setSuggestion });
   const stopGeneration = useStopGeneration();
   const { data: chat, isLoading } = useChat(chatId);
   const { data: activeData } = useActiveGeneration(chatId);
@@ -315,6 +321,7 @@ function ThreadView({ chatId }: { chatId: string }) {
     workspaceId: string | null;
     agentMode: boolean;
   }) => {
+    setSuggestion(null); // clear any stale chip from the previous turn
     setStreaming(true);
     try {
       await sendMessage.mutateAsync({
@@ -343,6 +350,24 @@ function ThreadView({ chatId }: { chatId: string }) {
     });
   };
 
+  const handleRunSuggestion = async () => {
+    if (!suggestion || !chat?.workspaceId) return;
+    try {
+      const run = await runAction.mutateAsync({
+        workspaceId: chat.workspaceId,
+        actionId: suggestion.actionId,
+      });
+      setSuggestion(null);
+      navigate(`/runs/${run.id}`);
+    } catch (err) {
+      toast({
+        title: t("actions.runFailed"),
+        description: err instanceof Error ? err.message : t("common.unknown"),
+        variant: "error",
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
@@ -351,6 +376,9 @@ function ThreadView({ chatId }: { chatId: string }) {
           onSend={(opts) => void handleSend(opts)}
           pending={busy}
           onStop={busy ? handleStop : undefined}
+          suggestion={suggestion}
+          onRunSuggestion={() => void handleRunSuggestion()}
+          onDismissSuggestion={() => setSuggestion(null)}
         />
       </div>
     </div>

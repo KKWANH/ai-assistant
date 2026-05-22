@@ -297,6 +297,7 @@ export interface StreamHandlers {
   onDelta?: (text: string) => void;
   onAgentPlan?: (steps: import("@ariadne/shared").AgentStep[]) => void;
   onAgentStep?: (step: import("@ariadne/shared").AgentStep) => void;
+  onIntentSuggestion?: (s: { actionId: string; actionName: string; reason: string }) => void;
   onDone?: (msg: ChatMessage) => void;
   onError?: (error: string) => void;
   /** The stream closed before a done/error event — the generation may still
@@ -378,6 +379,13 @@ export async function sendMessage(
             break;
           case "agent_step":
             handlers.onAgentStep?.(event.step);
+            break;
+          case "intent_suggestion":
+            handlers.onIntentSuggestion?.({
+              actionId: event.actionId,
+              actionName: event.actionName,
+              reason: event.reason,
+            });
             break;
           case "done":
             receivedTerminal = true;

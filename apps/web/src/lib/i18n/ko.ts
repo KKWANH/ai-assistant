@@ -749,6 +749,8 @@ const ko: Record<TranslationKey, string> = {
   "composer.tablePaste": "붙여넣은 표를 표 파일로 만들까요?",
   "composer.tablePaste.convert": "표로 전환",
   "composer.tablePaste.dismiss": "닫기",
+  "composer.intent.run": "실행",
+  "composer.intent.dismiss": "닫기",
   "composer.editTable": "표 편집",
 
   // Composer button tooltips + model picker info

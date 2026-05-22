@@ -555,8 +555,13 @@ function patchCachedMessage(
   });
 }
 
+export interface UseSendMessageOptions {
+  /** Called when the server emits an `intent_suggestion` event mid-stream. */
+  onIntentSuggestion?: (s: { actionId: string; actionName: string; reason: string }) => void;
+}
+
 /** Streaming mutation — manages cache directly; no server round-trip response value. */
-export function useSendMessage() {
+export function useSendMessage(opts?: UseSendMessageOptions) {
   const qc = useQueryClient();
 
   return useMutation<
@@ -624,6 +629,10 @@ export function useSendMessage() {
             ...m,
             agent: { steps },
           }));
+        },
+
+        onIntentSuggestion: (s) => {
+          opts?.onIntentSuggestion?.(s);
         },
 
         onAgentStep: (step) => {

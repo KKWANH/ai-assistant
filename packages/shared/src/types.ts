@@ -531,6 +531,7 @@ export type ChatStreamEvent =
   | { type: "delta"; text: string }
   | { type: "agent_plan"; steps: AgentStep[] }
   | { type: "agent_step"; step: AgentStep }
+  | { type: "intent_suggestion"; actionId: string; actionName: string; reason: string }
   | { type: "done"; message: ChatMessage }
   | { type: "error"; error: string };
 

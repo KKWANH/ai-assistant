@@ -8,7 +8,7 @@
 
 import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
-import type { ReportTriage, ReportType } from "@ariadne/shared";
+import type { ReportTriage, ReportType, ActionDef } from "@ariadne/shared";
 
 /**
  * Decide whether a chat message needs a live web search to answer well.
@@ -39,6 +39,49 @@ export async function decideWebSearch(
     return /\byes\b/i.test(text);
   } catch {
     return false;
+  }
+}
+
+/**
+ * Detect whether the user's chat message expresses the intent of running one
+ * of the workspace's actions. Returns the matched action (id, name, a short
+ * reason) or null. Fails open — a hiccup never surfaces a wrong suggestion.
+ */
+export async function detectActionIntent(
+  provider: AiProvider,
+  content: string,
+  actions: ActionDef[],
+  signal: AbortSignal,
+): Promise<{ actionId: string; actionName: string; reason: string } | null> {
+  const trimmed = content.trim();
+  if (trimmed.length < 8 || actions.length === 0) return null;
+  try {
+    const list = actions
+      .slice(0, 12)
+      .map((a) => `- ${a.id}: ${a.name}${a.description ? " — " + a.description : ""}`)
+      .join("\n");
+    const { text } = await provider.complete({
+      system:
+        "You decide whether a user's chat message clearly expresses the intent of running ONE of " +
+        "the workspace's actions. If a single action is a good match, return its id and a one-line " +
+        "reason in the same language as the message. Otherwise return null. Be conservative — only " +
+        "match a strong, specific intent (e.g. \"summarise X\" → a summarise action). " +
+        'Reply with ONLY a JSON object: {"actionId":"...","reason":"..."} OR {"actionId":null}.',
+      prompt: "Actions:\n" + list + "\n\nMessage:\n" + trimmed.slice(0, 600),
+      json: true,
+      signal,
+    });
+    const parsed = JSON.parse(extractJson(text)) as { actionId?: string | null; reason?: string };
+    if (!parsed.actionId || typeof parsed.actionId !== "string") return null;
+    const action = actions.find((a) => a.id === parsed.actionId);
+    if (!action) return null;
+    return {
+      actionId: action.id,
+      actionName: action.name,
+      reason: typeof parsed.reason === "string" ? parsed.reason.trim().slice(0, 200) : "",
+    };
+  } catch {
+    return null;
   }
 }
 
