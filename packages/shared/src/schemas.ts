@@ -60,6 +60,12 @@ export const CreateRunSchema = z.object({
 });
 export type CreateRunInput = z.infer<typeof CreateRunSchema>;
 
+/** POST /api/workspaces/:id/actions/:actionId/run — run a block-pipeline action. */
+export const CreateActionRunSchema = z.object({
+  input: z.record(z.string()).optional(),
+});
+export type CreateActionRunInput = z.infer<typeof CreateActionRunSchema>;
+
 /** POST /api/runs/:id/context — confirm the context pick. */
 export const ConfirmContextSchema = z.object({
   /** Final set of file paths the user approved for the focused read. */

@@ -46,6 +46,39 @@ export interface WorkspaceAction {
   constraints?: string;
 }
 
+/* ------------------------------------------------------------------ *
+ * Action pipelines — a runnable action is an ordered list of blocks.
+ * Block N's output feeds block N+1. Distinct from the flat WorkspaceAction
+ * above (which the agent planner still consumes).
+ * ------------------------------------------------------------------ */
+
+export type BlockType = "ask_ai" | "web_analysis" | "run_script" | "read_file";
+
+export interface ActionBlock {
+  id: string;
+  type: BlockType;
+  /** Type-specific settings, all string-valued (e.g. { prompt }, { script }). */
+  config: Record<string, string>;
+}
+
+export interface ActionDef {
+  id: string;
+  name: string;
+  description: string;
+  /** Domain category, matching Template.category (research/finance/career/…). */
+  category: string;
+  blocks: ActionBlock[];
+}
+
+export interface BlockResult {
+  blockId: string;
+  type: BlockType;
+  status: "ok" | "failed" | "running";
+  output: string;
+  error?: string;
+  startedAt: string;
+}
+
 /** Cheap per-file metadata from the Gasp Filter metadata scan. */
 export interface FileMeta {
   path: string; // relative to workspace root
@@ -125,7 +158,8 @@ export type RunPhase =
   | "evidence"
   | "unsupported"
   | "diff"
-  | "artifacts";
+  | "artifacts"
+  | "block"; // action-pipeline block step
 
 export interface TraceEvent {
   timestamp: string;
@@ -167,8 +201,12 @@ export interface RunUsage {
 
 export interface Run {
   id: string;
+  /** "template" = a template run; "action" = a block-pipeline action run. */
+  kind: "template" | "action";
   workspaceId: string;
+  /** For kind="action" this holds the action id. */
   templateId: string;
+  /** For kind="action" this holds the action name. */
   templateName: string;
   status: RunStatus;
   input: Record<string, string>;
@@ -189,6 +227,8 @@ export interface Run {
   createdBy: string | null;
   createdByName: string | null;
   usage: RunUsage | null;
+  /** Per-block results — populated only for kind="action" runs. */
+  blockResults: BlockResult[];
 }
 
 /* ------------------------------------------------------------------ *

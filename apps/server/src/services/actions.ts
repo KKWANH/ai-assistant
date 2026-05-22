@@ -6,7 +6,13 @@
  */
 
 import yaml from "yaml";
-import type { WorkspaceAction, ActionType } from "@ariadne/shared";
+import type {
+  WorkspaceAction,
+  ActionType,
+  ActionDef,
+  ActionBlock,
+  BlockType,
+} from "@ariadne/shared";
 import { readActionsYaml } from "../ariadneFolder.js";
 import logger from "../logger.js";
 
@@ -103,4 +109,121 @@ export function loadWorkspaceActions(workspaceRoot: string): ActionsLoadResult {
 
   const error = errors.length > 0 ? errors.join("; ") : null;
   return { source, actions, error };
+}
+
+// ---------------------------------------------------------------------------
+// Block-pipeline actions (the runnable form — distinct from the flat
+// WorkspaceAction[] above, which the agent planner still consumes).
+// ---------------------------------------------------------------------------
+
+export interface ActionDefsLoadResult {
+  actions: ActionDef[];
+  error: string | null;
+}
+
+const BLOCK_TYPES: Set<BlockType> = new Set([
+  "ask_ai",
+  "web_analysis",
+  "run_script",
+  "read_file",
+]);
+
+/** Synthesize a single block from an old flat action so it stays runnable. */
+function flatActionToBlock(type: ActionType, item: Record<string, unknown>): ActionBlock {
+  const str = (k: string): string => (typeof item[k] === "string" ? (item[k] as string) : "");
+  switch (type) {
+    case "run_script":
+      return { id: "blk-1", type: "run_script", config: { script: str("script") } };
+    case "read_file":
+      return { id: "blk-1", type: "read_file", config: { path: str("path") } };
+    case "web_search":
+      return { id: "blk-1", type: "web_analysis", config: { query: str("query") } };
+    case "format":
+      return { id: "blk-1", type: "ask_ai", config: { prompt: str("template") } };
+  }
+}
+
+/**
+ * Load actions.yaml as block-pipeline ActionDefs. A new-form action carries a
+ * `blocks:` list; an old flat action is synthesized into a single-block
+ * pipeline. Tolerates a missing or corrupt file (returns an empty list).
+ */
+export function loadActionDefs(workspaceRoot: string): ActionDefsLoadResult {
+  let source: string | null;
+  try {
+    source = readActionsYaml(workspaceRoot);
+  } catch {
+    return { actions: [], error: null };
+  }
+  if (source === null) return { actions: [], error: null };
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.parse(source);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { actions: [], error: `actions.yaml parse error: ${msg}` };
+  }
+
+  const raw =
+    parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)["actions"]
+      : null;
+  if (!Array.isArray(raw)) return { actions: [], error: null };
+
+  const actions: ActionDef[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i] as Record<string, unknown> | undefined;
+    if (!item || typeof item !== "object") continue;
+
+    const id = typeof item["id"] === "string" ? item["id"].trim() : "";
+    const name = typeof item["name"] === "string" ? item["name"].trim() : "";
+    if (!id || !name) {
+      errors.push(`actions[${i.toString()}]: missing 'id' or 'name'`);
+      continue;
+    }
+    const description =
+      typeof item["description"] === "string" ? item["description"].trim() : "";
+    const category = typeof item["category"] === "string" ? item["category"].trim() : "";
+
+    let blocks: ActionBlock[] = [];
+    if (Array.isArray(item["blocks"])) {
+      const rawBlocks = item["blocks"] as unknown[];
+      for (let b = 0; b < rawBlocks.length; b++) {
+        const bi = rawBlocks[b] as Record<string, unknown> | undefined;
+        if (!bi || typeof bi !== "object") continue;
+        const bt = bi["type"];
+        if (typeof bt !== "string" || !BLOCK_TYPES.has(bt as BlockType)) {
+          errors.push(`actions[${i.toString()}] (${id}) block[${b.toString()}]: invalid 'type'`);
+          continue;
+        }
+        const cfg: Record<string, string> = {};
+        const rawCfg = bi["config"];
+        if (rawCfg && typeof rawCfg === "object") {
+          for (const [k, v] of Object.entries(rawCfg as Record<string, unknown>)) {
+            if (typeof v === "string") cfg[k] = v;
+          }
+        }
+        const bid =
+          typeof bi["id"] === "string" && bi["id"].trim()
+            ? bi["id"].trim()
+            : `blk-${(b + 1).toString()}`;
+        blocks.push({ id: bid, type: bt as BlockType, config: cfg });
+      }
+    } else if (
+      typeof item["type"] === "string" &&
+      VALID_TYPES.has(item["type"] as ActionType)
+    ) {
+      blocks = [flatActionToBlock(item["type"] as ActionType, item)];
+    } else {
+      errors.push(`actions[${i.toString()}] (${id}): no 'blocks' and no valid 'type'`);
+      continue;
+    }
+
+    actions.push({ id, name, description, category, blocks });
+  }
+
+  return { actions, error: errors.length > 0 ? errors.join("; ") : null };
 }

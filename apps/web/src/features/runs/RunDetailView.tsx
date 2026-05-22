@@ -25,6 +25,7 @@ import { EvidenceBadge } from "../../components/ui/EvidenceBadge";
 import { Card } from "../../components/ui/Card";
 import { TokenEstimate } from "../../components/ui/TokenEstimate";
 import { NotFoundRedirect } from "../../components/NotFoundRedirect";
+import { ActionRunView } from "./ActionRunView";
 import { useUIStore } from "../../lib/store";
 import type { Claim, TraceEvent } from "@ariadne/shared";
 
@@ -419,6 +420,11 @@ export function RunDetailView() {
 
   // Loading finished but no run — it was deleted (or never existed).
   if (!run) return <NotFoundRedirect />;
+
+  // Block-pipeline action runs render in their own view.
+  if (run.kind === "action") {
+    return <ActionRunView run={run} workspace={workspace ?? null} />;
+  }
 
   const duration =
     run.completedAt && run.startedAt

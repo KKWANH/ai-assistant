@@ -193,6 +193,13 @@ export const getActions = (workspaceId: string) =>
 export const saveActions = (workspaceId: string, source: string) =>
   request<ActionsPayload>("PUT", `/workspaces/${workspaceId}/actions`, { source });
 
+export const runAction = (workspaceId: string, actionId: string, input?: Record<string, string>) =>
+  request<Run>(
+    "POST",
+    `/workspaces/${workspaceId}/actions/${encodeURIComponent(actionId)}/run`,
+    { input: input ?? {} },
+  );
+
 // ── Scripts ───────────────────────────────────────────────────────────────────
 export const getScripts = (workspaceId: string) =>
   request<ScriptFile[]>("GET", `/workspaces/${workspaceId}/scripts`);

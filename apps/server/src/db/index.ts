@@ -199,6 +199,16 @@ function runMigrations(db: DatabaseSync): void {
     db.exec("ALTER TABLE runs ADD COLUMN usage_json TEXT");
   }
 
+  // Guarded ALTER TABLE: add kind to runs if missing (NULL → "template")
+  if (!runColumns.some((c) => c.name === "kind")) {
+    db.exec("ALTER TABLE runs ADD COLUMN kind TEXT");
+  }
+
+  // Guarded ALTER TABLE: add block_results_json to runs if missing
+  if (!runColumns.some((c) => c.name === "block_results_json")) {
+    db.exec("ALTER TABLE runs ADD COLUMN block_results_json TEXT");
+  }
+
   // Guarded ALTER TABLE: add locale to accounts if missing
   const accountColumns = db
     .prepare("PRAGMA table_info(accounts)")

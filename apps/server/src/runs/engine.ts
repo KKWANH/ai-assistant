@@ -83,7 +83,7 @@ export function meteringProvider(inner: AiProvider, runId: string, model: string
 // ID generation
 // ---------------------------------------------------------------------------
 
-function makeDateRunId(existing: Run[]): string {
+export function makeDateRunId(existing: Run[]): string {
   const today = new Date().toISOString().slice(0, 10); // 2026-05-20
   const todayRuns = existing.filter((r) => r.id.startsWith(today));
   const seq = String(todayRuns.length + 1).padStart(3, "0");
@@ -94,16 +94,16 @@ function makeDateRunId(existing: Run[]): string {
 // Trace helpers
 // ---------------------------------------------------------------------------
 
-function traceEvent(phase: RunPhase, status: TraceEvent["status"], label: string, details?: string): TraceEvent {
+export function traceEvent(phase: RunPhase, status: TraceEvent["status"], label: string, details?: string): TraceEvent {
   return { timestamp: new Date().toISOString(), phase, status, label, details };
 }
 
-function appendTrace(run: Run, event: TraceEvent): void {
+export function appendTrace(run: Run, event: TraceEvent): void {
   run.trace = [...run.trace, event];
   dbUpdateRun(run.id, { trace: run.trace });
 }
 
-function failRun(run: Run, phase: RunPhase, error: unknown): void {
+export function failRun(run: Run, phase: RunPhase, error: unknown): void {
   const msg = error instanceof Error ? error.message : String(error);
   appendTrace(run, traceEvent(phase, "failed", `${phase} failed`, msg));
   dbUpdateRun(run.id, { status: "failed", error: msg, completedAt: new Date().toISOString() });
@@ -136,6 +136,7 @@ export async function createRun(input: {
 
   const run: Run = {
     id: runId,
+    kind: "template",
     workspaceId: input.workspaceId,
     templateId: input.templateId,
     templateName: template.name,
@@ -158,6 +159,7 @@ export async function createRun(input: {
     createdBy: input.createdBy ?? null,
     createdByName: null, // will be populated by JOIN when read back
     usage: null,
+    blockResults: [],
   };
 
   dbInsertRun(run);

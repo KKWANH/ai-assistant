@@ -5,6 +5,7 @@ import type {
   Snapshot,
   Run,
   RunUsage,
+  BlockResult,
   Claim,
   Settings,
   EvidencePack,
@@ -178,8 +179,8 @@ const RUN_SELECT = `
 export function dbInsertRun(r: Run): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO runs (id,workspace_id,template_id,template_name,status,input_json,model,provider,created_at,started_at,completed_at,candidate_files,selected_files,token_estimate,evidence_count,unsupported_count,artifacts_json,trace_json,previous_run_id,error,created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO runs (id,workspace_id,template_id,template_name,status,input_json,model,provider,created_at,started_at,completed_at,candidate_files,selected_files,token_estimate,evidence_count,unsupported_count,artifacts_json,trace_json,previous_run_id,error,created_by,kind,block_results_json)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     r.id, r.workspaceId, r.templateId, r.templateName, r.status,
     JSON.stringify(r.input), r.model, r.provider,
@@ -188,7 +189,8 @@ export function dbInsertRun(r: Run): void {
     r.tokenEstimate, r.evidenceCount, r.unsupportedCount,
     JSON.stringify(r.artifacts), JSON.stringify(r.trace),
     r.previousRunId, r.error,
-    r.createdBy ?? null
+    r.createdBy ?? null,
+    r.kind, JSON.stringify(r.blockResults)
   );
 }
 
@@ -224,6 +226,7 @@ export function dbUpdateRun(id: string, fields: Partial<Run>): Run | null {
   if (fields.trace !== undefined) { sets.push("trace_json = ?"); vals.push(JSON.stringify(fields.trace)); }
   if (fields.error !== undefined) { sets.push("error = ?"); vals.push(fields.error); }
   if (fields.usage !== undefined) { sets.push("usage_json = ?"); vals.push(fields.usage ? JSON.stringify(fields.usage) : null); }
+  if (fields.blockResults !== undefined) { sets.push("block_results_json = ?"); vals.push(JSON.stringify(fields.blockResults)); }
 
   if (sets.length === 0) return dbGetRun(id);
   vals.push(id);
@@ -234,8 +237,13 @@ export function dbUpdateRun(id: string, fields: Partial<Run>): Run | null {
 function rowToRun(row: Record<string, unknown>): Run {
   const usageJson = row["usage_json"] as string | null | undefined;
   const usage: RunUsage | null = usageJson ? (JSON.parse(usageJson) as RunUsage) : null;
+  const blockResultsJson = row["block_results_json"] as string | null | undefined;
+  const blockResults: BlockResult[] = blockResultsJson
+    ? (JSON.parse(blockResultsJson) as BlockResult[])
+    : [];
   return {
     id: row["id"] as string,
+    kind: ((row["kind"] as string | null) ?? "template") as Run["kind"],
     workspaceId: row["workspace_id"] as string,
     templateId: row["template_id"] as string,
     templateName: row["template_name"] as string,
@@ -258,6 +266,7 @@ function rowToRun(row: Record<string, unknown>): Run {
     createdBy: (row["created_by"] as string | null) ?? null,
     createdByName: (row["created_by_name"] as string | null) ?? null,
     usage,
+    blockResults,
   };
 }
 

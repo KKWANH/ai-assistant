@@ -24,13 +24,15 @@ import {
   Search,
   Sparkles,
   Code2,
+  Play,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { WorkspaceAction, ActionType } from "@ariadne/shared";
 import type { TranslationKey } from "../../lib/i18n/en";
 import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
-import { useActions, useSaveActions } from "../../lib/queries";
+import { useActions, useSaveActions, useRunAction } from "../../lib/queries";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 
@@ -222,20 +224,24 @@ function ActionBlock({
   total,
   readOnly,
   invalid,
+  runDisabled,
   onChange,
   onChangeType,
   onRemove,
   onMove,
+  onRun,
 }: {
   action: WorkspaceAction;
   index: number;
   total: number;
   readOnly: boolean;
   invalid: boolean;
+  runDisabled: boolean;
   onChange: (patch: Partial<WorkspaceAction>) => void;
   onChangeType: (t: ActionType) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  onRun: () => void;
 }) {
   const { t } = useT();
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
@@ -284,6 +290,14 @@ function ActionBlock({
             onChange={(e) => onChange({ name: e.target.value })}
           />
           <div className="flex items-center gap-0.5 shrink-0">
+            <IconButton
+              label={t("actions.run")}
+              size="xs"
+              disabled={runDisabled}
+              onClick={onRun}
+            >
+              <Play className="h-3.5 w-3.5 text-accent" />
+            </IconButton>
             <IconButton
               label={t("actions.moveUp")}
               size="xs"
@@ -428,6 +442,8 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
   const { toast } = useToast();
   const { data: actionsData, isLoading } = useActions(workspaceId);
   const saveActions = useSaveActions(workspaceId);
+  const runAction = useRunAction();
+  const navigate = useNavigate();
 
   const [blocks, setBlocks] = useState<WorkspaceAction[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -519,6 +535,16 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
     }
   }
 
+  async function handleRun(action: WorkspaceAction) {
+    try {
+      const run = await runAction.mutateAsync({ workspaceId, actionId: action.id });
+      navigate(`/runs/${run.id}`);
+    } catch (err) {
+      const e = err as Error;
+      toast({ title: t("actions.runFailed"), description: e.message, variant: "error" });
+    }
+  }
+
   const invalid = new Set<number>();
   blocks.forEach((b, i) => {
     if (!b.id.trim() || !b.name.trim()) invalid.add(i);
@@ -592,10 +618,12 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
                 total={blocks.length}
                 readOnly={readOnly}
                 invalid={invalid.has(i)}
+                runDisabled={invalid.has(i) || dirty || runAction.isPending}
                 onChange={(patch) => updateBlock(i, patch)}
                 onChangeType={(ty) => changeType(i, ty)}
                 onRemove={() => removeBlock(i)}
                 onMove={(dir) => moveBlock(i, dir)}
+                onRun={() => void handleRun(b)}
               />
               <InsertBar onInsert={(ty) => insertBlock(i + 1, ty)} />
             </div>

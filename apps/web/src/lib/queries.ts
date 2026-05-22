@@ -182,6 +182,25 @@ export function useCreateRun() {
   });
 }
 
+export function useRunAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      workspaceId,
+      actionId,
+      input,
+    }: {
+      workspaceId: string;
+      actionId: string;
+      input?: Record<string, string>;
+    }) => api.runAction(workspaceId, actionId, input),
+    onSuccess: (run) => {
+      void qc.invalidateQueries({ queryKey: qk.runs(run.workspaceId) });
+      void qc.invalidateQueries({ queryKey: qk.runs() });
+    },
+  });
+}
+
 export function useConfirmContext() {
   const qc = useQueryClient();
   return useMutation({

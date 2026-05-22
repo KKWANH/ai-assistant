@@ -9,9 +9,10 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { ActionsPutSchema } from "@ariadne/shared";
+import { ActionsPutSchema, CreateActionRunSchema } from "@ariadne/shared";
 import { ensureAriadneFolder, writeActionsYaml } from "../ariadneFolder.js";
 import { loadWorkspaceActions } from "../services/actions.js";
+import { createActionRun } from "../runs/actionEngine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
 export async function actionRoutes(app: FastifyInstance): Promise<void> {
@@ -56,4 +57,31 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     const result = loadWorkspaceActions(workspace.rootPath);
     return reply.send(result);
   });
+
+  // POST /api/workspaces/:id/actions/:actionId/run — run a block-pipeline action
+  app.post<{ Params: { id: string; actionId: string } }>(
+    "/workspaces/:id/actions/:actionId/run",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const parsed = CreateActionRunSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });
+      }
+
+      try {
+        const run = await createActionRun({
+          workspaceId: workspace.id,
+          actionId: req.params.actionId,
+          input: parsed.data.input,
+          createdBy: req.account?.id ?? null,
+        });
+        return reply.status(201).send(run);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(400).send({ error: "Failed to start action run", detail: msg });
+      }
+    },
+  );
 }
