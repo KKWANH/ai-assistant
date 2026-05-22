@@ -123,6 +123,14 @@ export const DEFAULT_EXCLUDE = [
 /** Id of the built-in, non-deletable tutorial workspace seeded on first boot. */
 export const TUTORIAL_WORKSPACE_ID = "ariadne-tutorial";
 
+/** Id of the built-in, non-deletable demo workspace (the Portfolio showcase). */
+export const DEMO_WORKSPACE_ID = "ariadne-demo-portfolio";
+
+/** Whether a workspace id is one of the built-in (seeded, non-deletable) ones. */
+export function isBuiltinWorkspace(id: string): boolean {
+  return id === TUTORIAL_WORKSPACE_ID || id === DEMO_WORKSPACE_ID;
+}
+
 /** Sensitive path patterns excluded by default (PRODUCT_PLAN §12). */
 export const SENSITIVE_PATTERNS = [
   "*.env",

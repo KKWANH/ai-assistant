@@ -30,6 +30,7 @@ import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
 import { seedAdmin } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
+import { ensureDemoWorkspace } from "./demoWorkspace.js";
 import { validateSession } from "./auth/sessions.js";
 import { accessContext } from "./auth/context.js";
 
@@ -76,9 +77,10 @@ async function bootstrap(): Promise<void> {
   ensureDirs();
   openDb(PATHS.db);
 
-  // Seed the admin account + the built-in tutorial workspace on first boot
+  // Seed the admin account + the built-in tutorial and demo workspaces
   seedAdmin();
   ensureTutorialWorkspace();
+  await ensureDemoWorkspace();
 
   // Retrieve or generate cookie signing secret
   let cookieSecret = dbGetSetting("cookie_secret");

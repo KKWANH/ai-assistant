@@ -27,8 +27,9 @@ import {
 } from "@ariadne/shared";
 import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
-import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus } from "../../lib/queries";
+import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
+import { modelInfo } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 
@@ -98,6 +99,9 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
   const { data: settings } = useSettings();
   const { data: providerStatus } = useProviderStatus();
   const updateSettings = useUpdateSettings();
+  const { data: me } = useMe();
+  // Easy mode shows friendly model names + a one-line trait instead of raw ids.
+  const isSimple = me?.account.mode === "simple";
 
   const selectedWs = workspaces?.find((w) => w.id === chatComposerWorkspaceId);
 
@@ -406,8 +410,8 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
               title={t("chat.composer.changeModel")}
             >
               <Cpu className="h-3.5 w-3.5" />
-              <span className="max-w-[80px] truncate font-mono">
-                {currentModel}
+              <span className={isSimple ? "max-w-[130px] truncate" : "max-w-[80px] truncate font-mono"}>
+                {isSimple ? modelInfo(currentModel).label : currentModel}
               </span>
               <ChevronDown className="h-3 w-3" />
             </button>
@@ -475,14 +479,30 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
                         <button
                           key={m}
                           className={[
-                            "flex items-center w-full px-2 py-1 rounded font-mono transition-colors",
+                            isSimple
+                              ? "flex flex-col items-start gap-0.5 w-full px-2 py-1.5 rounded transition-colors text-left"
+                              : "flex items-center w-full px-2 py-1 rounded font-mono transition-colors",
                             m === currentModel
                               ? "bg-accent/10 text-accent"
                               : "text-foreground hover:bg-surface-3",
                           ].join(" ")}
                           onClick={() => void handleModelChange(m)}
                         >
-                          {m}
+                          {isSimple ? (
+                            <>
+                              <span className="font-medium">{modelInfo(m).label}</span>
+                              <span
+                                className={[
+                                  "text-[11px] leading-snug",
+                                  m === currentModel ? "text-accent/80" : "text-muted-foreground",
+                                ].join(" ")}
+                              >
+                                {modelInfo(m).trait}
+                              </span>
+                            </>
+                          ) : (
+                            m
+                          )}
                         </button>
                       ))
                     ) : (

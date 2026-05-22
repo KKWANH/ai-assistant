@@ -63,7 +63,7 @@ import { Badge } from "../ui/Badge";
 import { CommandMenu } from "../ui/CommandMenu";
 import type { CommandItem } from "../ui/CommandMenu";
 import { Inspector } from "./Inspector";
-import { TUTORIAL_WORKSPACE_ID } from "@ariadne/shared";
+import { isBuiltinWorkspace } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
 export interface AppShellProps {
@@ -624,7 +624,7 @@ export function AppShell({ children }: AppShellProps) {
                           </span>
                         ) : undefined}
                       />
-                      {hoveredWorkspaceId === ws.id && ws.id !== TUTORIAL_WORKSPACE_ID && (
+                      {hoveredWorkspaceId === ws.id && !isBuiltinWorkspace(ws.id) && (
                         <button
                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
                           onClick={(e) => {

@@ -2,12 +2,12 @@
  * Shared access-control helpers.
  *
  * Content is private by default: every account sees only what it created.
- * An admin sees everything. The built-in tutorial workspace is public.
+ * An admin sees everything. The built-in workspaces are public.
  */
 
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { Workspace, Account } from "@ariadne/shared";
-import { TUTORIAL_WORKSPACE_ID } from "@ariadne/shared";
+import { isBuiltinWorkspace } from "@ariadne/shared";
 import { dbGetWorkspace } from "../db/repo.js";
 
 /**
@@ -20,8 +20,8 @@ export function isOwnerOrAdmin(createdBy: string | null, account: Account): bool
 }
 
 export function canAccessWorkspace(workspace: Workspace, account: Account): boolean {
-  // The built-in tutorial workspace is visible to everyone.
-  if (workspace.id === TUTORIAL_WORKSPACE_ID) return true;
+  // Built-in workspaces (the tutorial and the Portfolio demo) are public.
+  if (isBuiltinWorkspace(workspace.id)) return true;
   return isOwnerOrAdmin(workspace.createdBy, account);
 }
 
