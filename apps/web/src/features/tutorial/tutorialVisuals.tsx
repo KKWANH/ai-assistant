@@ -47,7 +47,7 @@ function Node({ icon, label }: { icon: ReactNode; label: string }) {
       <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-surface-2 text-accent">
         {icon}
       </div>
-      <span className="max-w-[5.5rem] text-[11px] leading-tight text-muted-foreground">
+      <span className="max-w-[5.5rem] text-2xs leading-tight text-muted-foreground">
         {label}
       </span>
     </div>
@@ -276,14 +276,14 @@ export function DashboardDemo() {
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg border border-border bg-surface-3 p-3">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
               <TrendingUp className="h-3 w-3" />
               {t("tutorial.page.reports.statLabel")}
             </div>
             <div className="mt-1 text-lg font-semibold text-foreground">+12.4%</div>
           </div>
           <div className="rounded-lg border border-border bg-surface-3 p-3">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
               <Flag className="h-3 w-3" />
               {t("tutorial.page.reports.queueLabel")}
             </div>

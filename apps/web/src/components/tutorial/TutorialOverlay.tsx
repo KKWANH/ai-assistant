@@ -169,7 +169,7 @@ export function TutorialOverlay() {
         <div className="relative rounded-2xl border border-border bg-card shadow-2xl">
           <div className="flex items-start justify-between gap-4 px-5 pt-4">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-accent">
+              <span className="text-2xs font-mono text-accent">
                 {step + 1}/{TOUR_STEPS.length}
               </span>
               <h2 className="text-sm font-semibold text-foreground">

@@ -108,7 +108,7 @@ export function SearchView() {
                 ? t("search.resultsPlural", { n: results.results.length })
                 : t("search.results", { n: results.results.length })}
             </span>
-            <Badge variant="default" className="text-[11px]">
+            <Badge variant="default" className="text-2xs">
               {results.provider}
             </Badge>
             {results.error && (

@@ -33,7 +33,7 @@ function Row({ label, value, mono }: { label: string; value: ReactNode; mono?: b
       <span
         className={[
           "text-foreground text-right break-all",
-          mono ? "font-mono text-[11px]" : "",
+          mono ? "font-mono text-2xs" : "",
         ].join(" ")}
       >
         {value}

@@ -128,13 +128,13 @@ function ReportCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
               {t(TYPE_LABEL[report.type])}
             </span>
           </div>
           <h3 className="text-sm font-semibold text-foreground mt-0.5">{report.title}</h3>
         </div>
-        <span className="text-[11px] text-muted-foreground shrink-0 text-right">
+        <span className="text-2xs text-muted-foreground shrink-0 text-right">
           {report.createdByName ?? ""}
           <br />
           {new Date(report.createdAt).toLocaleString()}
@@ -168,7 +168,7 @@ function ReportCard({
 
       {/* Auto-triage */}
       <div className="rounded-lg border border-border bg-surface-2 p-3">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
+        <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
           <Sparkles className="h-3 w-3" />
           {t("reports.triage")}
         </div>
@@ -179,7 +179,7 @@ function ReportCard({
                 {t(VERDICT_LABEL[triage.verdict] ?? "reports.verdict.review")}
               </span>
               {triage.category && (
-                <span className="text-[11px] text-muted-foreground">· {triage.category}</span>
+                <span className="text-2xs text-muted-foreground">· {triage.category}</span>
               )}
             </div>
             {triage.reason && (

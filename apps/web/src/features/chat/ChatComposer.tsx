@@ -277,10 +277,10 @@ export function ChatComposer({
     <div className="flex flex-col gap-1">
       <span className="font-semibold text-foreground">{currentModelInfo.label}</span>
       <span className="text-muted-foreground">{t(currentModelInfo.traitKey)}</span>
-      <span className="text-[11px] text-muted-foreground">
+      <span className="text-2xs text-muted-foreground">
         {t("model.tip.speed")}: {t(`model.speed.${currentModelInfo.speed}`)}
       </span>
-      <span className="text-[11px] text-muted-foreground">
+      <span className="text-2xs text-muted-foreground">
         {modelIsFree
           ? t("model.price.free")
           : !isSimple && currentModelPrice
@@ -616,7 +616,7 @@ export function ChatComposer({
 
                   {/* Provider selector */}
                   <div className="px-3 py-1.5 border-b border-border">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                    <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                       {t("chat.composer.provider")}
                     </p>
                     <div className="flex flex-col gap-0.5">
@@ -639,7 +639,7 @@ export function ChatComposer({
                             {p !== "mock" && (
                               <span
                                 className={[
-                                  "text-[11px]",
+                                  "text-2xs",
                                   reachable ? "text-success" : "text-muted-foreground",
                                 ].join(" ")}
                               >
@@ -654,7 +654,7 @@ export function ChatComposer({
 
                   {/* Model selector for current provider */}
                   <div className="px-3 py-1.5">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                    <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                       {t("chat.composer.model")}
                     </p>
                     {modelOptionsForProvider(currentProvider).length > 0 ? (
@@ -676,7 +676,7 @@ export function ChatComposer({
                               <span className="font-medium">{modelInfo(m).label}</span>
                               <span
                                 className={[
-                                  "text-[11px] leading-snug",
+                                  "text-2xs leading-snug",
                                   m === currentModel ? "text-accent/80" : "text-muted-foreground",
                                 ].join(" ")}
                               >
@@ -704,7 +704,7 @@ export function ChatComposer({
           </div>
 
           {/* Hint */}
-          <span className="shrink-0 self-center text-[11px] text-muted-foreground hidden sm:block">
+          <span className="shrink-0 self-center text-2xs text-muted-foreground hidden sm:block">
             {pending ? t("chat.composer.waiting") : t("chat.composer.hint")}
           </span>
 

@@ -240,7 +240,7 @@ export function ScriptsView() {
                   {runResult.stdout && (
                     <div>
                       <p className="text-muted-foreground mb-1">{t("scripts.stdout")}</p>
-                      <pre className="whitespace-pre-wrap text-foreground bg-surface-2 rounded-md p-2 text-[11px] max-h-40 overflow-y-auto">
+                      <pre className="whitespace-pre-wrap text-foreground bg-surface-2 rounded-md p-2 text-2xs max-h-40 overflow-y-auto">
                         {runResult.stdout}
                       </pre>
                     </div>
@@ -248,7 +248,7 @@ export function ScriptsView() {
                   {runResult.stderr && (
                     <div>
                       <p className="text-muted-foreground mb-1">{t("scripts.stderr")}</p>
-                      <pre className="whitespace-pre-wrap text-warning bg-surface-2 rounded-md p-2 text-[11px] max-h-40 overflow-y-auto">
+                      <pre className="whitespace-pre-wrap text-warning bg-surface-2 rounded-md p-2 text-2xs max-h-40 overflow-y-auto">
                         {runResult.stderr}
                       </pre>
                     </div>

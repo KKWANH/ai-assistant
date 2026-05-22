@@ -189,7 +189,7 @@ function AgentStepRow({ step }: { step: AgentStep }) {
             {step.description}
           </span>
           {step.note && (
-            <span className="block text-[11px] text-muted-foreground leading-snug mt-0.5">
+            <span className="block text-2xs text-muted-foreground leading-snug mt-0.5">
               {step.note}
             </span>
           )}
@@ -247,7 +247,7 @@ function AgentChecklist({ trace }: { trace: AgentTrace }) {
       {!collapsed && (
         <div className="px-3 pb-2">
           {trace.summary && (
-            <p className="text-[11px] text-muted-foreground leading-snug pt-0.5 pb-2 mb-1 border-b border-border/40">
+            <p className="text-2xs text-muted-foreground leading-snug pt-0.5 pb-2 mb-1 border-b border-border/40">
               {trace.summary}
             </p>
           )}
@@ -418,7 +418,7 @@ function AttachmentItem({ att }: { att: ChatAttachment }) {
             alt={att.name}
             className="max-w-[220px] max-h-[180px] rounded-lg border border-border object-cover group-hover:opacity-90 transition-opacity"
           />
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
+          <p className="text-2xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
             {att.name}
           </p>
         </button>
@@ -475,7 +475,7 @@ function SearchSources({ results }: { results: SearchResult[] }) {
                 <span className="truncate">{r.title}</span>
                 <ExternalLink className="h-3 w-3 shrink-0" />
               </a>
-              <p className="text-[11px] font-mono text-muted-foreground truncate mt-0.5">
+              <p className="text-2xs font-mono text-muted-foreground truncate mt-0.5">
                 {r.url}
               </p>
               {r.snippet && (
@@ -554,13 +554,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
         <div className="flex items-end gap-2">
-          <span className="text-[11px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="text-2xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
             {time}
           </span>
           <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed">
             {message.content}
             {message.webSearch && (
-              <Badge variant="default" className="ml-2 text-[11px] opacity-70">
+              <Badge variant="default" className="ml-2 text-2xs opacity-70">
                 {t("chat.message.webSearch")}
               </Badge>
             )}
@@ -622,7 +622,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             )}
 
             {/* Timestamp on hover */}
-            <span className="text-[11px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity block mt-1">
+            <span className="text-2xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity block mt-1">
               {time}
             </span>
           </div>

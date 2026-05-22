@@ -165,7 +165,7 @@ export function CreateWorkspaceDialog() {
                   />
                   <div>
                     <p className="text-xs font-medium text-foreground">{t(tpl.labelKey)}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{t(tpl.descKey)}</p>
+                    <p className="text-2xs text-muted-foreground mt-0.5">{t(tpl.descKey)}</p>
                   </div>
                 </Card>
               );
@@ -188,7 +188,7 @@ export function CreateWorkspaceDialog() {
               <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-medium text-foreground">{t("workspace.visibility.private")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-2xs text-muted-foreground mt-0.5">
                   {t("workspace.dialog.visibilityPrivateDesc")}
                 </p>
               </div>
@@ -202,7 +202,7 @@ export function CreateWorkspaceDialog() {
               <Globe className="h-4 w-4 text-accent shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-medium text-foreground">{t("workspace.visibility.public")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-2xs text-muted-foreground mt-0.5">
                   {t("workspace.dialog.visibilityPublicDesc")}
                 </p>
               </div>
@@ -224,7 +224,7 @@ export function CreateWorkspaceDialog() {
               <label className="text-xs font-medium text-muted-foreground">
                 {t("workspace.dialog.includeLabel")}
               </label>
-              <p className="text-[11px] leading-snug text-muted-foreground/80">
+              <p className="text-2xs leading-snug text-muted-foreground/80">
                 {t("workspace.dialog.includeHelp")}
               </p>
               <textarea
@@ -238,7 +238,7 @@ export function CreateWorkspaceDialog() {
               <label className="text-xs font-medium text-muted-foreground">
                 {t("workspace.dialog.excludeLabel")}
               </label>
-              <p className="text-[11px] leading-snug text-muted-foreground/80">
+              <p className="text-2xs leading-snug text-muted-foreground/80">
                 {t("workspace.dialog.excludeHelp")}
               </p>
               <textarea

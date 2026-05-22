@@ -430,7 +430,7 @@ export function WorkspaceOverview() {
                       {run.templateName}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-3 mt-0.5 text-2xs text-muted-foreground">
                     <span>{run.createdByName ?? "—"}</span>
                     <span>·</span>
                     <span>{new Date(run.createdAt).toLocaleString()}</span>
@@ -503,7 +503,7 @@ export function WorkspaceOverview() {
                 <span className="text-sm text-foreground truncate flex-1">
                   {c.title || t("commandMenu.untitledChat")}
                 </span>
-                <span className="text-[11px] text-muted-foreground shrink-0">
+                <span className="text-2xs text-muted-foreground shrink-0">
                   {new Date(c.updatedAt).toLocaleDateString()}
                 </span>
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -574,12 +574,12 @@ export function WorkspaceOverview() {
               <span className="font-mono text-xs">{ws.rootPath}</span>
               {/* Visibility badge */}
               {ws.visibility === "public" ? (
-                <span className="flex items-center gap-1 text-[11px] text-accent font-medium">
+                <span className="flex items-center gap-1 text-2xs text-accent font-medium">
                   <Globe className="h-3 w-3" />
                   {t("workspace.visibility.public")}
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1 text-2xs text-muted-foreground">
                   <Lock className="h-3 w-3" />
                   {t("workspace.visibility.private")}
                 </span>

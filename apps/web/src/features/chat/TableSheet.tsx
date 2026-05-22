@@ -135,7 +135,7 @@ export function TableSheet({
       </div>
 
       {truncated && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {t("table.truncated", { shown: MAX_ROWS, total: body.length })}
         </p>
       )}

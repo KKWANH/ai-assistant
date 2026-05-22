@@ -90,7 +90,7 @@ export function FolderPicker({
             <CornerLeftUp className="h-3.5 w-3.5" />
             {t("common.back")}
           </Button>
-          <code className="flex-1 truncate rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[11px] text-muted-foreground">
+          <code className="flex-1 truncate rounded-md border border-border bg-surface-2 px-2 py-1.5 text-2xs text-muted-foreground">
             {data?.path ?? "…"}
           </code>
         </div>

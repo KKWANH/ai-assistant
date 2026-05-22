@@ -190,7 +190,7 @@ function BlockTypeMenu({
               </span>
               <span className="flex flex-col min-w-0">
                 <span className="text-xs font-medium text-foreground">{t(m.labelKey)}</span>
-                <span className="text-[11px] text-muted-foreground leading-snug">{t(m.hintKey)}</span>
+                <span className="text-2xs text-muted-foreground leading-snug">{t(m.hintKey)}</span>
               </span>
             </button>
           );
@@ -232,7 +232,7 @@ function BlockRow({
       <div className={`w-1 shrink-0 ${meta.strip}`} />
       <div className="flex-1 min-w-0 p-2.5 flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+          <span className="text-2xs font-mono text-muted-foreground shrink-0">
             {(index + 1).toString()}
           </span>
           <div className="relative shrink-0">
@@ -240,7 +240,7 @@ function BlockRow({
               type="button"
               disabled={readOnly}
               onClick={() => setMenuOpen((v) => !v)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold border ${meta.chip} disabled:opacity-60`}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold border ${meta.chip} disabled:opacity-60`}
             >
               <Icon className="h-3 w-3" />
               {t(meta.labelKey)}
@@ -250,7 +250,7 @@ function BlockRow({
               <BlockTypeMenu onPick={onChangeType} onClose={() => setMenuOpen(false)} />
             )}
           </div>
-          <span className="text-[11px] text-muted-foreground truncate flex-1">
+          <span className="text-2xs text-muted-foreground truncate flex-1">
             {t(meta.hintKey)}
           </span>
           <div className="flex items-center gap-0.5 shrink-0">
@@ -276,7 +276,7 @@ function BlockRow({
           </div>
         </div>
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold text-foreground">{t(meta.fieldLabelKey)}</span>
+          <span className="text-2xs font-semibold text-foreground">{t(meta.fieldLabelKey)}</span>
           {meta.multiline ? (
             <textarea
               rows={2}
@@ -311,7 +311,7 @@ function AddBlockButton({ onAdd }: { onAdd: (t: BlockType) => void }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-accent hover:border-accent transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-dashed border-border text-2xs font-medium text-muted-foreground hover:text-accent hover:border-accent transition-colors"
       >
         <Plus className="h-3 w-3" />
         {t("actions.addBlock")}
@@ -414,12 +414,12 @@ function ActionCard({
 
       {/* Block pipeline */}
       <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-border">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pl-2">
+        <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground pl-2">
           {t("actions.blockPipeline")}
         </span>
         <div className="flex flex-col gap-1.5 pl-2">
           {action.blocks.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">{t("actions.noBlocks")}</p>
+            <p className="text-2xs text-muted-foreground">{t("actions.noBlocks")}</p>
           ) : (
             action.blocks.map((b, i) => (
               <BlockRow
@@ -640,7 +640,7 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
       {/* Read-only YAML preview */}
       {showYaml && (
         <div className="rounded-lg border border-border overflow-hidden">
-          <div className="px-3 py-1.5 bg-surface-2 border-b border-border text-[11px] font-mono text-muted-foreground">
+          <div className="px-3 py-1.5 bg-surface-2 border-b border-border text-2xs font-mono text-muted-foreground">
             .ariadne/actions.yaml · {t("actions.yamlReadonly")}
           </div>
           <pre className="p-3 text-xs font-mono text-foreground bg-surface-1 overflow-x-auto whitespace-pre">

@@ -26,8 +26,25 @@ import { useT, LOCALES, type Locale } from "../../lib/i18n";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Textarea } from "../../components/ui/Textarea";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
+
+/** Compact section heading shared by every block in the settings page. */
+function SectionHeading({
+  icon,
+  children,
+}: {
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+      {icon}
+      {children}
+    </h2>
+  );
+}
 
 export function SettingsView() {
   const { data: settings, isLoading } = useSettings();
@@ -89,12 +106,12 @@ export function SettingsView() {
       {/* Provider status overview — live. The active provider/model is
           chosen in the chat composer; this is a read-only status panel. */}
       <section>
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+        <SectionHeading>
           {t("settings.providers.heading")}
           {statusLoading && (
             <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
           )}
-        </h2>
+        </SectionHeading>
         <p className="text-xs text-muted-foreground mb-2">
           {t("settings.providers.pickInChat")}
         </p>
@@ -173,66 +190,48 @@ export function SettingsView() {
 
       {/* Language / 언어 */}
       <section>
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-          <Languages className="h-3.5 w-3.5" />
+        <SectionHeading icon={<Languages className="h-3.5 w-3.5" />}>
           {t("settings.language.heading")}
-        </h2>
+        </SectionHeading>
         <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
           <p className="text-xs text-muted-foreground">{t("settings.language.description")}</p>
-          <div className="flex gap-2">
-            {LOCALES.map((loc) => (
-              <button
-                key={loc}
-                onClick={() => void handleLocaleChange(loc)}
-                className={[
-                  "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
-                  locale === loc
-                    ? "bg-accent text-accent-foreground border-accent"
-                    : "text-foreground border-border hover:border-border-strong hover:bg-surface-3",
-                ].join(" ")}
-              >
-                {loc === "en" ? t("settings.language.en") : t("settings.language.ko")}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl<Locale>
+            ariaLabel={t("settings.language.heading")}
+            value={locale}
+            onChange={(loc) => void handleLocaleChange(loc)}
+            options={LOCALES.map((loc) => ({
+              value: loc,
+              label: loc === "en" ? t("settings.language.en") : t("settings.language.ko"),
+            }))}
+          />
         </Card>
       </section>
 
       {/* UI Mode */}
       <section>
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-          <Layers className="h-3.5 w-3.5" />
+        <SectionHeading icon={<Layers className="h-3.5 w-3.5" />}>
           {t("settings.mode.heading")}
-        </h2>
+        </SectionHeading>
         <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
           <p className="text-xs text-muted-foreground">{t("settings.mode.description")}</p>
-          <div className="flex gap-2">
-            {(["standard", "simple"] as AccountMode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => void handleModeChange(m)}
-                disabled={updateMode.isPending}
-                className={[
-                  "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
-                  (me?.account.mode ?? "standard") === m
-                    ? "bg-accent text-accent-foreground border-accent"
-                    : "text-foreground border-border hover:border-border-strong hover:bg-surface-3",
-                  updateMode.isPending ? "opacity-50 cursor-wait" : "",
-                ].join(" ")}
-              >
-                {m === "standard" ? t("settings.mode.standard") : t("settings.mode.simple")}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl<AccountMode>
+            ariaLabel={t("settings.mode.heading")}
+            value={me?.account.mode ?? "standard"}
+            disabled={updateMode.isPending}
+            onChange={(m) => void handleModeChange(m)}
+            options={[
+              { value: "standard", label: t("settings.mode.standard") },
+              { value: "simple", label: t("settings.mode.simple") },
+            ]}
+          />
         </Card>
       </section>
 
       {/* My profile — saved account context, auto-updated + manually editable */}
       <section>
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-          <Brain className="h-3.5 w-3.5" />
+        <SectionHeading icon={<Brain className="h-3.5 w-3.5" />}>
           {t("settings.context.heading")}
-        </h2>
+        </SectionHeading>
         <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
           <p className="text-xs text-muted-foreground">{t("settings.context.description")}</p>
           <Textarea
@@ -243,7 +242,7 @@ export function SettingsView() {
             maxLength={2000}
           />
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               {me?.account.contextUpdatedAt
                 ? t("settings.context.autoNote", {
                     time: new Date(me.account.contextUpdatedAt).toLocaleString(),
@@ -268,10 +267,9 @@ export function SettingsView() {
 
       {/* Usage & Cost */}
       <section>
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-          <TrendingUp className="h-3.5 w-3.5" />
+        <SectionHeading icon={<TrendingUp className="h-3.5 w-3.5" />}>
           {t("settings.usage.heading")}
-        </h2>
+        </SectionHeading>
         {usage ? (
           <div className="flex flex-col gap-2">
             <Card className="px-4 py-3 flex flex-wrap gap-4 bg-surface-2">
