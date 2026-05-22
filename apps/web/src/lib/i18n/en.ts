@@ -643,6 +643,18 @@ const en = {
   "reports.reject": "Reject",
   "reports.viewOnGithub": "Open issue draft on GitHub",
   "reports.decideError": "Could not update the report",
+
+  // Table attachments — pasted TSV / csv / xlsx → editable grid
+  "table.addRow": "Add row",
+  "table.addColumn": "Add column",
+  "table.deleteRow": "Delete row",
+  "table.deleteColumn": "Delete column",
+  "table.save": "Save",
+  "table.truncated": "Showing {shown} of {total} rows",
+  "composer.tablePaste": "Make the pasted table into a table file?",
+  "composer.tablePaste.convert": "Convert to table",
+  "composer.tablePaste.dismiss": "Dismiss",
+  "composer.editTable": "Edit table",
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -636,6 +636,18 @@ const ko: Record<TranslationKey, string> = {
   "reports.reject": "반려",
   "reports.viewOnGithub": "GitHub에서 이슈 초안 열기",
   "reports.decideError": "제보 상태를 변경하지 못했습니다",
+
+  // Table attachments — 탭 구분 붙여넣기 / csv / xlsx → 편집 가능한 격자
+  "table.addRow": "행 추가",
+  "table.addColumn": "열 추가",
+  "table.deleteRow": "행 삭제",
+  "table.deleteColumn": "열 삭제",
+  "table.save": "저장",
+  "table.truncated": "전체 {total}행 중 {shown}행 표시",
+  "composer.tablePaste": "붙여넣은 표를 표 파일로 만들까요?",
+  "composer.tablePaste.convert": "표로 전환",
+  "composer.tablePaste.dismiss": "닫기",
+  "composer.editTable": "표 편집",
 };
 
 export default ko;

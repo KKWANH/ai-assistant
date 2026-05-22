@@ -26,6 +26,7 @@
     "react-router-dom": "^6.28.2",
     "remark-cjk-friendly": "^2.0.1",
     "remark-gfm": "^4.0.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

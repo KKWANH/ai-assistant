@@ -13,6 +13,7 @@ import {
   FolderOpen,
   ChevronDown,
   File,
+  FileSpreadsheet,
   Image,
   Cpu,
   AlertCircle,
@@ -32,6 +33,15 @@ import { useUIStore } from "../../lib/store";
 import { modelInfo } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
+import {
+  looksLikeTable,
+  parseTsv,
+  toCsv,
+  isTableFile,
+  textToBase64,
+  base64ToText,
+} from "../../lib/tableData";
+import { TableEditorModal } from "./TableSheet";
 
 export interface PendingAttachment {
   name: string;
@@ -89,6 +99,10 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
   const [agentMode, setAgentMode] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  // Table feature: pasted TSV awaiting a "convert to table" decision, and the
+  // index of the table attachment currently open in the editor.
+  const [tablePaste, setTablePaste] = useState<string | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
@@ -145,11 +159,31 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
   const handleFiles = useCallback(async (files: FileList) => {
     const newAtts: PendingAttachment[] = [];
     for (const file of Array.from(files)) {
+      // Spreadsheets become a CSV table attachment (first sheet) so they open
+      // in the table editor like any other table.
+      if (/\.xlsx?$/i.test(file.name)) {
+        try {
+          const XLSX = await import("xlsx");
+          const wb = XLSX.read(await file.arrayBuffer());
+          const sheet = wb.Sheets[wb.SheetNames[0] ?? ""];
+          const csv = sheet ? XLSX.utils.sheet_to_csv(sheet) : "";
+          newAtts.push({
+            name: file.name.replace(/\.xlsx?$/i, ".csv"),
+            mediaType: "text/csv",
+            dataBase64: textToBase64(csv),
+            kind: "file",
+          });
+          continue;
+        } catch {
+          /* parsing failed — fall through and attach the raw file */
+        }
+      }
       const base64 = await fileToBase64(file);
       const isImage = IMAGE_TYPES.includes(file.type);
+      const isCsv = /\.(csv|tsv)$/i.test(file.name);
       newAtts.push({
         name: file.name,
-        mediaType: file.type || "application/octet-stream",
+        mediaType: isCsv ? "text/csv" : file.type || "application/octet-stream",
         dataBase64: base64,
         kind: isImage ? "image" : "file",
         previewUrl: isImage ? URL.createObjectURL(file) : undefined,
@@ -166,6 +200,23 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
       next.splice(i, 1);
       return next;
     });
+  };
+
+  // Offer to turn pasted tab-separated text into a table file.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = e.clipboardData.getData("text/plain");
+    if (text && looksLikeTable(text)) setTablePaste(text);
+  };
+
+  const convertPastedTable = () => {
+    if (!tablePaste) return;
+    const csv = toCsv(parseTsv(tablePaste));
+    setAttachments((prev) => [
+      ...prev,
+      { name: "표.csv", mediaType: "text/csv", dataBase64: textToBase64(csv), kind: "file" },
+    ]);
+    setContent((c) => c.replace(tablePaste, ""));
+    setTablePaste(null);
   };
 
   const handleSend = () => {
@@ -197,9 +248,49 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
   };
 
   const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending;
+  const editingAtt = editingIndex !== null ? attachments[editingIndex] ?? null : null;
 
   return (
     <div className="flex flex-col gap-2" data-tour="composer">
+      {/* Pasted tab-separated text → offer to make it a table file */}
+      {tablePaste && (
+        <div className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-xs">
+          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-accent" />
+          <span className="flex-1 text-foreground">{t("composer.tablePaste")}</span>
+          <button
+            type="button"
+            onClick={convertPastedTable}
+            className="rounded-md bg-accent px-2 py-1 font-medium text-accent-foreground hover:bg-accent/90"
+          >
+            {t("composer.tablePaste.convert")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTablePaste(null)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={t("composer.tablePaste.dismiss")}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Table editor — opened by clicking a pending table attachment */}
+      {editingAtt && editingIndex !== null && (
+        <TableEditorModal
+          title={editingAtt.name}
+          initialCsv={base64ToText(editingAtt.dataBase64)}
+          onSave={(csv) =>
+            setAttachments((prev) =>
+              prev.map((a, i) =>
+                i === editingIndex ? { ...a, dataBase64: textToBase64(csv) } : a,
+              ),
+            )
+          }
+          onClose={() => setEditingIndex(null)}
+        />
+      )}
+
       {/* Attachment previews */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-1">
@@ -226,8 +317,22 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
                 </div>
               ) : (
                 <div className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface-2 text-xs">
-                  <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-foreground max-w-[120px] truncate">{att.name}</span>
+                  {isTableFile(att.name, att.mediaType) ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingIndex(i)}
+                      className="flex min-w-0 items-center gap-1.5 text-foreground hover:text-accent transition-colors"
+                      title={t("composer.editTable")}
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                      <span className="max-w-[120px] truncate">{att.name}</span>
+                    </button>
+                  ) : (
+                    <>
+                      <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-foreground max-w-[120px] truncate">{att.name}</span>
+                    </>
+                  )}
                   <button
                     onClick={() => removeAttachment(i)}
                     className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
@@ -259,6 +364,7 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
             el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
           }}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={disabled}
         />
 

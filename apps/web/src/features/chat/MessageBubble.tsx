@@ -36,6 +36,8 @@ import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTrace, 
 import { Badge } from "../../components/ui/Badge";
 import { useT } from "../../lib/i18n";
 import * as api from "../../lib/api";
+import { parseCsv } from "../../lib/tableData";
+import { TableSheet } from "./TableSheet";
 
 // ── Markdown renderer (react-markdown + remark-gfm) ──────────────────────────
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
@@ -271,12 +273,13 @@ function fileExt(name: string): string {
   return (name.split(".").pop() ?? "").toLowerCase();
 }
 
-type PreviewKind = "image" | "pdf" | "text" | "other";
+type PreviewKind = "image" | "pdf" | "text" | "table" | "other";
 
 function previewKind(att: ChatAttachment): PreviewKind {
   if (att.kind === "image") return "image";
   const ext = fileExt(att.name);
   if (att.mediaType === "application/pdf" || ext === "pdf") return "pdf";
+  if (ext === "csv" || ext === "tsv" || att.mediaType === "text/csv") return "table";
   if (att.mediaType.startsWith("text/") || TEXT_PREVIEW_EXT.includes(ext)) return "text";
   return "other";
 }
@@ -299,7 +302,7 @@ function AttachmentViewer({ att, onClose }: { att: ChatAttachment; onClose: () =
   const [textError, setTextError] = useState(false);
 
   useEffect(() => {
-    if (kind !== "text") return;
+    if (kind !== "text" && kind !== "table") return;
     let cancelled = false;
     fetch(url)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error("fetch failed"))))
@@ -359,6 +362,20 @@ function AttachmentViewer({ att, onClose }: { att: ChatAttachment; onClose: () =
               <pre className="p-4 text-xs font-mono text-foreground whitespace-pre-wrap break-words">
                 {text}
               </pre>
+            ) : textError ? (
+              <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+                {t("chat.attachment.previewFailed")}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ))}
+          {kind === "table" &&
+            (text !== null ? (
+              <div className="p-4">
+                <TableSheet rows={parseCsv(text)} />
+              </div>
             ) : textError ? (
               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
                 {t("chat.attachment.previewFailed")}
