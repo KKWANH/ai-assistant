@@ -44,8 +44,8 @@ const WORKSPACE_SELECT = `
 export function dbInsertWorkspace(w: Workspace): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     w.id,
     w.name,
@@ -56,7 +56,8 @@ export function dbInsertWorkspace(w: Workspace): void {
     w.lastScanAt,
     w.fileCount,
     w.createdBy ?? null,
-    w.visibility ?? "private"
+    w.visibility ?? "private",
+    w.category ?? null
   );
 }
 
@@ -86,6 +87,7 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   if (fields.lastScanAt !== undefined) { sets.push("last_scan_at = ?"); vals.push(fields.lastScanAt); }
   if (fields.fileCount !== undefined) { sets.push("file_count = ?"); vals.push(fields.fileCount); }
   if (fields.visibility !== undefined) { sets.push("visibility = ?"); vals.push(fields.visibility); }
+  if (fields.category !== undefined) { sets.push("category = ?"); vals.push(fields.category); }
 
   if (sets.length === 0) return dbGetWorkspace(id);
   vals.push(id);
@@ -116,6 +118,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     createdBy: (row["created_by"] as string | null) ?? null,
     createdByName: (row["created_by_name"] as string | null) ?? null,
     visibility: ((row["visibility"] as string | null) ?? "private") as WorkspaceVisibility,
+    category: (row["category"] as string | null) ?? null,
   };
 }
 

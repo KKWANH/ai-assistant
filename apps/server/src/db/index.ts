@@ -225,6 +225,11 @@ function runMigrations(db: DatabaseSync): void {
     db.exec("ALTER TABLE workspaces ADD COLUMN visibility TEXT");
   }
 
+  // Guarded ALTER TABLE: add category to workspaces if missing (NULL → all templates)
+  if (!wsColumns.some((c) => c.name === "category")) {
+    db.exec("ALTER TABLE workspaces ADD COLUMN category TEXT");
+  }
+
   // Guarded ALTER TABLE: add attachments_json to reports if missing
   const reportColumns = db
     .prepare("PRAGMA table_info(reports)")

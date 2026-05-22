@@ -64,6 +64,16 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "rootPath is not a directory", detail: rootPath });
     }
 
+    // Category scopes which templates the workspace surfaces — derived from the
+    // starter so a portfolio/budget workspace shows finance templates, etc.
+    const categoryByStarter: Record<string, string | null> = {
+      portfolio: "finance",
+      budget: "finance",
+      reading: "research",
+      blank: null,
+    };
+    const category = starter ? categoryByStarter[starter] ?? null : null;
+
     const workspace: Workspace = {
       id: crypto.randomUUID(),
       name,
@@ -76,6 +86,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       createdBy: req.account?.id ?? null,
       createdByName: req.account?.displayName ?? null,
       visibility: visibility ?? "private",
+      category,
     };
 
     dbInsertWorkspace(workspace);

@@ -231,7 +231,12 @@ export function WorkspaceOverview() {
 
   const hasSnapshot = !!snapshot;
   const hasRuns = runs && runs.length > 0;
-  const hasTemplates = templates && templates.length > 0;
+  // Surface only the templates relevant to this workspace's category; a
+  // workspace with no category (null) shows every template.
+  const visibleTemplates = (templates ?? []).filter(
+    (tmpl) => !ws.category || tmpl.category === ws.category,
+  );
+  const hasTemplates = visibleTemplates.length > 0;
   const hasSurface = surfaceData?.state?.exists ?? false;
 
   // ── Standard overview content (templates + runs) ──────────────────────────
@@ -290,7 +295,7 @@ export function WorkspaceOverview() {
 
         {hasTemplates ? (
           <div className="grid grid-cols-1 gap-2">
-            {templates.map((tmpl) => (
+            {visibleTemplates.map((tmpl) => (
               <Card
                 key={tmpl.id}
                 interactive
@@ -407,7 +412,7 @@ export function WorkspaceOverview() {
                 size="sm"
                 leftIcon={<Play className="h-3.5 w-3.5" />}
                 onClick={() =>
-                  navigate(`/templates/${templates[0]!.id}?workspaceId=${ws.id}`)
+                  navigate(`/templates/${visibleTemplates[0]!.id}?workspaceId=${ws.id}`)
                 }
               >
                 {t("workspace.runs.getStarted")}

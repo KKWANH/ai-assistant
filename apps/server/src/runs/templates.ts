@@ -7,6 +7,7 @@ export const BUILTIN_TEMPLATES: Template[] = [
     description:
       "로컬 폴더의 메모·논문·자료를 근거로, 출처가 연결된 리서치 브리프를 생성합니다.",
     builtin: true,
+    category: "research",
     inputs: [
       {
         key: "topic",
@@ -55,6 +56,7 @@ export const BUILTIN_TEMPLATES: Template[] = [
     name: "강의 브리프",
     description: "강의 노트와 자료를 근거로, 출처가 연결된 강의 준비 브리프를 생성합니다.",
     builtin: true,
+    category: "research",
     inputs: [
       {
         key: "topic",
@@ -105,6 +107,7 @@ export const BUILTIN_TEMPLATES: Template[] = [
     description:
       "리서치 노트·재무 자료·시장 데이터를 근거로, 구조화된 투자 결정 메모를 생성합니다.",
     builtin: true,
+    category: "finance",
     inputs: [
       {
         key: "subject",
@@ -154,6 +157,7 @@ export const BUILTIN_TEMPLATES: Template[] = [
     description:
       "로컬 폴더의 메모를 바탕으로 지원 현황·직무 적합도·아웃리치 진행 상황을 요약하고 평가합니다.",
     builtin: true,
+    category: "career",
     inputs: [
       {
         key: "goal",
@@ -195,6 +199,7 @@ export const BUILTIN_TEMPLATES: Template[] = [
     description:
       "파일 묶음의 출처 품질, 누락 영역, 인용 완전성을 점검합니다.",
     builtin: true,
+    category: "research",
     inputs: [
       {
         key: "scope",

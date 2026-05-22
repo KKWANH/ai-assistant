@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DEMO_WORKSPACE_ID, DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import type { Workspace } from "@ariadne/shared";
-import { dbGetWorkspace, dbInsertWorkspace } from "./db/repo.js";
+import { dbGetWorkspace, dbInsertWorkspace, dbUpdateWorkspace } from "./db/repo.js";
 import { PATHS } from "./config.js";
 import { ensureAriadneFolder, writeSurface } from "./ariadneFolder.js";
 import { buildSurface } from "./services/surfaceBuild.js";
@@ -73,9 +73,17 @@ export async function ensureDemoWorkspace(): Promise<void> {
         createdBy: null,
         createdByName: null,
         visibility: "public",
+        category: "finance",
       };
       dbInsertWorkspace(workspace);
       logger.info({ rootPath }, "Seeded the built-in Portfolio demo workspace");
+    } else {
+      // Backfill: an older demo row predates the category column and would
+      // still surface every template — pin it to finance once.
+      const demo = dbGetWorkspace(DEMO_WORKSPACE_ID);
+      if (demo && !demo.category) {
+        dbUpdateWorkspace(DEMO_WORKSPACE_ID, { category: "finance" });
+      }
     }
   } catch (err) {
     logger.warn({ err }, "Failed to seed the demo workspace");

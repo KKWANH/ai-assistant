@@ -19,6 +19,8 @@ export interface Workspace {
   createdByName: string | null;
   /** "private" = owner only; "public" = visible to admins too. */
   visibility: WorkspaceVisibility;
+  /** Scopes which templates this workspace surfaces; null = show all. */
+  category: string | null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -90,6 +92,8 @@ export interface Template {
   name: string;
   description: string;
   builtin: boolean;
+  /** Domain this template belongs to (e.g. "research", "finance", "career"). */
+  category: string;
   inputs: TemplateInput[];
   outputContract: { sections: string[] };
   evidenceRequired: boolean;
