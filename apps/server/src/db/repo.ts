@@ -531,9 +531,12 @@ const REPORT_SELECT = `
 export function dbInsertReport(r: Report): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO reports (id,type,title,description,created_by,created_at,status)
-     VALUES (?,?,?,?,?,?,?)`
-  ).run(r.id, r.type, r.title, r.description, r.createdBy ?? null, r.createdAt, r.status);
+    `INSERT INTO reports (id,type,title,description,created_by,created_at,status,attachments_json)
+     VALUES (?,?,?,?,?,?,?,?)`
+  ).run(
+    r.id, r.type, r.title, r.description, r.createdBy ?? null, r.createdAt, r.status,
+    JSON.stringify(r.attachments),
+  );
 }
 
 export function dbListReports(status?: ReportStatus): Report[] {
@@ -594,6 +597,7 @@ function rowToReport(row: Record<string, unknown>): Report {
     decidedBy: (row["decided_by"] as string | null) ?? null,
     decidedAt: (row["decided_at"] as string | null) ?? null,
     githubUrl: (row["github_url"] as string | null) ?? null,
+    attachments: j<ChatAttachment[]>(row["attachments_json"] as string | null, []),
   };
 }
 

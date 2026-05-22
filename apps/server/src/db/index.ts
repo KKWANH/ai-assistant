@@ -165,7 +165,8 @@ function runMigrations(db: DatabaseSync): void {
       triaged_at  TEXT,
       decided_by  TEXT,
       decided_at  TEXT,
-      github_url  TEXT
+      github_url  TEXT,
+      attachments_json TEXT NOT NULL DEFAULT '[]'
     );
   `);
 
@@ -214,5 +215,13 @@ function runMigrations(db: DatabaseSync): void {
   // Guarded ALTER TABLE: add visibility to workspaces if missing (NULL → "private")
   if (!wsColumns.some((c) => c.name === "visibility")) {
     db.exec("ALTER TABLE workspaces ADD COLUMN visibility TEXT");
+  }
+
+  // Guarded ALTER TABLE: add attachments_json to reports if missing
+  const reportColumns = db
+    .prepare("PRAGMA table_info(reports)")
+    .all() as Array<{ name: string }>;
+  if (!reportColumns.some((c) => c.name === "attachments_json")) {
+    db.exec("ALTER TABLE reports ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
   }
 }

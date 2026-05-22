@@ -24,6 +24,7 @@ import { TraceTimeline } from "../../components/ui/TraceTimeline";
 import { EvidenceBadge } from "../../components/ui/EvidenceBadge";
 import { Card } from "../../components/ui/Card";
 import { TokenEstimate } from "../../components/ui/TokenEstimate";
+import { NotFoundRedirect } from "../../components/NotFoundRedirect";
 import { useUIStore } from "../../lib/store";
 import type { Claim, TraceEvent } from "@ariadne/shared";
 
@@ -408,13 +409,16 @@ export function RunDetailView() {
   const { data: run, isLoading } = useRun(id ?? "");
   const { data: workspace } = useWorkspace(run?.workspaceId ?? "");
 
-  if (isLoading || !run) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-sm text-muted-foreground">{t("runs.detail.loading")}</p>
       </div>
     );
   }
+
+  // Loading finished but no run — it was deleted (or never existed).
+  if (!run) return <NotFoundRedirect />;
 
   const duration =
     run.completedAt && run.startedAt

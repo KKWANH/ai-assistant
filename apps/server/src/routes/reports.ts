@@ -11,7 +11,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { CreateReportSchema, ReportDecisionSchema } from "@ariadne/shared";
-import type { Report, ReportStatus } from "@ariadne/shared";
+import type { Report, ReportStatus, ChatAttachment } from "@ariadne/shared";
 import {
   dbInsertReport,
   dbListReports,
@@ -19,6 +19,7 @@ import {
   dbSetReportTriage,
   dbDecideReport,
 } from "../db/repo.js";
+import { saveUpload } from "../services/uploads.js";
 import { getProvider } from "../providers/index.js";
 import { triageReport } from "../services/triage.js";
 import { getActiveSettings, isProviderConfigured, GITHUB_REPO } from "../config.js";
@@ -77,13 +78,26 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });
     }
+    // Persist any uploaded images, mirroring the chat-attachment flow.
+    const attachments: ChatAttachment[] = [];
+    for (const att of parsed.data.attachments ?? []) {
+      const uploadId = crypto.randomUUID();
+      const meta = saveUpload(uploadId, att.name, att.mediaType, att.dataBase64);
+      attachments.push({
+        id: uploadId,
+        name: att.name,
+        mediaType: att.mediaType,
+        kind: meta.kind,
+        size: meta.size,
+      });
+    }
     const report: Report = {
       id: crypto.randomUUID(),
       type: parsed.data.type,
       title: parsed.data.title,
       description: parsed.data.description,
       createdBy: req.account?.id ?? null,
-      createdByName: null,
+      createdByName: req.account?.displayName ?? null,
       createdAt: now(),
       status: "pending",
       triage: null,
@@ -91,6 +105,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       decidedBy: null,
       decidedAt: null,
       githubUrl: null,
+      attachments,
     };
     dbInsertReport(report);
     setImmediate(() => void triageInBackground(report.id));

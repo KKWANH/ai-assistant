@@ -7,7 +7,7 @@
  *  - "Create & runs" and "Edit screen" tabs share a consistent-width panel
  *    (max-w-5xl mx-auto) so they look cohesive.
  */
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   FolderOpen,
@@ -47,6 +47,7 @@ import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { TokenEstimate } from "../../components/ui/TokenEstimate";
 import { PageHeader } from "../../components/layout/PageHeader";
+import { NotFoundRedirect } from "../../components/NotFoundRedirect";
 import { useToast } from "../../components/ui/Toast";
 import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
@@ -67,6 +68,57 @@ function EditorFallback() {
     <div className="flex items-center justify-center h-64">
       <div className="h-5 w-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
     </div>
+  );
+}
+
+/** The workspace name in the page header — double-click to rename inline. */
+function WorkspaceTitle({ workspaceId, name }: { workspaceId: string; name: string }) {
+  const { t } = useT();
+  const updateWorkspace = useUpdateWorkspace();
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(name);
+
+  const commit = () => {
+    const next = draft.trim();
+    setRenaming(false);
+    if (next && next !== name) {
+      void updateWorkspace.mutateAsync({ id: workspaceId, input: { name: next } });
+    } else {
+      setDraft(name);
+    }
+  };
+
+  if (renaming) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          else if (e.key === "Escape") {
+            setDraft(name);
+            setRenaming(false);
+          }
+        }}
+        className="min-w-0 w-64 max-w-full rounded border border-border bg-surface-2 px-1.5 text-lg font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={t("workspace.rename")}
+      />
+    );
+  }
+
+  return (
+    <span
+      onDoubleClick={() => {
+        setDraft(name);
+        setRenaming(true);
+      }}
+      title={t("workspace.renameHint")}
+      className="-mx-1 cursor-text rounded px-1 transition-colors hover:bg-surface-3"
+    >
+      {name}
+    </span>
   );
 }
 
@@ -125,13 +177,16 @@ export function WorkspaceOverview() {
   const { data: chats } = useChats();
   const createChat = useCreateChat();
 
-  if (wsLoading || !ws) {
+  if (wsLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="h-4 w-4 rounded-full border-2 border-accent border-t-transparent animate-spin" />
       </div>
     );
   }
+
+  // Loading finished but no workspace — it was deleted (or never existed).
+  if (!ws) return <NotFoundRedirect />;
 
   const handleScan = async () => {
     try {
@@ -454,7 +509,7 @@ export function WorkspaceOverview() {
       <div className="shrink-0 px-5 pt-5 pb-3 border-b border-border bg-background">
         <PageHeader
           icon={<FolderOpen className="h-5 w-5" />}
-          title={ws.name}
+          title={<WorkspaceTitle workspaceId={ws.id} name={ws.name} />}
           description={
             <span className="flex items-center gap-2">
               <span className="font-mono text-xs">{ws.rootPath}</span>

@@ -188,7 +188,7 @@ export function TutorialOverlay() {
           <p className="px-5 pt-2 text-xs leading-relaxed text-muted-foreground">
             {current.body}
           </p>
-          <div className="flex items-center justify-between gap-2 px-5 py-4 mt-2">
+          <div className="flex flex-wrap items-center gap-2 gap-y-3 px-5 py-4 mt-2">
             <div className="flex items-center gap-1.5">
               {TOUR_STEPS.map((s, i) => (
                 <span
@@ -200,7 +200,7 @@ export function TutorialOverlay() {
                 />
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-auto">
               {step > 0 && (
                 <Button
                   variant="ghost"

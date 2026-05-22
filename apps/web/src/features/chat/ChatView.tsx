@@ -32,6 +32,7 @@ import { useT } from "../../lib/i18n";
 import { ChatComposer, type WebSearchMode } from "./ChatComposer";
 import { MessageBubble, StreamingIndicator } from "./MessageBubble";
 import { Card } from "../../components/ui/Card";
+import { NotFoundRedirect } from "../../components/NotFoundRedirect";
 
 /** Format a chat's creation timestamp for the "started" line, localised. */
 function formatStarted(iso: string, locale: string): string {
@@ -296,6 +297,10 @@ function ThreadView({ chatId }: { chatId: string }) {
       </div>
     );
   }
+
+  // Loading finished but no chat came back — it was deleted (or never existed).
+  // Bounce home instead of showing an empty, broken thread.
+  if (!chat) return <NotFoundRedirect />;
 
   const hasLocalPlaceholder = messages.some((m) => m.id.startsWith("__streaming_"));
   // Show the reconnect view only for a generation this tab is not streaming.

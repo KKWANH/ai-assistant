@@ -146,6 +146,26 @@ function ReportCard({
         {report.description}
       </p>
 
+      {/* Attachments — screenshots the reporter included */}
+      {report.attachments.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {report.attachments.map((att) => (
+            <a
+              key={att.id}
+              href={`/api/uploads/${att.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                src={`/api/uploads/${att.id}`}
+                alt={att.name}
+                className="h-20 w-20 rounded-lg border border-border object-cover transition-opacity hover:opacity-80"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+
       {/* Auto-triage */}
       <div className="rounded-lg border border-border bg-surface-2 p-3">
         <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">

@@ -339,6 +339,8 @@ export interface Report {
   decidedAt: string | null;
   /** The pre-filled GitHub "new issue" URL recorded when the report was filed. */
   githubUrl: string | null;
+  /** Image / file attachments uploaded with the report. */
+  attachments: ChatAttachment[];
 }
 
 /* ------------------------------------------------------------------ *

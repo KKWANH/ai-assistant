@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialog";
@@ -9,60 +9,77 @@ import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
 
 // Route screens are code-split: each becomes its own chunk, loaded on demand.
-const ChatView = lazy(() =>
+
+/** Wrap a lazy import so a stale chunk (after a redeploy) triggers one page
+ *  reload instead of crashing with a chunk-load 404. */
+function lazyWithReload<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+) {
+  const load = (): Promise<{ default: T }> =>
+    factory().catch((err: unknown) => {
+      const KEY = "ariadne.chunkReloaded";
+      if (sessionStorage.getItem(KEY)) throw err;
+      sessionStorage.setItem(KEY, "1");
+      window.location.reload();
+      return new Promise<{ default: T }>(() => {});
+    });
+  return lazy(load);
+}
+
+const ChatView = lazyWithReload(() =>
   import("./features/chat/ChatView").then((m) => ({ default: m.ChatView }))
 );
-const WorkspaceList = lazy(() =>
+const WorkspaceList = lazyWithReload(() =>
   import("./features/workspace/WorkspaceList").then((m) => ({
     default: m.WorkspaceList,
   }))
 );
-const WorkspaceOverview = lazy(() =>
+const WorkspaceOverview = lazyWithReload(() =>
   import("./features/workspace/WorkspaceOverview").then((m) => ({
     default: m.WorkspaceOverview,
   }))
 );
-const ScriptsView = lazy(() =>
+const ScriptsView = lazyWithReload(() =>
   import("./features/workspace/ScriptsView").then((m) => ({
     default: m.ScriptsView,
   }))
 );
-const SurfaceEditor = lazy(() =>
+const SurfaceEditor = lazyWithReload(() =>
   import("./features/surface/SurfaceEditor").then((m) => ({
     default: m.SurfaceEditor,
   }))
 );
-const TemplateRunView = lazy(() =>
+const TemplateRunView = lazyWithReload(() =>
   import("./features/runs/TemplateRunView").then((m) => ({
     default: m.TemplateRunView,
   }))
 );
-const ContextPickView = lazy(() =>
+const ContextPickView = lazyWithReload(() =>
   import("./features/runs/ContextPickView").then((m) => ({
     default: m.ContextPickView,
   }))
 );
-const RunDetailView = lazy(() =>
+const RunDetailView = lazyWithReload(() =>
   import("./features/runs/RunDetailView").then((m) => ({
     default: m.RunDetailView,
   }))
 );
-const SettingsView = lazy(() =>
+const SettingsView = lazyWithReload(() =>
   import("./features/settings/SettingsView").then((m) => ({
     default: m.SettingsView,
   }))
 );
-const SearchView = lazy(() =>
+const SearchView = lazyWithReload(() =>
   import("./features/search/SearchView").then((m) => ({
     default: m.SearchView,
   }))
 );
-const ReportsQueueView = lazy(() =>
+const ReportsQueueView = lazyWithReload(() =>
   import("./features/reports/ReportsQueueView").then((m) => ({
     default: m.ReportsQueueView,
   }))
 );
-const TutorialPage = lazy(() =>
+const TutorialPage = lazyWithReload(() =>
   import("./features/tutorial/TutorialPage").then((m) => ({
     default: m.TutorialPage,
   }))

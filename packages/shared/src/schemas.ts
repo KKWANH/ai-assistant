@@ -92,6 +92,16 @@ export const CreateReportSchema = z.object({
   type: z.enum(["bug", "suggestion", "other"]),
   title: z.string().min(3).max(160),
   description: z.string().min(10).max(4000),
+  attachments: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        mediaType: z.string().min(1),
+        dataBase64: z.string().min(1),
+      }),
+    )
+    .max(6)
+    .optional(),
 });
 export type CreateReportInput = z.infer<typeof CreateReportSchema>;
 

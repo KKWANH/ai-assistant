@@ -21,7 +21,7 @@
  * Right Inspector: contextual — only on workspace/template/run detail screens.
  */
 import { type ReactNode, useEffect, useState } from "react";
-import { useNavigate, useLocation, matchPath } from "react-router-dom";
+import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import {
   FolderOpen,
   Play,
@@ -72,8 +72,8 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-/** Monochrome Ariadne web mark — a web spun outward from the centre.
- *  Inherits the current text color. */
+/** Monochrome Ariadne mark — her thread wound into a spiral: the clew that
+ *  traces the one path through the labyrinth. Inherits the current text color. */
 function Logo({ className }: { className?: string }) {
   return (
     <svg
@@ -81,15 +81,12 @@ function Logo({ className }: { className?: string }) {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.1}
+      strokeWidth={1.9}
       strokeLinecap="round"
-      strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M16 16 16 4.5M16 16 26 10.3M16 16 26 21.7M16 16 16 27.5M16 16 6 21.7M16 16 6 10.3" />
-      <path d="M16 4.5 26 10.3 26 21.7 16 27.5 6 21.7 6 10.3Z" />
-      <path d="M16 9.5 21.6 12.8 21.6 19.3 16 22.5 10.4 19.3 10.4 12.8Z" />
-      <circle cx="16" cy="16" r="2" fill="currentColor" stroke="none" />
+      <path d="M3.5 16 A11.5 11.5 0 0 1 26.5 16 A9.5 9.5 0 0 1 7.5 16 A7.5 7.5 0 0 1 22.5 16 A5.5 5.5 0 0 1 11.5 16 A2.25 2.25 0 0 1 16 16" />
+      <circle cx="16" cy="16" r="1.7" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -154,10 +151,10 @@ function ChatRow({
         label={chat.title || t("commandMenu.untitledChat")}
         icon={<MessageSquare className="h-3.5 w-3.5" />}
         active={active}
+        to={`/chat/${chat.id}`}
         onClick={() => {
           setSidebarSection("chat");
           closeMobileNav();
-          navigate(`/chat/${chat.id}`);
         }}
       />
       <button
@@ -380,10 +377,11 @@ export function AppShell({ children }: AppShellProps) {
   const inspectorAvailable = inspectorRoute && !isSimple;
   const showInspector = inspectorOpen && inspectorAvailable;
 
+  // Side-effects for the home links — the <Link to="/"> handles navigation
+  // itself, which lets middle-click / cmd-click open a new tab natively.
   const goHome = () => {
     setSidebarSection("chat");
     setMobileNavOpen(false);
-    navigate("/");
   };
 
   return (
@@ -402,7 +400,8 @@ export function AppShell({ children }: AppShellProps) {
             </IconButton>
           </span>
           {/* Brand — links to home */}
-          <button
+          <Link
+            to="/"
             onClick={goHome}
             title={t("nav.home")}
             className="flex items-center gap-1.5 shrink-0 rounded-md px-1.5 py-1 hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -411,7 +410,7 @@ export function AppShell({ children }: AppShellProps) {
             <span className="text-sm font-semibold text-topbar-foreground tracking-tight">
               Ariadne
             </span>
-          </button>
+          </Link>
           {activeWorkspaceId && workspaces && !onChatRoute && (
             <span className="hidden sm:flex items-center gap-1.5 min-w-0">
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -555,7 +554,8 @@ export function AppShell({ children }: AppShellProps) {
         >
           {/* Mobile drawer header */}
           <div className="md:hidden flex items-center justify-between h-10 pl-2 pr-1 border-b border-sidebar-border shrink-0">
-            <button
+            <Link
+              to="/"
               onClick={goHome}
               className="flex items-center gap-1.5 rounded-md px-1 py-1 hover:bg-surface-3 transition-colors"
             >
@@ -563,7 +563,7 @@ export function AppShell({ children }: AppShellProps) {
               <span className="text-sm font-semibold text-foreground tracking-tight">
                 Ariadne
               </span>
-            </button>
+            </Link>
             <IconButton
               label={t("nav.closeMenu")}
               size="sm"
@@ -575,18 +575,18 @@ export function AppShell({ children }: AppShellProps) {
 
           {/* New Chat button — prominent top action */}
           <div className="px-2 pt-2.5 pb-2 shrink-0">
-            <button
+            <Link
+              to="/"
               data-tour="new-chat"
               onClick={() => {
                 setSidebarSection("chat");
                 setMobileNavOpen(false);
-                navigate("/");
               }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <MessageSquarePlus className="h-4 w-4 shrink-0" />
               {t("nav.newChat")}
-            </button>
+            </Link>
           </div>
 
           {/* Chats list */}
@@ -645,11 +645,11 @@ export function AppShell({ children }: AppShellProps) {
                           activeWorkspaceId === ws.id &&
                           location.pathname.startsWith("/workspaces/")
                         }
+                        to={`/workspaces/${ws.id}`}
                         onClick={() => {
                           setActiveWorkspaceId(ws.id);
                           setSidebarSection("workspaces");
                           setMobileNavOpen(false);
-                          navigate(`/workspaces/${ws.id}`);
                         }}
                         meta={ws.visibility === "public" && hoveredWorkspaceId !== ws.id ? (
                           <span className="flex items-center gap-0.5 text-[11px] text-accent font-medium">
@@ -680,10 +680,8 @@ export function AppShell({ children }: AppShellProps) {
                         <SidebarItem
                           label={t("nav.scripts")}
                           icon={<Terminal className="h-3 w-3" />}
-                          onClick={() => {
-                            setMobileNavOpen(false);
-                            navigate(`/workspaces/${ws.id}/scripts`);
-                          }}
+                          to={`/workspaces/${ws.id}/scripts`}
+                          onClick={() => setMobileNavOpen(false)}
                           className="pl-5 text-[11px]"
                         />
                       )}
@@ -713,13 +711,13 @@ export function AppShell({ children }: AppShellProps) {
                   </span>
                   {allRuns && allRuns.length > 0 ? (
                     allRuns.slice(0, 6).map((run) => (
-                      <button
+                      <Link
                         key={run.id}
+                        to={`/runs/${run.id}`}
                         className="w-full flex flex-col px-2 py-1.5 rounded-md text-left text-xs transition-colors duration-100 text-sidebar-foreground hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={() => {
                           setActiveRunId(run.id);
                           setMobileNavOpen(false);
-                          navigate(`/runs/${run.id}`);
                         }}
                       >
                         <div className="flex items-center gap-2">
@@ -727,7 +725,7 @@ export function AppShell({ children }: AppShellProps) {
                           <span className="flex-1 truncate">{run.templateName}</span>
                           <Badge variant={run.status} dot />
                         </div>
-                      </button>
+                      </Link>
                     ))
                   ) : (
                     <p className="px-2 py-1 text-xs text-muted-foreground">
@@ -746,10 +744,10 @@ export function AppShell({ children }: AppShellProps) {
                 label={t("nav.reportsQueue")}
                 icon={<Flag className="h-3.5 w-3.5" />}
                 active={sidebarSection === "reports"}
+                to="/reports"
                 onClick={() => {
                   setSidebarSection("reports");
                   setMobileNavOpen(false);
-                  navigate("/reports");
                 }}
               />
             )}
@@ -757,10 +755,10 @@ export function AppShell({ children }: AppShellProps) {
               label={t("nav.settings")}
               icon={<Settings className="h-3.5 w-3.5" />}
               active={sidebarSection === "settings"}
+              to="/settings"
               onClick={() => {
                 setSidebarSection("settings");
                 setMobileNavOpen(false);
-                navigate("/settings");
               }}
             />
             {me && (
