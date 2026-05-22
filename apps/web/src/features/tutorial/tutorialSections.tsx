@@ -11,6 +11,8 @@ import {
   ReadyArt,
   WorkspaceDiagram,
   AgentFlowDiagram,
+  ActionsScenarioDiagram,
+  IntentScenarioDiagram,
   ChatDemo,
   AttachDemo,
   TemplateDemo,
@@ -75,6 +77,18 @@ export function getTutorialSections(t: TFn): TutorialSection[] {
       title: t("tutorial.page.evidence.title"),
       body: <Body paras={[t("tutorial.page.evidence.p1"), t("tutorial.page.evidence.p2")]} />,
       visual: <EvidenceDemo />,
+    },
+    {
+      id: "actions",
+      title: t("tutorial.page.actions.title"),
+      body: <Body paras={[t("tutorial.page.actions.p1"), t("tutorial.page.actions.p2")]} />,
+      visual: <ActionsScenarioDiagram />,
+    },
+    {
+      id: "intent",
+      title: t("tutorial.page.intent.title"),
+      body: <Body paras={[t("tutorial.page.intent.p1"), t("tutorial.page.intent.p2")]} />,
+      visual: <IntentScenarioDiagram />,
     },
     {
       id: "agent",

@@ -163,6 +163,30 @@ reported per run and cumulatively.
 
 ---
 
+## Screenshots
+
+The views worth showing off. Drop PNGs at the listed paths and they render
+inline. See [`docs/screenshots/README.md`](docs/screenshots/README.md) for
+what each shot should show.
+
+| Screenshot | Path |
+|---|---|
+| Portfolio dashboard — custom surface with live FX and quotes | `docs/screenshots/portfolio.png` |
+| Workspace Data tab — editable CSV-as-a-table | `docs/screenshots/data-tab.png` |
+| Actions editor — composing a block pipeline | `docs/screenshots/actions-editor.png` |
+| Action run view — per-block timeline + final output | `docs/screenshots/action-run.png` |
+| Chat intent-suggestion chip | `docs/screenshots/intent-chip.png` |
+| Agent mode — plan and execute | `docs/screenshots/agent-mode.png` |
+
+![Portfolio dashboard](docs/screenshots/portfolio.png)
+![Data tab](docs/screenshots/data-tab.png)
+![Actions editor](docs/screenshots/actions-editor.png)
+![Action run view](docs/screenshots/action-run.png)
+![Chat intent suggestion](docs/screenshots/intent-chip.png)
+![Agent mode](docs/screenshots/agent-mode.png)
+
+---
+
 ## Capabilities
 
 - **Streaming chat** — token-by-token replies, markdown rendered in place, live

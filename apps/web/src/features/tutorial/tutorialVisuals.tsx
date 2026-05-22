@@ -118,6 +118,34 @@ export function WorkspaceDiagram() {
   );
 }
 
+/** Actions — read a file, ask AI, run the pipeline. */
+export function ActionsScenarioDiagram() {
+  const { t } = useT();
+  return (
+    <div className="flex w-full max-w-md items-start justify-center gap-2 py-6">
+      <Node icon={<FileText className="h-6 w-6" />} label={t("tutorial.page.actions.nodeRead")} />
+      <div className="pt-3.5"><Arrow /></div>
+      <Node icon={<Sparkles className="h-6 w-6" />} label={t("tutorial.page.actions.nodeAsk")} />
+      <div className="pt-3.5"><Arrow /></div>
+      <Node icon={<Play className="h-6 w-6" />} label={t("tutorial.page.actions.nodeRun")} />
+    </div>
+  );
+}
+
+/** Intent — chat → AI detects → suggests a workspace action. */
+export function IntentScenarioDiagram() {
+  const { t } = useT();
+  return (
+    <div className="flex w-full max-w-md items-start justify-center gap-2 py-6">
+      <Node icon={<MessageSquare className="h-6 w-6" />} label={t("tutorial.page.intent.nodeChat")} />
+      <div className="pt-3.5"><Arrow /></div>
+      <Node icon={<Sparkles className="h-6 w-6" />} label={t("tutorial.page.intent.nodeDetect")} />
+      <div className="pt-3.5"><Arrow /></div>
+      <Node icon={<Play className="h-6 w-6" />} label={t("tutorial.page.intent.nodeSuggest")} />
+    </div>
+  );
+}
+
 /** Agent — plan-and-execute flow. */
 export function AgentFlowDiagram() {
   const { t } = useT();
