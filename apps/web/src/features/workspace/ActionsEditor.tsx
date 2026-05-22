@@ -138,7 +138,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <label className="flex flex-col gap-1">
       <span className="flex items-baseline gap-1.5 flex-wrap">
         <span className="text-[11px] font-semibold text-foreground">{label}</span>
-        {hint && <span className="text-[10px] text-muted-foreground">{hint}</span>}
+        {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
       </span>
       {children}
     </label>
@@ -180,7 +180,7 @@ function TypeMenu({
               </span>
               <span className="flex flex-col min-w-0">
                 <span className="text-xs font-medium text-foreground">{t(m.labelKey)}</span>
-                <span className="text-[10px] text-muted-foreground leading-snug">{t(m.hintKey)}</span>
+                <span className="text-[11px] text-muted-foreground leading-snug">{t(m.hintKey)}</span>
               </span>
             </button>
           );
@@ -611,7 +611,7 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
       {/* Read-only YAML preview */}
       {showYaml && (
         <div className="rounded-lg border border-border overflow-hidden">
-          <div className="px-3 py-1.5 bg-surface-2 border-b border-border text-[10px] font-mono text-muted-foreground">
+          <div className="px-3 py-1.5 bg-surface-2 border-b border-border text-[11px] font-mono text-muted-foreground">
             .ariadne/actions.yaml · {t("actions.yamlReadonly")}
           </div>
           <pre className="p-3 text-xs font-mono text-foreground bg-surface-1 overflow-x-auto whitespace-pre">

@@ -43,7 +43,7 @@ export function WorkspaceList() {
   }
 
   return (
-    <div className="p-5 max-w-2xl overflow-y-auto h-full">
+    <div className="p-5 max-w-5xl mx-auto w-full overflow-y-auto h-full">
       <PageHeader
         icon={<FolderOpen className="h-5 w-5" />}
         title={t("workspace.list.title")}

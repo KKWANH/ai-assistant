@@ -90,28 +90,43 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-        {examples.map((ex) => (
-          <Card
-            key={ex.title}
-            interactive={!!ex.action}
-            className="flex flex-col gap-2 px-4 py-3.5"
-            onClick={ex.action}
-          >
-            <div className="flex items-center gap-2">
-              {ex.icon}
-              <p className="text-sm font-medium text-foreground">{ex.title}</p>
+        {examples.map((ex) =>
+          ex.action ? (
+            // Actionable — a real card with hover + an action link.
+            <Card
+              key={ex.title}
+              interactive
+              className="flex flex-col gap-2 px-4 py-3.5"
+              onClick={ex.action}
+            >
+              <div className="flex items-center gap-2">
+                {ex.icon}
+                <p className="text-sm font-medium text-foreground">{ex.title}</p>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{ex.body}</p>
+              {ex.actionLabel && (
+                <button
+                  className="self-start text-xs text-accent hover:underline mt-0.5"
+                  onClick={(e) => { e.stopPropagation(); ex.action?.(); }}
+                >
+                  {ex.actionLabel} →
+                </button>
+              )}
+            </Card>
+          ) : (
+            // Informational tip — dashed + muted so it doesn't read as a button.
+            <div
+              key={ex.title}
+              className="flex flex-col gap-2 px-4 py-3.5 rounded-xl border border-dashed border-border/70"
+            >
+              <div className="flex items-center gap-2">
+                {ex.icon}
+                <p className="text-sm font-medium text-muted-foreground">{ex.title}</p>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{ex.body}</p>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">{ex.body}</p>
-            {ex.actionLabel && (
-              <button
-                className="self-start text-xs text-accent hover:underline mt-0.5"
-                onClick={(e) => { e.stopPropagation(); ex.action?.(); }}
-              >
-                {ex.actionLabel} →
-              </button>
-            )}
-          </Card>
-        ))}
+          )
+        )}
       </div>
 
       <button

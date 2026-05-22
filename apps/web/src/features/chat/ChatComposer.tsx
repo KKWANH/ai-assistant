@@ -429,7 +429,7 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
 
                   {/* Provider selector */}
                   <div className="px-3 py-1.5 border-b border-border">
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                       {t("chat.composer.provider")}
                     </p>
                     <div className="flex flex-col gap-0.5">
@@ -452,7 +452,7 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
                             {p !== "mock" && (
                               <span
                                 className={[
-                                  "text-[10px]",
+                                  "text-[11px]",
                                   reachable ? "text-success" : "text-muted-foreground",
                                 ].join(" ")}
                               >
@@ -467,7 +467,7 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
 
                   {/* Model selector for current provider */}
                   <div className="px-3 py-1.5">
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                       {t("chat.composer.model")}
                     </p>
                     {modelOptionsForProvider(currentProvider).length > 0 ? (
@@ -501,7 +501,7 @@ export function ChatComposer({ onSend, disabled, pending, onStop }: ChatComposer
           </div>
 
           {/* Hint */}
-          <span className="shrink-0 self-center text-[10px] text-muted-foreground hidden sm:block">
+          <span className="shrink-0 self-center text-[11px] text-muted-foreground hidden sm:block">
             {pending ? t("chat.composer.waiting") : t("chat.composer.hint")}
           </span>
 

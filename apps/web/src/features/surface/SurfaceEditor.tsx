@@ -9,7 +9,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Save, Hammer, AlertCircle, CheckCircle, Lock } from "lucide-react";
 import { Button } from "../../components/ui/Button";
@@ -21,6 +22,41 @@ import { useT } from "../../lib/i18n";
 export interface SurfaceEditorProps {
   workspaceId: string;
 }
+
+/**
+ * Token-driven CodeMirror chrome — every colour is a CSS custom property, so
+ * the editor follows Ariadne's light/dark theme automatically (no recreation).
+ */
+const editorTheme = EditorView.theme({
+  "&": {
+    height: "100%",
+    fontSize: "12px",
+    backgroundColor: "rgb(var(--surface-2))",
+    color: "rgb(var(--foreground))",
+  },
+  ".cm-scroller": { overflow: "auto", fontFamily: "var(--font-mono, monospace)" },
+  ".cm-content": { caretColor: "rgb(var(--foreground))" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "rgb(var(--foreground))" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "rgb(var(--muted))",
+  },
+  ".cm-gutters": {
+    backgroundColor: "rgb(var(--surface-2))",
+    color: "rgb(var(--muted-foreground))",
+    borderRight: "1px solid rgb(var(--border))",
+  },
+  ".cm-activeLine": { backgroundColor: "rgb(var(--surface-3))" },
+  ".cm-activeLineGutter": { backgroundColor: "rgb(var(--surface-3))" },
+});
+
+/** Syntax highlighting in semantic theme tokens — readable in light and dark. */
+const highlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: "rgb(var(--info))" },
+  { tag: tags.string, color: "rgb(var(--success))" },
+  { tag: tags.comment, color: "rgb(var(--muted-foreground))", fontStyle: "italic" },
+  { tag: [tags.number, tags.bool], color: "rgb(var(--warning))" },
+  { tag: [tags.typeName, tags.tagName, tags.className], color: "rgb(var(--info))" },
+]);
 
 export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -47,7 +83,8 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
     const editorState = EditorState.create({
       doc: initialSource,
       extensions: [
-        oneDark,
+        editorTheme,
+        syntaxHighlighting(highlightStyle),
         lineNumbers(),
         highlightActiveLine(),
         history(),
@@ -56,10 +93,6 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
         EditorState.readOnly.of(readOnly),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) setDirty(true);
-        }),
-        EditorView.theme({
-          "&": { height: "100%", fontSize: "12px" },
-          ".cm-scroller": { overflow: "auto", fontFamily: "var(--font-mono, monospace)" },
         }),
       ],
     });
@@ -227,7 +260,7 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
       {/* CodeMirror mount point */}
       <div
         ref={editorRef}
-        className="rounded-xl border border-border overflow-hidden bg-[#282c34]"
+        className="rounded-xl border border-border overflow-hidden bg-surface-2"
         style={{ height: "500px" }}
       />
 

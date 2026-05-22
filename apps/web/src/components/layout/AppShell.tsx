@@ -196,7 +196,7 @@ function ChatRow({
               {t("nav.deleteChat")}
             </button>
             <div className="border-t border-border mt-1 pt-1">
-              <p className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <p className="px-3 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
                 {t("nav.moveToWorkspace")}
               </p>
               <button
@@ -581,7 +581,7 @@ export function AppShell({ children }: AppShellProps) {
             {/* Workspaces */}
             <div className="px-2 pt-1 pb-1" data-tour="workspaces-section">
               <div className="flex items-center justify-between mb-1 px-1">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                   {t("nav.workspaces")}
                 </span>
                 <IconButton
@@ -618,7 +618,7 @@ export function AppShell({ children }: AppShellProps) {
                           navigate(`/workspaces/${ws.id}`);
                         }}
                         meta={ws.visibility === "public" && hoveredWorkspaceId !== ws.id ? (
-                          <span className="flex items-center gap-0.5 text-[9px] text-accent font-medium">
+                          <span className="flex items-center gap-0.5 text-[11px] text-accent font-medium">
                             <Globe className="h-2.5 w-2.5" />
                             {t("workspace.visibility.publicBadge")}
                           </span>
@@ -674,7 +674,7 @@ export function AppShell({ children }: AppShellProps) {
                 {/* Divider */}
                 <div className="border-t border-sidebar-border mx-2 my-1" />
                 <div className="px-2 pt-1 pb-1">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-1 block mb-1">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-1 block mb-1">
                     {t("nav.recentRuns")}
                   </span>
                   {allRuns && allRuns.length > 0 ? (
@@ -731,7 +731,7 @@ export function AppShell({ children }: AppShellProps) {
             />
             {me && (
               <div className="flex items-center gap-2 px-2 py-1.5 mt-1 rounded-md bg-surface-2 border border-border">
-                <div className="h-5 w-5 rounded-full bg-accent/20 text-accent flex items-center justify-center text-[10px] font-semibold shrink-0">
+                <div className="h-5 w-5 rounded-full bg-accent/20 text-accent flex items-center justify-center text-[11px] font-semibold shrink-0">
                   {me.account.displayName.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-xs text-foreground truncate flex-1">
