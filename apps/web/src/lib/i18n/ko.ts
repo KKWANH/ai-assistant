@@ -193,8 +193,11 @@ const ko: Record<TranslationKey, string> = {
   "workspace.runs.empty.body": "위의 템플릿을 사용해 첫 번째 브리핑이나 근거 묶음을 만들어 보세요.",
   "workspace.runs.getStarted": "시작하기",
   "workspace.chats.title": "대화",
+  "workspace.chats.subtitle": "이 워크스페이스의 파일에 대해 무엇이든 물어보세요.",
   "workspace.chats.new": "새 대화",
   "workspace.chats.empty": "이 워크스페이스에 연결된 대화가 아직 없습니다.",
+  "workspace.chats.empty.title": "이 워크스페이스에서 첫 대화를 시작해 보세요",
+  "workspace.chats.empty.body": "여기서 물어보면 이 워크스페이스의 파일을 바탕으로 답변합니다.",
   "workspace.chats.failed": "대화를 시작할 수 없습니다",
 
   "workspace.patterns.title": "파일 패턴",
@@ -225,9 +228,9 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.nameLabel": "워크스페이스 이름",
   "workspace.dialog.namePlaceholder": "내 연구 폴더",
   "workspace.dialog.nameRequired": "이름을 입력해 주세요.",
-  "workspace.dialog.rootLabel": "루트 폴더 경로",
+  "workspace.dialog.rootLabel": "워크스페이스 폴더",
   "workspace.dialog.rootPlaceholder": "찾아보기를 클릭해 폴더를 선택하세요",
-  "workspace.dialog.rootRequired": "루트 경로를 입력해 주세요.",
+  "workspace.dialog.rootRequired": "폴더를 선택해 주세요.",
   "workspace.dialog.starterLabel": "템플릿",
   "workspace.dialog.starterBlank": "빈 워크스페이스",
   "workspace.dialog.starterBlankDesc": "빈 상태 — 내 파일로 처음부터 시작합니다.",
@@ -605,8 +608,8 @@ const ko: Record<TranslationKey, string> = {
 
   // Create dialog visibility
   "workspace.dialog.visibilityLabel": "공개 설정",
-  "workspace.dialog.visibilityPrivateDesc": "본인만 볼 수 있습니다.",
-  "workspace.dialog.visibilityPublicDesc": "관리자 및 공유 사용자에게 표시됩니다.",
+  "workspace.dialog.visibilityPrivateDesc": "나만 볼 수 있습니다.",
+  "workspace.dialog.visibilityPublicDesc": "이 기기의 다른 사용자도 열 수 있어요.",
 
   // ── Actions editor ───────────────────────────────────────────────────────────
   "workspace.actions.tab": "액션",

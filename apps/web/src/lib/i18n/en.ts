@@ -200,8 +200,11 @@ const en = {
   "workspace.runs.empty.body": "Use a template above to produce your first brief or evidence pack.",
   "workspace.runs.getStarted": "Get started",
   "workspace.chats.title": "Conversations",
+  "workspace.chats.subtitle": "Ask anything about the files in this workspace.",
   "workspace.chats.new": "New chat",
   "workspace.chats.empty": "No conversations linked to this workspace yet.",
+  "workspace.chats.empty.title": "Start your first chat here",
+  "workspace.chats.empty.body": "Anything you ask will be answered against this workspace's files.",
   "workspace.chats.failed": "Could not start a chat",
 
   "workspace.patterns.title": "File Patterns",
@@ -232,9 +235,9 @@ const en = {
   "workspace.dialog.nameLabel": "Workspace name",
   "workspace.dialog.namePlaceholder": "My Research Folder",
   "workspace.dialog.nameRequired": "Name is required.",
-  "workspace.dialog.rootLabel": "Root folder path",
+  "workspace.dialog.rootLabel": "Workspace folder",
   "workspace.dialog.rootPlaceholder": "Click Browse to pick a folder",
-  "workspace.dialog.rootRequired": "Root path is required.",
+  "workspace.dialog.rootRequired": "Please choose a folder.",
   "workspace.dialog.starterLabel": "Template",
   "workspace.dialog.starterBlank": "Blank",
   "workspace.dialog.starterBlankDesc": "Empty workspace — start from scratch with your own files.",
@@ -613,7 +616,7 @@ const en = {
   // Create dialog visibility
   "workspace.dialog.visibilityLabel": "Visibility",
   "workspace.dialog.visibilityPrivateDesc": "Only you can see this workspace.",
-  "workspace.dialog.visibilityPublicDesc": "Visible to admins and shared users.",
+  "workspace.dialog.visibilityPublicDesc": "Other users on this device can open it too.",
 
   // ── Actions editor ───────────────────────────────────────────────────────────
   "workspace.actions.tab": "Actions",
