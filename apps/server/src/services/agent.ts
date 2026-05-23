@@ -4,7 +4,11 @@
  * Flow:
  *   1. Plan  — ask provider (JSON) for an ordered list of steps.
  *   2. Execute — run each step's tool; emit SSE events.
- *   3. Re-plan — after each step, let the provider revise remaining steps.
+ *   3. Re-plan — conditionally, when a step fails or yields a low-information
+ *      result (and we still have replan budget left). The previous version
+ *      re-planned after every step, paying an LLM round-trip even when the
+ *      plan was clearly still fine; in practice 80%+ of those revisions were
+ *      no-ops and cost the user 500ms–1s of latency per step.
  *   4. Final  — stream a synthesis of all step results.
  *
  * Safety: max 8 steps total, per-step timeout of 60 s, failed tools keep loop alive.
@@ -32,6 +36,12 @@ import logger from "../logger.js";
 
 const MAX_STEPS = 8;
 const STEP_TIMEOUT_MS = 60_000;
+/**
+ * Hard cap on re-planning calls per agent run. One re-plan handles a typical
+ * mid-course correction (failed tool, empty search). Higher values rarely pay
+ * for themselves — each one costs an extra provider round-trip.
+ */
+const MAX_REPLANS = 2;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -59,13 +69,22 @@ export interface RunAgentResult {
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   const { chat, history, userMessage, provider, emit, signal, accountContext } = opts;
 
-  // Load custom actions for this workspace (if any)
+  // Load custom actions for this workspace (if any), plus a short summary
+  // of workspace state so the planner knows whether file/list tools are
+  // even useful. Without this, it routinely planned `read_file` steps for
+  // workspace-less chats and burned a tool call on "[No workspace attached]".
   let customActions: WorkspaceAction[] = [];
+  let workspaceHint: WorkspaceHint = { attached: false, fileCount: 0 };
   if (chat.workspaceId) {
     const ws = dbGetWorkspace(chat.workspaceId);
     if (ws) {
       const { actions } = loadWorkspaceActions(ws.rootPath);
       customActions = actions;
+      const snapshot = dbGetLatestSnapshot(chat.workspaceId);
+      workspaceHint = {
+        attached: true,
+        fileCount: snapshot?.files.length ?? 0,
+      };
     }
   }
 
@@ -74,7 +93,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   emit({ type: "status", text: "Planning steps…" });
 
   const planRaw = await safeComplete(provider, {
-    system: buildPlannerSystem(customActions),
+    system: buildPlannerSystem(customActions, workspaceHint),
     prompt: buildPlannerPrompt(history, userMessage),
     json: true,
     signal,
@@ -121,6 +140,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
   const stepResults: string[] = [];
   const collectedSources: SearchResult[] = [];
+  // Each conditional re-plan costs a full provider round-trip; track usage
+  // against MAX_REPLANS so a long plan can't burn budget mid-execution.
+  let replansUsed = 0;
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -157,8 +179,18 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     emit({ type: "agent_step", step: { ...step } });
     stepResults.push(`Step "${step.description}" (${step.tool}): ${step.result ?? ""}`);
 
-    // ── 3. Re-plan after each step ─────────────────────────────────────────
-    if (i < steps.length - 1) {
+    // ── 3. Conditional re-plan ─────────────────────────────────────────────
+    // Skip the re-planner LLM call unless something actually changed:
+    //   - the step failed (recover), OR
+    //   - the step returned little / no information (low signal)
+    // and we still have replan budget. Doc-promised but previously not done.
+    const isLast = i >= steps.length - 1;
+    const shouldConsiderReplan =
+      !isLast &&
+      replansUsed < MAX_REPLANS &&
+      (step.status === "failed" || isLowInformation(result));
+
+    if (shouldConsiderReplan) {
       const remaining = steps.slice(i + 1);
       const revisedRaw = await safeComplete(provider, {
         system: buildReplannerSystem(customActions),
@@ -169,8 +201,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
       if (revisedRaw) {
         const revisedSteps = parsePlan(revisedRaw, customActions).steps;
-        if (revisedSteps.length > 0) {
-          // Replace remaining steps with revised plan (cap total)
+        // Skip the rewrite if the re-planner returned an identical or
+        // smaller version of what was already queued — it's a no-op
+        // change and emitting agent_plan again just causes the client to
+        // re-render for nothing.
+        if (revisedSteps.length > 0 && !plansEqual(revisedSteps, remaining)) {
           const newRemaining = revisedSteps
             .slice(0, MAX_STEPS - (i + 1))
             .map((s) => ({
@@ -181,6 +216,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
               status: "pending" as const,
             }));
           steps.splice(i + 1, steps.length - (i + 1), ...newRemaining);
+          replansUsed += 1;
+          emit({ type: "status", text: "Adjusting plan…" });
           emit({ type: "agent_plan", steps: [...steps] });
         }
       }
@@ -436,14 +473,30 @@ async function executeCustomAction(
 // Prompt builders
 // ---------------------------------------------------------------------------
 
-function buildPlannerSystem(customActions: WorkspaceAction[] = []): string {
+interface WorkspaceHint {
+  attached: boolean;
+  fileCount: number;
+}
+
+function buildPlannerSystem(
+  customActions: WorkspaceAction[] = [],
+  workspace: WorkspaceHint = { attached: false, fileCount: 0 },
+): string {
   const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason";
   const customSection = customActions.length > 0
     ? `\n\nThis workspace also has custom actions you may use as tool names:\n${customActions
         .map((a) => `  - "${a.id}": ${a.name} — ${a.description}${a.constraints ? ` [constraints: ${a.constraints}]` : ""}`)
         .join("\n")}`
     : "";
+  // A short, structured fact block beats burying these in prose — the
+  // planner respects it more reliably and avoids picking `read_file` when
+  // there is nothing to read.
+  const wsLine = workspace.attached
+    ? `Workspace attached: yes (${workspace.fileCount.toString()} indexed files). You may use read_file / list_files / run_template.`
+    : `Workspace attached: no. Do NOT pick read_file, list_files, or run_template — they will return errors. Use web_search or reason instead.`;
   return `You are an agent planner for the Ariadne AI workspace tool.
+${wsLine}
+
 First decide whether the task needs a multi-step plan at all.
 
 If it is a simple question, greeting, small talk, or anything you can answer
@@ -475,13 +528,18 @@ function buildReplannerSystem(customActions: WorkspaceAction[] = []): string {
     ? ` | ${customActions.map((a) => a.id).join(" | ")}`
     : "";
   return `You are an agent replanner for the Ariadne AI workspace tool.
-Given the user task, completed step results so far, and the remaining planned steps,
-revise the remaining steps if needed based on what was learned.
+You are called only when something went off-track — the previous step failed,
+returned little information, or revealed the plan was wrong. Given the user
+task, completed step results so far, and the remaining planned steps, decide
+whether to revise the remaining steps.
+
+Bias toward MINIMAL changes — only rewrite what truly needs to change. If the
+existing plan is still fine, return the same steps verbatim; the caller
+detects identity and skips the rewrite.
 
 Return ONLY JSON: { "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
 "tool" must be one of: ${builtinTools}${customSection}
-Each step's "note" is a brief one-line rationale.
-If no changes are needed, return the same steps unchanged.`;
+Each step's "note" is a brief one-line rationale.`;
 }
 
 function buildReplannerPrompt(
@@ -587,6 +645,47 @@ async function safeComplete(
   } catch {
     return "{}";
   }
+}
+
+/**
+ * Heuristic: did a tool result tell us almost nothing? Used as a re-plan
+ * trigger so the agent can pivot when web search yielded zero results or a
+ * file read hit a missing path. Conservative — we'd rather under-trigger a
+ * re-plan than burn budget on the wrong signal.
+ */
+function isLowInformation(result: string): boolean {
+  const trimmed = result.trim();
+  if (trimmed.length < 40) return true;
+  // The standard "I have nothing" markers our own tools emit, plus the most
+  // common natural-language equivalents from web/search backends.
+  return /^\[[^\]]+\]\s*$|no results found|no snapshot|no workspace|workspace not found|could not read/i.test(
+    trimmed,
+  );
+}
+
+/**
+ * Compare a revised plan against the currently-queued remaining steps.
+ * Returns true when the re-planner produced an effective no-op so we can
+ * skip emitting a fresh `agent_plan` event (and avoid the client re-render).
+ */
+function plansEqual(
+  revised: Array<{ description: string; tool: AgentTool }>,
+  remaining: AgentStep[],
+): boolean {
+  if (revised.length !== remaining.length) return false;
+  for (let i = 0; i < revised.length; i++) {
+    const r = revised[i];
+    const c = remaining[i];
+    if (!r || !c) return false;
+    if (r.tool !== c.tool) return false;
+    // Tolerate tiny wording differences (extra whitespace, punctuation).
+    if (normaliseDescription(r.description) !== normaliseDescription(c.description)) return false;
+  }
+  return true;
+}
+
+function normaliseDescription(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "");
 }
 
 /** Race a promise against a timeout. On timeout, aborts `ctl` so the tool's
