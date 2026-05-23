@@ -529,6 +529,13 @@ export interface ChatMessage {
   searchResults: SearchResult[] | null;
   /** Plan-and-execute trace, when the message was produced in agent mode. */
   agent: AgentTrace | null;
+  /** Provider that generated this message ("anthropic", "openai", "gemini",
+   *  "moonshot", "ollama", "mock"). Set on assistant messages; null on
+   *  user messages and on rows from before the metadata was tracked. */
+  provider?: string | null;
+  /** Model id the provider used (e.g. "claude-opus-4.5-20251024",
+   *  "gpt-5", "llama3.2:3b"). Same rules as `provider`. */
+  model?: string | null;
   /** Past content versions for an edited user message — oldest first. */
   revisions?: MessageRevision[];
   createdAt: string;

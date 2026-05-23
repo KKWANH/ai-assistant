@@ -795,9 +795,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               </div>
             )}
 
-            {/* Timestamp on hover */}
-            <span className="text-2xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity block mt-1">
-              {time}
+            {/* Footer: timestamp + provider/model (hover-revealed). Model
+                metadata is stamped per-message at insert time — older rows
+                may be null and just hide the badge. */}
+            <span className="text-2xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex items-center gap-2">
+              <span>{time}</span>
+              {(message.provider || message.model) && (
+                <span className="font-mono">
+                  · {[message.provider, message.model].filter(Boolean).join(" / ")}
+                </span>
+              )}
             </span>
           </div>
         )}

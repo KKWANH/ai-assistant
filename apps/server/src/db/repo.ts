@@ -513,8 +513,10 @@ function rowToChat(row: Record<string, unknown>): Chat {
 export function dbInsertMessage(m: ChatMessage): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO chat_messages (id, chat_id, role, content, attachments_json, web_search, search_results_json, agent_json, revisions_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO chat_messages
+       (id, chat_id, role, content, attachments_json, web_search, search_results_json,
+        agent_json, revisions_json, provider, model, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     m.id,
     m.chatId,
@@ -525,6 +527,8 @@ export function dbInsertMessage(m: ChatMessage): void {
     m.searchResults ? JSON.stringify(m.searchResults) : null,
     m.agent ? JSON.stringify(m.agent) : null,
     m.revisions && m.revisions.length > 0 ? JSON.stringify(m.revisions) : null,
+    m.provider ?? null,
+    m.model ?? null,
     m.createdAt
   );
 }
@@ -604,6 +608,8 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
     agent: row["agent_json"]
       ? (JSON.parse(row["agent_json"] as string) as AgentTrace)
       : null,
+    provider: (row["provider"] as string | null) ?? null,
+    model: (row["model"] as string | null) ?? null,
     revisions: revisions && revisions.length > 0 ? revisions : undefined,
     createdAt: row["created_at"] as string,
   };

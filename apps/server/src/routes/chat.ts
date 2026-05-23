@@ -126,6 +126,10 @@ interface StreamReplyResult {
   agentTrace: import("@ariadne/shared").AgentTrace | null;
   searchResults: SearchResult[] | null;
   generatedTitle: string | null;
+  /** Provider/model that produced this response. Null if the answer came
+   *  from the no-key notice path (no provider was actually called). */
+  provider: string | null;
+  model: string | null;
 }
 
 /**
@@ -152,7 +156,14 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   if (!isProviderConfigured(settings.provider)) {
     assistantContent = noProviderKeyMessage(settings.provider, accountLocale);
     emit({ type: "delta", text: assistantContent });
-    return { assistantContent, agentTrace, searchResults: null, generatedTitle: null };
+    return {
+      assistantContent,
+      agentTrace,
+      searchResults: null,
+      generatedTitle: null,
+      provider: null,
+      model: null,
+    };
   }
 
   const model =
@@ -297,6 +308,8 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     agentTrace,
     searchResults: agentSearchResults ?? contextSearchResults,
     generatedTitle,
+    provider: settings.provider,
+    model,
   };
 }
 
@@ -527,6 +540,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         const agentTrace = replyResult.agentTrace;
         const searchResults = replyResult.searchResults;
         const generatedTitle = replyResult.generatedTitle;
+        const replyProvider = replyResult.provider;
+        const replyModel = replyResult.model;
 
         // If the user stopped before any visible output (no text, no steps),
         // leave a small marker so the turn doesn't render blank.
@@ -548,6 +563,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           webSearch: false,
           searchResults,
           agent: agentTrace,
+          provider: replyProvider,
+          model: replyModel,
           createdAt: now(),
         };
         dbInsertMessage(assistantMsg);
@@ -701,6 +718,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           webSearch: false,
           searchResults: result.searchResults,
           agent: result.agentTrace,
+          provider: result.provider,
+          model: result.model,
           createdAt: now(),
         };
         dbInsertMessage(assistantMsg);

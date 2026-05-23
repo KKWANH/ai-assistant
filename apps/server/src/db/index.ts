@@ -267,6 +267,11 @@ function runMigrations(db: DatabaseSync): void {
   // revisions_json — past versions of a user message's content, retained
   // when the message was edited.
   chatMessages("revisions_json", "TEXT");
+  // provider + model — which provider/model produced this assistant message.
+  // Null for user messages and for assistant messages from before this
+  // metadata was tracked.
+  chatMessages("provider", "TEXT");
+  chatMessages("model", "TEXT");
 
   const workspaces = addColumnIfMissing(db, "workspaces");
   workspaces("created_by", "TEXT");
