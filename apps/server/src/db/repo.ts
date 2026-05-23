@@ -835,6 +835,91 @@ function rowToSchedule(row: Record<string, unknown>): ActionSchedule {
 }
 
 // ---------------------------------------------------------------------------
+// Chunk embeddings — semantic-search index over workspace files
+// ---------------------------------------------------------------------------
+
+export interface ChunkEmbeddingRow {
+  id: string;
+  workspaceId: string;
+  provider: string;
+  dimensions: number;
+  path: string;
+  chunk: string;
+  chunkIndex: number;
+  fileMtime: number;
+  embedding: Float32Array;
+  indexedAt: string;
+}
+
+/** Wipe the workspace's embedding index — called before a fresh reindex. */
+export function dbClearWorkspaceEmbeddings(workspaceId: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM chunk_embeddings WHERE workspace_id = ?").run(workspaceId);
+}
+
+/** Bulk-insert chunks for one workspace. Caller passes a Float32Array
+ *  per row; we store it as a BLOB. */
+export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
+  if (rows.length === 0) return;
+  const db = getDb();
+  const stmt = db.prepare(
+    `INSERT INTO chunk_embeddings
+       (id, workspace_id, provider, dimensions, path, chunk, chunk_index, file_mtime, embedding, indexed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const r of rows) {
+    stmt.run(
+      r.id,
+      r.workspaceId,
+      r.provider,
+      r.dimensions,
+      r.path,
+      r.chunk,
+      r.chunkIndex,
+      r.fileMtime,
+      // node:sqlite accepts Buffer / Uint8Array for BLOB.
+      Buffer.from(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength),
+      r.indexedAt,
+    );
+  }
+}
+
+export interface StoredChunk {
+  id: string;
+  path: string;
+  chunk: string;
+  embedding: Float32Array;
+  /** Provider + dimensions of THIS row — caller checks against the
+   *  query's provider before scoring (mismatch ⇒ reindex needed). */
+  provider: string;
+  dimensions: number;
+}
+
+export function dbListWorkspaceChunks(workspaceId: string): StoredChunk[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, path, chunk, embedding, provider, dimensions
+         FROM chunk_embeddings WHERE workspace_id = ?`,
+    )
+    .all(workspaceId) as Array<Record<string, unknown>>;
+  return rows.map((row) => {
+    // SQLite returns BLOB as Uint8Array. Reuse the underlying buffer so
+    // we don't pay an O(n) copy per row.
+    const buf = row["embedding"] as Uint8Array;
+    const f32 = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+    return {
+      id: row["id"] as string,
+      path: row["path"] as string,
+      chunk: row["chunk"] as string,
+      embedding: f32,
+      provider: row["provider"] as string,
+      dimensions: row["dimensions"] as number,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // FTS index
 // ---------------------------------------------------------------------------
 

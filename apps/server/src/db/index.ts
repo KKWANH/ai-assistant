@@ -202,6 +202,29 @@ function runMigrations(db: DatabaseSync): void {
     );
   `);
 
+  // Chunk embeddings — semantic-search index over workspace text files.
+  // One row per chunk. embedding is a Float32Array stored as a BLOB; the
+  // provider tag captures which model produced the vector so the
+  // retriever can reject a stale index after a model swap.
+  // Re-indexing replaces all rows for the workspace, so we don't need
+  // staleness flags — file_mtime is for incremental indexing later.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chunk_embeddings (
+      id            TEXT PRIMARY KEY,
+      workspace_id  TEXT NOT NULL,
+      provider      TEXT NOT NULL,
+      dimensions    INTEGER NOT NULL,
+      path          TEXT NOT NULL,
+      chunk         TEXT NOT NULL,
+      chunk_index   INTEGER NOT NULL,
+      file_mtime    INTEGER NOT NULL,
+      embedding     BLOB NOT NULL,
+      indexed_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_workspace
+      ON chunk_embeddings(workspace_id);
+  `);
+
   // Guarded ALTER TABLE: add agent_json to chat_messages if missing
   const chatMsgColumns = db
     .prepare("PRAGMA table_info(chat_messages)")

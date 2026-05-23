@@ -711,6 +711,8 @@ const ko: Record<TranslationKey, string> = {
   "schedules.delete": "스케줄 삭제",
   "schedules.confirmDelete": "이 스케줄을 삭제할까요?",
   "schedules.failed": "스케줄을 저장하지 못했습니다",
+  "workspace.history.title": "실행 기록",
+  "workspace.history.filesChanged": "{n}개 파일",
   "actions.type.web_search": "웹 검색",
   "actions.type.web_search.hint": "검색어로 웹 검색",
   "actions.type.format": "형식 변환",

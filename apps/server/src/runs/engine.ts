@@ -415,6 +415,23 @@ ${fileContext}`;
     usage: usageToStore,
   });
 
+  // Auto-version the run's .ariadne/ artifacts. Background — never
+  // blocks the completed response and silently no-ops when git is
+  // unavailable on the host.
+  setImmediate(() => {
+    void (async () => {
+      try {
+        const { commitWorkspaceHistory } = await import("../services/workspaceGit.js");
+        await commitWorkspaceHistory(
+          workspace.rootPath,
+          `run: ${runId} (completed)`,
+        );
+      } catch (err) {
+        logger.debug({ runId, err }, "workspaceGit commit threw");
+      }
+    })();
+  });
+
   logger.info({ runId, usage: usageToStore }, "run completed");
 }
 

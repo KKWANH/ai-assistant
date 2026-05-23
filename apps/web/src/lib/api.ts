@@ -441,6 +441,22 @@ async function consumeMessageStream(
 
 export const getUploadUrl = (id: string) => `/api/uploads/${id}`;
 
+// ── Workspace git history ─────────────────────────────────────────────────────
+
+export interface WorkspaceCommit {
+  sha: string;
+  shortSha: string;
+  message: string;
+  timestamp: string;
+  filesChanged: number;
+}
+
+export const listWorkspaceHistory = (workspaceId: string, limit = 50) =>
+  request<WorkspaceCommit[]>(
+    "GET",
+    `/workspaces/${workspaceId}/history?limit=${limit.toString()}`,
+  );
+
 // ── Action schedules ──────────────────────────────────────────────────────────
 import type {
   ActionSchedule,

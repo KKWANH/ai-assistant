@@ -222,6 +222,12 @@ A short triage classifier (also a provider call) decides, per message, whether
 a web search would help and whether the question warrants the slower
 plan-and-execute agent loop — so users can leave both toggles on `auto`.
 
+**Embeddings (optional).** If your local Ollama has `nomic-embed-text` or
+`mxbai-embed-large` installed (or you set `OPENAI_API_KEY`), Ariadne will
+auto-index your workspace into a vector store at scan time and use cosine
+similarity for retrieval. Without an embedding model installed it falls back
+to a keyword ranker — same interface, no config change.
+
 ---
 
 ## Capabilities

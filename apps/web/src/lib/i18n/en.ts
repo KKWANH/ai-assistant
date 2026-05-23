@@ -718,6 +718,8 @@ const en = {
   "schedules.delete": "Delete schedule",
   "schedules.confirmDelete": "Delete this schedule?",
   "schedules.failed": "Could not save the schedule",
+  "workspace.history.title": "Run history",
+  "workspace.history.filesChanged": "{n} files",
   "actions.type.web_search": "Web search",
   "actions.type.web_search.hint": "Search the web for a query",
   "actions.type.format": "Format",

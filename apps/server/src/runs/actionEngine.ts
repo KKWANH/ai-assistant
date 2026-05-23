@@ -154,6 +154,23 @@ async function runActionPipeline(runId: string, action: ActionDef): Promise<void
     blockResults: results,
     usage: usage.inputTokens > 0 || usage.outputTokens > 0 ? usage : null,
   });
+
+  // Mirror engine.ts: auto-version the .ariadne/ artifacts in the
+  // workspace's history repo. Background, no-op without git.
+  setImmediate(() => {
+    void (async () => {
+      try {
+        const { commitWorkspaceHistory } = await import("../services/workspaceGit.js");
+        await commitWorkspaceHistory(
+          workspace.rootPath,
+          `action: ${action.name} (${runId}) completed`,
+        );
+      } catch (err) {
+        logger.debug({ runId, err }, "workspaceGit commit threw");
+      }
+    })();
+  });
+
   logger.info({ runId, blocks: action.blocks.length }, "action run completed");
 }
 

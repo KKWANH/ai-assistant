@@ -151,6 +151,10 @@ export async function buildChatContext(
           ws.rootPath,
           snapshot.files,
           userMessage.content,
+          // Letting the retriever know the workspaceId unlocks the
+          // embedding path — it'll cosine-score against the stored
+          // index when one exists, fall back to keyword otherwise.
+          { workspaceId: ws.id },
         );
         const rendered = formatChunksForPrompt(ranked);
         if (rendered) {

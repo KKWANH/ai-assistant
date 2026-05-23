@@ -8,6 +8,7 @@ import { buildFileMeta } from "./metadata.js";
 import { getDb } from "../db/index.js";
 import { dbInsertSnapshot, dbUpsertFileIndex } from "../db/repo.js";
 import { ensureAriadneFolder, writeSnapshot } from "../ariadneFolder.js";
+import logger from "../logger.js";
 
 /** Walk the directory tree and return all absolute file paths. */
 function walk(dir: string, results: string[] = []): string[] {
@@ -95,6 +96,26 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
     const headings = f.headings?.join(" ") ?? "";
     dbUpsertFileIndex(db, workspace.id, f.path, headings);
   }
+
+  // Re-build the embedding index in the background — never blocks the
+  // scan response. No-op when no embedding provider is reachable, in
+  // which case retrieval falls through to the keyword ranker.
+  setImmediate(() => {
+    void (async () => {
+      try {
+        const { indexWorkspaceEmbeddings } = await import("../services/retrieval.js");
+        const result = await indexWorkspaceEmbeddings(workspace.id, workspace.rootPath, files);
+        if (result.indexed > 0) {
+          logger.info(
+            { workspaceId: workspace.id, indexed: result.indexed, provider: result.provider },
+            "embedding index rebuilt",
+          );
+        }
+      } catch (err) {
+        logger.warn({ workspaceId: workspace.id, err }, "embedding indexer threw");
+      }
+    })();
+  });
 
   return snapshot;
 }

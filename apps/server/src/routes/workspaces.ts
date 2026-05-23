@@ -145,6 +145,20 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(workspace);
   });
 
+  // GET /api/workspaces/:id/history — list recent commits in the
+  // workspace's .ariadne/ git repo (auto-versioned per run).
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    "/workspaces/:id/history",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+      const { listWorkspaceHistory } = await import("../services/workspaceGit.js");
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+      const commits = await listWorkspaceHistory(workspace.rootPath, limit);
+      return reply.send(commits);
+    },
+  );
+
   // PATCH /api/workspaces/:id
   app.patch<{ Params: { id: string } }>("/workspaces/:id", async (req, reply) => {
     const workspace = await requireWorkspace(req.params.id, req, reply);

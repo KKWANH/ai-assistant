@@ -32,6 +32,7 @@ import {
   Database,
   Pencil,
   Trash2,
+  GitCommit,
 } from "lucide-react";
 
 import {
@@ -49,6 +50,7 @@ import {
   useCreateSchedule,
   useUpdateSchedule,
   useDeleteSchedule,
+  useWorkspaceHistory,
 } from "../../lib/queries";
 import type { ScheduleFrequency } from "@ariadne/shared";
 import { useT } from "../../lib/i18n";
@@ -359,6 +361,47 @@ function SchedulesSection({
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+/** Compact history list — auto-versioned commits of `.ariadne/` per run. */
+function HistorySection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useT();
+  const { data: commits } = useWorkspaceHistory(workspaceId, 12);
+  // Hide entirely when there's nothing to show — keeps the overview
+  // clean for workspaces that haven't run anything yet (or where git
+  // isn't on the host).
+  if (!commits || commits.length === 0) return null;
+  return (
+    <section>
+      <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+        <GitCommit className="h-3.5 w-3.5" />
+        {t("workspace.history.title")}
+      </h2>
+      <div className="flex flex-col gap-1">
+        {commits.map((c) => (
+          <div
+            key={c.sha}
+            className="flex items-center gap-3 px-3 py-1.5 rounded-md border border-border bg-background"
+          >
+            <span className="font-mono text-2xs text-muted-foreground shrink-0">
+              {c.shortSha}
+            </span>
+            <span className="text-xs text-foreground truncate flex-1">
+              {c.message}
+            </span>
+            <span className="text-2xs text-muted-foreground shrink-0">
+              {c.filesChanged > 0
+                ? t("workspace.history.filesChanged", { n: c.filesChanged })
+                : ""}
+            </span>
+            <span className="text-2xs text-muted-foreground shrink-0">
+              {new Date(c.timestamp).toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -740,6 +783,11 @@ export function WorkspaceOverview() {
           </div>
         )}
       </section>
+
+      {/* Workspace history — auto-committed snapshot of every run's
+          .ariadne/ artifacts. Hidden when git isn't available or there
+          are no commits yet. */}
+      <HistorySection workspaceId={ws.id} />
 
       {/* Patterns (secondary info) */}
       {(ws.include.length > 0 || ws.exclude.length > 0) && (

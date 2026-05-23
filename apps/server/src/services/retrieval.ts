@@ -15,9 +15,19 @@
  * Designed so a future embedding-based retriever can drop in behind the
  * same `retrieveRelevantChunks` signature without callers changing.
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { FileMeta } from "@ariadne/shared";
+import { getEmbeddingProvider } from "../providers/embedding.js";
+import {
+  dbClearWorkspaceEmbeddings,
+  dbInsertChunkEmbeddings,
+  dbListWorkspaceChunks,
+  type ChunkEmbeddingRow,
+  type StoredChunk,
+} from "../db/repo.js";
+import logger from "../logger.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -68,6 +78,9 @@ export interface RetrievedChunk {
 export interface RetrieveOptions {
   topK?: number;
   chunkChars?: number;
+  /** When set, the retriever first checks for a stored embedding index
+   *  and uses it before falling back to keyword search. */
+  workspaceId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,8 +90,16 @@ export interface RetrieveOptions {
 /**
  * Return up to `topK` workspace chunks that look most relevant to `query`.
  *
- * Empty array if the query has no extractable keywords, the workspace has
- * no readable files, or every chunk scores zero.
+ * Strategy (in order):
+ *   1. If an embedding index exists for the workspace and an embedding
+ *      provider is reachable, score by cosine similarity against the
+ *      query embedding.
+ *   2. Otherwise fall back to the local keyword ranker (sublinear TF +
+ *      path-match bonus). The semantic path is opt-in via indexing;
+ *      keyword always works with no setup.
+ *
+ * Empty array if the query has no extractable keywords AND there's no
+ * embedding index (i.e. nothing to score against).
  */
 export async function retrieveRelevantChunks(
   rootPath: string,
@@ -86,10 +107,19 @@ export async function retrieveRelevantChunks(
   query: string,
   options: RetrieveOptions = {},
 ): Promise<RetrievedChunk[]> {
+  const topK = options.topK ?? DEFAULT_TOP_K;
+
+  // ── Embedding path — only used if a workspace_id is provided AND an
+  //    index already exists. The chat route passes the id; ad-hoc
+  //    callers without one fall through to keyword.
+  if (options.workspaceId) {
+    const semantic = await retrieveBySimilarity(options.workspaceId, query, topK);
+    if (semantic !== null) return semantic;
+  }
+
   const tokens = tokenize(query);
   if (tokens.length === 0) return [];
 
-  const topK = options.topK ?? DEFAULT_TOP_K;
   const chunkChars = options.chunkChars ?? CHUNK_CHARS;
 
   // Pick candidate files. We don't read everything — sort by size so the
@@ -263,4 +293,179 @@ function countOccurrences(haystack: string, needle: string): number {
     count++;
     from = idx + needle.length;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Embedding-based retrieval — opt-in semantic search via stored vectors
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-build the embedding index for a workspace from scratch. Called
+ * after a workspace scan completes. No-op if no embedding provider is
+ * reachable (Ollama down + no OPENAI_API_KEY) — the caller falls back
+ * to keyword retrieval automatically.
+ */
+export async function indexWorkspaceEmbeddings(
+  workspaceId: string,
+  rootPath: string,
+  files: FileMeta[],
+): Promise<{ indexed: number; provider: string | null }> {
+  const provider = await getEmbeddingProvider();
+  if (!provider) return { indexed: 0, provider: null };
+
+  const root = path.resolve(rootPath);
+  // Same eligibility rules as the keyword path.
+  const candidates = files
+    .filter((f) => {
+      if (f.sensitive) return false;
+      const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
+      return READABLE_EXT.has(ext);
+    })
+    .sort((a, b) => a.size - b.size)
+    .slice(0, MAX_FILES_READ);
+
+  // Read + chunk every candidate. Concurrency is fine — disk-bound.
+  const rows: ChunkEmbeddingRow[] = [];
+  const allChunks: { path: string; chunk: string; index: number; mtime: number }[] = [];
+
+  for (const f of candidates) {
+    const abs = path.resolve(root, f.path);
+    if (abs !== root && !abs.startsWith(root + path.sep)) continue;
+    let text: string;
+    let mtime: number;
+    try {
+      const stat = await fs.promises.stat(abs);
+      mtime = Math.floor(stat.mtimeMs);
+      const buf = await fs.promises.readFile(abs, "utf-8");
+      text = buf.length > FILE_READ_BUDGET ? buf.slice(0, FILE_READ_BUDGET) : buf;
+    } catch {
+      continue;
+    }
+    const chunks = chunkText(text, CHUNK_CHARS);
+    chunks.forEach((chunk, idx) => {
+      allChunks.push({ path: f.path, chunk, index: idx, mtime });
+    });
+  }
+
+  if (allChunks.length === 0) {
+    // Nothing to index — still clear stale rows so a now-empty
+    // workspace doesn't carry old embeddings forward.
+    dbClearWorkspaceEmbeddings(workspaceId);
+    return { indexed: 0, provider: provider.id };
+  }
+
+  // Embed in batches via the provider's preferred path.
+  let vectors: number[][];
+  try {
+    vectors = await provider.embedMany(allChunks.map((c) => c.chunk));
+  } catch (err) {
+    logger.warn({ workspaceId, err }, "embedding indexer failed");
+    return { indexed: 0, provider: provider.id };
+  }
+
+  const now = new Date().toISOString();
+  for (let i = 0; i < allChunks.length; i++) {
+    const c = allChunks[i];
+    const v = vectors[i];
+    if (!c || !v || v.length === 0) continue;
+    rows.push({
+      id: crypto.randomUUID(),
+      workspaceId,
+      provider: provider.id,
+      dimensions: v.length,
+      path: c.path,
+      chunk: c.chunk,
+      chunkIndex: c.index,
+      fileMtime: c.mtime,
+      embedding: new Float32Array(v),
+      indexedAt: now,
+    });
+  }
+
+  // Replace, don't merge — keeps the index in sync with the current
+  // file set (deletes / renames don't leave orphans).
+  dbClearWorkspaceEmbeddings(workspaceId);
+  dbInsertChunkEmbeddings(rows);
+  return { indexed: rows.length, provider: provider.id };
+}
+
+/**
+ * Semantic retrieval — returns null if there's no usable index, signal
+ * to the caller to fall through to keyword search. Returns an empty
+ * array (not null) when the index exists but nothing scores above noise.
+ */
+async function retrieveBySimilarity(
+  workspaceId: string,
+  query: string,
+  topK: number,
+): Promise<RetrievedChunk[] | null> {
+  const stored = dbListWorkspaceChunks(workspaceId);
+  if (stored.length === 0) return null;
+
+  const provider = await getEmbeddingProvider();
+  if (!provider) return null;
+
+  // The stored index was produced by one specific model — if the
+  // active provider doesn't match (model changed, dimensions changed),
+  // bail rather than mixing geometries. The caller falls back to
+  // keyword and re-indexing will catch this up on the next scan.
+  const indexProvider = stored[0]?.provider;
+  if (!indexProvider || indexProvider !== provider.id) {
+    logger.info(
+      { workspaceId, indexProvider, activeProvider: provider.id },
+      "embedding index out of date — falling back",
+    );
+    return null;
+  }
+
+  let queryVec: Float32Array;
+  try {
+    queryVec = new Float32Array(await provider.embed(query));
+  } catch (err) {
+    logger.warn({ workspaceId, err }, "embedding query failed — falling back");
+    return null;
+  }
+
+  // Cosine similarity in JS — corpora are O(hundreds) of chunks per
+  // workspace, well within in-process scoring budget. Pre-norm the
+  // query once.
+  const qNorm = vectorNorm(queryVec);
+  if (qNorm === 0) return [];
+
+  const scored: { chunk: StoredChunk; score: number }[] = [];
+  for (const s of stored) {
+    const sim = cosineSimilarity(queryVec, qNorm, s.embedding);
+    if (sim > 0) scored.push({ chunk: s, score: sim });
+  }
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, topK).map((s) => ({
+    path: s.chunk.path,
+    chunk: s.chunk.chunk,
+    score: s.score,
+  }));
+}
+
+function vectorNorm(v: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < v.length; i++) {
+    const x = v[i] ?? 0;
+    sum += x * x;
+  }
+  return Math.sqrt(sum);
+}
+
+function cosineSimilarity(a: Float32Array, aNorm: number, b: Float32Array): number {
+  if (a.length !== b.length) return 0;
+  let dot = 0;
+  let bSqr = 0;
+  for (let i = 0; i < a.length; i++) {
+    const ax = a[i] ?? 0;
+    const bx = b[i] ?? 0;
+    dot += ax * bx;
+    bSqr += bx * bx;
+  }
+  const bNorm = Math.sqrt(bSqr);
+  if (aNorm === 0 || bNorm === 0) return 0;
+  return dot / (aNorm * bNorm);
 }

@@ -790,6 +790,16 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
   });
 }
 
+// ── Workspace history ─────────────────────────────────────────────────────────
+
+export function useWorkspaceHistory(workspaceId: string, limit = 50) {
+  return useQuery({
+    queryKey: ["workspace-history", workspaceId, limit] as const,
+    queryFn: () => api.listWorkspaceHistory(workspaceId, limit),
+    enabled: !!workspaceId,
+  });
+}
+
 // ── Schedules ─────────────────────────────────────────────────────────────────
 
 export function useSchedules(workspaceId: string) {
