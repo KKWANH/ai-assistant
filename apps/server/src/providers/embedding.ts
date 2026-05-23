@@ -114,6 +114,106 @@ async function tryOllamaEmbedding(): Promise<EmbeddingProvider | null> {
   }
 }
 
+// ── One-time auto-pull of an embedding model ────────────────────────────────
+
+const AUTO_PULL_MODEL = "nomic-embed-text";
+/** Tracks the in-flight pull so concurrent scans don't kick off two at once. */
+let autoPullInFlight: Promise<boolean> | null = null;
+/** Sentinel that flips to true once a pull has completed (success or fail)
+ *  in this process — avoids retrying repeatedly within the same session. */
+let autoPullAttempted = false;
+
+/** Is Ollama reachable right now? Used to gate the auto-pull. */
+async function isOllamaUp(): Promise<boolean> {
+  try {
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Best-effort: kick off `ollama pull nomic-embed-text` in the background
+ * if (a) Ollama is reachable, (b) no embedding model is already installed,
+ * (c) we haven't already attempted a pull in this process. Returns
+ * immediately — the pull continues in the background and the next scan
+ * picks up the newly-installed model.
+ *
+ * Caller should treat the return value as "did we start a pull this time".
+ */
+export async function ensureOllamaEmbeddingModel(): Promise<boolean> {
+  if (autoPullAttempted) return false;
+  if (autoPullInFlight) return false;
+  // Don't auto-pull if the user already configured a hosted embedding
+  // provider — they may not want a 300 MB download.
+  if (process.env.OPENAI_API_KEY) return false;
+  if (!(await isOllamaUp())) return false;
+  // Re-check the tag list to make sure no model snuck in between calls.
+  try {
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { models?: Array<{ name: string }> };
+      const installed = (data.models ?? []).map((m) => m.name);
+      if (OLLAMA_PREFERRED_MODELS.some((m) => installed.includes(m))) return false;
+    }
+  } catch {
+    return false;
+  }
+
+  autoPullAttempted = true;
+  autoPullInFlight = doPull(AUTO_PULL_MODEL).finally(() => {
+    autoPullInFlight = null;
+    // Force the provider cache to re-probe on the next get — the
+    // newly-pulled model should be visible.
+    resetEmbeddingProviderCache();
+  });
+  return true;
+}
+
+/** Stream-parse the Ollama pull response. Resolves true on completion. */
+async function doPull(model: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/pull`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: model, stream: true }),
+    });
+    if (!res.ok || !res.body) return false;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // Each Ollama pull frame is one JSON object per newline.
+      let nl;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (!line) continue;
+        // We deliberately don't log every frame — Ollama emits one per
+        // ~MB of download. The final "success" frame is what matters.
+        try {
+          const obj = JSON.parse(line) as { status?: string; error?: string };
+          if (obj.error) return false;
+          if (obj.status === "success") return true;
+        } catch {
+          /* malformed line — ignore */
+        }
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── OpenAI adapter ──────────────────────────────────────────────────────────
 
 class OpenAIEmbeddingProvider implements EmbeddingProvider {

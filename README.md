@@ -222,11 +222,14 @@ A short triage classifier (also a provider call) decides, per message, whether
 a web search would help and whether the question warrants the slower
 plan-and-execute agent loop — so users can leave both toggles on `auto`.
 
-**Embeddings (optional).** If your local Ollama has `nomic-embed-text` or
-`mxbai-embed-large` installed (or you set `OPENAI_API_KEY`), Ariadne will
-auto-index your workspace into a vector store at scan time and use cosine
-similarity for retrieval. Without an embedding model installed it falls back
-to a keyword ranker — same interface, no config change.
+**Embeddings (auto-pull).** Workspace files are auto-indexed into a
+cosine-similarity vector store at scan time. If your local Ollama doesn't
+have an embedding model yet, Ariadne kicks off a background
+`ollama pull nomic-embed-text` on the first scan — the next scan picks it
+up automatically (no UI dialog, ~300 MB download, ~one-minute affair). If
+`OPENAI_API_KEY` is set, OpenAI `text-embedding-3-small` is used instead.
+Until an embedding model is available, retrieval falls back to a keyword
+ranker — same interface, no config change.
 
 ---
 
@@ -234,17 +237,48 @@ to a keyword ranker — same interface, no config change.
 
 - **Streaming chat** — token-by-token replies, markdown rendered in place,
   file / image attachments, edit-and-regenerate with kept revision history.
+- **Skills** — account-scoped reusable prompt snippets. Surface them in any
+  composer via the Sparkles button, or type `/name` for slash-command
+  autocomplete. Create / edit / delete inline from Settings.
 - **Agent mode (off / auto / on)** — a plan-and-execute loop with conditional
   re-planning (failures or low-information results only), surfaced as a live
   checklist of steps. `auto` mode classifies per message.
 - **Custom actions** — declarative per-workspace block pipelines
-  (`.ariadne/actions.yaml`) the agent planner can use: run a script, read a
-  file, ask AI, search the web, format output. Each block feeds the next;
-  fail-fast on the first error.
+  (`.ariadne/actions.yaml`) the agent planner can use. Six block types:
+  `read_file`, `ask_ai`, `web_analysis`, `run_script`, `write_file` (output
+  to disk with `{date}` / `{time}` substitution), `edit_file` (search/replace
+  or full-content; **stages** under `.ariadne/staged/` for review rather than
+  writing immediately), and `run_tests` (captures pass/fail for re-plan).
+- **Staged diff review** — `edit_file` proposals land at `/runs/<id>/diff`
+  with per-file checkboxes and a side-by-side line diff. Apply commits the
+  selected files; Discard wipes the staged tree.
+- **Agent attempts** — when the agent uses `edit_file`, edits accumulate
+  into the chat's open *attempt* (one per chat). Review at
+  `/attempts/<id>/diff`, then Apply or Abandon. A compact chip in the
+  composer surfaces the attempt's file count.
+- **Action schedules** — register an action to run hourly / daily / weekly /
+  monthly. In-process scheduler ticks every 60s; combine with `write_file`
+  to land scheduled outputs in `briefs/{date}.md` (or anywhere else).
+- **Workspace history + rewind** — `.ariadne/` is its own git repo; every
+  completed run lands a commit. The Run history widget shows recent commits
+  with stats; on each `apply:` commit, a hover-revealed Rewind button
+  restores the workspace to the state immediately before.
+- **Embedding-aware retrieval** — when an Ollama embedding model
+  (`nomic-embed-text` or `mxbai-embed-large`) is installed (or
+  `OPENAI_API_KEY` is set), workspace files are auto-indexed into a
+  cosine-similarity vector store at scan time. Falls back to a keyword
+  ranker silently when no embedding model is available.
+- **Symbol-boosted retrieval** — a regex-based code symbol indexer
+  (function / class / method / const) over TS / JS / TSX / JSX / Python /
+  Go / Rust / Java adds a small score nudge to chunks whose paths contain
+  query-matched symbols. Cheap to maintain; better grounding for code-heavy
+  workspaces.
 - **Custom surfaces** — a workspace can carry a TypeScript dashboard
   (`.ariadne/surface.tsx`), built with esbuild and run in a sandboxed iframe
-  with a postMessage SDK. Ships a Portfolio (CSV + charts) example with live
-  FX & stock quotes.
+  with a postMessage SDK. Six starter templates ship: Portfolio (CSV +
+  charts with live FX & stock quotes), Budget Tracker, Reading Library,
+  Chefbook (ingredients + recipes), Code Project (TypeScript sandbox with
+  the `edit_file` demo), plus Blank.
 - **Gasp Filter** — proposes ≤8 source files per workspace size before any
   read, keeping token bills bounded and giving the user a context preview.
 - **Evidence map + unsupported claims** — every claim in a brief is mapped to
@@ -264,19 +298,28 @@ to a keyword ranker — same interface, no config change.
 
 ## How Ariadne is different
 
-| | ChatGPT / Claude.ai | Open WebUI / LibreChat | **Ariadne** |
-|---|---|---|---|
-| Reads local folders | upload only | model-switch UI | yes — native workspace |
-| Evidence-mapped output | no | no | yes — claim-to-source + unsupported list |
-| Re-runnable, diffable runs | no | no | yes — `.ariadne/` is portable |
-| Custom workspace dashboards | no | no | yes — sandboxed surfaces |
-| Composed action pipelines | no | no | yes — block pipelines + intent chip |
-| Self-host | no | yes | yes — local-first + tunnel |
-| Bring-your-own models | no | yes | yes (incl. Ollama default) |
+| | ChatGPT / Claude.ai | Open WebUI / LibreChat | Cursor / Claude Code | **Ariadne** |
+|---|---|---|---|---|
+| Reads local folders | upload only | model-switch UI | yes (editor-first) | yes — native workspace |
+| Evidence-mapped output | no | no | no | yes — claim-to-source + unsupported list |
+| Re-runnable, diffable runs | no | no | no | yes — `.ariadne/` is portable |
+| Custom workspace dashboards | no | no | no | yes — sandboxed surfaces (6 starters) |
+| Composed action pipelines | no | no | no | yes — 7 block types + intent chip |
+| Staged file edits with diff review | n/a | no | yes (apply per file) | yes — `/runs/<id>/diff` per-file checkboxes |
+| Agent staging branches per chat | no | no | no | yes — `attempts` model + chip in composer |
+| Edit-and-regenerate user messages | partial | partial | partial | yes — full revision history per message |
+| Recurring scheduled runs | no | no | no | yes — hourly / daily / weekly / monthly |
+| Workspace git history + rewind | no | no | partial (git outside) | yes — auto-commit + per-apply rewind button |
+| Embedding RAG over workspace | no | varies | varies | yes — Ollama / OpenAI, auto-indexed |
+| Code symbol retrieval boost | no | no | yes (LSP) | yes — regex symbol index over 8 languages |
+| Self-host | no | yes | partial (cloud features) | yes — local-first + Cloudflare tunnel |
+| Bring-your-own models | no | yes | partial | yes — incl. Ollama default, six providers |
+| Per-account skills (`/translate` etc.) | no | no | no | yes — slash commands + composer button |
 
-Ariadne sits in the gap between chat-only tools and enterprise workflow
-automation — for researchers, analysts, consultants, and lecturers who
-already use AI and want their outputs grounded, verifiable, and re-runnable.
+Ariadne sits in the gap between chat-only tools, editor-first coding agents,
+and enterprise workflow automation — for researchers, analysts, consultants,
+and engineers who already use AI and want their outputs grounded, verifiable,
+re-runnable, and auditable in their own filesystem.
 
 ---
 

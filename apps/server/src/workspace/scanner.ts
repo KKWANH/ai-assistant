@@ -102,6 +102,21 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
   // no source-code files), so this is safe to run unconditionally.
   setImmediate(() => {
     void (async () => {
+      // First scan into Ollama-equipped machines that don't have an
+      // embedding model yet → kick off a background pull. Doesn't
+      // block this scan; the next one picks up the model.
+      try {
+        const { ensureOllamaEmbeddingModel } = await import("../providers/embedding.js");
+        const started = await ensureOllamaEmbeddingModel();
+        if (started) {
+          logger.info(
+            { workspaceId: workspace.id },
+            "auto-pulling Ollama embedding model in background — next scan will use it",
+          );
+        }
+      } catch (err) {
+        logger.debug({ workspaceId: workspace.id, err }, "embedding model auto-pull check threw");
+      }
       try {
         const { indexWorkspaceEmbeddings } = await import("../services/retrieval.js");
         const result = await indexWorkspaceEmbeddings(workspace.id, workspace.rootPath, files);
