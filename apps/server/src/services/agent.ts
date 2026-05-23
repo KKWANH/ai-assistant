@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Chat, ChatMessage, ChatStreamEvent, AgentStep, AgentTrace, AgentTool, WorkspaceAction, SearchResult } from "@ariadne/shared";
 import type { AiProvider } from "../providers/index.js";
+import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { extractJson } from "../providers/index.js";
 import { performSearch } from "./search.js";
 import { appendUserProfile } from "./chatContext.js";
@@ -449,9 +450,8 @@ async function runTool(
       const attempt = getOrOpenAttempt(chat.id, chat.workspaceId);
       const stagingId = stagingIdForAttempt(attempt.id);
 
-      const root = path.resolve(ws.rootPath);
-      const abs = path.resolve(root, proposal.path);
-      if (abs !== root && !abs.startsWith(root + path.sep)) {
+      const abs = safeResolveUnderRoot(ws.rootPath, proposal.path);
+      if (!abs) {
         return `[edit_file: path traversal rejected: ${proposal.path}]`;
       }
       const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
@@ -604,14 +604,10 @@ async function executeCustomAction(
       if (!ws) return "[Workspace not found]";
       const filePath = action.path ?? description;
       try {
-        const root = path.resolve(ws.rootPath);
-        const resolved = path.resolve(root, filePath);
-        // Guard against path traversal — must stay within the workspace root.
-        // The `+ path.sep` check prevents a sibling like `/root-secrets` from
-        // satisfying a bare `startsWith(root)` prefix match.
-        if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-          return "[Path traversal not allowed]";
-        }
+        // safeResolveUnderRoot uses `+ path.sep` to block sibling like
+        // `/root-secrets` from satisfying a bare prefix match.
+        const resolved = safeResolveUnderRoot(ws.rootPath, filePath);
+        if (!resolved) return "[Path traversal not allowed]";
         const content = fs.readFileSync(resolved, "utf-8");
         return content.slice(0, 8_000);
       } catch {

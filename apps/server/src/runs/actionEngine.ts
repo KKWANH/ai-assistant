@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Run, ActionDef, ActionBlock, BlockResult, Workspace } from "@ariadne/shared";
+import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import {
   dbGetRun,
   dbInsertRun,
@@ -257,11 +258,8 @@ async function runBlock(
     case "read_file": {
       const filePath = (cfg["path"] ?? "").trim();
       if (!filePath) throw new Error("read_file: missing 'path'");
-      const root = path.resolve(workspace.rootPath);
-      const resolved = path.resolve(root, filePath);
-      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-        throw new Error("Path traversal not allowed");
-      }
+      const resolved = safeResolveUnderRoot(workspace.rootPath, filePath);
+      if (!resolved) throw new Error("Path traversal not allowed");
       if (!fs.existsSync(resolved)) throw new Error(`File not found: ${filePath}`);
       return fs.readFileSync(resolved, "utf-8").slice(0, OUTPUT_CAP);
     }
@@ -288,11 +286,8 @@ async function runBlock(
         .replace(/\{time\}/g, timeStr)
         .replace(/\{timestamp\}/g, `${dateStr}_${timeStr}`);
 
-      const root = path.resolve(workspace.rootPath);
-      const abs = path.resolve(root, resolvedPath);
-      if (abs !== root && !abs.startsWith(root + path.sep)) {
-        throw new Error("Path traversal not allowed");
-      }
+      const abs = safeResolveUnderRoot(workspace.rootPath, resolvedPath);
+      if (!abs) throw new Error("Path traversal not allowed");
       // Body: explicit cfg.content wins, otherwise the prior block's output.
       const body = (cfg["content"] ?? priorOutput ?? "").toString();
       if (!body.trim()) {
@@ -308,7 +303,7 @@ async function runBlock(
         const sep = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? "\n\n---\n\n" : "";
         fs.appendFileSync(abs, sep + body, "utf-8");
       }
-      const rel = path.relative(root, abs);
+      const rel = path.relative(path.resolve(workspace.rootPath), abs);
       return `Wrote ${body.length.toString()} chars to ${rel} (${mode}).`;
     }
 
@@ -318,11 +313,8 @@ async function runBlock(
       // The user reviews + applies from /runs/<id>/diff.
       const filePath = (cfg["path"] ?? "").trim();
       if (!filePath) throw new Error("edit_file: missing 'path'");
-      const root = path.resolve(workspace.rootPath);
-      const abs = path.resolve(root, filePath);
-      if (abs !== root && !abs.startsWith(root + path.sep)) {
-        throw new Error("Path traversal not allowed");
-      }
+      const abs = safeResolveUnderRoot(workspace.rootPath, filePath);
+      if (!abs) throw new Error("Path traversal not allowed");
 
       const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
       const hasContent = typeof cfg["content"] === "string";

@@ -12,6 +12,7 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { SurfacePutSchema } from "@ariadne/shared";
 import type { SurfaceState } from "@ariadne/shared";
+import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import {
   ensureAriadneFolder,
   readSurface,
@@ -165,12 +166,11 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: "Only data files (csv, tsv, txt, json, md, yaml) may be edited" });
       }
 
-      const root = path.resolve(workspace.rootPath);
-      const resolved = path.resolve(root, relPath);
-      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+      const resolved = safeResolveUnderRoot(workspace.rootPath, relPath);
+      if (!resolved) {
         return reply.status(403).send({ error: "Path traversal not allowed" });
       }
-      const ariadneDir = path.join(root, ".ariadne");
+      const ariadneDir = path.join(path.resolve(workspace.rootPath), ".ariadne");
       if (resolved === ariadneDir || resolved.startsWith(ariadneDir + path.sep)) {
         return reply.status(403).send({ error: "The .ariadne folder is managed and cannot be edited here" });
       }

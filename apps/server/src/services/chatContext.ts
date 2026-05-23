@@ -18,6 +18,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared";
 import type { ProviderImage } from "../providers/index.js";
+import { safeResolveUnderRoot } from "../security/pathGuard.js";
+import { normalizedExtension } from "../workspace/readWithinRoot.js";
 import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
@@ -222,23 +224,21 @@ const EMBEDDABLE_EXT = new Set([
  * as one labelled block, under a fixed character budget.
  */
 async function readWorkspaceFiles(rootPath: string, files: FileMeta[]): Promise<string> {
-  const root = path.resolve(rootPath);
   const candidates = files
     .filter((f) => {
       if (f.sensitive) return false;
-      const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-      return EMBEDDABLE_EXT.has(ext);
+      return EMBEDDABLE_EXT.has(normalizedExtension(f));
     })
     .sort((a, b) => a.size - b.size)
     .slice(0, 8);
 
   // Read the candidates concurrently and off the event loop, then apply the
-  // character budget in size order.
+  // character budget in size order. No size budget on the read itself —
+  // the caller applies one across the aggregate, so a full read is correct.
   const reads = await Promise.all(
     candidates.map(async (f): Promise<{ path: string; text: string } | null> => {
-      const abs = path.resolve(root, f.path);
-      // Stay within the workspace root — never follow a traversal.
-      if (abs !== root && !abs.startsWith(root + path.sep)) return null;
+      const abs = safeResolveUnderRoot(rootPath, f.path);
+      if (!abs) return null;
       try {
         return { path: f.path, text: await fs.promises.readFile(abs, "utf-8") };
       } catch {

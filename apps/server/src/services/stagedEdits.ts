@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { StagedManifest, StagedFile, Workspace } from "@ariadne/shared";
+import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { computeDiffOps, toUnifiedDiff, diffStats } from "./diff.js";
 import { commitWorkspaceHistory } from "./workspaceGit.js";
 import { dbGetWorkspace, dbGetRun } from "../db/repo.js";
@@ -162,13 +163,11 @@ export async function applyStagedEdits(
       continue;
     }
     try {
-      const abs = path.resolve(root, f.path);
       // Path-traversal guard — staged paths come from the action engine
       // which already guards, but we re-check here because manifest
       // files can be edited externally.
-      if (abs !== root && !abs.startsWith(root + path.sep)) {
-        throw new Error("Path escapes workspace root");
-      }
+      const abs = safeResolveUnderRoot(root, f.path);
+      if (!abs) throw new Error("Path escapes workspace root");
       if (f.action === "delete") {
         if (fs.existsSync(abs)) fs.unlinkSync(abs);
       } else {
@@ -298,10 +297,8 @@ export async function rewindApply(workspaceId: string, sha: string): Promise<Rew
   for (const rel of record.paths) {
     try {
       const beforeFile = path.join(beforeDir, rel);
-      const workspaceFile = path.resolve(root, rel);
-      if (workspaceFile !== root && !workspaceFile.startsWith(root + path.sep)) {
-        throw new Error("Path escapes workspace root");
-      }
+      const workspaceFile = safeResolveUnderRoot(root, rel);
+      if (!workspaceFile) throw new Error("Path escapes workspace root");
       if (fs.existsSync(beforeFile)) {
         // Pre-existed → restore content.
         const body = fs.readFileSync(beforeFile, "utf-8");

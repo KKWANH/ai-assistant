@@ -19,6 +19,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { FileMeta } from "@ariadne/shared";
+import { safeResolveUnderRoot } from "../security/pathGuard.js";
+import {
+  normalizedExtension,
+  readTextUnderRoot,
+} from "../workspace/readWithinRoot.js";
 import { getEmbeddingProvider } from "../providers/embedding.js";
 import {
   dbClearWorkspaceEmbeddings,
@@ -135,12 +140,10 @@ export async function retrieveRelevantChunks(
   // Pick candidate files. We don't read everything — sort by size so the
   // small content-dense files (READMEs, configs) lead, while still letting
   // mid-size files be considered.
-  const root = path.resolve(rootPath);
   const candidates = files
     .filter((f) => {
       if (f.sensitive) return false;
-      const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-      return READABLE_EXT.has(ext);
+      return READABLE_EXT.has(normalizedExtension(f));
     })
     .sort((a, b) => a.size - b.size)
     .slice(0, MAX_FILES_READ);
@@ -148,16 +151,8 @@ export async function retrieveRelevantChunks(
   // Read concurrently — file system is the bottleneck, not CPU.
   const fileContents = await Promise.all(
     candidates.map(async (f) => {
-      const abs = path.resolve(root, f.path);
-      // Path-traversal guard: stay within the workspace root.
-      if (abs !== root && !abs.startsWith(root + path.sep)) return null;
-      try {
-        const buf = await fs.promises.readFile(abs, "utf-8");
-        const text = buf.length > FILE_READ_BUDGET ? buf.slice(0, FILE_READ_BUDGET) : buf;
-        return { path: f.path, content: text };
-      } catch {
-        return null;
-      }
+      const text = await readTextUnderRoot(rootPath, f.path, FILE_READ_BUDGET);
+      return text == null ? null : { path: f.path, content: text };
     }),
   );
 
@@ -328,24 +323,23 @@ export async function indexWorkspaceEmbeddings(
   const provider = await getEmbeddingProvider();
   if (!provider) return { indexed: 0, provider: null };
 
-  const root = path.resolve(rootPath);
   // Same eligibility rules as the keyword path.
   const candidates = files
     .filter((f) => {
       if (f.sensitive) return false;
-      const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-      return READABLE_EXT.has(ext);
+      return READABLE_EXT.has(normalizedExtension(f));
     })
     .sort((a, b) => a.size - b.size)
     .slice(0, MAX_FILES_READ);
 
-  // Read + chunk every candidate. Concurrency is fine — disk-bound.
+  // Read + chunk every candidate. We need mtime as well as content, so
+  // this loop uses the path guard directly instead of readTextUnderRoot.
   const rows: ChunkEmbeddingRow[] = [];
   const allChunks: { path: string; chunk: string; index: number; mtime: number }[] = [];
 
   for (const f of candidates) {
-    const abs = path.resolve(root, f.path);
-    if (abs !== root && !abs.startsWith(root + path.sep)) continue;
+    const abs = safeResolveUnderRoot(rootPath, f.path);
+    if (!abs) continue;
     let text: string;
     let mtime: number;
     try {
