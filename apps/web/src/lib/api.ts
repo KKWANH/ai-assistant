@@ -441,6 +441,22 @@ async function consumeMessageStream(
 
 export const getUploadUrl = (id: string) => `/api/uploads/${id}`;
 
+// ── Action schedules ──────────────────────────────────────────────────────────
+import type {
+  ActionSchedule,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+} from "@ariadne/shared";
+
+export const listSchedules = (workspaceId: string) =>
+  request<ActionSchedule[]>("GET", `/workspaces/${workspaceId}/schedules`);
+export const createSchedule = (workspaceId: string, input: CreateScheduleInput) =>
+  request<ActionSchedule>("POST", `/workspaces/${workspaceId}/schedules`, input);
+export const updateSchedule = (id: string, input: UpdateScheduleInput) =>
+  request<ActionSchedule>("PATCH", `/schedules/${id}`, input);
+export const deleteSchedule = (id: string) =>
+  request<{ ok: boolean }>("DELETE", `/schedules/${id}`);
+
 // ── Skills ────────────────────────────────────────────────────────────────────
 import type { Skill, CreateSkillInput, UpdateSkillInput } from "@ariadne/shared";
 

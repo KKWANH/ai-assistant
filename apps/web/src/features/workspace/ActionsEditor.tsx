@@ -22,6 +22,7 @@ import {
   Search,
   Terminal,
   FileText,
+  FilePlus,
   Play,
   Code2,
 } from "lucide-react";
@@ -95,9 +96,23 @@ const BLOCK_META: Record<BlockType, BlockMeta> = {
     strip: "bg-info",
     chip: "border-info/40 bg-info/15 text-info",
   },
+  write_file: {
+    labelKey: "actions.type.write_file",
+    hintKey: "actions.type.write_file.hint",
+    // Primary field is the path — the body comes from the previous
+    // block's output by default. Mode (append / replace) is set via
+    // raw YAML for now to keep the v1 picker uncluttered.
+    field: "path",
+    fieldLabelKey: "actions.field.path",
+    placeholder: "briefs/{date}.md",
+    multiline: false,
+    icon: FilePlus,
+    strip: "bg-success",
+    chip: "border-success/40 bg-success/15 text-success",
+  },
 };
 
-const BLOCK_TYPES: BlockType[] = ["ask_ai", "web_analysis", "run_script", "read_file"];
+const BLOCK_TYPES: BlockType[] = ["ask_ai", "web_analysis", "run_script", "read_file", "write_file"];
 
 // ── YAML serialiser ────────────────────────────────────────────────────────────
 // actions.yaml is a shallow, string-only structure, so a double-quoted scalar

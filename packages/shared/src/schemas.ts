@@ -161,6 +161,21 @@ export const PostMessageSchema = z.object({
 });
 export type PostMessageInput = z.infer<typeof PostMessageSchema>;
 
+/* ── Action schedules ───────────────────────────────────────────────── */
+
+export const CreateScheduleSchema = z.object({
+  workspaceId: z.string().min(1),
+  actionId: z.string().min(1),
+  frequency: z.enum(["hourly", "daily", "weekly", "monthly"]),
+});
+export type CreateScheduleInput = z.infer<typeof CreateScheduleSchema>;
+
+export const UpdateScheduleSchema = z.object({
+  frequency: z.enum(["hourly", "daily", "weekly", "monthly"]).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateScheduleInput = z.infer<typeof UpdateScheduleSchema>;
+
 /* ── Skills ─────────────────────────────────────────────────────────── */
 
 /** POST /api/skills — create a new skill for the calling account. */

@@ -248,6 +248,52 @@ async function runBlock(
       return fs.readFileSync(resolved, "utf-8").slice(0, OUTPUT_CAP);
     }
 
+    case "write_file": {
+      // Closes the loop for scheduled actions — the prior block's text
+      // (or a configured constant) lands back on disk. mode=append is
+      // the default since most callers want a running log (monthly
+      // briefs append into one file rather than overwriting).
+      const filePath = (cfg["path"] ?? "").trim();
+      if (!filePath) throw new Error("write_file: missing 'path'");
+      const mode = (cfg["mode"] ?? "append").trim().toLowerCase();
+      if (mode !== "append" && mode !== "replace") {
+        throw new Error("write_file: 'mode' must be 'append' or 'replace'");
+      }
+      // Substitute {date} / {time} / {timestamp} in the path so a schedule
+      // can land into per-run files without templating elsewhere.
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}`;
+      const resolvedPath = filePath
+        .replace(/\{date\}/g, dateStr)
+        .replace(/\{time\}/g, timeStr)
+        .replace(/\{timestamp\}/g, `${dateStr}_${timeStr}`);
+
+      const root = path.resolve(workspace.rootPath);
+      const abs = path.resolve(root, resolvedPath);
+      if (abs !== root && !abs.startsWith(root + path.sep)) {
+        throw new Error("Path traversal not allowed");
+      }
+      // Body: explicit cfg.content wins, otherwise the prior block's output.
+      const body = (cfg["content"] ?? priorOutput ?? "").toString();
+      if (!body.trim()) {
+        throw new Error("write_file: nothing to write (no priorOutput and no 'content')");
+      }
+      // Ensure the directory exists so users can target e.g. briefs/{date}.md.
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      if (mode === "replace") {
+        fs.writeFileSync(abs, body, "utf-8");
+      } else {
+        // Separator only inserted when the file already has content, so a
+        // brand-new file isn't prefixed with a stray blank line.
+        const sep = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? "\n\n---\n\n" : "";
+        fs.appendFileSync(abs, sep + body, "utf-8");
+      }
+      const rel = path.relative(root, abs);
+      return `Wrote ${body.length.toString()} chars to ${rel} (${mode}).`;
+    }
+
     default: {
       const exhaustive: never = block.type;
       throw new Error(`Unknown block type: ${String(exhaustive)}`);

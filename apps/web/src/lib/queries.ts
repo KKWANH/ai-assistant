@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report, Skill } from "@ariadne/shared";
+import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report, Skill, ActionSchedule } from "@ariadne/shared";
 import * as api from "./api";
 
 // ── Query keys ───────────────────────────────────────────────────────────────
@@ -786,6 +786,65 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
           void qc.invalidateQueries({ queryKey: ["chat-active", chatId] });
         },
       });
+    },
+  });
+}
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+
+export function useSchedules(workspaceId: string) {
+  return useQuery({
+    queryKey: ["schedules", workspaceId] as const,
+    queryFn: () => api.listSchedules(workspaceId),
+    enabled: !!workspaceId,
+  });
+}
+
+export function useCreateSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      workspaceId,
+      input,
+    }: {
+      workspaceId: string;
+      input: import("@ariadne/shared").CreateScheduleInput;
+    }) => api.createSchedule(workspaceId, input),
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ["schedules", created.workspaceId] });
+    },
+  });
+}
+
+export function useUpdateSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: import("@ariadne/shared").UpdateScheduleInput;
+    }) => api.updateSchedule(id, input),
+    onSuccess: (updated) => {
+      qc.setQueryData<ActionSchedule[]>(
+        ["schedules", updated.workspaceId] as const,
+        (prev) => (prev ? prev.map((s) => (s.id === updated.id ? updated : s)) : prev),
+      );
+    },
+  });
+}
+
+export function useDeleteSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, workspaceId }: { id: string; workspaceId: string }) =>
+      api.deleteSchedule(id).then(() => ({ id, workspaceId })),
+    onSuccess: ({ id, workspaceId }) => {
+      qc.setQueryData<ActionSchedule[]>(
+        ["schedules", workspaceId] as const,
+        (prev) => (prev ? prev.filter((s) => s.id !== id) : prev),
+      );
     },
   });
 }

@@ -184,6 +184,24 @@ function runMigrations(db: DatabaseSync): void {
     );
   `);
 
+  // Action schedules — recurring runs of a workspace action, fired by the
+  // in-process scheduler service (services/scheduler.ts) every minute.
+  // next_run_at is denormalised so we don't recompute from `frequency`
+  // every tick. enabled doubles as a soft delete: flip to 0 to pause.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS action_schedules (
+      id           TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      action_id    TEXT NOT NULL,
+      account_id   TEXT NOT NULL,
+      frequency    TEXT NOT NULL,
+      enabled      INTEGER NOT NULL DEFAULT 1,
+      last_run_at  TEXT,
+      next_run_at  TEXT NOT NULL,
+      created_at   TEXT NOT NULL
+    );
+  `);
+
   // Guarded ALTER TABLE: add agent_json to chat_messages if missing
   const chatMsgColumns = db
     .prepare("PRAGMA table_info(chat_messages)")

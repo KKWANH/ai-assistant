@@ -30,6 +30,8 @@ import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
 import { marketDataRoutes } from "./routes/marketData.js";
 import { skillRoutes } from "./routes/skills.js";
+import { scheduleRoutes } from "./routes/schedules.js";
+import { startScheduler } from "./services/scheduler.js";
 import { seedAdmin } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
 import { ensureDemoWorkspace } from "./demoWorkspace.js";
@@ -161,6 +163,7 @@ async function bootstrap(): Promise<void> {
       await api.register(reportRoutes);
       await api.register(marketDataRoutes);
       await api.register(skillRoutes);
+      await api.register(scheduleRoutes);
     },
     { prefix: "/api" }
   );
@@ -211,6 +214,10 @@ async function bootstrap(): Promise<void> {
   const settings = getActiveSettings();
 
   await app.listen({ port: PORTS.server, host: "0.0.0.0" });
+
+  // Start the in-process action scheduler — ticks every 60s, fires
+  // recurring action runs declared in the action_schedules table.
+  startScheduler();
 
   logger.info(
     {

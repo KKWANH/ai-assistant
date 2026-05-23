@@ -85,6 +85,14 @@ actions:
             4) 보유 종목 단위로 짧은 액션 권고 (보유 유지 / 비중 조정 / 추가 매수 검토 / 관망 등 — 사유 1줄과 함께)
 
             중요: 단정적인 매수·매도 추천이 아니라 "고려할 수 있는 시나리오" 어조로 작성. 인용은 출처 번호 [1], [2] 형태로 본문에 자연스럽게 섞으세요.
+      # Closes the loop: the synthesis lands at briefs/{date}.md so a
+      # monthly schedule produces a permanent record per run rather than
+      # a one-shot screen output.
+      - id: archive
+        type: write_file
+        config:
+          path: briefs/{date}.md
+          mode: replace
 
   - id: rebalance_check
     name: 리밸런싱 점검

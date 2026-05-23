@@ -126,6 +126,7 @@ const BLOCK_TYPES: Set<BlockType> = new Set([
   "web_analysis",
   "run_script",
   "read_file",
+  "write_file",
 ]);
 
 /** Synthesize a single block from an old flat action so it stays runnable. */

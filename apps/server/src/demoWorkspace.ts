@@ -25,6 +25,7 @@ import {
   FX_RATES_CSV,
   HISTORY_CSV,
   SURFACE_TSX,
+  ACTIONS_YAML,
 } from "./surface/portfolioStarter.js";
 import logger from "./logger.js";
 
@@ -58,6 +59,13 @@ export async function ensureDemoWorkspace(): Promise<void> {
     // The dashboard surface is always re-synced so showcase updates land.
     ensureAriadneFolder(rootPath);
     writeSurface(rootPath, SURFACE_TSX);
+    // actions.yaml — seed once, do NOT overwrite later. Users may edit
+    // the seeded actions (rename, tweak prompts, add new ones); a daemon
+    // restart shouldn't reset their work. Only write when absent.
+    const actionsPath = path.join(rootPath, ".ariadne", "actions.yaml");
+    if (!fs.existsSync(actionsPath)) {
+      fs.writeFileSync(actionsPath, ACTIONS_YAML, "utf-8");
+    }
     await buildSurface(rootPath);
 
     if (!exists) {

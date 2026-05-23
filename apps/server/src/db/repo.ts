@@ -21,6 +21,8 @@ import type {
   ReportStatus,
   ReportTriage,
   Skill,
+  ActionSchedule,
+  ScheduleFrequency,
 } from "@ariadne/shared";
 import { getDb } from "./index.js";
 
@@ -731,6 +733,104 @@ function rowToSkill(row: Record<string, unknown>): Skill {
     prompt: row["prompt"] as string,
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Action schedules — recurring action runs
+// ---------------------------------------------------------------------------
+
+export function dbInsertSchedule(s: ActionSchedule): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO action_schedules
+      (id, workspace_id, action_id, account_id, frequency, enabled, last_run_at, next_run_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    s.id,
+    s.workspaceId,
+    s.actionId,
+    s.accountId,
+    s.frequency,
+    s.enabled ? 1 : 0,
+    s.lastRunAt,
+    s.nextRunAt,
+    s.createdAt,
+  );
+}
+
+export function dbGetSchedule(id: string): ActionSchedule | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM action_schedules WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? rowToSchedule(row) : null;
+}
+
+/** All schedules in the workspace (regardless of enabled / paused). */
+export function dbListSchedulesForWorkspace(workspaceId: string): ActionSchedule[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      "SELECT * FROM action_schedules WHERE workspace_id = ? ORDER BY created_at DESC",
+    )
+    .all(workspaceId) as Record<string, unknown>[];
+  return rows.map(rowToSchedule);
+}
+
+/** Every schedule that is enabled AND already due — what the scheduler ticks on. */
+export function dbListDueSchedules(nowIso: string): ActionSchedule[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      "SELECT * FROM action_schedules WHERE enabled = 1 AND next_run_at <= ? ORDER BY next_run_at ASC",
+    )
+    .all(nowIso) as Record<string, unknown>[];
+  return rows.map(rowToSchedule);
+}
+
+export function dbUpdateSchedule(
+  id: string,
+  patch: { frequency?: ScheduleFrequency; enabled?: boolean; lastRunAt?: string; nextRunAt?: string },
+): ActionSchedule | null {
+  const existing = dbGetSchedule(id);
+  if (!existing) return null;
+  const next: ActionSchedule = {
+    ...existing,
+    frequency: patch.frequency ?? existing.frequency,
+    enabled: patch.enabled ?? existing.enabled,
+    lastRunAt: patch.lastRunAt !== undefined ? patch.lastRunAt : existing.lastRunAt,
+    nextRunAt: patch.nextRunAt ?? existing.nextRunAt,
+  };
+  const db = getDb();
+  db.prepare(
+    "UPDATE action_schedules SET frequency = ?, enabled = ?, last_run_at = ?, next_run_at = ? WHERE id = ?",
+  ).run(
+    next.frequency,
+    next.enabled ? 1 : 0,
+    next.lastRunAt,
+    next.nextRunAt,
+    id,
+  );
+  return next;
+}
+
+export function dbDeleteSchedule(id: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM action_schedules WHERE id = ?").run(id);
+}
+
+function rowToSchedule(row: Record<string, unknown>): ActionSchedule {
+  return {
+    id: row["id"] as string,
+    workspaceId: row["workspace_id"] as string,
+    actionId: row["action_id"] as string,
+    accountId: row["account_id"] as string,
+    frequency: row["frequency"] as ScheduleFrequency,
+    enabled: Boolean(row["enabled"]),
+    lastRunAt: (row["last_run_at"] as string | null) ?? null,
+    nextRunAt: row["next_run_at"] as string,
+    createdAt: row["created_at"] as string,
   };
 }
 

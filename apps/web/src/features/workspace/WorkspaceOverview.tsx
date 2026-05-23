@@ -31,6 +31,7 @@ import {
   MessageSquarePlus,
   Database,
   Pencil,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -44,7 +45,12 @@ import {
   useUpdateWorkspace,
   useChats,
   useCreateChat,
+  useSchedules,
+  useCreateSchedule,
+  useUpdateSchedule,
+  useDeleteSchedule,
 } from "../../lib/queries";
+import type { ScheduleFrequency } from "@ariadne/shared";
 import { useT } from "../../lib/i18n";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -174,6 +180,186 @@ function WorkspacePanel({ children }: { children: React.ReactNode }) {
     <div className="max-w-5xl w-full mx-auto px-5 py-5 flex flex-col gap-6">
       {children}
     </div>
+  );
+}
+
+/** Schedules block — list existing, inline 'add' row, toggle/delete. */
+function SchedulesSection({
+  workspaceId,
+  actionOptions,
+}: {
+  workspaceId: string;
+  actionOptions: { id: string; name: string }[];
+}) {
+  const { t } = useT();
+  const { toast } = useToast();
+  const { data: schedules } = useSchedules(workspaceId);
+  const createSchedule = useCreateSchedule();
+  const updateSchedule = useUpdateSchedule();
+  const deleteSchedule = useDeleteSchedule();
+
+  const [adding, setAdding] = useState(false);
+  const [actionId, setActionId] = useState(actionOptions[0]?.id ?? "");
+  const [frequency, setFrequency] = useState<ScheduleFrequency>("daily");
+
+  const freqLabel = (f: ScheduleFrequency): string =>
+    f === "hourly"
+      ? t("schedules.freq.hourly")
+      : f === "daily"
+        ? t("schedules.freq.daily")
+        : f === "weekly"
+          ? t("schedules.freq.weekly")
+          : t("schedules.freq.monthly");
+
+  const actionName = (id: string): string =>
+    actionOptions.find((a) => a.id === id)?.name ?? id;
+
+  const fmt = (iso: string | null): string =>
+    iso ? new Date(iso).toLocaleString() : t("schedules.never");
+
+  const submitNew = async () => {
+    if (!actionId) return;
+    try {
+      await createSchedule.mutateAsync({
+        workspaceId,
+        input: { workspaceId, actionId, frequency },
+      });
+      setAdding(false);
+    } catch {
+      toast({ title: t("schedules.failed"), variant: "error" });
+    }
+  };
+
+  return (
+    <section>
+      <div className="flex items-end justify-between mb-3 gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground mb-0.5 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-accent" />
+            {t("schedules.title")}
+          </h2>
+          <p className="text-xs text-muted-foreground">{t("schedules.subtitle")}</p>
+        </div>
+        {!adding && (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => setAdding(true)}
+            className="shrink-0"
+          >
+            {t("schedules.addAction")}
+          </Button>
+        )}
+      </div>
+
+      {/* Inline add row */}
+      {adding && (
+        <div className="rounded-lg border border-accent bg-surface-2 px-3 py-2.5 mb-2 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 flex-1 min-w-[200px]">
+            <span className="text-2xs text-muted-foreground">{t("schedules.pickAction")}</span>
+            <select
+              value={actionId}
+              onChange={(e) => setActionId(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {actionOptions.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 flex-1 min-w-[160px]">
+            <span className="text-2xs text-muted-foreground">{t("schedules.frequency")}</span>
+            <select
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value as ScheduleFrequency)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="hourly">{t("schedules.freq.hourly")}</option>
+              <option value="daily">{t("schedules.freq.daily")}</option>
+              <option value="weekly">{t("schedules.freq.weekly")}</option>
+              <option value="monthly">{t("schedules.freq.monthly")}</option>
+            </select>
+          </label>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAdding(false)}
+          >
+            {t("schedules.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void submitNew()}
+            disabled={!actionId || createSchedule.isPending}
+            loading={createSchedule.isPending}
+          >
+            {t("schedules.create")}
+          </Button>
+        </div>
+      )}
+
+      {/* List */}
+      {(schedules ?? []).length === 0 && !adding ? (
+        <p className="text-xs text-muted-foreground px-1">{t("schedules.empty")}</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {(schedules ?? []).map((s) => (
+            <Card
+              key={s.id}
+              className="flex items-center gap-3 px-4 py-2.5"
+            >
+              <Clock
+                className={`h-3.5 w-3.5 shrink-0 ${s.enabled ? "text-accent" : "text-muted-foreground"}`}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-foreground truncate">
+                  {actionName(s.actionId)}
+                  <span className="ml-2 text-2xs text-muted-foreground">
+                    · {freqLabel(s.frequency)}
+                  </span>
+                </div>
+                <div className="text-2xs text-muted-foreground mt-0.5">
+                  {t("schedules.nextRun")}: {fmt(s.nextRunAt)}
+                  <span className="mx-2">·</span>
+                  {t("schedules.lastRun")}: {fmt(s.lastRunAt)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  void updateSchedule.mutateAsync({
+                    id: s.id,
+                    input: { enabled: !s.enabled },
+                  })
+                }
+                className="text-2xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-3 transition-colors shrink-0"
+                title={s.enabled ? t("schedules.enabled") : t("schedules.paused")}
+              >
+                {s.enabled ? t("schedules.enabled") : t("schedules.paused")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(t("schedules.confirmDelete"))) {
+                    void deleteSchedule.mutateAsync({
+                      id: s.id,
+                      workspaceId: s.workspaceId,
+                    });
+                  }
+                }}
+                aria-label={t("schedules.delete")}
+                title={t("schedules.delete")}
+                className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-surface-3 transition-colors shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -463,6 +649,15 @@ export function WorkspaceOverview() {
           </div>
         )}
       </section>
+
+      {/* Schedules — only meaningful when the workspace has at least one
+          action to schedule against. */}
+      {customActions.length > 0 && (
+        <SchedulesSection
+          workspaceId={ws.id}
+          actionOptions={customActions.map((a) => ({ id: a.id, name: a.name }))}
+        />
+      )}
 
       {/* Recent outputs */}
       <section>

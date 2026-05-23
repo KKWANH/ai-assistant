@@ -52,7 +52,18 @@ export interface WorkspaceAction {
  * above (which the agent planner still consumes).
  * ------------------------------------------------------------------ */
 
-export type BlockType = "ask_ai" | "web_analysis" | "run_script" | "read_file";
+export type BlockType =
+  | "ask_ai"
+  | "web_analysis"
+  | "run_script"
+  | "read_file"
+  /**
+   * Write the prior block's output (or a configured constant) to a file in
+   * the workspace. Closes the loop for scheduled actions — the report a
+   * monthly macro brief produces lands back in `monthly-briefs/2026-05.md`
+   * instead of just streaming once to the screen.
+   */
+  | "write_file";
 
 export interface ActionBlock {
   id: string;
@@ -559,6 +570,35 @@ export interface Chat {
   updatedAt: string;
   /** Populated by GET /api/chats/:id. */
   messages?: ChatMessage[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Action schedules — recurring runs of a workspace action.
+ *
+ * Stored alongside accounts; a single in-process scheduler ticks every
+ * 60 s, finds rows where `enabled` and `nextRunAt <= now`, and kicks off
+ * a fresh action run via the existing actionEngine. v1 supports only
+ * preset cadences (hourly / daily / weekly / monthly) — no raw cron, no
+ * day-of-week / day-of-month picker yet. Those can land later.
+ * ------------------------------------------------------------------ */
+
+export type ScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
+
+export interface ActionSchedule {
+  id: string;
+  workspaceId: string;
+  /** The action.id inside the workspace's actions.yaml. */
+  actionId: string;
+  accountId: string;
+  frequency: ScheduleFrequency;
+  enabled: boolean;
+  /** ISO timestamp of the most recent successful tick, null before the
+   *  first run. */
+  lastRunAt: string | null;
+  /** ISO timestamp the scheduler is targeting next. The scheduler trusts
+   *  this value rather than recomputing from `frequency` every tick. */
+  nextRunAt: string;
+  createdAt: string;
 }
 
 /* ------------------------------------------------------------------ *
