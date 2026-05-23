@@ -440,3 +440,14 @@ async function consumeMessageStream(
 }
 
 export const getUploadUrl = (id: string) => `/api/uploads/${id}`;
+
+// ── Skills ────────────────────────────────────────────────────────────────────
+import type { Skill, CreateSkillInput, UpdateSkillInput } from "@ariadne/shared";
+
+export const listSkills = () => request<Skill[]>("GET", "/skills");
+export const createSkill = (input: CreateSkillInput) =>
+  request<Skill>("POST", "/skills", input);
+export const updateSkill = (id: string, input: UpdateSkillInput) =>
+  request<Skill>("PATCH", `/skills/${id}`, input);
+export const deleteSkill = (id: string) =>
+  request<{ ok: boolean }>("DELETE", `/skills/${id}`);

@@ -160,3 +160,19 @@ export const PostMessageSchema = z.object({
   agentMode: z.union([z.boolean(), z.enum(["off", "auto", "on"])]).optional(),
 });
 export type PostMessageInput = z.infer<typeof PostMessageSchema>;
+
+/* ── Skills ─────────────────────────────────────────────────────────── */
+
+/** POST /api/skills — create a new skill for the calling account. */
+export const CreateSkillSchema = z.object({
+  name: z.string().min(1).max(40),
+  prompt: z.string().min(1).max(4000),
+});
+export type CreateSkillInput = z.infer<typeof CreateSkillSchema>;
+
+/** PATCH /api/skills/:id — partial update. */
+export const UpdateSkillSchema = z.object({
+  name: z.string().min(1).max(40).optional(),
+  prompt: z.string().min(1).max(4000).optional(),
+});
+export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>;

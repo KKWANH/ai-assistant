@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report } from "@ariadne/shared";
+import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report, Skill } from "@ariadne/shared";
 import * as api from "./api";
 
 // ── Query keys ───────────────────────────────────────────────────────────────
@@ -786,6 +786,50 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
           void qc.invalidateQueries({ queryKey: ["chat-active", chatId] });
         },
       });
+    },
+  });
+}
+
+// ── Skills ────────────────────────────────────────────────────────────────────
+
+export function useSkills() {
+  return useQuery({
+    queryKey: ["skills"] as const,
+    queryFn: api.listSkills,
+  });
+}
+
+export function useCreateSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createSkill,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["skills"] });
+    },
+  });
+}
+
+export function useUpdateSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: import("@ariadne/shared").UpdateSkillInput }) =>
+      api.updateSkill(id, input),
+    onSuccess: (updated) => {
+      qc.setQueryData<Skill[]>(["skills"], (prev) =>
+        prev ? prev.map((s) => (s.id === updated.id ? updated : s)) : prev,
+      );
+    },
+  });
+}
+
+export function useDeleteSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSkill(id),
+    onSuccess: (_, id) => {
+      qc.setQueryData<Skill[]>(["skills"], (prev) =>
+        prev ? prev.filter((s) => s.id !== id) : prev,
+      );
     },
   });
 }

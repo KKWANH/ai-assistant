@@ -20,6 +20,7 @@ import {
   Bot,
   Zap,
   Play,
+  Sparkles,
 } from "lucide-react";
 import type { PostAttachmentInput } from "@ariadne/shared";
 import {
@@ -31,7 +32,7 @@ import {
 import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
 import { Tooltip } from "../../components/ui/Tooltip";
-import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe } from "../../lib/queries";
+import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe, useSkills } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
 import { modelInfo, modelPrice } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
@@ -98,6 +99,70 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/**
+ * Small dropdown listing the account's skills, optionally filtered by
+ * the slash-command keyword the user is typing. Renders no list at all
+ * when there are no matches — instead shows a one-line empty state with
+ * a link to the Settings page where new skills are created.
+ */
+function SkillsDropdown({
+  skills,
+  filter,
+  onPick,
+  onClose,
+}: {
+  skills: import("@ariadne/shared").Skill[];
+  filter: string;
+  onPick: (s: import("@ariadne/shared").Skill) => void;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const filtered = filter
+    ? skills.filter((s) => s.name.toLowerCase().includes(filter))
+    : skills;
+  return (
+    <>
+      <div className="fixed inset-0 z-20" onClick={onClose} />
+      <div className="absolute bottom-full mb-1 left-0 z-30 w-72 max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg p-1">
+        {filtered.length > 0 ? (
+          <ul className="flex flex-col">
+            {filtered.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(s)}
+                  className="w-full text-left px-3 py-2 rounded-md hover:bg-surface-3 transition-colors flex flex-col gap-0.5"
+                >
+                  <span className="text-xs font-medium text-foreground">
+                    /{s.name}
+                  </span>
+                  <span className="text-2xs text-muted-foreground truncate">
+                    {s.prompt.slice(0, 80)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+            {skills.length === 0
+              ? t("chat.composer.skillsEmpty")
+              : t("chat.composer.skillsNoMatch")}
+          </div>
+        )}
+        <div className="border-t border-border mt-1 pt-1">
+          <a
+            href="/settings"
+            className="block px-3 py-2 rounded-md text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+          >
+            {t("chat.composer.skillsManage")} →
+          </a>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function ChatComposer({
   onSend,
   disabled,
@@ -113,6 +178,10 @@ export function ChatComposer({
   // (the server decides per message). Both stay sticky across messages.
   const [webMode, setWebMode] = useState<WebSearchMode>("auto");
   const [agentMode, setAgentMode] = useState<AgentMode>("off");
+  // Skill picker — opens via the Sparkles button OR when the composer
+  // starts with "/" (slash-command autocomplete). The state below tracks
+  // which trigger opened it so the filter logic stays separate.
+  const [skillsOpenMode, setSkillsOpenMode] = useState<"button" | "slash" | null>(null);
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   // Table feature: pasted TSV awaiting a "convert to table" decision, and the
@@ -126,6 +195,7 @@ export function ChatComposer({
 
   const { chatComposerWorkspaceId, setChatComposerWorkspaceId } = useUIStore();
   const { data: workspaces } = useWorkspaces();
+  const { data: skills } = useSkills();
   const { data: settings } = useSettings();
   const { data: providerStatus } = useProviderStatus();
   const updateSettings = useUpdateSettings();
@@ -430,11 +500,21 @@ export function ChatComposer({
           placeholder={t("chat.composer.placeholder")}
           value={content}
           onChange={(e) => {
-            setContent(e.target.value);
+            const value = e.target.value;
+            setContent(value);
             // Auto-grow
             const el = e.target;
             el.style.height = "auto";
             el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+            // Slash-command autocomplete: open the skill picker as the
+            // user types `/abc`. Close it once they keep typing past a
+            // word boundary (so a literal slash in real text won't keep
+            // the picker stuck open).
+            if (/^\/[a-z0-9가-힣_-]*$/i.test(value)) {
+              setSkillsOpenMode("slash");
+            } else if (skillsOpenMode === "slash") {
+              setSkillsOpenMode(null);
+            }
           }}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
@@ -525,6 +605,52 @@ export function ChatComposer({
               </span>
             </button>
           </Tooltip>
+
+          {/* Skills picker — account-scoped reusable prompt snippets.
+              Opens via this button or via slash-command autocomplete in the
+              textarea above. */}
+          <div className="relative shrink-0">
+            <Tooltip content={t("chat.composer.skillsHint")} className="shrink-0">
+              <button
+                type="button"
+                className={[
+                  "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                  skillsOpenMode
+                    ? "text-foreground bg-surface-3"
+                    : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
+                ].join(" ")}
+                onClick={() => setSkillsOpenMode((m) => (m ? null : "button"))}
+                disabled={disabled}
+                aria-label={t("chat.composer.skills")}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>{t("chat.composer.skills")}</span>
+              </button>
+            </Tooltip>
+            {skillsOpenMode && (
+              <SkillsDropdown
+                skills={skills ?? []}
+                filter={
+                  skillsOpenMode === "slash"
+                    ? content.replace(/^\//, "").toLowerCase()
+                    : ""
+                }
+                onPick={(s) => {
+                  // Replace a leading "/foo" with the skill prompt; otherwise
+                  // append at the cursor / end. Either way close the picker.
+                  setContent((cur) =>
+                    /^\/[a-z0-9가-힣_-]*$/i.test(cur)
+                      ? s.prompt
+                      : (cur ? cur + (cur.endsWith("\n") ? "" : "\n") : "") + s.prompt,
+                  );
+                  setSkillsOpenMode(null);
+                  // Refocus the textarea so the user can keep typing.
+                  setTimeout(() => textareaRef.current?.focus(), 0);
+                }}
+                onClose={() => setSkillsOpenMode(null)}
+              />
+            )}
+          </div>
 
           {/* Workspace selector */}
           <div className="relative max-md:static shrink-0">

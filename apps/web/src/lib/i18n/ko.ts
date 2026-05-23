@@ -144,6 +144,17 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.agentOn": "에이전트 켜짐",
   "chat.composer.agentCycle": "에이전트: 끔 → 자동 → 켬",
   "chat.composer.enableAgent": "에이전트 모드 활성화 (계획 및 실행)",
+  "settings.skills.heading": "스킬",
+  "settings.skills.description": "반복해서 쓰는 프롬프트를 저장해 두는 곳입니다. 채팅 입력창의 '스킬' 버튼이나 /이름으로 바로 끼워 넣을 수 있어요.",
+  "settings.skills.namePlaceholder": "스킬 이름 (예: ko-번역)",
+  "settings.skills.promptPlaceholder": "이 스킬이 실행될 때 삽입될 프롬프트 — 예: \"아래 글을 자연스러운 한국어로 번역해 줘:\"",
+  "settings.skills.add": "추가",
+  "settings.skills.saveFailed": "스킬을 저장하지 못했습니다",
+  "chat.composer.skills": "스킬",
+  "chat.composer.skillsHint": "저장한 프롬프트 삽입 — / 입력해도 열립니다",
+  "chat.composer.skillsEmpty": "아직 스킬이 없어요. 설정에서 만들어 보세요.",
+  "chat.composer.skillsNoMatch": "일치하는 스킬이 없습니다.",
+  "chat.composer.skillsManage": "스킬 관리",
 
   // Message
   "chat.message.sources": "{n}개 출처",

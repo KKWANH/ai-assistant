@@ -151,6 +151,17 @@ const en = {
   "chat.composer.agentOn": "Agent on",
   "chat.composer.agentCycle": "Agent mode: off → auto → on",
   "chat.composer.enableAgent": "Enable agent mode (plan & execute)",
+  "settings.skills.heading": "Skills",
+  "settings.skills.description": "Reusable prompt snippets. Insert one from the chat composer with the Skills button or by typing /name.",
+  "settings.skills.namePlaceholder": "skill name (e.g. translate-ko)",
+  "settings.skills.promptPlaceholder": "Prompt text inserted when this skill fires — e.g. \"Translate the following to Korean, keeping a neutral tone:\"",
+  "settings.skills.add": "Add",
+  "settings.skills.saveFailed": "Could not save the skill",
+  "chat.composer.skills": "Skills",
+  "chat.composer.skillsHint": "Insert a saved prompt — also try typing /",
+  "chat.composer.skillsEmpty": "No skills yet. Create one in Settings.",
+  "chat.composer.skillsNoMatch": "No matching skill.",
+  "chat.composer.skillsManage": "Manage skills",
 
   // Message
   "chat.message.sources": "{n} source",

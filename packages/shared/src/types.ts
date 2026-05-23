@@ -562,6 +562,26 @@ export interface Chat {
 }
 
 /* ------------------------------------------------------------------ *
+ * Skills — short, reusable prompt snippets owned by an account.
+ *
+ * A skill is the cheapest unit of reuse in the composer: a named prompt
+ * the user can drop in with a single click or via a slash command. The
+ * agent / actions / runs system is for longer pipelines; skills are for
+ * the "/translate / /summarize / /rewrite politely" instinct.
+ * ------------------------------------------------------------------ */
+
+export interface Skill {
+  id: string;
+  accountId: string;
+  /** Short label shown in the menu and as the slash-command keyword. */
+  name: string;
+  /** The text inserted into the composer when this skill fires. */
+  prompt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ------------------------------------------------------------------ *
  * Custom project surface (user-authored UI)
  * ------------------------------------------------------------------ */
 

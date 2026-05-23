@@ -20,6 +20,7 @@ import type {
   ReportType,
   ReportStatus,
   ReportTriage,
+  Skill,
 } from "@ariadne/shared";
 import { getDb } from "./index.js";
 
@@ -664,6 +665,72 @@ function rowToReport(row: Record<string, unknown>): Report {
     decidedAt: (row["decided_at"] as string | null) ?? null,
     githubUrl: (row["github_url"] as string | null) ?? null,
     attachments: j<ChatAttachment[]>(row["attachments_json"] as string | null, []),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Skills — account-scoped reusable prompt snippets
+// ---------------------------------------------------------------------------
+
+export function dbListSkills(accountId: string): Skill[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      "SELECT * FROM skills WHERE account_id = ? ORDER BY updated_at DESC",
+    )
+    .all(accountId) as Record<string, unknown>[];
+  return rows.map(rowToSkill);
+}
+
+export function dbGetSkill(id: string): Skill | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM skills WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? rowToSkill(row) : null;
+}
+
+export function dbInsertSkill(s: Skill): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO skills (id, account_id, name, prompt, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(s.id, s.accountId, s.name, s.prompt, s.createdAt, s.updatedAt);
+}
+
+export function dbUpdateSkill(
+  id: string,
+  patch: { name?: string; prompt?: string },
+  updatedAt: string,
+): Skill | null {
+  const existing = dbGetSkill(id);
+  if (!existing) return null;
+  const next: Skill = {
+    ...existing,
+    name: patch.name ?? existing.name,
+    prompt: patch.prompt ?? existing.prompt,
+    updatedAt,
+  };
+  const db = getDb();
+  db.prepare(
+    "UPDATE skills SET name = ?, prompt = ?, updated_at = ? WHERE id = ?",
+  ).run(next.name, next.prompt, next.updatedAt, id);
+  return next;
+}
+
+export function dbDeleteSkill(id: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM skills WHERE id = ?").run(id);
+}
+
+function rowToSkill(row: Record<string, unknown>): Skill {
+  return {
+    id: row["id"] as string,
+    accountId: row["account_id"] as string,
+    name: row["name"] as string,
+    prompt: row["prompt"] as string,
+    createdAt: row["created_at"] as string,
+    updatedAt: row["updated_at"] as string,
   };
 }
 

@@ -170,6 +170,20 @@ function runMigrations(db: DatabaseSync): void {
     );
   `);
 
+  // Skills — account-scoped, reusable prompt snippets. v1 keeps it tiny:
+  // just a name + a prompt. The chat composer surfaces them via a button
+  // dropdown and via slash-command autocomplete (e.g. /translate).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skills (
+      id         TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      name       TEXT NOT NULL,
+      prompt     TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Guarded ALTER TABLE: add agent_json to chat_messages if missing
   const chatMsgColumns = db
     .prepare("PRAGMA table_info(chat_messages)")

@@ -29,6 +29,7 @@ import { surfaceHostRoutes } from "./routes/surfaceHost.js";
 import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
 import { marketDataRoutes } from "./routes/marketData.js";
+import { skillRoutes } from "./routes/skills.js";
 import { seedAdmin } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
 import { ensureDemoWorkspace } from "./demoWorkspace.js";
@@ -159,6 +160,7 @@ async function bootstrap(): Promise<void> {
       await api.register(actionRoutes);
       await api.register(reportRoutes);
       await api.register(marketDataRoutes);
+      await api.register(skillRoutes);
     },
     { prefix: "/api" }
   );
