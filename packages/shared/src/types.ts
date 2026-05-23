@@ -458,6 +458,16 @@ export interface ChatAttachment {
   size: number;
 }
 
+/**
+ * A previous version of a user message's content, retained when the user
+ * edited the message. Oldest first.
+ */
+export interface MessageRevision {
+  content: string;
+  /** When this version was replaced. */
+  editedAt: string;
+}
+
 export interface ChatMessage {
   id: string;
   chatId: string;
@@ -470,6 +480,8 @@ export interface ChatMessage {
   searchResults: SearchResult[] | null;
   /** Plan-and-execute trace, when the message was produced in agent mode. */
   agent: AgentTrace | null;
+  /** Past content versions for an edited user message — oldest first. */
+  revisions?: MessageRevision[];
   createdAt: string;
 }
 

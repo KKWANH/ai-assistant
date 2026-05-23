@@ -456,6 +456,36 @@ export function useStopGeneration() {
   });
 }
 
+/**
+ * Edit a user message's content. The previous text is appended to the
+ * message's `revisions` log on the server. Patches the cached chat
+ * (messages live inside the chat object, not a separate query) so the
+ * UI updates without a refetch.
+ */
+export function useEditMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      chatId,
+      messageId,
+      content,
+    }: {
+      chatId: string;
+      messageId: string;
+      content: string;
+    }) => api.editMessage(chatId, messageId, content),
+    onSuccess: (updated) => {
+      qc.setQueryData<Chat>(["chats", updated.chatId] as const, (prev) => {
+        if (!prev || !prev.messages) return prev;
+        return {
+          ...prev,
+          messages: prev.messages.map((m) => (m.id === updated.id ? updated : m)),
+        };
+      });
+    },
+  });
+}
+
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 export function useActions(workspaceId: string) {

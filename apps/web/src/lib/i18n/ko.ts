@@ -147,6 +147,11 @@ const ko: Record<TranslationKey, string> = {
   "chat.message.sources": "{n}개 출처",
   "chat.message.sourcesPlural": "{n}개 출처",
   "chat.message.webSearch": "웹 검색",
+  "chat.message.edit": "메시지 수정",
+  "chat.message.edited": "수정됨 ({n})",
+  "chat.message.editHistory": "수정 기록",
+  "chat.message.editPlaceholder": "메시지를 수정하세요…",
+  "chat.message.editHint": "⌘+Enter 저장 · Esc 취소",
 
   // Attachment viewer
   "chat.attachment.download": "다운로드",

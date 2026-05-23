@@ -154,6 +154,11 @@ const en = {
   "chat.message.sources": "{n} source",
   "chat.message.sourcesPlural": "{n} sources",
   "chat.message.webSearch": "web search",
+  "chat.message.edit": "Edit message",
+  "chat.message.edited": "Edited ({n})",
+  "chat.message.editHistory": "Edit history",
+  "chat.message.editPlaceholder": "Edit your message…",
+  "chat.message.editHint": "⌘+Enter to save · Esc to cancel",
 
   // Attachment viewer
   "chat.attachment.download": "Download",

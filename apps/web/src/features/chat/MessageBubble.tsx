@@ -31,11 +31,14 @@ import {
   Brain,
   Play,
   AlertCircle,
+  Pencil,
+  History,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTrace, AgentTool } from "@ariadne/shared";
 import { Badge } from "../../components/ui/Badge";
 import { useT } from "../../lib/i18n";
 import * as api from "../../lib/api";
+import { useEditMessage } from "../../lib/queries";
 import { parseCsv } from "../../lib/tableData";
 import { TableSheet } from "./TableSheet";
 
@@ -523,6 +526,192 @@ export function StreamingIndicator({
   );
 }
 
+// ── User message — extracted so edit / history state stays scoped ─────────
+function UserMessageBubble({
+  message,
+  time,
+}: {
+  message: ChatMessage;
+  time: string;
+}) {
+  const { t } = useT();
+  const editMessage = useEditMessage();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const startEdit = () => {
+    setDraft(message.content);
+    setEditing(true);
+  };
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraft(message.content);
+  };
+  const commitEdit = () => {
+    const next = draft.trim();
+    if (!next || next === message.content) {
+      cancelEdit();
+      return;
+    }
+    void editMessage
+      .mutateAsync({ chatId: message.chatId, messageId: message.id, content: next })
+      .finally(() => setEditing(false));
+  };
+
+  const revisionCount = message.revisions?.length ?? 0;
+
+  if (editing) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <div className="w-[540px] max-w-full rounded-2xl border border-accent px-3 py-2.5 bg-surface-2">
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                cancelEdit();
+              } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                commitEdit();
+              }
+            }}
+            rows={Math.min(8, Math.max(2, draft.split("\n").length))}
+            className="w-full resize-none bg-transparent text-sm text-foreground outline-none focus-visible:outline-none placeholder:text-muted-foreground"
+            placeholder={t("chat.message.editPlaceholder")}
+            disabled={editMessage.isPending}
+          />
+          <div className="mt-2 flex items-center justify-end gap-2 text-2xs">
+            <span className="text-muted-foreground mr-auto">
+              {t("chat.message.editHint")}
+            </span>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={editMessage.isPending}
+              className="px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors disabled:opacity-50"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={commitEdit}
+              disabled={editMessage.isPending || !draft.trim() || draft.trim() === message.content}
+              className="px-2.5 py-1 rounded-md bg-accent text-accent-foreground font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {editMessage.isPending ? t("common.loading") : t("common.save")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1 group">
+      {message.attachments.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-2 max-w-[540px]">
+          {message.attachments.map((att) => (
+            <AttachmentItem key={att.id} att={att} />
+          ))}
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        {/* Left-of-bubble controls: edit pencil + clock — appear on hover. */}
+        <div className="flex flex-col items-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={startEdit}
+            aria-label={t("chat.message.edit")}
+            title={t("chat.message.edit")}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+          <span className="text-2xs text-muted-foreground px-1">{time}</span>
+        </div>
+        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed">
+          {message.content}
+          {message.webSearch && (
+            <Badge variant="default" className="ml-2 text-2xs opacity-70">
+              {t("chat.message.webSearch")}
+            </Badge>
+          )}
+        </div>
+      </div>
+      {/* "edited" affordance — clicking opens the revision history popover. */}
+      {revisionCount > 0 && (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <History className="h-3 w-3" />
+            {t("chat.message.edited", { n: revisionCount })}
+          </button>
+          {historyOpen && (
+            <RevisionHistoryPopover
+              message={message}
+              onClose={() => setHistoryOpen(false)}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Small popover listing the message's revisions (oldest first). */
+function RevisionHistoryPopover({
+  message,
+  onClose,
+}: {
+  message: ChatMessage;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <>
+      {/* click-outside scrim */}
+      <div className="fixed inset-0 z-20" onClick={onClose} />
+      <div className="absolute right-0 top-full mt-1 z-30 w-[420px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg p-2">
+        <div className="flex items-center justify-between px-1 mb-2">
+          <span className="text-xs font-medium text-foreground">
+            {t("chat.message.editHistory")}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-surface-3"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <ol className="flex flex-col gap-1.5">
+          {(message.revisions ?? []).map((rev, i) => (
+            <li
+              key={`${rev.editedAt}-${i.toString()}`}
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-2"
+            >
+              <div className="text-2xs text-muted-foreground mb-1">
+                {new Date(rev.editedAt).toLocaleString()}
+              </div>
+              <div className="text-xs text-foreground whitespace-pre-wrap break-words">
+                {rev.content}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export interface MessageBubbleProps {
   message: ChatMessage & { _streamStatus?: string; _streamError?: string };
@@ -544,30 +733,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   });
 
   if (isUser) {
-    return (
-      <div className="flex flex-col items-end gap-1 group">
-        {message.attachments.length > 0 && (
-          <div className="flex flex-wrap justify-end gap-2 max-w-[540px]">
-            {message.attachments.map((att) => (
-              <AttachmentItem key={att.id} att={att} />
-            ))}
-          </div>
-        )}
-        <div className="flex items-end gap-2">
-          <span className="text-2xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-            {time}
-          </span>
-          <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed">
-            {message.content}
-            {message.webSearch && (
-              <Badge variant="default" className="ml-2 text-2xs opacity-70">
-                {t("chat.message.webSearch")}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    // Don't allow editing while a streaming placeholder for this turn is
+    // still resolving — the id `__streaming_*` only applies to the assistant
+    // bubble, so user messages with a real id are always editable.
+    return <UserMessageBubble message={message} time={time} />;
   }
 
   if (isAssistant) {

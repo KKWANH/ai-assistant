@@ -488,8 +488,8 @@ function rowToChat(row: Record<string, unknown>): Chat {
 export function dbInsertMessage(m: ChatMessage): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO chat_messages (id, chat_id, role, content, attachments_json, web_search, search_results_json, agent_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO chat_messages (id, chat_id, role, content, attachments_json, web_search, search_results_json, agent_json, revisions_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     m.id,
     m.chatId,
@@ -499,8 +499,40 @@ export function dbInsertMessage(m: ChatMessage): void {
     m.webSearch ? 1 : 0,
     m.searchResults ? JSON.stringify(m.searchResults) : null,
     m.agent ? JSON.stringify(m.agent) : null,
+    m.revisions && m.revisions.length > 0 ? JSON.stringify(m.revisions) : null,
     m.createdAt
   );
+}
+
+export function dbGetMessage(messageId: string): ChatMessage | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM chat_messages WHERE id = ?")
+    .get(messageId) as Record<string, unknown> | undefined;
+  return row ? rowToMessage(row) : null;
+}
+
+/**
+ * Update a message's content, recording the prior content in its
+ * revisions log. Used by the edit-and-regenerate flow. Returns the
+ * updated message, or null if it doesn't exist.
+ */
+export function dbEditMessageContent(
+  messageId: string,
+  newContent: string,
+  editedAt: string,
+): ChatMessage | null {
+  const existing = dbGetMessage(messageId);
+  if (!existing) return null;
+  const revisions: import("@ariadne/shared").MessageRevision[] = [
+    ...(existing.revisions ?? []),
+    { content: existing.content, editedAt },
+  ];
+  const db = getDb();
+  db.prepare(
+    "UPDATE chat_messages SET content = ?, revisions_json = ? WHERE id = ?",
+  ).run(newContent, JSON.stringify(revisions), messageId);
+  return { ...existing, content: newContent, revisions };
 }
 
 export function dbListMessages(chatId: string): ChatMessage[] {
@@ -512,6 +544,10 @@ export function dbListMessages(chatId: string): ChatMessage[] {
 }
 
 function rowToMessage(row: Record<string, unknown>): ChatMessage {
+  const revisionsRaw = row["revisions_json"];
+  const revisions = revisionsRaw
+    ? (JSON.parse(revisionsRaw as string) as import("@ariadne/shared").MessageRevision[])
+    : undefined;
   return {
     id: row["id"] as string,
     chatId: row["chat_id"] as string,
@@ -526,6 +562,7 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
     agent: row["agent_json"]
       ? (JSON.parse(row["agent_json"] as string) as AgentTrace)
       : null,
+    revisions: revisions && revisions.length > 0 ? revisions : undefined,
     createdAt: row["created_at"] as string,
   };
 }

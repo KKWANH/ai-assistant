@@ -177,6 +177,11 @@ function runMigrations(db: DatabaseSync): void {
   if (!chatMsgColumns.some((c) => c.name === "agent_json")) {
     db.exec("ALTER TABLE chat_messages ADD COLUMN agent_json TEXT");
   }
+  // Guarded ALTER TABLE: add revisions_json — past versions of a user
+  // message's content, retained when the message was edited.
+  if (!chatMsgColumns.some((c) => c.name === "revisions_json")) {
+    db.exec("ALTER TABLE chat_messages ADD COLUMN revisions_json TEXT");
+  }
 
   // Guarded ALTER TABLE: add created_by to workspaces if missing
   const wsColumns = db

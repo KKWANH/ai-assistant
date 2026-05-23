@@ -27,6 +27,8 @@ import {
   dbInsertMessage,
   dbListMessages,
   dbGetWorkspace,
+  dbGetMessage,
+  dbEditMessageContent,
 } from "../db/repo.js";
 import { loadActionDefs } from "../services/actions.js";
 import { getProvider } from "../providers/index.js";
@@ -507,6 +509,45 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         sseEnd();
       }
     }
+  );
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/chats/:id/messages/:messageId
+  //   Edit the text of a user-authored message in place. The previous
+  //   content is appended to the message's `revisions` log so it stays
+  //   recoverable. Does NOT auto-regenerate the assistant reply — keeping
+  //   the conversation branch model simple. Assistant messages and other
+  //   users' messages are not editable.
+  // -------------------------------------------------------------------------
+  app.patch<{ Params: { id: string; messageId: string }; Body: unknown }>(
+    "/chats/:id/messages/:messageId",
+    async (req, reply) => {
+      const chat = dbGetChat(req.params.id);
+      if (!chat) return reply.status(404).send({ error: "Chat not found" });
+      if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const existing = dbGetMessage(req.params.messageId);
+      if (!existing || existing.chatId !== chat.id) {
+        return reply.status(404).send({ error: "Message not found" });
+      }
+      if (existing.role !== "user") {
+        return reply.status(400).send({ error: "Only user messages can be edited" });
+      }
+      const body = req.body as { content?: unknown } | null;
+      const next = typeof body?.content === "string" ? body.content.trim() : "";
+      if (!next) {
+        return reply.status(400).send({ error: "content must be a non-empty string" });
+      }
+      if (next === existing.content) {
+        // No-op edit — return the existing message unchanged.
+        return reply.send(existing);
+      }
+      const updated = dbEditMessageContent(req.params.messageId, next, now());
+      if (!updated) return reply.status(404).send({ error: "Message not found" });
+      dbUpdateChat(chat.id, { updatedAt: now() });
+      return reply.send(updated);
+    },
   );
 
   // -------------------------------------------------------------------------

@@ -288,6 +288,9 @@ export const getActiveGeneration = (chatId: string) =>
 export const stopGeneration = (chatId: string) =>
   request<{ ok: boolean }>("POST", `/chats/${chatId}/stop`);
 
+export const editMessage = (chatId: string, messageId: string, content: string) =>
+  request<ChatMessage>("PATCH", `/chats/${chatId}/messages/${messageId}`, { content });
+
 // ── Streaming sendMessage (SSE) ───────────────────────────────────────────────
 import type { ChatStreamEvent } from "@ariadne/shared";
 
