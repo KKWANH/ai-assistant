@@ -507,6 +507,24 @@ export interface RewindResult {
 export const rewindWorkspaceCommit = (workspaceId: string, sha: string) =>
   request<RewindResult>("POST", `/workspaces/${workspaceId}/history/rewind`, { sha });
 
+export interface CommitFileChange {
+  path: string;
+  action: "create" | "modify" | "replace" | "delete";
+  before: string | null;
+  after: string | null;
+  diff: string;
+}
+export interface CommitDetail {
+  sha: string;
+  shortSha: string;
+  message: string;
+  timestamp: string;
+  files: CommitFileChange[];
+}
+
+export const getCommitDetail = (workspaceId: string, sha: string) =>
+  request<CommitDetail>("GET", `/workspaces/${workspaceId}/history/${sha}`);
+
 // ── Action schedules ──────────────────────────────────────────────────────────
 import type {
   ActionSchedule,

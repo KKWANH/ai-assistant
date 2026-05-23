@@ -8,7 +8,7 @@
  *    (max-w-5xl mx-auto) so they look cohesive.
  */
 import { lazy, Suspense, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   FolderOpen,
   RefreshCw,
@@ -397,10 +397,18 @@ function HistorySection({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section>
-      <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-        <GitCommit className="h-3.5 w-3.5" />
-        {t("workspace.history.title")}
-      </h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+          <GitCommit className="h-3.5 w-3.5" />
+          {t("workspace.history.title")}
+        </h2>
+        <Link
+          to={`/workspaces/${workspaceId}/history`}
+          className="text-2xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {t("workspace.history.viewAll")} →
+        </Link>
+      </div>
       <div className="flex flex-col gap-1">
         {commits.map((c) => (
           <div

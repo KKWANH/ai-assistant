@@ -891,6 +891,18 @@ export function useRewindWorkspaceCommit() {
   });
 }
 
+/** Detail for one commit (each file's pre/post bodies). The full-history
+ *  page lazy-loads these as the user expands rows. */
+export function useCommitDetail(workspaceId: string, sha: string | null) {
+  return useQuery({
+    queryKey: ["commit", workspaceId, sha] as const,
+    queryFn: () => api.getCommitDetail(workspaceId, sha as string),
+    enabled: !!workspaceId && !!sha,
+    // Commits are immutable; cache forever within a session.
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
 // ── Schedules ─────────────────────────────────────────────────────────────────
 
 export function useSchedules(workspaceId: string) {

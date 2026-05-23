@@ -219,3 +219,122 @@ export async function listWorkspaceHistory(
 
   return commits;
 }
+
+export interface CommitFileChange {
+  path: string;
+  /** create / modify / replace / delete — same shape as the staged
+   *  manifest so the UI can render both with one component. */
+  action: "create" | "modify" | "replace" | "delete";
+  /** File body at parent commit; null for newly-created files. */
+  before: string | null;
+  /** File body at this commit; null for deletions. */
+  after: string | null;
+  /** Best-effort unified diff string for the file. UI ignores it; we
+   *  keep it on the wire for future LLM-readable exports. */
+  diff: string;
+}
+
+export interface CommitDetail {
+  sha: string;
+  shortSha: string;
+  message: string;
+  timestamp: string;
+  files: CommitFileChange[];
+}
+
+const FILE_BODY_CAP = 32_000;
+
+/**
+ * Read a file's body at a given revision. Returns null when the file
+ * doesn't exist at that revision (root commit's parent, or a delete).
+ */
+async function showFileAtRev(
+  dir: string,
+  rev: string,
+  filePath: string,
+): Promise<string | null> {
+  const res = await runGit(dir, ["show", `${rev}:${filePath}`], { ignoreFailure: true });
+  if (!res.ok) return null;
+  return res.stdout.length > FILE_BODY_CAP
+    ? res.stdout.slice(0, FILE_BODY_CAP) + "\n[…truncated]"
+    : res.stdout;
+}
+
+/**
+ * Detailed view of one commit: changed paths + each file's body at
+ * the parent commit and at this commit. Front-end reuses the same
+ * side-by-side renderer it draws staged manifests with.
+ */
+export async function getCommitDetail(
+  workspaceRoot: string,
+  sha: string,
+): Promise<CommitDetail | null> {
+  if (!(await isGitAvailable())) return null;
+  const dir = ariadneDir(workspaceRoot);
+  if (!fs.existsSync(path.join(dir, ".git"))) return null;
+  // Refuse anything that's not a hex sha so we never pass user input
+  // to git as a rev (route also validates — defence in depth).
+  if (!/^[a-f0-9]{7,40}$/i.test(sha)) return null;
+
+  const head = await runGit(
+    dir,
+    ["show", "--no-patch", "--pretty=format:%H%x09%h%x09%aI%x09%s", sha],
+    { ignoreFailure: true },
+  );
+  if (!head.ok || !head.stdout.trim()) return null;
+  const [fullSha, shortSha, timestamp, ...rest] = head.stdout.trim().split("\t");
+  if (!fullSha || !shortSha || !timestamp) return null;
+  const message = rest.join("\t");
+
+  // Is there a parent? Root commit has none.
+  const parent = await runGit(dir, ["rev-parse", `${sha}^`], { ignoreFailure: true });
+  const hasParent = parent.ok && parent.stdout.trim().length > 0;
+  const parentRev = hasParent ? parent.stdout.trim() : null;
+
+  // Changed-file list with status letters.
+  const nsCmd = hasParent
+    ? ["diff", "--name-status", `${parentRev!}..${sha}`]
+    : ["show", "--no-patch", "--name-status", "--pretty=format:", sha];
+  const ns = await runGit(dir, nsCmd, { ignoreFailure: true });
+  if (!ns.ok) return { sha: fullSha, shortSha, message, timestamp, files: [] };
+
+  const files: CommitFileChange[] = [];
+  for (const line of ns.stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split("\t");
+    const status = parts[0] ?? "";
+    const filePath = parts[parts.length - 1];
+    if (!filePath) continue;
+
+    let action: CommitFileChange["action"];
+    if (status.startsWith("A")) action = "create";
+    else if (status.startsWith("D")) action = "delete";
+    else if (status.startsWith("R")) action = "modify";
+    else action = "modify"; // M, T, anything else → treat as modify
+
+    const before = parentRev && action !== "create"
+      ? await showFileAtRev(dir, parentRev, filePath)
+      : null;
+    const after = action !== "delete"
+      ? await showFileAtRev(dir, sha, filePath)
+      : null;
+
+    const diff = await runGit(
+      dir,
+      ["show", "--format=", "--unified=3", sha, "--", filePath],
+      { ignoreFailure: true },
+    );
+    files.push({
+      path: filePath,
+      action,
+      before,
+      after,
+      diff: diff.ok
+        ? (diff.stdout.length > 8_000 ? diff.stdout.slice(0, 8_000) + "\n[…truncated]" : diff.stdout)
+        : "",
+    });
+  }
+
+  return { sha: fullSha, shortSha, message, timestamp, files };
+}

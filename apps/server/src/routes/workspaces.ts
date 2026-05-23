@@ -20,6 +20,7 @@ import * as budgetStarter from "../surface/budgetStarter.js";
 import * as readingStarter from "../surface/readingStarter.js";
 import * as chefbookStarter from "../surface/chefbookStarter.js";
 import * as codeStarter from "../surface/codeStarter.js";
+import * as decisionsStarter from "../surface/decisionsStarter.js";
 import logger from "../logger.js";
 import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
@@ -68,6 +69,17 @@ const STARTERS: Record<
     surface: codeStarter.SURFACE_TSX,
     actions: codeStarter.ACTIONS_YAML,
   },
+  decisions: {
+    files: {
+      "README.md": decisionsStarter.DECISIONS_README,
+      "prd/workspace-search.md": decisionsStarter.PRD_SAMPLE,
+      "decisions/ADR-001-sqlite.md": decisionsStarter.ADR_001,
+      "decisions/ADR-002-tree-sitter.md": decisionsStarter.ADR_002,
+      "open-questions.md": decisionsStarter.OPEN_QUESTIONS,
+    },
+    surface: decisionsStarter.SURFACE_TSX,
+    actions: decisionsStarter.ACTIONS_YAML,
+  },
 };
 
 export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
@@ -101,6 +113,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       reading: "research",
       chefbook: "cooking",
       code: "code",
+      decisions: "decisions",
       blank: null,
     };
     const category = starter ? categoryByStarter[starter] ?? null : null;
@@ -182,6 +195,24 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         applyRunId: applyBySha.get(c.sha)?.runId ?? null,
       }));
       return reply.send(decorated);
+    },
+  );
+
+  // GET /api/workspaces/:id/history/:sha — single commit with each
+  // file's before/after bodies, for the per-commit diff UI.
+  app.get<{ Params: { id: string; sha: string } }>(
+    "/workspaces/:id/history/:sha",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+      // Sha sanity guard — accept short or full hex; service double-checks.
+      if (!/^[a-f0-9]{7,40}$/i.test(req.params.sha)) {
+        return reply.status(400).send({ error: "Invalid sha" });
+      }
+      const { getCommitDetail } = await import("../services/workspaceGit.js");
+      const detail = await getCommitDetail(workspace.rootPath, req.params.sha);
+      if (!detail) return reply.status(404).send({ error: "Commit not found" });
+      return reply.send(detail);
     },
   );
 

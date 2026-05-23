@@ -185,10 +185,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     //   - the step returned little / no information (low signal)
     // and we still have replan budget. Doc-promised but previously not done.
     const isLast = i >= steps.length - 1;
+    // A `run_tests` step that reports ✗ should re-plan even though the
+    // step itself succeeded (status === "done") and the output is
+    // long. This is the fix-until-tests-pass loop the code-editing
+    // planner expects.
+    const testFailure = step.tool === "run_tests" && /^✗/.test(result.trimStart());
     const shouldConsiderReplan =
       !isLast &&
       replansUsed < MAX_REPLANS &&
-      (step.status === "failed" || isLowInformation(result));
+      (step.status === "failed" || isLowInformation(result) || testFailure);
 
     if (shouldConsiderReplan) {
       const remaining = steps.slice(i + 1);
@@ -647,6 +652,13 @@ Otherwise, break it into an ordered list of 2–5 steps. Each step has:
   - "note": a brief one-line rationale — why this step, what it should surface
 
 Prefer "reason" for pure analysis. Use "web_search" for factual lookup.
+
+For code-editing tasks (e.g. "fix the failing tests", "rename X to Y",
+"add validation to the foo handler") the canonical chain is:
+  read_file → reason → edit_file → run_tests
+The replanner will re-run the edit/test pair if tests fail, so emit just
+one edit_file + run_tests pair — don't pre-plan retries.
+
 Return ONLY JSON: { "summary": "<one line describing your approach>", "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
 This is a plan-and-execute agent. Do not add commentary outside the JSON.`;
 }
