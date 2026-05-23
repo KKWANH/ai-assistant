@@ -20,6 +20,7 @@ import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared"
 import type { ProviderImage } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { normalizedExtension } from "../workspace/readWithinRoot.js";
+import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
@@ -284,18 +285,16 @@ async function parseUploadedFile(data: Buffer, name: string, _uploadId: string):
 
   // PDF
   if (ext === "pdf") {
-    try {
+    return tryParseDocument(name, async () => {
       const { extractPdfText } = await import("./pdfExtract.js");
       const text = await extractPdfText(data);
       return text.length > 8000 ? text.slice(0, 6000) + "\n[...truncated...]" : text;
-    } catch {
-      return `[Could not parse ${name}]`;
-    }
+    });
   }
 
   // DOCX
   if (ext === "docx") {
-    try {
+    return tryParseDocument(name, async () => {
       const mammoth = await import("mammoth");
       const tmp = path.join("/tmp", `ariadne-upload-${Date.now().toString()}.docx`);
       fs.writeFileSync(tmp, data);
@@ -303,14 +302,12 @@ async function parseUploadedFile(data: Buffer, name: string, _uploadId: string):
       try { fs.unlinkSync(tmp); } catch { /* ignore */ }
       const text = result.value ?? "";
       return text.length > 8000 ? text.slice(0, 6000) + "\n[...truncated...]" : text;
-    } catch {
-      return `[Could not parse ${name}]`;
-    }
+    });
   }
 
   // XLSX
   if (ext === "xlsx" || ext === "xls") {
-    try {
+    return tryParseDocument(name, async () => {
       const XLSX = await import("xlsx");
       const workbook = XLSX.read(data);
       const parts: string[] = [];
@@ -322,9 +319,7 @@ async function parseUploadedFile(data: Buffer, name: string, _uploadId: string):
         parts.push(`## Sheet: ${sheetName}\n${rows}`);
       }
       return parts.join("\n\n") || `[Empty workbook: ${name}]`;
-    } catch {
-      return `[Could not parse ${name}]`;
-    }
+    });
   }
 
   // Text-based

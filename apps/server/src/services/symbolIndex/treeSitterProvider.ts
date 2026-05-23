@@ -152,6 +152,38 @@ export async function getTreeSitterProvider(): Promise<TreeSitterProvider> {
   };
 }
 
+// ── AST node-type constants ────────────────────────────────────────────
+//
+// Local inventory of the tree-sitter node types we care about. Using
+// const refs instead of bare string literals turns typos into compile
+// errors — `NodeType.EXPRT_STATEMENT` fails to resolve where
+// `"exprot_statement"` would silently never match.
+//
+// Tree-sitter has no upstream NodeType enum; the grammars ship a
+// node-types.json but it's a runtime artefact. Keeping this list
+// matched against the JSON is a manual step, but trivial — these
+// names change roughly once per grammar major version.
+
+const NODE_TYPE = {
+  // TypeScript / JavaScript
+  EXPORT_STATEMENT: "export_statement",
+  INTERNAL_MODULE: "internal_module",
+  MODULE: "module",
+  FUNCTION_DECLARATION: "function_declaration",
+  CLASS_DECLARATION: "class_declaration",
+  METHOD_DEFINITION: "method_definition",
+  METHOD_SIGNATURE: "method_signature",
+  INTERFACE_DECLARATION: "interface_declaration",
+  TYPE_ALIAS_DECLARATION: "type_alias_declaration",
+  LEXICAL_DECLARATION: "lexical_declaration",
+  VARIABLE_DECLARATION: "variable_declaration",
+  VARIABLE_DECLARATOR: "variable_declarator",
+  // Python
+  DECORATED_DEFINITION: "decorated_definition",
+  FUNCTION_DEFINITION: "function_definition",
+  CLASS_DEFINITION: "class_definition",
+} as const;
+
 // ── Shared helpers ─────────────────────────────────────────────────────
 
 /** Iterate a node's named children, skipping nulls. The native binding
@@ -165,101 +197,115 @@ function forEachNamedChild(node: TSNode, fn: (child: TSNode) => void): void {
 }
 
 /**
+ * Walk context threaded through the recursive visitors. `rows` and
+ * `source` are scan-wide constants; `parent` and `exported` change
+ * with scope (export_statement, class body, namespace). Passing one
+ * object instead of five positional args makes state changes explicit
+ * — the only mutating recursion creates `{ ...ctx, exported: true }`
+ * etc., which is harder to do wrong than threading five args by hand.
+ */
+interface VisitCtx {
+  rows: SymbolDraft[];
+  source: string;
+  /** Enclosing class name for methods, null at top level. */
+  parent: string | null;
+  /** TS: in an `export ...` wrapper. Python: enclosing scope is public. */
+  exported: boolean;
+}
+
+/**
  * Build and push a SymbolDraft row. Both visitors funnel through this
  * so the row shape is described in exactly one place — if SymbolRow
  * grows a new column, only this function needs to learn it.
  */
 function pushRow(
-  rows: SymbolDraft[],
+  ctx: VisitCtx,
   node: TSNode,
   name: string,
   kind: SymbolRow["kind"],
-  parent: string | null,
-  exported: boolean,
   signature: string | null,
 ): void {
-  rows.push({
+  ctx.rows.push({
     name,
     kind,
     line: node.startPosition.row + 1,
     endLine: node.endPosition.row + 1,
-    parent,
+    parent: ctx.parent,
     signature,
-    exported,
+    exported: ctx.exported,
   });
 }
 
 // ── TypeScript / JavaScript extraction ─────────────────────────────────
 
 function extractTypeScript(root: TSNode, source: string): SymbolDraft[] {
-  const rows: SymbolDraft[] = [];
   // Walk only the program's direct children — local `const`s inside
   // function/method bodies aren't useful for a retrieval-time index.
-  forEachNamedChild(root, (child) => visitTSTopLevel(child, rows, source, null, false));
-  return rows;
+  const ctx: VisitCtx = { rows: [], source, parent: null, exported: false };
+  forEachNamedChild(root, (child) => visitTSTopLevel(ctx, child));
+  return ctx.rows;
 }
 
-function visitTSTopLevel(
-  node: TSNode,
-  rows: SymbolDraft[],
-  source: string,
-  parentName: string | null,
-  exported: boolean,
-): void {
+function visitTSTopLevel(ctx: VisitCtx, node: TSNode): void {
   const t = node.type;
   // `export ...` wraps the actual declaration; recurse with exported flag.
-  if (t === "export_statement") {
-    forEachNamedChild(node, (c) => visitTSTopLevel(c, rows, source, parentName, true));
+  if (t === NODE_TYPE.EXPORT_STATEMENT) {
+    const childCtx: VisitCtx = { ...ctx, exported: true };
+    forEachNamedChild(node, (c) => visitTSTopLevel(childCtx, c));
     return;
   }
 
   // Namespaces / modules can nest declarations — walk into them.
-  if (t === "internal_module" || t === "module") {
+  if (t === NODE_TYPE.INTERNAL_MODULE || t === NODE_TYPE.MODULE) {
     const body = node.childForFieldName("body");
     if (body) {
-      const nsName = nameOf(node) ?? parentName;
-      forEachNamedChild(body, (c) => visitTSTopLevel(c, rows, source, nsName, exported));
+      const childCtx: VisitCtx = { ...ctx, parent: nameOf(node) ?? ctx.parent };
+      forEachNamedChild(body, (c) => visitTSTopLevel(childCtx, c));
     }
     return;
   }
 
-  if (t === "function_declaration") {
+  if (t === NODE_TYPE.FUNCTION_DECLARATION) {
     const name = nameOf(node);
-    if (name) pushRow(rows, node, name, "function", parentName, exported, signatureOf(node, source, "function"));
+    if (name) pushRow(ctx, node, name, "function", signatureOf(node, ctx.source, "function"));
     return;
   }
-  if (t === "class_declaration") {
+  if (t === NODE_TYPE.CLASS_DECLARATION) {
     const className = nameOf(node);
     if (!className) return;
-    pushRow(rows, node, className, "class", parentName, exported, signatureOf(node, source, "class"));
+    pushRow(ctx, node, className, "class", signatureOf(node, ctx.source, "class"));
     const body = node.childForFieldName("body");
     if (body) {
+      const methodCtx: VisitCtx = { ...ctx, parent: className };
       forEachNamedChild(body, (child) => {
-        if (child.type !== "method_definition" && child.type !== "method_signature") return;
+        if (
+          child.type !== NODE_TYPE.METHOD_DEFINITION &&
+          child.type !== NODE_TYPE.METHOD_SIGNATURE
+        ) return;
         const methodName = nameOf(child);
         if (methodName) {
-          pushRow(rows, child, methodName, "method", className, exported, signatureOf(child, source, "method"));
+          pushRow(methodCtx, child, methodName, "method", signatureOf(child, ctx.source, "method"));
         }
       });
     }
     return;
   }
-  if (t === "interface_declaration") {
+  if (t === NODE_TYPE.INTERFACE_DECLARATION) {
     const name = nameOf(node);
-    if (name) pushRow(rows, node, name, "interface", parentName, exported, null);
+    if (name) pushRow(ctx, node, name, "interface", null);
     return;
   }
-  if (t === "type_alias_declaration") {
+  if (t === NODE_TYPE.TYPE_ALIAS_DECLARATION) {
     const name = nameOf(node);
-    if (name) pushRow(rows, node, name, "type", parentName, exported, null);
+    if (name) pushRow(ctx, node, name, "type", null);
     return;
   }
-  if (t === "lexical_declaration" || t === "variable_declaration") {
+  if (t === NODE_TYPE.LEXICAL_DECLARATION || t === NODE_TYPE.VARIABLE_DECLARATION) {
     // const/let at top level — one row per declarator.
     forEachNamedChild(node, (decl) => {
-      if (decl.type !== "variable_declarator") return;
+      if (decl.type !== NODE_TYPE.VARIABLE_DECLARATOR) return;
       const name = nameOf(decl);
-      if (name) pushRow(rows, decl, name, "const", parentName, exported, null);
+      if (name) pushRow(ctx, decl, name, "const", null);
     });
     return;
   }
@@ -269,51 +315,49 @@ function visitTSTopLevel(
 // ── Python extraction ──────────────────────────────────────────────────
 
 function extractPython(root: TSNode, source: string): SymbolDraft[] {
-  const rows: SymbolDraft[] = [];
-  visitPy(root, rows, source, null, /*parentExported*/ true);
-  return rows;
+  // Top-level Python scope is public by convention — parentExported = true.
+  const ctx: VisitCtx = { rows: [], source, parent: null, exported: true };
+  visitPy(ctx, root);
+  return ctx.rows;
 }
 
 /**
  * Python "exported" is a convention, not a keyword — anything that
  * doesn't start with `_` is considered public IF its enclosing scope is
- * also public. `parentExported` carries that down: a non-underscore
- * method of a `_Internal` class is still effectively private.
+ * also public. `ctx.exported` carries that down: a non-underscore method
+ * of a `_Internal` class is still effectively private.
  */
-function visitPy(
-  node: TSNode,
-  rows: SymbolDraft[],
-  source: string,
-  parentName: string | null,
-  parentExported: boolean,
-): void {
+function visitPy(ctx: VisitCtx, node: TSNode): void {
   const t = node.type;
   // @decorator def foo(): / @decorator class C: — unwrap to the inner def.
-  if (t === "decorated_definition") {
+  if (t === NODE_TYPE.DECORATED_DEFINITION) {
     const inner = node.childForFieldName("definition");
-    if (inner) visitPy(inner, rows, source, parentName, parentExported);
+    if (inner) visitPy(ctx, inner);
     return;
   }
-  if (t === "function_definition") {
+  if (t === NODE_TYPE.FUNCTION_DEFINITION) {
     const name = nameOf(node);
     if (!name) return;
-    const exported = parentExported && !name.startsWith("_");
-    const kind = parentName ? "method" : "function";
-    pushRow(rows, node, name, kind, parentName, exported, signatureOf(node, source, kind));
+    const exported = ctx.exported && !name.startsWith("_");
+    const kind = ctx.parent ? "method" : "function";
+    pushRow({ ...ctx, exported }, node, name, kind, signatureOf(node, ctx.source, kind));
     return; // don't descend into function bodies — nested defs are uncommon
   }
-  if (t === "class_definition") {
+  if (t === NODE_TYPE.CLASS_DEFINITION) {
     const name = nameOf(node);
     if (!name) return;
-    const exported = parentExported && !name.startsWith("_");
-    pushRow(rows, node, name, "class", parentName, exported, null);
+    const exported = ctx.exported && !name.startsWith("_");
+    pushRow({ ...ctx, exported }, node, name, "class", null);
     const body = node.childForFieldName("body");
-    if (body) forEachNamedChild(body, (c) => visitPy(c, rows, source, name, exported));
+    if (body) {
+      const childCtx: VisitCtx = { ...ctx, parent: name, exported };
+      forEachNamedChild(body, (c) => visitPy(childCtx, c));
+    }
     return;
   }
   // Module-level descent only — we don't walk into function bodies.
-  if (t === "module") {
-    forEachNamedChild(node, (c) => visitPy(c, rows, source, parentName, parentExported));
+  if (t === NODE_TYPE.MODULE) {
+    forEachNamedChild(node, (c) => visitPy(ctx, c));
   }
 }
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { FileMeta, Snapshot, Template } from "@ariadne/shared";
 import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
+import { tryParseDocument } from "../services/safeParse.js";
 
 const OVERSIZED_TOKENS = 8000;
 
@@ -115,31 +116,27 @@ ${JSON.stringify(manifest.files, null, 2)}`;
 
 /** PDF extraction via pdfjs-dist with OCR fallback for scanned PDFs. */
 async function extractPdf(absPath: string, provider?: AiProvider): Promise<string> {
-  try {
+  return tryParseDocument(path.basename(absPath), async () => {
     const buf = fs.readFileSync(absPath);
     const { extractPdfText } = await import("../services/pdfExtract.js");
-    return await extractPdfText(buf, provider);
-  } catch {
-    return `[Could not parse ${path.basename(absPath)}]`;
-  }
+    return extractPdfText(buf, provider);
+  });
 }
 
 /** DOCX extraction via mammoth. */
 async function extractDocx(absPath: string): Promise<string> {
-  try {
+  return tryParseDocument(path.basename(absPath), async () => {
     const mammoth = await import("mammoth");
     const result = await mammoth.extractRawText({ path: absPath });
     const text = result.value ?? "";
     if (text.length <= 12000) return text;
     return text.slice(0, 6000) + "\n\n[...truncated...]\n\n" + text.slice(-2000);
-  } catch {
-    return `[Could not parse ${path.basename(absPath)}]`;
-  }
+  });
 }
 
 /** XLSX extraction via SheetJS — per sheet, name + CSV of first ~30 rows. */
 async function extractXlsx(absPath: string): Promise<string> {
-  try {
+  return tryParseDocument(path.basename(absPath), async () => {
     const XLSX = await import("xlsx");
     const workbook = XLSX.readFile(absPath);
     const parts: string[] = [];
@@ -151,9 +148,7 @@ async function extractXlsx(absPath: string): Promise<string> {
       parts.push(`## Sheet: ${sheetName}\n${rows}`);
     }
     return parts.join("\n\n") || `[Empty workbook: ${path.basename(absPath)}]`;
-  } catch {
-    return `[Could not parse ${path.basename(absPath)}]`;
-  }
+  });
 }
 
 /** Image interpretation via the active provider. Falls back to a description placeholder. */
