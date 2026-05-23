@@ -2,16 +2,19 @@
  * DataFilesView — browse and edit a workspace's CSV data files as tables.
  *
  * Lists the CSV files from the latest snapshot; the selected file is loaded,
- * parsed into a grid and rendered in an editable TableSheet. Saving serialises
- * the grid back to CSV via the workspace file-write API (local access only).
+ * parsed into a grid and rendered in an editable TableSheet. Saving now
+ * stages the change for review (same staged-diff + apply flow the AI's
+ * edit_file uses) instead of writing directly — keeps the "review before
+ * applying" invariant uniform across the app.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Database, FileSpreadsheet, Save } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Database, FileSpreadsheet, Save, FileDiff } from "lucide-react";
 import {
   useSnapshot,
   useScanWorkspace,
   useWorkspaceFile,
-  useSaveWorkspaceFile,
+  useStageWorkspaceFile,
   useMe,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
@@ -24,11 +27,12 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
   const { t } = useT();
   const { toast } = useToast();
   const { data: me } = useMe();
+  const navigate = useNavigate();
   const isRemote = me?.accessContext === "remote";
 
   const { data: snapshot } = useSnapshot(workspaceId);
   const scan = useScanWorkspace();
-  const saveFile = useSaveWorkspaceFile(workspaceId);
+  const stageFile = useStageWorkspaceFile(workspaceId);
 
   const dataFiles = useMemo(
     () =>
@@ -45,6 +49,11 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
 
   const [grid, setGrid] = useState<string[][]>([]);
   const [dirty, setDirty] = useState(false);
+  // Last staged edit — surfaced as an inline "Review & apply" pill until
+  // the user clicks through or stages another change.
+  const [lastStaged, setLastStaged] = useState<
+    { runId: string; path: string; added: number; removed: number } | null
+  >(null);
 
   // Keep the selection valid: pick the first file initially, and re-pick if a
   // re-scan removed the selected file.
@@ -74,9 +83,25 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
   const handleSave = async () => {
     if (!activePath) return;
     try {
-      await saveFile.mutateAsync({ path: activePath, content: toCsv(grid) });
+      const result = await stageFile.mutateAsync({
+        path: activePath,
+        content: toCsv(grid),
+      });
       setDirty(false);
-      toast({ title: t("workspace.data.saved"), variant: "success" });
+      setLastStaged({
+        runId: result.runId,
+        path: activePath,
+        added: result.added,
+        removed: result.removed,
+      });
+      toast({
+        title: t("workspace.data.staged"),
+        description: t("workspace.data.stagedDetail", {
+          added: result.added.toString(),
+          removed: result.removed.toString(),
+        }),
+        variant: "success",
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : t("workspace.data.saveFailed");
       toast({ title: t("workspace.data.saveFailed"), description: msg, variant: "error" });
@@ -156,13 +181,44 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
                     size="sm"
                     leftIcon={<Save className="h-3.5 w-3.5" />}
                     disabled={!dirty}
-                    loading={saveFile.isPending}
+                    loading={stageFile.isPending}
                     onClick={() => void handleSave()}
                   >
-                    {t("common.save")}
+                    {t("workspace.data.stage")}
                   </Button>
                 )}
               </div>
+
+              {/* Pending staged-edit CTA — visible until the user reviews. */}
+              {lastStaged && lastStaged.path === activePath && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-2 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <FileDiff className="h-3.5 w-3.5 text-accent" />
+                    <span className="text-foreground">
+                      {t("workspace.data.stagedShort", {
+                        added: lastStaged.added.toString(),
+                        removed: lastStaged.removed.toString(),
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLastStaged(null)}
+                    >
+                      {t("workspace.data.stageDismiss")}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => navigate(`/runs/${lastStaged.runId}/diff`)}
+                    >
+                      {t("workspace.data.review")}
+                    </Button>
+                  </div>
+                </div>
+              )}
               {fileData ? (
                 <TableSheet
                   rows={grid}

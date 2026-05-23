@@ -172,6 +172,23 @@ export const getWorkspaceFile = (workspaceId: string, path: string) =>
 export const saveWorkspaceFile = (workspaceId: string, path: string, content: string) =>
   request<{ ok: boolean }>("PUT", `/workspaces/${workspaceId}/file`, { path, content });
 
+export interface StageWorkspaceFileResult {
+  runId: string;
+  added: number;
+  removed: number;
+}
+/**
+ * Stage a data-file edit instead of writing it directly. The caller can
+ * then navigate to /runs/:runId/diff to review + apply (or discard).
+ * This is the Data-tab equivalent of the AI's edit_file → stage flow.
+ */
+export const stageWorkspaceFile = (workspaceId: string, path: string, content: string) =>
+  request<StageWorkspaceFileResult>(
+    "POST",
+    `/workspaces/${workspaceId}/file/stage`,
+    { path, content },
+  );
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const login = (input: LoginInput) =>
   request<AuthInfo>("POST", "/auth/login", input);

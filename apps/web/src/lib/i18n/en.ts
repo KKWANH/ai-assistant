@@ -258,6 +258,12 @@ const en = {
   "workspace.data.saveFailed": "Couldn't save the file",
   "workspace.data.readOnly": "Read-only — connect locally to edit data files.",
   "workspace.data.unsaved": "Unsaved changes",
+  "workspace.data.stage": "Stage edit",
+  "workspace.data.staged": "Edit staged for review",
+  "workspace.data.stagedDetail": "+{added} / −{removed} lines. Click Review to see the diff and apply.",
+  "workspace.data.stagedShort": "+{added} / −{removed} lines staged.",
+  "workspace.data.review": "Review & apply",
+  "workspace.data.stageDismiss": "Dismiss",
 
   // Create workspace dialog
   "workspace.dialog.title": "New Workspace",

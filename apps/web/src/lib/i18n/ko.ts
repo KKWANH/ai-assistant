@@ -251,6 +251,12 @@ const ko: Record<TranslationKey, string> = {
   "workspace.data.saveFailed": "파일을 저장하지 못했습니다",
   "workspace.data.readOnly": "읽기 전용 — 데이터 파일을 편집하려면 로컬에서 접속하세요.",
   "workspace.data.unsaved": "저장하지 않은 변경",
+  "workspace.data.stage": "스테이지",
+  "workspace.data.staged": "리뷰용으로 스테이지됨",
+  "workspace.data.stagedDetail": "+{added} / −{removed} 줄. Review를 눌러 diff 확인 후 적용하세요.",
+  "workspace.data.stagedShort": "+{added} / −{removed} 줄 스테이지됨.",
+  "workspace.data.review": "검토 & 적용",
+  "workspace.data.stageDismiss": "닫기",
 
   // Create workspace dialog
   "workspace.dialog.title": "새 워크스페이스",

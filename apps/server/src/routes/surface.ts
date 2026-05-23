@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { SurfacePutSchema } from "@ariadne/shared";
-import type { SurfaceState } from "@ariadne/shared";
+import type { SurfaceState, Run } from "@ariadne/shared";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import {
   ensureAriadneFolder,
@@ -21,6 +21,9 @@ import {
   surfaceTsxPath,
 } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
+import { stageEdit } from "../services/stagedEdits.js";
+import { dbInsertRun, dbListRuns } from "../db/repo.js";
+import { makeDateRunId } from "../runs/engine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
 function getSurfaceState(workspaceRoot: string): SurfaceState {
@@ -187,5 +190,108 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.send({ ok: true });
     }
+  );
+
+  // POST /api/workspaces/:id/file/stage — stage a data-file edit for review.
+  // Same shape as the direct PUT above, but routes through stagedEdits +
+  // creates a new Run so the change shows up at /runs/:runId/diff. The UI's
+  // Data tab now uses this path; the direct PUT stays for callers that need
+  // immediate writes (Surface SDK, headless flows). The whole point of this
+  // route is to give Data-tab edits the same "review before applying"
+  // workflow that AI-proposed edits already have.
+  app.post<{ Params: { id: string }; Body: { path?: string; content?: string } }>(
+    "/workspaces/:id/file/stage",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Staging workspace files is not permitted from remote access.",
+          req,
+          reply,
+        )
+      )
+        return;
+
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const relPath = req.body?.path;
+      const content = req.body?.content;
+      if (typeof relPath !== "string" || !relPath || typeof content !== "string") {
+        return reply.status(400).send({ error: "path and content are required" });
+      }
+      if (!/\.(csv|tsv|txt|json|md|ya?ml)$/i.test(relPath)) {
+        return reply
+          .status(400)
+          .send({ error: "Only data files (csv, tsv, txt, json, md, yaml) may be staged" });
+      }
+
+      const resolved = safeResolveUnderRoot(workspace.rootPath, relPath);
+      if (!resolved) {
+        return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+      const ariadneDir = path.join(path.resolve(workspace.rootPath), ".ariadne");
+      if (resolved === ariadneDir || resolved.startsWith(ariadneDir + path.sep)) {
+        return reply
+          .status(403)
+          .send({ error: "The .ariadne folder is managed and cannot be edited here" });
+      }
+
+      const before = fs.existsSync(resolved) ? fs.readFileSync(resolved, "utf-8") : null;
+      const action: "create" | "modify" | "replace" = before === null ? "create" : "modify";
+
+      // New synthetic Run so the diff view + apply flow work unchanged.
+      // kind="action" with a manual-data-edit actionId is the smallest
+      // change that fits the existing schema; the diff/apply UI doesn't
+      // care where the staged manifest came from.
+      const runId = makeDateRunId(dbListRuns());
+      const now = new Date().toISOString();
+      const run: Run = {
+        id: runId,
+        kind: "action",
+        workspaceId: workspace.id,
+        templateId: "manual-data-edit",
+        templateName: `Edit ${relPath}`,
+        status: "completed",
+        input: { path: relPath },
+        model: "",
+        provider: "anthropic",
+        createdAt: now,
+        startedAt: null,
+        completedAt: null,
+        candidateFiles: [],
+        selectedFiles: [],
+        tokenEstimate: 0,
+        evidenceCount: 0,
+        unsupportedCount: 0,
+        blockResults: [],
+        artifacts: {},
+        trace: [],
+        previousRunId: null,
+        error: null,
+        createdBy: req.account?.id ?? null,
+        createdByName: req.account?.displayName ?? null,
+        usage: null,
+      };
+      dbInsertRun(run);
+
+      try {
+        const stats = await stageEdit({
+          runId,
+          workspace,
+          path: relPath,
+          action,
+          before,
+          after: content,
+        });
+        return reply.send({
+          runId,
+          added: stats.added,
+          removed: stats.removed,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: "Failed to stage edit", detail: msg });
+      }
+    },
   );
 }

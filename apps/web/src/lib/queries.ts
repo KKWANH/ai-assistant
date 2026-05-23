@@ -346,6 +346,19 @@ export function useSaveWorkspaceFile(workspaceId: string) {
   });
 }
 
+/**
+ * Stage a data-file edit (Data-tab Save) instead of writing it directly.
+ * Returns the created runId so the caller can deep-link to /runs/:runId/diff.
+ * Apply happens from that diff view, and on apply the workspace's runs
+ * + file queries should refresh — the diff view handles that itself.
+ */
+export function useStageWorkspaceFile(workspaceId: string) {
+  return useMutation({
+    mutationFn: ({ path, content }: { path: string; content: string }) =>
+      api.stageWorkspaceFile(workspaceId, path, content),
+  });
+}
+
 export function useRunScript(workspaceId: string) {
   return useMutation({
     mutationFn: (name: string) => api.runScript(workspaceId, name),
