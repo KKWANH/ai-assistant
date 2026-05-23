@@ -1,22 +1,16 @@
 /**
- * Symbol indexer — pluggable provider architecture.
+ * Symbol indexer — chooser over pluggable providers.
  *
- * Today the only provider is regex-based (this file's patterns). A
- * future tree-sitter provider plugs in by implementing the same
- * `extractSymbols(text, lang) → SymbolRow[]` shape, and the chooser
- * here picks tree-sitter when its WASM grammars are available, falling
- * back to regex otherwise. See docs/SYMBOL_INDEX_PLAN.md for the
- * grammar-loading design (lazy fetch into ~/.ariadne/grammars/, cached
- * across server restarts).
+ * Boot-time order:
+ *   1. tree-sitter provider — accurate AST for TS/TSX/JS/JSX/Python,
+ *      gated on optionalDependencies loading successfully (see
+ *      docs/SYMBOL_INDEX_PLAN.md §8 for why we picked native bindings).
+ *   2. regex provider — the existing patterns, always ready. Floor for
+ *      Go/Rust/Java and the fallback path when tree-sitter is unavailable.
  *
- * The regex patterns catch the symbol kinds that matter for retrieval
- * boosting (function, class, method, const) across JavaScript /
- * TypeScript, Python, Go, Rust, and Java. False positives are cheap
- * (retrieval just gets a +2.0 nudge); false negatives mean the
- * embedding + keyword paths carry the load, which they already do well.
- *
- * The indexer runs once per scan, in the same background slot as the
- * embedding indexer.
+ * The indexer runs once per scan in the same background slot as the
+ * embedding indexer. Per-file routing picks the highest-priority
+ * provider that supports the extension.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -26,12 +20,15 @@ import {
   dbInsertSymbols,
   type SymbolRow,
 } from "../db/repo.js";
+import { getTreeSitterProvider } from "./symbolIndex/treeSitterProvider.js";
 
 const READ_BUDGET = 200_000; // 200 KB per file is plenty for symbol heads.
 const MAX_FILES = 200;
 
-/** Languages we extract — keyed by file extension. */
-const LANG_PATTERNS: Record<string, { kind: SymbolRow["kind"]; re: RegExp }[]> = {
+type SymbolDraft = Omit<SymbolRow, "workspaceId" | "path">;
+
+/** Languages the regex provider catches — keyed by file extension. */
+const REGEX_PATTERNS: Record<string, { kind: SymbolRow["kind"]; re: RegExp }[]> = {
   ts: [
     { kind: "function", re: /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm },
     { kind: "class", re: /^(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/gm },
@@ -40,8 +37,6 @@ const LANG_PATTERNS: Record<string, { kind: SymbolRow["kind"]; re: RegExp }[]> =
     { kind: "interface", re: /^(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)/gm },
     { kind: "type", re: /^(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/gm },
   ],
-  // JS shares the TS patterns minus interface/type — extracting them anyway
-  // is harmless because plain JS won't have those tokens.
   js: [],
   tsx: [],
   jsx: [],
@@ -65,9 +60,32 @@ const LANG_PATTERNS: Record<string, { kind: SymbolRow["kind"]; re: RegExp }[]> =
   ],
 };
 // JS / TSX / JSX share TS rules.
-LANG_PATTERNS["js"] = LANG_PATTERNS["ts"]!;
-LANG_PATTERNS["tsx"] = LANG_PATTERNS["ts"]!;
-LANG_PATTERNS["jsx"] = LANG_PATTERNS["ts"]!;
+REGEX_PATTERNS["js"] = REGEX_PATTERNS["ts"]!;
+REGEX_PATTERNS["tsx"] = REGEX_PATTERNS["ts"]!;
+REGEX_PATTERNS["jsx"] = REGEX_PATTERNS["ts"]!;
+
+const REGEX_SUPPORTED = new Set(Object.keys(REGEX_PATTERNS));
+
+/** Regex extractor — the same patterns we've had since Phase D. */
+function extractWithRegex(text: string, ext: string): SymbolDraft[] {
+  const patterns = REGEX_PATTERNS[ext];
+  if (!patterns) return [];
+  const rows: SymbolDraft[] = [];
+  for (const { kind, re } of patterns) {
+    // Each pattern is module-scoped with the `g` flag — reset lastIndex
+    // before each file to be safe.
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const name = m[1];
+      if (!name) continue;
+      // O(n) per match newline-count is fine at this scale.
+      const line = (text.slice(0, m.index).match(/\n/g)?.length ?? 0) + 1;
+      rows.push({ name, kind, line });
+    }
+  }
+  return rows;
+}
 
 /**
  * Reindex a workspace's symbol table from a fresh scan. Replaces all
@@ -79,11 +97,14 @@ export async function indexWorkspaceSymbols(
   files: FileMeta[],
 ): Promise<{ symbols: number }> {
   const root = path.resolve(rootPath);
+  // Load tree-sitter once per scan; the chooser uses it per file.
+  const treeSitter = await getTreeSitterProvider();
+
   const candidates = files
     .filter((f) => {
       if (f.sensitive) return false;
       const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-      return ext in LANG_PATTERNS;
+      return treeSitter.supports(ext) || REGEX_SUPPORTED.has(ext);
     })
     .slice(0, MAX_FILES);
 
@@ -99,28 +120,16 @@ export async function indexWorkspaceSymbols(
       continue;
     }
     const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-    const patterns = LANG_PATTERNS[ext];
-    if (!patterns) continue;
 
-    for (const { kind, re } of patterns) {
-      // Each pattern is a fresh RegExp with `g` flag, but they're
-      // module-scoped — reset lastIndex before each file to be safe.
-      re.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(text)) !== null) {
-        const name = m[1];
-        if (!name) continue;
-        // Approximate line number by counting newlines up to the
-        // match. O(n) per match is fine at this scale.
-        const line = (text.slice(0, m.index).match(/\n/g)?.length ?? 0) + 1;
-        rows.push({
-          workspaceId,
-          path: f.path,
-          name,
-          kind,
-          line,
-        });
-      }
+    // Pick the highest-priority provider that handles this language.
+    // The candidate filter above guarantees at least one branch matches.
+    const drafts =
+      treeSitter.ready && treeSitter.supports(ext)
+        ? treeSitter.extract(text, ext)
+        : extractWithRegex(text, ext);
+
+    for (const d of drafts) {
+      rows.push({ workspaceId, path: f.path, ...d });
     }
   }
 

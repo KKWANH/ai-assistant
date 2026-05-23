@@ -925,6 +925,17 @@ export interface SymbolRow {
   name: string;
   kind: "function" | "class" | "method" | "const" | "interface" | "type" | "struct" | "enum" | "trait";
   line: number;
+  /** Last line of the symbol's range (inclusive). Tree-sitter fills this;
+   *  regex extraction leaves it null. */
+  endLine?: number | null;
+  /** Enclosing scope — e.g. the class name for a method. Null for top-level. */
+  parent?: string | null;
+  /** Short signature snippet (function header up to body). Null for kinds
+   *  where it doesn't apply (const, type alias) or when unavailable. */
+  signature?: string | null;
+  /** True when the symbol is exported / public at the module level. Null
+   *  when the extractor can't tell (regex provider). */
+  exported?: boolean | null;
 }
 
 export function dbClearWorkspaceSymbols(workspaceId: string): void {
@@ -936,11 +947,22 @@ export function dbInsertSymbols(rows: SymbolRow[]): void {
   if (rows.length === 0) return;
   const db = getDb();
   const stmt = db.prepare(
-    `INSERT INTO symbol_index (workspace_id, path, name, kind, line)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO symbol_index
+       (workspace_id, path, name, kind, line, end_line, parent, signature, exported)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const r of rows) {
-    stmt.run(r.workspaceId, r.path, r.name, r.kind, r.line);
+    stmt.run(
+      r.workspaceId,
+      r.path,
+      r.name,
+      r.kind,
+      r.line,
+      r.endLine ?? null,
+      r.parent ?? null,
+      r.signature ?? null,
+      r.exported == null ? null : r.exported ? 1 : 0,
+    );
   }
 }
 

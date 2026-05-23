@@ -340,4 +340,23 @@ function runMigrations(db: DatabaseSync): void {
   if (!reportColumns.some((c) => c.name === "attachments_json")) {
     db.exec("ALTER TABLE reports ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
   }
+
+  // Guarded ALTER TABLE: extend symbol_index with the tree-sitter shape.
+  // All four columns (end_line, parent, signature, exported) are NULL for
+  // regex-extracted rows; only the tree-sitter provider fills them in.
+  const symbolColumns = db
+    .prepare("PRAGMA table_info(symbol_index)")
+    .all() as Array<{ name: string }>;
+  if (!symbolColumns.some((c) => c.name === "end_line")) {
+    db.exec("ALTER TABLE symbol_index ADD COLUMN end_line INTEGER");
+  }
+  if (!symbolColumns.some((c) => c.name === "parent")) {
+    db.exec("ALTER TABLE symbol_index ADD COLUMN parent TEXT");
+  }
+  if (!symbolColumns.some((c) => c.name === "signature")) {
+    db.exec("ALTER TABLE symbol_index ADD COLUMN signature TEXT");
+  }
+  if (!symbolColumns.some((c) => c.name === "exported")) {
+    db.exec("ALTER TABLE symbol_index ADD COLUMN exported INTEGER");
+  }
 }
