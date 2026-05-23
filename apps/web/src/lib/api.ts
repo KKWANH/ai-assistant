@@ -81,6 +81,23 @@ export const scanWorkspace = (id: string) =>
 export const getSnapshot = (id: string) =>
   request<Snapshot>("GET", `/workspaces/${id}/snapshot`);
 
+export interface WorkspaceSearchChunk {
+  path: string;
+  chunk: string;
+  score: number;
+}
+export interface WorkspaceSearchResult {
+  query: string;
+  chunks: WorkspaceSearchChunk[];
+  indexed: boolean;
+  fileCount?: number;
+}
+export const searchWorkspace = (id: string, query: string, topK = 10) =>
+  request<WorkspaceSearchResult>(
+    "GET",
+    `/workspaces/${id}/search?q=${encodeURIComponent(query)}&topK=${topK.toString()}`,
+  );
+
 // ── Templates ───────────────────────────────────────────────────────────────
 export const getTemplates = () =>
   request<Template[]>("GET", "/templates");

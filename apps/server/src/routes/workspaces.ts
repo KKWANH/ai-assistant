@@ -15,6 +15,7 @@ import {
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
+import { retrieveRelevantChunks } from "../services/retrieval.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
 import * as budgetStarter from "../surface/budgetStarter.js";
 import * as readingStarter from "../surface/readingStarter.js";
@@ -318,4 +319,46 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.send(snapshot);
   });
+
+  // GET /api/workspaces/:id/search?q=…&topK=N
+  // The chat path's retrieveRelevantChunks engine, exposed as a standalone
+  // surface so the UI's /workspaces/:id/search page can rank workspace
+  // chunks by the same semantic + keyword + symbol-boost pipeline that
+  // grounds the chat answers. /api/search (root-level) was always a *web*
+  // search; this is the workspace counterpart.
+  app.get<{ Params: { id: string }; Querystring: { q?: string; topK?: string } }>(
+    "/workspaces/:id/search",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const query = (req.query.q ?? "").trim();
+      if (!query) {
+        return reply.send({ query: "", chunks: [], indexed: false });
+      }
+      const topK = Math.min(Math.max(parseInt(req.query.topK ?? "10", 10) || 10, 1), 50);
+
+      const snapshot = dbGetLatestSnapshot(workspace.id);
+      if (!snapshot) {
+        return reply
+          .status(404)
+          .send({ error: "No snapshot found — run a scan first" });
+      }
+
+      const chunks = await retrieveRelevantChunks(
+        workspace.rootPath,
+        snapshot.files,
+        query,
+        { workspaceId: workspace.id, topK },
+      );
+      // `indexed` reflects whether the workspace has an embedding index —
+      // useful for the UI to show "semantic search active" vs "keyword only".
+      return reply.send({
+        query,
+        chunks,
+        indexed: chunks.length > 0,
+        fileCount: snapshot.files.length,
+      });
+    },
+  );
 }

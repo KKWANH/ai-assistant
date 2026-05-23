@@ -30,6 +30,7 @@ import {
   Layout,
   Code2,
   Plus,
+  Search,
   Zap,
   MessageSquare,
   MessageSquarePlus,
@@ -887,6 +888,14 @@ export function WorkspaceOverview() {
           action={
             <div className="flex items-center gap-2">
               {/* Visibility toggle hidden for the same reason as the badge. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Search className="h-3.5 w-3.5" />}
+                onClick={() => navigate(`/workspaces/${ws.id}/search`)}
+              >
+                {t("workspace.search.button")}
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
