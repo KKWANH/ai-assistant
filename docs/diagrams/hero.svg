@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 200" width="520" height="200" fill="none" role="img" aria-label="Local files become evidence-backed work">
+  <style>
+    .stroke   { stroke: #94a3b8; }
+    .strong   { stroke: #cbd5e1; }
+    .accent   { stroke: #84cc16; }
+    .accent-f { fill: #84cc16; }
+    .surface  { fill: #1f2937; }
+    .text     { fill: #cbd5e1; }
+    @media (prefers-color-scheme: light) {
+      .stroke { stroke: #475569; }
+      .strong { stroke: #334155; }
+      .surface { fill: #f1f5f9; }
+      .text   { fill: #334155; }
+    }
+  </style>
+
+  <!-- stacked source files -->
+  <g transform="translate(40 50)">
+    <rect x="0" y="0" width="60" height="78" rx="7" class="strong" stroke-width="2.4" />
+    <rect x="20" y="18" width="60" height="78" rx="7" class="surface strong" stroke-width="2.4" />
+    <line x1="32" y1="40" x2="62" y2="40" class="stroke" stroke-width="2.4" stroke-linecap="round" />
+    <line x1="32" y1="54" x2="62" y2="54" class="stroke" stroke-width="2.4" stroke-linecap="round" />
+    <line x1="32" y1="68" x2="56" y2="68" class="stroke" stroke-width="2.4" stroke-linecap="round" />
+  </g>
+
+  <!-- flow line in -->
+  <path d="M130 108 H190" class="accent" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 5" />
+
+  <!-- AI core — web motif -->
+  <g transform="translate(220 70)" class="accent" stroke-width="2.4" stroke-linecap="round">
+    <path d="M30 -10 30 78 M30 34 60 18 M30 34 60 50 M30 34 0 18 M30 34 0 50" />
+    <path d="M30 -10 60 18 60 50 30 78 0 50 0 18Z" />
+  </g>
+  <circle cx="250" cy="104" r="5" class="accent-f" />
+  <text x="250" y="180" text-anchor="middle" class="text" font-family="system-ui,sans-serif" font-size="13" font-weight="500">Ariadne</text>
+
+  <!-- flow line out -->
+  <path d="M290 108 H350" class="accent" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 5" />
+
+  <!-- result document with check -->
+  <g transform="translate(370 50)">
+    <rect x="0" y="0" width="70" height="92" rx="7" class="surface strong" stroke-width="2.4" />
+    <line x1="14" y1="24" x2="56" y2="24" class="stroke" stroke-width="2.4" stroke-linecap="round" />
+    <line x1="14" y1="38" x2="56" y2="38" class="stroke" stroke-width="2.4" stroke-linecap="round" />
+    <line x1="14" y1="52" x2="44" y2="52" class="stroke" stroke-width="2.4" stroke-linecap="round" />
+    <circle cx="35" cy="74" r="14" class="accent-f" />
+    <path d="M28 74 L33 79 L42 70" stroke="#0a0f1c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  </g>
+</svg>
