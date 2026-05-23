@@ -18,12 +18,14 @@ import {
   dbListRuns,
   dbGetWorkspace,
   dbGetRunUsage,
+  dbGetLatestSnapshot,
 } from "../db/repo.js";
 import type { AiProvider } from "../providers/index.js";
 import { getProvider } from "../providers/index.js";
 import { getActiveSettings } from "../config.js";
 import { performSearch } from "../services/search.js";
 import { loadActionDefs } from "../services/actions.js";
+import { retrieveRelevantChunks, formatChunksForPrompt } from "../services/retrieval.js";
 import { scriptEnv } from "../services/scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import { meteringProvider, makeDateRunId, traceEvent, appendTrace, failRun } from "./engine.js";
@@ -189,13 +191,46 @@ async function runBlock(
     case "ask_ai": {
       const instruction = (cfg["prompt"] ?? "").trim();
       if (!instruction) throw new Error("ask_ai: missing 'prompt'");
-      const prompt = priorOutput
-        ? `Instruction:\n${instruction}\n\nPrevious step output:\n${priorOutput}`
-        : `Instruction:\n${instruction}`;
+
+      // Workspace RAG — same retriever the chat path uses (cosine over
+      // the embedding index when one exists, keyword ranker otherwise).
+      // Without this, actions could only see the previous block's output,
+      // which forced action authors to chain a read_file before every
+      // ask_ai and left the workspace's broader content inaccessible.
+      let workspaceContext = "";
+      const snapshot = dbGetLatestSnapshot(workspace.id);
+      if (snapshot && snapshot.files.length > 0) {
+        const query = instruction.trim().slice(0, 500);
+        try {
+          const ranked = await retrieveRelevantChunks(
+            workspace.rootPath,
+            snapshot.files,
+            query,
+            { workspaceId: workspace.id },
+          );
+          const rendered = formatChunksForPrompt(ranked);
+          if (rendered) {
+            workspaceContext = `\n\n--- Workspace excerpts (most relevant to the instruction) ---\n${rendered}`;
+          }
+        } catch (err) {
+          // Retrieval is a best-effort enrichment — never fail the block over it.
+          logger.debug(
+            { err: (err as Error)?.message ?? String(err) },
+            "ask_ai workspace retrieval failed — proceeding without RAG context",
+          );
+        }
+      }
+
+      const priorBlock = priorOutput
+        ? `\n\nPrevious step output:\n${priorOutput}`
+        : "";
+      const prompt = `Instruction:\n${instruction}${priorBlock}${workspaceContext}`;
       const { text } = await provider.complete({
         system:
           "You are an assistant inside an Ariadne action pipeline. " +
-          "Follow the instruction and answer clearly and concisely in Markdown.",
+          "Follow the instruction and answer clearly and concisely in Markdown. " +
+          "When workspace excerpts are provided, ground your answer in them; " +
+          "say so plainly when the excerpts don't contain the answer.",
         prompt,
         signal: AbortSignal.timeout(BLOCK_LLM_TIMEOUT_MS),
       });
