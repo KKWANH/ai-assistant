@@ -366,6 +366,45 @@ async function runTool(
       return text;
     }
 
+    case "calculate": {
+      // Math expressions via mathjs — in-process, no side effects, no
+      // filesystem / network. The planner puts the expression in the
+      // step's description; we accept either a bare expression
+      // ("17% of 48200") or one wrapped in obvious context the model
+      // tends to add ("Calculate: 17% of 48200" / "= 17% of 48200").
+      const { evaluate } = await import("mathjs");
+      const cleaned = description
+        .replace(/^.*?[:=]/, "")                            // drop "Calculate:" / "result ="
+        .replace(/(\d+(?:\.\d+)?)\s*%/g, "($1/100)")         // tolerant percent-of, multi-digit
+        .replace(/\bof\b/gi, "*")                           // "of" → "*"
+        .trim();
+      if (!cleaned) return "[calculate: empty expression]";
+      try {
+        // Hard timeout via Promise.race — mathjs evaluations are
+        // synchronous so we wrap in a setImmediate boundary.
+        const result = await Promise.race<unknown>([
+          new Promise((resolve, reject) => {
+            try {
+              resolve(evaluate(cleaned));
+            } catch (err) {
+              reject(err);
+            }
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 200),
+          ),
+        ]);
+        const formatted =
+          typeof result === "number" || typeof result === "bigint"
+            ? result.toString()
+            : (result?.toString?.() ?? JSON.stringify(result));
+        return `\`${cleaned}\` = **${formatted}**`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return `[calculate failed: ${msg}]`;
+      }
+    }
+
     case "edit_file": {
       // Phase C: actually stage. The chat's open attempt is the
       // staging "branch"; multiple edit_file calls in one turn or
@@ -624,7 +663,7 @@ function buildPlannerSystem(
   customActions: WorkspaceAction[] = [],
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
 ): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests";
+  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate";
   const customSection = customActions.length > 0
     ? `\n\nThis workspace also has custom actions you may use as tool names:\n${customActions
         .map((a) => `  - "${a.id}": ${a.name} — ${a.description}${a.constraints ? ` [constraints: ${a.constraints}]` : ""}`)
@@ -653,6 +692,11 @@ Otherwise, break it into an ordered list of 2–5 steps. Each step has:
 
 Prefer "reason" for pure analysis. Use "web_search" for factual lookup.
 
+For ANY numeric calculation — percentages, sums over a small set of
+values, conversions, weighted averages — use "calculate". The
+expression goes in the description (e.g. "17% of 48200",
+"(120 + 85 + 230) / 3"). Don't ask the model to do mental arithmetic.
+
 For code-editing tasks (e.g. "fix the failing tests", "rename X to Y",
 "add validation to the foo handler") the canonical chain is:
   read_file → reason → edit_file → run_tests
@@ -672,7 +716,7 @@ function buildPlannerPrompt(history: ChatMessage[], userMessage: string): string
 }
 
 function buildReplannerSystem(customActions: WorkspaceAction[] = []): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests";
+  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate";
   const customSection = customActions.length > 0
     ? ` | ${customActions.map((a) => a.id).join(" | ")}`
     : "";
@@ -765,7 +809,7 @@ function parsePlan(raw: string, customActions: WorkspaceAction[] = []): ParsedPl
     if (!Array.isArray(parsed.steps)) return { steps: [], summary };
     const validTools = new Set<string>([
       "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
-      "edit_file", "run_tests",
+      "edit_file", "run_tests", "calculate",
       ...customActions.map((a) => a.id),
     ]);
     const steps = parsed.steps

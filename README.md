@@ -255,7 +255,9 @@ ranker — same interface, no config change.
 - **Agent attempts** — when the agent uses `edit_file`, edits accumulate
   into the chat's open *attempt* (one per chat). Review at
   `/attempts/<id>/diff`, then Apply or Abandon. A compact chip in the
-  composer surfaces the attempt's file count.
+  composer surfaces the open attempt's file count; a separate
+  `/chat/<id>/attempts` list shows every attempt the agent has ever
+  staged in this chat with its status (open / applied / abandoned).
 - **Action schedules** — register an action to run hourly / daily / weekly /
   monthly. In-process scheduler ticks every 60s; combine with `write_file`
   to land scheduled outputs in `briefs/{date}.md` (or anywhere else).
@@ -275,10 +277,12 @@ ranker — same interface, no config change.
   workspaces.
 - **Custom surfaces** — a workspace can carry a TypeScript dashboard
   (`.ariadne/surface.tsx`), built with esbuild and run in a sandboxed iframe
-  with a postMessage SDK. Six starter templates ship: Portfolio (CSV +
+  with a postMessage SDK. **Eight starter templates** ship: Portfolio (CSV +
   charts with live FX & stock quotes), Budget Tracker, Reading Library,
   Chefbook (ingredients + recipes), Code Project (TypeScript sandbox with
-  the `edit_file` demo), plus Blank.
+  the `edit_file` demo), **Decisions log** (PRD + ADR + open-questions with
+  status badges), **Research papers** (notes + .bib + inbound-citation
+  count + dangling-citation audit), plus Blank.
 - **Gasp Filter** — proposes ≤8 source files per workspace size before any
   read, keeping token bills bounded and giving the user a context preview.
 - **Evidence map + unsupported claims** — every claim in a brief is mapped to
@@ -306,7 +310,8 @@ ranker — same interface, no config change.
 | Custom workspace dashboards | no | no | no | yes — sandboxed surfaces (6 starters) |
 | Composed action pipelines | no | no | no | yes — 7 block types + intent chip |
 | Staged file edits with diff review | n/a | no | yes (apply per file) | yes — `/runs/<id>/diff` per-file checkboxes |
-| Agent staging branches per chat | no | no | no | yes — `attempts` model + chip in composer |
+| Agent staging branches per chat | no | no | no | yes — `attempts` model + chip + history list |
+| Citation audit / paper library | no | no | no | yes — papers starter w/ inbound-citation surface |
 | Edit-and-regenerate user messages | partial | partial | partial | yes — full revision history per message |
 | Recurring scheduled runs | no | no | no | yes — hourly / daily / weekly / monthly |
 | Workspace git history + rewind | no | no | partial (git outside) | yes — auto-commit + per-apply rewind button |

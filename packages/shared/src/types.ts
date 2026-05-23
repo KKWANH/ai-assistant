@@ -548,7 +548,9 @@ export type AgentTool =
   /** Propose a file change — stages it under .ariadne/staged/ for review. */
   | "edit_file"
   /** Run the workspace's test command; output prefixed with ✓/✗ for re-plan. */
-  | "run_tests";
+  | "run_tests"
+  /** Evaluate a math expression via mathjs — fast, in-process, no side effects. */
+  | "calculate";
 
 export interface AgentStep {
   id: string;
