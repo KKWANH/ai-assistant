@@ -151,7 +151,12 @@ export const PostMessageSchema = z.object({
   attachments: z.array(PostAttachmentSchema).optional(),
   /** Web search mode: off (never), auto (the server decides), on (always). */
   webSearch: z.enum(["off", "auto", "on"]).optional(),
-  /** Run this message through the plan-and-execute agent loop. */
-  agentMode: z.boolean().optional(),
+  /**
+   * Agent plan-and-execute mode: off (never), auto (classifier decides per
+   * message — only kicks in for multi-step research-ish prompts), on
+   * (always). Legacy `boolean` still accepted from older clients: true→"on",
+   * false→"off".
+   */
+  agentMode: z.union([z.boolean(), z.enum(["off", "auto", "on"])]).optional(),
 });
 export type PostMessageInput = z.infer<typeof PostMessageSchema>;

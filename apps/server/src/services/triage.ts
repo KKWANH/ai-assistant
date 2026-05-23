@@ -43,6 +43,44 @@ export async function decideWebSearch(
 }
 
 /**
+ * Decide whether a chat message warrants the agent plan-and-execute loop.
+ * Used when the composer's agent mode is "auto".
+ *
+ * Fails open to `false` — agent mode is slower than a plain stream, so we'd
+ * rather miss a hard prompt than burn 10–30 s on a casual one. The bar is
+ * deliberately high: only multi-step research / tool-chaining prompts pass.
+ */
+export async function decideAgentMode(
+  provider: AiProvider,
+  content: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const trimmed = content.trim();
+  // Single words, greetings, "ok" — never worth the agent's planning round.
+  if (trimmed.length < 20) return false;
+  try {
+    const { text } = await provider.complete({
+      system:
+        "You decide whether a user's message is worth running through a plan-and-execute " +
+        "agent loop (which decomposes the task into 2–5 steps, calls tools like web search " +
+        "or file read, and re-plans on failures). " +
+        "Answer YES only when the task plainly requires multi-step work or external lookups " +
+        "to do well — e.g. \"compare X and Y across these files\", \"research recent news on Z " +
+        "and summarise\", \"go through the holdings.csv and flag anomalies\". " +
+        "Answer NO for any task a single direct response handles well: questions, opinions, " +
+        "small talk, coding requests, writing requests, translation, general-knowledge " +
+        "lookups, anything where one well-chosen prompt is enough. Reply with exactly one " +
+        "word: YES or NO.",
+      prompt: trimmed.slice(0, 600),
+      signal,
+    });
+    return /\byes\b/i.test(text);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Detect whether the user's chat message expresses the intent of running one
  * of the workspace's actions. Returns the matched action (id, name, a short
  * reason) or null. Fails open — a hiccup never surfaces a wrong suggestion.

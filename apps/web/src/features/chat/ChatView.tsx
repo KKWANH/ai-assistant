@@ -319,7 +319,7 @@ function ThreadView({ chatId }: { chatId: string }) {
     attachments: { name: string; mediaType: string; dataBase64: string }[];
     webSearch: WebSearchMode;
     workspaceId: string | null;
-    agentMode: boolean;
+    agentMode: import("./ChatComposer").AgentMode;
   }) => {
     setSuggestion(null); // clear any stale chip from the previous turn
     setStreaming(true);
@@ -330,7 +330,9 @@ function ThreadView({ chatId }: { chatId: string }) {
           content: opts.content,
           attachments: opts.attachments,
           webSearch: opts.webSearch,
-          agentMode: opts.agentMode || undefined,
+          // Forward the tri-state directly; backend accepts "off"|"auto"|"on"
+          // and legacy booleans. Skip the field for "off" to keep payloads slim.
+          agentMode: opts.agentMode === "off" ? undefined : opts.agentMode,
         },
       });
     } catch (err) {
@@ -408,7 +410,7 @@ export function ChatView() {
     attachments: { name: string; mediaType: string; dataBase64: string }[];
     webSearch: WebSearchMode;
     workspaceId: string | null;
-    agentMode: boolean;
+    agentMode: import("./ChatComposer").AgentMode;
   }) => {
     setPending(true);
     try {
@@ -430,7 +432,7 @@ export function ChatView() {
           content: opts.content,
           attachments: opts.attachments,
           webSearch: opts.webSearch,
-          agentMode: opts.agentMode || undefined,
+          agentMode: opts.agentMode === "off" ? undefined : opts.agentMode,
         },
       });
     } catch (err) {

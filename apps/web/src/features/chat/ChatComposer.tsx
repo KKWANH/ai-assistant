@@ -56,6 +56,7 @@ export interface PendingAttachment {
 
 /** Web-search mode: off (never), auto (the server decides), on (always). */
 export type WebSearchMode = "off" | "auto" | "on";
+export type AgentMode = "off" | "auto" | "on";
 
 export interface ChatComposerProps {
   onSend: (opts: {
@@ -63,7 +64,7 @@ export interface ChatComposerProps {
     attachments: PostAttachmentInput[];
     webSearch: WebSearchMode;
     workspaceId: string | null;
-    agentMode: boolean;
+    agentMode: AgentMode;
   }) => void;
   disabled?: boolean;
   pending?: boolean;
@@ -111,7 +112,7 @@ export function ChatComposer({
   // Plain chat is the default: agent mode is opt-in, web search is "auto"
   // (the server decides per message). Both stay sticky across messages.
   const [webMode, setWebMode] = useState<WebSearchMode>("auto");
-  const [agentMode, setAgentMode] = useState(false);
+  const [agentMode, setAgentMode] = useState<AgentMode>("off");
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   // Table feature: pasted TSV awaiting a "convert to table" decision, and the
@@ -494,21 +495,34 @@ export function ChatComposer({
             </button>
           </Tooltip>
 
-          {/* Agent mode toggle */}
+          {/* Agent mode toggle — off → auto → on, mirrors the web-search cycle.
+              auto lets the server's classifier decide per message. */}
           <Tooltip content={t("composer.tip.agent")} rich className="shrink-0">
             <button
               type="button"
               className={[
                 "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-                agentMode
+                agentMode === "on"
                   ? "text-accent bg-accent/10 border border-accent/20"
-                  : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
+                  : agentMode === "auto"
+                    ? "text-foreground hover:bg-surface-3"
+                    : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
               ].join(" ")}
-              onClick={() => setAgentMode((v) => !v)}
+              onClick={() =>
+                setAgentMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
+              }
               disabled={disabled}
+              aria-label={t("chat.composer.agentCycle")}
+              title={t("chat.composer.agentCycle")}
             >
               <Bot className="h-3.5 w-3.5" />
-              <span>{agentMode ? t("chat.composer.agentOn") : t("chat.composer.agent")}</span>
+              <span>
+                {agentMode === "on"
+                  ? t("chat.composer.agentOn")
+                  : agentMode === "auto"
+                    ? t("chat.composer.agentAuto")
+                    : t("chat.composer.agent")}
+              </span>
             </button>
           </Tooltip>
 

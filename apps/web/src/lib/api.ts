@@ -297,7 +297,11 @@ export const stopGeneration = (chatId: string) =>
 export async function regenerateAfterEdit(
   chatId: string,
   messageId: string,
-  body: { content: string; webSearch?: "on" | "off" | "auto"; agentMode?: boolean },
+  body: {
+    content: string;
+    webSearch?: "on" | "off" | "auto";
+    agentMode?: boolean | "off" | "auto" | "on";
+  },
   handlers: StreamHandlers,
 ): Promise<void> {
   return consumeMessageStream(

@@ -40,7 +40,7 @@ import { buildChatContext } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
-import { decideWebSearch, detectActionIntent, generateChatTitle } from "../services/triage.js";
+import { decideWebSearch, decideAgentMode, detectActionIntent, generateChatTitle } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
 import { isOwnerOrAdmin } from "./workspaceGuard.js";
 import {
@@ -109,7 +109,8 @@ interface StreamReplyOptions {
   userContent: string;
   attachmentRefs: AttachmentRef[];
   webSearchMode: "on" | "off" | "auto" | undefined;
-  agentMode: boolean;
+  /** boolean for legacy callers; tri-state for explicit auto-classifier opt-in. */
+  agentMode: boolean | "off" | "auto" | "on";
   /** Used for locale + saved profile context. */
   accountLocale: string | undefined;
   accountContext: string | undefined;
@@ -134,7 +135,7 @@ interface StreamReplyResult {
  */
 async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamReplyResult> {
   const {
-    chat, history, userContent, attachmentRefs, webSearchMode, agentMode,
+    chat, history, userContent, attachmentRefs, webSearchMode, agentMode: rawAgentMode,
     accountLocale, accountContext, emit, controller, assistantMsgId,
     shouldGenerateTitle,
   } = opts;
@@ -160,6 +161,21 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       : settings.model;
   const rawProvider = await getProvider({ provider: settings.provider, model });
   const provider = meteringProvider(rawProvider, assistantMsgId, model);
+
+  // Resolve agent mode: explicit on/off keeps its value; "auto" runs a
+  // cheap classifier and only enters the loop for multi-step prompts.
+  // Legacy boolean callers (true/false) map to on/off.
+  let agentMode: boolean;
+  if (typeof rawAgentMode === "boolean") {
+    agentMode = rawAgentMode;
+  } else if (rawAgentMode === "on") {
+    agentMode = true;
+  } else if (rawAgentMode === "auto" && hasContent) {
+    emit({ type: "status", text: "Deciding whether to use the agent…" });
+    agentMode = await decideAgentMode(provider, userContent, controller.signal);
+  } else {
+    agentMode = false;
+  }
 
   // First-turn title generation runs in parallel with the answer, resolved
   // before we return so the caller can apply it to the chat row.
@@ -476,12 +492,15 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         const assistantMsgId = newId();
 
         // The generation survives client disconnect; a reconnecting client
-        // (or a stop request) finds it by chat id.
+        // (or a stop request) finds it by chat id. For "auto" we don't yet
+        // know whether the agent will actually run — default to false; the
+        // client learns by watching for agent_plan events on the SSE stream.
+        const willDefinitelyAgent = agentMode === true || agentMode === "on";
         const controller = new AbortController();
         const gen = beginGeneration({
           chatId: chat.id,
           messageId: assistantMsgId,
-          agentMode: agentMode ?? false,
+          agentMode: willDefinitelyAgent,
           controller,
         });
         const emit = (event: ChatStreamEvent): void => {
@@ -591,7 +610,11 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         body.webSearch === "on" || body.webSearch === "off" || body.webSearch === "auto"
           ? body.webSearch
           : (existing.webSearch ? "on" : "off");
-      const agentMode = Boolean(body.agentMode);
+      const agentMode: boolean | "off" | "auto" | "on" =
+        body.agentMode === "on" || body.agentMode === "off" || body.agentMode === "auto"
+          ? body.agentMode
+          : Boolean(body.agentMode);
+      const willDefinitelyAgent = agentMode === true || agentMode === "on";
 
       // 1. Save the prior content (if changed) and update in place.
       let userMsg = existing;
@@ -632,7 +655,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         const gen = beginGeneration({
           chatId: chat.id,
           messageId: assistantMsgId,
-          agentMode,
+          agentMode: willDefinitelyAgent,
           controller,
         });
         const emit = (event: ChatStreamEvent): void => {
