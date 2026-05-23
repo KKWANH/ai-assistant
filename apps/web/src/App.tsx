@@ -64,6 +64,11 @@ const RunDetailView = lazyWithReload(() =>
     default: m.RunDetailView,
   }))
 );
+const StagedDiffView = lazyWithReload(() =>
+  import("./features/runs/StagedDiffView").then((m) => ({
+    default: m.StagedDiffView,
+  }))
+);
 const SettingsView = lazyWithReload(() =>
   import("./features/settings/SettingsView").then((m) => ({
     default: m.SettingsView,
@@ -119,6 +124,7 @@ function AppContent() {
             {/* Templates & Runs */}
             <Route path="/templates/:id" element={<TemplateRunView />} />
             <Route path="/runs/:id/context" element={<ContextPickView />} />
+            <Route path="/runs/:id/diff" element={<StagedDiffView />} />
             <Route path="/runs/:id" element={<RunDetailView />} />
 
             {/* Utility */}

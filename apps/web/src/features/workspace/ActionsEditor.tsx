@@ -23,6 +23,8 @@ import {
   Terminal,
   FileText,
   FilePlus,
+  FileEdit,
+  TestTube,
   Play,
   Code2,
 } from "lucide-react";
@@ -110,9 +112,36 @@ const BLOCK_META: Record<BlockType, BlockMeta> = {
     strip: "bg-success",
     chip: "border-success/40 bg-success/15 text-success",
   },
+  edit_file: {
+    labelKey: "actions.type.edit_file",
+    hintKey: "actions.type.edit_file.hint",
+    // Primary field is the path; search/replace/content go via raw YAML
+    // for v1 since the picker only models one text input per block.
+    field: "path",
+    fieldLabelKey: "actions.field.path",
+    placeholder: "src/foo.ts",
+    multiline: false,
+    icon: FileEdit,
+    strip: "bg-accent",
+    chip: "border-accent/40 bg-accent/15 text-accent",
+  },
+  run_tests: {
+    labelKey: "actions.type.run_tests",
+    hintKey: "actions.type.run_tests.hint",
+    field: "command",
+    fieldLabelKey: "actions.field.command",
+    placeholder: "npm test",
+    multiline: false,
+    icon: TestTube,
+    strip: "bg-warning",
+    chip: "border-warning/40 bg-warning/15 text-warning",
+  },
 };
 
-const BLOCK_TYPES: BlockType[] = ["ask_ai", "web_analysis", "run_script", "read_file", "write_file"];
+const BLOCK_TYPES: BlockType[] = [
+  "ask_ai", "web_analysis", "run_script", "read_file",
+  "write_file", "edit_file", "run_tests",
+];
 
 // ── YAML serialiser ────────────────────────────────────────────────────────────
 // actions.yaml is a shallow, string-only structure, so a double-quoted scalar

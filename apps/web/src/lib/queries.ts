@@ -790,6 +790,41 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
   });
 }
 
+// ── Staged edits (Claude-Code Phase A) ────────────────────────────────────────
+
+export function useStagedManifest(runId: string) {
+  return useQuery({
+    queryKey: ["staged", runId] as const,
+    queryFn: () => api.getStagedManifest(runId),
+    enabled: !!runId,
+    // Stage manifests are append-only during a run — caching them stops
+    // the diff view from flicker-refetching on every tab focus.
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useApplyStagedEdits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, paths }: { runId: string; paths: string[] }) =>
+      api.applyStagedEdits(runId, paths),
+    onSuccess: (_result, vars) => {
+      void qc.invalidateQueries({ queryKey: ["staged", vars.runId] });
+    },
+  });
+}
+
+export function useDiscardStagedEdits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => api.discardStagedEdits(runId),
+    onSuccess: (_r, runId) => {
+      void qc.invalidateQueries({ queryKey: ["staged", runId] });
+    },
+  });
+}
+
 // ── Workspace history ─────────────────────────────────────────────────────────
 
 export function useWorkspaceHistory(workspaceId: string, limit = 50) {

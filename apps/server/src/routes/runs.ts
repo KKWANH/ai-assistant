@@ -127,4 +127,65 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(404).send({ error: "Diff file not found" });
     }
   });
+
+  // --- Staged edits (Claude-Code Phase A) ---
+
+  // GET /api/runs/:runId/staged — fetch the StagedManifest produced by
+  // edit_file blocks during this run. The diff-review UI reads this.
+  app.get<{ Params: { runId: string } }>("/runs/:runId/staged", async (req, reply) => {
+    const run = dbGetRun(req.params.runId);
+    if (!run) return reply.status(404).send({ error: "Run not found" });
+    const workspace = dbGetWorkspace(run.workspaceId);
+    if (!workspace) return reply.status(404).send({ error: "Workspace not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
+    const { getStagedManifest } = await import("../services/stagedEdits.js");
+    const manifest = getStagedManifest(run.workspaceId, req.params.runId);
+    if (!manifest) return reply.status(404).send({ error: "No staged edits for this run" });
+    return reply.send(manifest);
+  });
+
+  // POST /api/runs/:runId/staged/apply — copy selected after/<paths>
+  // into the workspace and commit via the workspace-history repo.
+  app.post<{ Params: { runId: string }; Body: unknown }>(
+    "/runs/:runId/staged/apply",
+    async (req, reply) => {
+      const run = dbGetRun(req.params.runId);
+      if (!run) return reply.status(404).send({ error: "Run not found" });
+      if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const body = (req.body ?? {}) as { paths?: unknown };
+      const paths = Array.isArray(body.paths)
+        ? body.paths.filter((p): p is string => typeof p === "string")
+        : null;
+      if (!paths || paths.length === 0) {
+        return reply.status(400).send({ error: "paths[] is required" });
+      }
+      try {
+        const { applyStagedEdits } = await import("../services/stagedEdits.js");
+        const result = await applyStagedEdits(run.workspaceId, req.params.runId, paths);
+        return reply.send(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(400).send({ error: msg });
+      }
+    },
+  );
+
+  // POST /api/runs/:runId/staged/discard — wipe the staged tree.
+  app.post<{ Params: { runId: string } }>(
+    "/runs/:runId/staged/discard",
+    async (req, reply) => {
+      const run = dbGetRun(req.params.runId);
+      if (!run) return reply.status(404).send({ error: "Run not found" });
+      if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const { discardStagedEdits } = await import("../services/stagedEdits.js");
+      discardStagedEdits(run.workspaceId, req.params.runId);
+      return reply.send({ ok: true });
+    },
+  );
 }

@@ -123,7 +123,7 @@ async function runActionPipeline(runId: string, action: ActionDef): Promise<void
     dbUpdateRun(runId, { blockResults: results });
 
     try {
-      const output = await runBlock(block, priorOutput, workspace, provider);
+      const output = await runBlock(block, priorOutput, workspace, provider, runId);
       result.status = "ok";
       result.output = output;
       priorOutput = output;
@@ -180,6 +180,7 @@ async function runBlock(
   priorOutput: string,
   workspace: Workspace,
   provider: AiProvider,
+  runId: string,
 ): Promise<string> {
   const cfg = block.config;
 
@@ -309,6 +310,124 @@ async function runBlock(
       }
       const rel = path.relative(root, abs);
       return `Wrote ${body.length.toString()} chars to ${rel} (${mode}).`;
+    }
+
+    case "edit_file": {
+      // Doesn't touch the workspace — proposed edit lands at
+      // .ariadne/staged/<runId>/{before,after}/<path> + manifest.json.
+      // The user reviews + applies from /runs/<id>/diff.
+      const filePath = (cfg["path"] ?? "").trim();
+      if (!filePath) throw new Error("edit_file: missing 'path'");
+      const root = path.resolve(workspace.rootPath);
+      const abs = path.resolve(root, filePath);
+      if (abs !== root && !abs.startsWith(root + path.sep)) {
+        throw new Error("Path traversal not allowed");
+      }
+
+      const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
+      const hasContent = typeof cfg["content"] === "string";
+      const hasSearch = typeof cfg["search"] === "string" && cfg["search"].length > 0;
+
+      let proposed: string;
+      let action: "create" | "modify" | "replace";
+
+      if (hasContent) {
+        // Full rewrite — the model produced the whole desired body.
+        proposed = cfg["content"]!;
+        action = existing === null ? "create" : "replace";
+      } else if (hasSearch) {
+        // Search/replace — robust to formatting drift since it
+        // matches on string content rather than line numbers.
+        if (existing === null) {
+          throw new Error(`edit_file: file does not exist for search/replace: ${filePath}`);
+        }
+        const search = cfg["search"]!;
+        const replace = cfg["replace"] ?? "";
+        const expected = cfg["require_match_count"]
+          ? parseInt(cfg["require_match_count"], 10)
+          : null;
+
+        // Count non-overlapping matches first so we can reject ambiguous edits
+        // (e.g. `search="x"` matching 14 places when only one was intended).
+        let count = 0;
+        let from = 0;
+        while (true) {
+          const idx = existing.indexOf(search, from);
+          if (idx === -1) break;
+          count++;
+          from = idx + search.length;
+        }
+        if (count === 0) {
+          throw new Error(`edit_file: search string not found in ${filePath}`);
+        }
+        if (expected !== null && !isNaN(expected) && count !== expected) {
+          throw new Error(
+            `edit_file: search matched ${count.toString()} times in ${filePath}, expected ${expected.toString()}`,
+          );
+        }
+        proposed = existing.split(search).join(replace);
+        action = "modify";
+      } else {
+        throw new Error("edit_file: requires 'content' or 'search'");
+      }
+
+      // No-op detection — if the edit is a wash, refuse rather than stage
+      // an empty diff so the diff view never lists trivial entries.
+      if (existing !== null && proposed === existing) {
+        throw new Error(`edit_file: proposed change is identical to current file: ${filePath}`);
+      }
+
+      const { stageEdit } = await import("../services/stagedEdits.js");
+      const stats = await stageEdit({
+        runId,
+        workspace,
+        path: filePath,
+        action,
+        before: existing,
+        after: proposed,
+      });
+      return `Staged ${action} for ${filePath} (+${stats.added.toString()}/-${stats.removed.toString()})`;
+    }
+
+    case "run_tests": {
+      // Thin wrapper over a shell exec, with a known success/failure
+      // semantics so a re-plan loop can branch on the exit code.
+      const command = (cfg["command"] ?? "").trim();
+      if (!command) throw new Error("run_tests: missing 'command'");
+      const timeoutSec = parseInt(cfg["timeout_seconds"] ?? "120", 10);
+      const ms = isFinite(timeoutSec) && timeoutSec > 0 ? timeoutSec * 1000 : 120_000;
+
+      const { spawn } = await import("node:child_process");
+      return await new Promise<string>((resolve) => {
+        let stdout = "";
+        let stderr = "";
+        const proc = spawn("/bin/sh", ["-c", command], {
+          cwd: workspace.rootPath,
+          env: scriptEnv(),
+        });
+        const timer = setTimeout(() => proc.kill("SIGTERM"), ms);
+        proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
+        proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
+        proc.on("close", (code) => {
+          clearTimeout(timer);
+          const passed = code === 0;
+          // Slice generously but stay under the per-block output cap so
+          // the next ask_ai block isn't drowned in test logs.
+          const stdoutClipped = stdout.slice(-Math.floor(OUTPUT_CAP / 2));
+          const stderrClipped = stderr.slice(-1000);
+          const head = passed
+            ? `✓ Tests passed (exit 0, command: \`${command}\`)`
+            : `✗ Tests failed (exit ${(code ?? "?").toString()}, command: \`${command}\`)`;
+          const parts = [head];
+          if (stdoutClipped.trim()) parts.push("\n--- stdout (tail) ---\n" + stdoutClipped);
+          if (stderrClipped.trim()) parts.push("\n--- stderr (tail) ---\n" + stderrClipped);
+          resolve(parts.join(""));
+        });
+        proc.on("error", (e) => {
+          clearTimeout(timer);
+          resolve(`[run_tests error: ${e.message}]`);
+        });
+      });
     }
 
     default: {

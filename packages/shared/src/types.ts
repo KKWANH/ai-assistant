@@ -63,7 +63,45 @@ export type BlockType =
    * monthly macro brief produces lands back in `monthly-briefs/2026-05.md`
    * instead of just streaming once to the screen.
    */
-  | "write_file";
+  | "write_file"
+  /**
+   * Propose a file change without touching the workspace. The diff lands
+   * in `.ariadne/staged/<run-id>/` and the user reviews & applies it from
+   * the run's diff view. Supports search/replace (with a required-match-
+   * count safety) and full-file content.
+   */
+  | "edit_file"
+  /**
+   * Run a workspace test command and capture pass/fail. Thin wrapper over
+   * shell execution shaped specifically so the agent can re-plan on
+   * failure ("tests failed → fix → run again").
+   */
+  | "run_tests";
+
+/**
+ * Manifest of staged edits for a run, mirroring .ariadne/staged/<run-id>/.
+ * The frontend renders this as the diff-review screen; applying produces
+ * real file writes + a workspace-history commit.
+ */
+export interface StagedManifest {
+  runId: string;
+  workspaceId: string;
+  createdAt: string;
+  appliedAt: string | null;
+  files: StagedFile[];
+}
+
+export interface StagedFile {
+  path: string;
+  /** What the apply step will do on disk. */
+  action: "create" | "modify" | "replace" | "delete";
+  /** Unified diff text (for the side-by-side renderer + history log). */
+  diff: string;
+  /** Pre-edit content, null when action="create". */
+  before: string | null;
+  /** Post-edit content, null when action="delete". */
+  after: string | null;
+}
 
 export interface ActionBlock {
   id: string;

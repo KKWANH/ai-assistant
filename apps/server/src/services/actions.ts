@@ -127,6 +127,8 @@ const BLOCK_TYPES: Set<BlockType> = new Set([
   "run_script",
   "read_file",
   "write_file",
+  "edit_file",
+  "run_tests",
 ]);
 
 /** Synthesize a single block from an old flat action so it stays runnable. */

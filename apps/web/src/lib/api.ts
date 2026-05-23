@@ -441,6 +441,25 @@ async function consumeMessageStream(
 
 export const getUploadUrl = (id: string) => `/api/uploads/${id}`;
 
+// ── Staged edits (Claude-Code Phase A) ────────────────────────────────────────
+import type { StagedManifest } from "@ariadne/shared";
+
+export const getStagedManifest = (runId: string) =>
+  request<StagedManifest>("GET", `/runs/${runId}/staged`);
+
+export interface ApplyStagedResult {
+  applied: string[];
+  skipped: string[];
+  errors: { path: string; reason: string }[];
+  commitSha: string | null;
+}
+
+export const applyStagedEdits = (runId: string, paths: string[]) =>
+  request<ApplyStagedResult>("POST", `/runs/${runId}/staged/apply`, { paths });
+
+export const discardStagedEdits = (runId: string) =>
+  request<{ ok: boolean }>("POST", `/runs/${runId}/staged/discard`);
+
 // ── Workspace git history ─────────────────────────────────────────────────────
 
 export interface WorkspaceCommit {

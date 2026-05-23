@@ -70,7 +70,15 @@ export function ActionRunView({
     web_analysis: t("actionRun.block.webAnalysis"),
     run_script: t("actionRun.block.runScript"),
     read_file: t("actionRun.block.readFile"),
+    write_file: t("actions.type.write_file"),
+    edit_file: t("actions.type.edit_file"),
+    run_tests: t("actions.type.run_tests"),
   };
+  // Did this run stage any edits? If so, surface a CTA so the user
+  // doesn't miss the review step.
+  const hasStagedEdits = run.blockResults.some(
+    (b) => b.type === "edit_file" && b.status === "ok",
+  );
   const statusLabels: Record<string, string> = {
     created: t("badge.status.created"),
     scanning: t("badge.status.scanning"),
@@ -139,6 +147,27 @@ export function ActionRunView({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4">
         <div className="max-w-3xl mx-auto w-full flex flex-col gap-5">
+          {/* Staged-edit CTA — surfaces the diff-review step when this
+              run produced any edit_file output. The review page reads
+              the manifest by run id. */}
+          {hasStagedEdits && (
+            <Card
+              interactive
+              onClick={() => navigate(`/runs/${run.id}/diff`)}
+              className="px-4 py-3 border-accent/40 bg-accent/10 flex items-center justify-between gap-3 cursor-pointer"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  {t("diff.title")}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t("actionRun.reviewStagedHint")}
+                </p>
+              </div>
+              <span className="text-xs text-accent shrink-0">→</span>
+            </Card>
+          )}
+
           {run.status === "completed" && finalOutput && (
             <section>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
