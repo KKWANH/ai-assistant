@@ -258,105 +258,69 @@ function runMigrations(db: DatabaseSync): void {
       ON chunk_embeddings(workspace_id);
   `);
 
-  // Guarded ALTER TABLE: add agent_json to chat_messages if missing
-  const chatMsgColumns = db
-    .prepare("PRAGMA table_info(chat_messages)")
+  // Guarded ALTER TABLE blocks. Each `addColumn(...)` is a no-op if the
+  // column already exists on the table; SQLite has no IF NOT EXISTS for
+  // ADD COLUMN, so we PRAGMA-introspect once per table and reuse the
+  // cached column list for every column on that table.
+  const chatMessages = addColumnIfMissing(db, "chat_messages");
+  chatMessages("agent_json", "TEXT");
+  // revisions_json — past versions of a user message's content, retained
+  // when the message was edited.
+  chatMessages("revisions_json", "TEXT");
+
+  const workspaces = addColumnIfMissing(db, "workspaces");
+  workspaces("created_by", "TEXT");
+  // visibility (NULL → "private"), category (NULL → all templates)
+  workspaces("visibility", "TEXT");
+  workspaces("category", "TEXT");
+
+  const runs = addColumnIfMissing(db, "runs");
+  runs("created_by", "TEXT");
+  runs("usage_json", "TEXT");
+  // kind (NULL → "template")
+  runs("kind", "TEXT");
+  runs("block_results_json", "TEXT");
+
+  const accounts = addColumnIfMissing(db, "accounts");
+  accounts("locale", "TEXT");
+  // mode (NULL → "standard")
+  accounts("mode", "TEXT");
+  accounts("context", "TEXT");
+  accounts("context_updated_at", "TEXT");
+
+  const reports = addColumnIfMissing(db, "reports");
+  reports("attachments_json", "TEXT NOT NULL DEFAULT '[]'");
+
+  // symbol_index extended with the tree-sitter shape. All four columns
+  // are NULL for regex-extracted rows; only the tree-sitter provider
+  // fills them in.
+  const symbolIndex = addColumnIfMissing(db, "symbol_index");
+  symbolIndex("end_line", "INTEGER");
+  symbolIndex("parent", "TEXT");
+  symbolIndex("signature", "TEXT");
+  symbolIndex("exported", "INTEGER");
+}
+
+/**
+ * Returns a function that adds a column to `table` if it doesn't already
+ * exist. Reads PRAGMA once at the call site (so 4 columns on one table
+ * still mean 1 PRAGMA read, matching the previous hand-rolled pattern).
+ * Table and column names are template-literal'd into the SQL — only
+ * call this with hardcoded identifiers from migration code, never with
+ * untrusted input.
+ */
+function addColumnIfMissing(
+  db: DatabaseSync,
+  table: string,
+): (column: string, decl: string) => void {
+  const cols = db
+    .prepare(`PRAGMA table_info(${table})`)
     .all() as Array<{ name: string }>;
-  if (!chatMsgColumns.some((c) => c.name === "agent_json")) {
-    db.exec("ALTER TABLE chat_messages ADD COLUMN agent_json TEXT");
-  }
-  // Guarded ALTER TABLE: add revisions_json — past versions of a user
-  // message's content, retained when the message was edited.
-  if (!chatMsgColumns.some((c) => c.name === "revisions_json")) {
-    db.exec("ALTER TABLE chat_messages ADD COLUMN revisions_json TEXT");
-  }
-
-  // Guarded ALTER TABLE: add created_by to workspaces if missing
-  const wsColumns = db
-    .prepare("PRAGMA table_info(workspaces)")
-    .all() as Array<{ name: string }>;
-  if (!wsColumns.some((c) => c.name === "created_by")) {
-    db.exec("ALTER TABLE workspaces ADD COLUMN created_by TEXT");
-  }
-
-  // Guarded ALTER TABLE: add created_by to runs if missing
-  const runColumns = db
-    .prepare("PRAGMA table_info(runs)")
-    .all() as Array<{ name: string }>;
-  if (!runColumns.some((c) => c.name === "created_by")) {
-    db.exec("ALTER TABLE runs ADD COLUMN created_by TEXT");
-  }
-
-  // Guarded ALTER TABLE: add usage_json to runs if missing
-  if (!runColumns.some((c) => c.name === "usage_json")) {
-    db.exec("ALTER TABLE runs ADD COLUMN usage_json TEXT");
-  }
-
-  // Guarded ALTER TABLE: add kind to runs if missing (NULL → "template")
-  if (!runColumns.some((c) => c.name === "kind")) {
-    db.exec("ALTER TABLE runs ADD COLUMN kind TEXT");
-  }
-
-  // Guarded ALTER TABLE: add block_results_json to runs if missing
-  if (!runColumns.some((c) => c.name === "block_results_json")) {
-    db.exec("ALTER TABLE runs ADD COLUMN block_results_json TEXT");
-  }
-
-  // Guarded ALTER TABLE: add locale to accounts if missing
-  const accountColumns = db
-    .prepare("PRAGMA table_info(accounts)")
-    .all() as Array<{ name: string }>;
-  if (!accountColumns.some((c) => c.name === "locale")) {
-    db.exec("ALTER TABLE accounts ADD COLUMN locale TEXT");
-  }
-
-  // Guarded ALTER TABLE: add mode to accounts if missing (NULL → "standard")
-  if (!accountColumns.some((c) => c.name === "mode")) {
-    db.exec("ALTER TABLE accounts ADD COLUMN mode TEXT");
-  }
-
-  // Guarded ALTER TABLE: add context + context_updated_at to accounts if missing
-  if (!accountColumns.some((c) => c.name === "context")) {
-    db.exec("ALTER TABLE accounts ADD COLUMN context TEXT");
-  }
-  if (!accountColumns.some((c) => c.name === "context_updated_at")) {
-    db.exec("ALTER TABLE accounts ADD COLUMN context_updated_at TEXT");
-  }
-
-  // Guarded ALTER TABLE: add visibility to workspaces if missing (NULL → "private")
-  if (!wsColumns.some((c) => c.name === "visibility")) {
-    db.exec("ALTER TABLE workspaces ADD COLUMN visibility TEXT");
-  }
-
-  // Guarded ALTER TABLE: add category to workspaces if missing (NULL → all templates)
-  if (!wsColumns.some((c) => c.name === "category")) {
-    db.exec("ALTER TABLE workspaces ADD COLUMN category TEXT");
-  }
-
-  // Guarded ALTER TABLE: add attachments_json to reports if missing
-  const reportColumns = db
-    .prepare("PRAGMA table_info(reports)")
-    .all() as Array<{ name: string }>;
-  if (!reportColumns.some((c) => c.name === "attachments_json")) {
-    db.exec("ALTER TABLE reports ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
-  }
-
-  // Guarded ALTER TABLE: extend symbol_index with the tree-sitter shape.
-  // All four columns (end_line, parent, signature, exported) are NULL for
-  // regex-extracted rows; only the tree-sitter provider fills them in.
-  const symbolColumns = db
-    .prepare("PRAGMA table_info(symbol_index)")
-    .all() as Array<{ name: string }>;
-  if (!symbolColumns.some((c) => c.name === "end_line")) {
-    db.exec("ALTER TABLE symbol_index ADD COLUMN end_line INTEGER");
-  }
-  if (!symbolColumns.some((c) => c.name === "parent")) {
-    db.exec("ALTER TABLE symbol_index ADD COLUMN parent TEXT");
-  }
-  if (!symbolColumns.some((c) => c.name === "signature")) {
-    db.exec("ALTER TABLE symbol_index ADD COLUMN signature TEXT");
-  }
-  if (!symbolColumns.some((c) => c.name === "exported")) {
-    db.exec("ALTER TABLE symbol_index ADD COLUMN exported INTEGER");
-  }
+  return (column, decl) => {
+    if (cols.some((c) => c.name === column)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+    // Keep the cache fresh in case the caller adds two columns with the
+    // same name (idempotent without re-reading PRAGMA).
+    cols.push({ name: column });
+  };
 }
