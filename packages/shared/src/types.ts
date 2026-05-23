@@ -544,7 +544,11 @@ export type AgentTool =
   | "list_files"
   | "analyze_image"
   | "run_template"
-  | "reason";
+  | "reason"
+  /** Propose a file change — stages it under .ariadne/staged/ for review. */
+  | "edit_file"
+  /** Run the workspace's test command; output prefixed with ✓/✗ for re-plan. */
+  | "run_tests";
 
 export interface AgentStep {
   id: string;

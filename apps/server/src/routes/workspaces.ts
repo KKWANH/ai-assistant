@@ -19,6 +19,7 @@ import * as portfolioStarter from "../surface/portfolioStarter.js";
 import * as budgetStarter from "../surface/budgetStarter.js";
 import * as readingStarter from "../surface/readingStarter.js";
 import * as chefbookStarter from "../surface/chefbookStarter.js";
+import * as codeStarter from "../surface/codeStarter.js";
 import logger from "../logger.js";
 import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
@@ -57,6 +58,16 @@ const STARTERS: Record<
     },
     surface: chefbookStarter.SURFACE_TSX,
   },
+  code: {
+    files: {
+      "README.md": codeStarter.README_MD,
+      "package.json": codeStarter.PACKAGE_JSON,
+      "src/index.ts": codeStarter.INDEX_TS,
+      "src/utils.ts": codeStarter.UTILS_TS,
+    },
+    surface: codeStarter.SURFACE_TSX,
+    actions: codeStarter.ACTIONS_YAML,
+  },
 };
 
 export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
@@ -89,6 +100,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       budget: "finance",
       reading: "research",
       chefbook: "cooking",
+      code: "code",
       blank: null,
     };
     const category = starter ? categoryByStarter[starter] ?? null : null;
@@ -116,7 +128,11 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     if (starterDef) {
       try {
         for (const [filename, content] of Object.entries(starterDef.files)) {
-          fs.writeFileSync(path.join(rootPath, filename), content, "utf-8");
+          const filePath = path.join(rootPath, filename);
+          // mkdirp the parent so starters can ship nested paths
+          // (e.g. the code starter's src/index.ts).
+          fs.mkdirSync(path.dirname(filePath), { recursive: true });
+          fs.writeFileSync(filePath, content, "utf-8");
         }
         writeSurface(rootPath, starterDef.surface);
         if (starterDef.actions) {
@@ -146,16 +162,48 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/workspaces/:id/history — list recent commits in the
-  // workspace's .ariadne/ git repo (auto-versioned per run).
+  // workspace's .ariadne/ git repo (auto-versioned per run). Commit
+  // rows are decorated with an `applyRunId` field when they correspond
+  // to an `apply` step (so the UI can offer Rewind only where it works).
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
     "/workspaces/:id/history",
     async (req, reply) => {
       const workspace = await requireWorkspace(req.params.id, req, reply);
       if (!workspace) return;
       const { listWorkspaceHistory } = await import("../services/workspaceGit.js");
+      const { listAppliedCommits } = await import("../services/stagedEdits.js");
       const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
       const commits = await listWorkspaceHistory(workspace.rootPath, limit);
-      return reply.send(commits);
+      const applies = listAppliedCommits(workspace.id);
+      const applyBySha = new Map(applies.map((a) => [a.sha, a]));
+      // Annotate so the front-end knows which rows can be rewound.
+      const decorated = commits.map((c) => ({
+        ...c,
+        applyRunId: applyBySha.get(c.sha)?.runId ?? null,
+      }));
+      return reply.send(decorated);
+    },
+  );
+
+  // POST /api/workspaces/:id/history/rewind — restore the workspace to
+  // its state immediately BEFORE the given commit. Only `apply` commits
+  // can be rewound (the staged tree they reference has to still exist).
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    "/workspaces/:id/history/rewind",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+      const body = (req.body ?? {}) as { sha?: unknown };
+      const sha = typeof body.sha === "string" ? body.sha : "";
+      if (!sha) return reply.status(400).send({ error: "sha is required" });
+      try {
+        const { rewindApply } = await import("../services/stagedEdits.js");
+        const result = await rewindApply(workspace.id, sha);
+        return reply.send(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(400).send({ error: msg });
+      }
     },
   );
 

@@ -33,6 +33,7 @@ import {
   Pencil,
   Trash2,
   GitCommit,
+  Undo2,
 } from "lucide-react";
 
 import {
@@ -51,6 +52,7 @@ import {
   useUpdateSchedule,
   useDeleteSchedule,
   useWorkspaceHistory,
+  useRewindWorkspaceCommit,
 } from "../../lib/queries";
 import type { ScheduleFrequency } from "@ariadne/shared";
 import { useT } from "../../lib/i18n";
@@ -368,11 +370,31 @@ function SchedulesSection({
 /** Compact history list — auto-versioned commits of `.ariadne/` per run. */
 function HistorySection({ workspaceId }: { workspaceId: string }) {
   const { t } = useT();
+  const { toast } = useToast();
   const { data: commits } = useWorkspaceHistory(workspaceId, 12);
+  const rewind = useRewindWorkspaceCommit();
   // Hide entirely when there's nothing to show — keeps the overview
   // clean for workspaces that haven't run anything yet (or where git
   // isn't on the host).
   if (!commits || commits.length === 0) return null;
+
+  const doRewind = async (sha: string) => {
+    if (!window.confirm(t("workspace.history.rewindConfirm"))) return;
+    try {
+      const result = await rewind.mutateAsync({ workspaceId, sha });
+      toast({
+        title: t("workspace.history.rewindSuccess", { n: result.restored.length }),
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: t("workspace.history.rewindFailed"),
+        description: err instanceof Error ? err.message : "",
+        variant: "error",
+      });
+    }
+  };
+
   return (
     <section>
       <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -383,7 +405,7 @@ function HistorySection({ workspaceId }: { workspaceId: string }) {
         {commits.map((c) => (
           <div
             key={c.sha}
-            className="flex items-center gap-3 px-3 py-1.5 rounded-md border border-border bg-background"
+            className="flex items-center gap-3 px-3 py-1.5 rounded-md border border-border bg-background group"
           >
             <span className="font-mono text-2xs text-muted-foreground shrink-0">
               {c.shortSha}
@@ -399,6 +421,20 @@ function HistorySection({ workspaceId }: { workspaceId: string }) {
             <span className="text-2xs text-muted-foreground shrink-0">
               {new Date(c.timestamp).toLocaleString()}
             </span>
+            {/* Rewind only on apply-commits; hidden until hover so a long
+                history list isn't a wall of buttons. */}
+            {c.applyRunId && (
+              <button
+                type="button"
+                onClick={() => void doRewind(c.sha)}
+                disabled={rewind.isPending}
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-all"
+                aria-label={t("workspace.history.rewind")}
+                title={t("workspace.history.rewind")}
+              >
+                <Undo2 className="h-3 w-3" />
+              </button>
+            )}
           </div>
         ))}
       </div>

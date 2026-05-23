@@ -468,6 +468,8 @@ export interface WorkspaceCommit {
   message: string;
   timestamp: string;
   filesChanged: number;
+  /** When set, this commit is from an apply-step and can be rewound. */
+  applyRunId: string | null;
 }
 
 export const listWorkspaceHistory = (workspaceId: string, limit = 50) =>
@@ -475,6 +477,15 @@ export const listWorkspaceHistory = (workspaceId: string, limit = 50) =>
     "GET",
     `/workspaces/${workspaceId}/history?limit=${limit.toString()}`,
   );
+
+export interface RewindResult {
+  restored: string[];
+  errors: { path: string; reason: string }[];
+  commitSha: string | null;
+}
+
+export const rewindWorkspaceCommit = (workspaceId: string, sha: string) =>
+  request<RewindResult>("POST", `/workspaces/${workspaceId}/history/rewind`, { sha });
 
 // ── Action schedules ──────────────────────────────────────────────────────────
 import type {

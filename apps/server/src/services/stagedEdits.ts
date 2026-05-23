@@ -194,6 +194,17 @@ export async function applyStagedEdits(
     const message = `apply: ${actionTitle} — ${fileList}`;
     try {
       result.commitSha = await commitWorkspaceHistory(ws.rootPath, message);
+      // Persist a sha→runId mapping so the rewind path can find the
+      // original `before/` snapshots without parsing the commit message.
+      if (result.commitSha) {
+        recordApply(ws.rootPath, {
+          sha: result.commitSha,
+          runId,
+          paths: result.applied,
+          actionTitle,
+          appliedAt: new Date().toISOString(),
+        });
+      }
     } catch (err) {
       logger.warn({ runId, err }, "workspaceGit commit failed after apply");
     }
@@ -214,4 +225,108 @@ export function discardStagedEdits(workspaceId: string, runId: string): void {
   if (fs.existsSync(root)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
+}
+
+// ── Apply log + rewind ──────────────────────────────────────────────────────
+
+interface ApplyRecord {
+  sha: string;
+  runId: string;
+  paths: string[];
+  actionTitle: string;
+  appliedAt: string;
+}
+
+function appliesLogPath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, ".ariadne", "applies.json");
+}
+
+function readAppliesLog(workspaceRoot: string): ApplyRecord[] {
+  const p = appliesLogPath(workspaceRoot);
+  if (!fs.existsSync(p)) return [];
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8")) as ApplyRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function recordApply(workspaceRoot: string, record: ApplyRecord): void {
+  const log = readAppliesLog(workspaceRoot);
+  log.push(record);
+  fs.mkdirSync(path.dirname(appliesLogPath(workspaceRoot)), { recursive: true });
+  fs.writeFileSync(appliesLogPath(workspaceRoot), JSON.stringify(log, null, 2), "utf-8");
+}
+
+/** Which commits in the workspace's history were applies (so the UI
+ *  can show a Rewind button only where it's meaningful). */
+export function listAppliedCommits(workspaceId: string): ApplyRecord[] {
+  const ws = dbGetWorkspace(workspaceId);
+  if (!ws) return [];
+  return readAppliesLog(ws.rootPath);
+}
+
+export interface RewindResult {
+  restored: string[];
+  errors: { path: string; reason: string }[];
+  commitSha: string | null;
+}
+
+/**
+ * Restore the workspace to its state immediately BEFORE the given apply
+ * commit. We use the `.ariadne/staged/<runId>/before/` snapshots the
+ * Phase A staging already keeps around. A new commit records the
+ * rewind so the history list itself stays append-only.
+ */
+export async function rewindApply(workspaceId: string, sha: string): Promise<RewindResult> {
+  const ws = dbGetWorkspace(workspaceId);
+  if (!ws) throw new Error("Workspace not found");
+  const log = readAppliesLog(ws.rootPath);
+  const record = log.find((r) => r.sha === sha);
+  if (!record) {
+    throw new Error("No applied edits found for that commit — only `apply:` commits can be rewound.");
+  }
+  const stagedDir = stagedRoot(ws, record.runId);
+  const beforeDir = path.join(stagedDir, "before");
+  if (!fs.existsSync(beforeDir)) {
+    throw new Error("Pre-edit snapshots are no longer on disk for this commit.");
+  }
+
+  const root = path.resolve(ws.rootPath);
+  const result: RewindResult = { restored: [], errors: [], commitSha: null };
+
+  for (const rel of record.paths) {
+    try {
+      const beforeFile = path.join(beforeDir, rel);
+      const workspaceFile = path.resolve(root, rel);
+      if (workspaceFile !== root && !workspaceFile.startsWith(root + path.sep)) {
+        throw new Error("Path escapes workspace root");
+      }
+      if (fs.existsSync(beforeFile)) {
+        // Pre-existed → restore content.
+        const body = fs.readFileSync(beforeFile, "utf-8");
+        fs.mkdirSync(path.dirname(workspaceFile), { recursive: true });
+        fs.writeFileSync(workspaceFile, body, "utf-8");
+      } else if (fs.existsSync(workspaceFile)) {
+        // The apply created this file from nothing → rewind deletes it.
+        fs.unlinkSync(workspaceFile);
+      }
+      result.restored.push(rel);
+    } catch (err) {
+      result.errors.push({
+        path: rel,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (result.restored.length > 0) {
+    const message = `rewind: ${record.actionTitle} (${sha.slice(0, 8)})`;
+    try {
+      result.commitSha = await commitWorkspaceHistory(ws.rootPath, message);
+    } catch (err) {
+      logger.warn({ workspaceId, sha, err }, "workspaceGit commit failed after rewind");
+    }
+  }
+  return result;
 }

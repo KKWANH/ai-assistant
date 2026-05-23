@@ -835,6 +835,17 @@ export function useWorkspaceHistory(workspaceId: string, limit = 50) {
   });
 }
 
+export function useRewindWorkspaceCommit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workspaceId, sha }: { workspaceId: string; sha: string }) =>
+      api.rewindWorkspaceCommit(workspaceId, sha),
+    onSuccess: (_r, { workspaceId }) => {
+      void qc.invalidateQueries({ queryKey: ["workspace-history", workspaceId] });
+    },
+  });
+}
+
 // ── Schedules ─────────────────────────────────────────────────────────────────
 
 export function useSchedules(workspaceId: string) {

@@ -361,6 +361,70 @@ async function runTool(
       return text;
     }
 
+    case "edit_file": {
+      // Agent-side edit_file is intentionally "plan-only" in v1 — the
+      // agent loop has no Run record to attach a staged manifest to,
+      // and surfacing agent-staged diffs needs a dedicated UI we'll
+      // build in Phase C. For now we describe the proposed change
+      // (using a small ask_ai pass) so the agent's plan is internally
+      // coherent; the actual staging happens by running an action.
+      if (!chat.workspaceId) return "[No workspace attached — cannot propose file edits]";
+      const { text } = await provider.complete({
+        system:
+          "You are a code-edit planner. Given a workspace target and a goal, " +
+          "describe a single concrete file edit that would address it — say which " +
+          "file, what to search for, what to replace with, and why. Keep it short " +
+          "(<150 words) and concrete. Do not write code outside the patch.",
+        prompt: description,
+        signal,
+      });
+      return "[Proposed edit (plan-only — run an action with `edit_file` to actually stage):]\n" + text;
+    }
+
+    case "run_tests": {
+      // Real execution: run the workspace's test command. Output is
+      // prefixed with ✓/✗ so the re-plan gate (low-information
+      // detection) can branch on failure automatically.
+      if (!chat.workspaceId) return "[No workspace attached — cannot run tests]";
+      const ws = dbGetWorkspace(chat.workspaceId);
+      if (!ws) return "[Workspace not found]";
+
+      // For agent use the command comes from the step description
+      // ("run npm test", "execute pytest -k auth") or a sensible default.
+      const command = description.trim() || "npm test";
+
+      const { spawn } = await import("node:child_process");
+      return await new Promise<string>((resolve) => {
+        let stdout = "";
+        let stderr = "";
+        const proc = spawn("/bin/sh", ["-c", command], { cwd: ws.rootPath });
+        const timer = setTimeout(() => proc.kill("SIGTERM"), 120_000);
+        proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
+        proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
+        proc.on("close", (code) => {
+          clearTimeout(timer);
+          const passed = code === 0;
+          const head = passed
+            ? `✓ Tests passed (\`${command}\`)`
+            : `✗ Tests failed (exit ${(code ?? "?").toString()}, \`${command}\`)`;
+          // Trim aggressively — agent context budget is tighter than
+          // an action block's. Tail of stdout/stderr is what's useful
+          // for triage anyway.
+          const out = stdout.slice(-1500);
+          const err = stderr.slice(-500);
+          resolve(
+            [head, out.trim() ? "stdout: " + out : "", err.trim() ? "stderr: " + err : ""]
+              .filter(Boolean)
+              .join("\n"),
+          );
+        });
+        proc.on("error", (e) => {
+          clearTimeout(timer);
+          resolve(`[run_tests error: ${e.message}]`);
+        });
+      });
+    }
+
     default: {
       const _exhaustive: never = tool;
       return `[Unknown tool: ${String(_exhaustive)}]`;
@@ -482,7 +546,7 @@ function buildPlannerSystem(
   customActions: WorkspaceAction[] = [],
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
 ): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason";
+  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests";
   const customSection = customActions.length > 0
     ? `\n\nThis workspace also has custom actions you may use as tool names:\n${customActions
         .map((a) => `  - "${a.id}": ${a.name} — ${a.description}${a.constraints ? ` [constraints: ${a.constraints}]` : ""}`)
@@ -523,7 +587,7 @@ function buildPlannerPrompt(history: ChatMessage[], userMessage: string): string
 }
 
 function buildReplannerSystem(customActions: WorkspaceAction[] = []): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason";
+  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests";
   const customSection = customActions.length > 0
     ? ` | ${customActions.map((a) => a.id).join(" | ")}`
     : "";
@@ -616,6 +680,7 @@ function parsePlan(raw: string, customActions: WorkspaceAction[] = []): ParsedPl
     if (!Array.isArray(parsed.steps)) return { steps: [], summary };
     const validTools = new Set<string>([
       "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
+      "edit_file", "run_tests",
       ...customActions.map((a) => a.id),
     ]);
     const steps = parsed.steps
