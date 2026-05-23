@@ -5,83 +5,122 @@
  *   1. tree-sitter provider — accurate AST for TS/TSX/JS/JSX/Python,
  *      gated on optionalDependencies loading successfully (see
  *      docs/SYMBOL_INDEX_PLAN.md §8 for why we picked native bindings).
- *   2. regex provider — the existing patterns, always ready. Floor for
- *      Go/Rust/Java and the fallback path when tree-sitter is unavailable.
+ *   2. regex provider — the patterns below, always ready. Floor for
+ *      Go/Rust/Java and the fallback when tree-sitter is unavailable.
  *
  * The indexer runs once per scan in the same background slot as the
- * embedding indexer. Per-file routing picks the highest-priority
- * provider that supports the extension.
+ * embedding indexer. File reads run concurrently with `Promise.all`
+ * (file system is the bottleneck), AST/regex extraction runs serially
+ * on the loaded buffers, then the rows are bulk-inserted under a single
+ * transaction in `dbInsertSymbols`.
  */
-import fs from "node:fs";
-import path from "node:path";
 import type { FileMeta } from "@ariadne/shared";
 import {
   dbClearWorkspaceSymbols,
   dbInsertSymbols,
+  type SymbolDraft,
   type SymbolRow,
 } from "../db/repo.js";
+import {
+  normalizedExtension,
+  readTextUnderRoot,
+} from "../workspace/readWithinRoot.js";
 import { getTreeSitterProvider } from "./symbolIndex/treeSitterProvider.js";
 
 const READ_BUDGET = 200_000; // 200 KB per file is plenty for symbol heads.
 const MAX_FILES = 200;
 
-type SymbolDraft = Omit<SymbolRow, "workspaceId" | "path">;
+/**
+ * Regex pattern *sources*, not RegExp instances. We construct fresh
+ * RegExps per call so module-scoped `lastIndex` can't leak across
+ * concurrent scans of different workspaces.
+ */
+interface RegexPattern {
+  kind: SymbolRow["kind"];
+  src: string;
+}
+
+const TS_PATTERNS: RegexPattern[] = [
+  { kind: "function", src: "^(?:export\\s+)?(?:async\\s+)?function\\s+([A-Za-z_$][\\w$]*)" },
+  { kind: "class", src: "^(?:export\\s+)?(?:abstract\\s+)?class\\s+([A-Za-z_$][\\w$]*)" },
+  { kind: "const", src: "^(?:export\\s+)?const\\s+([A-Za-z_$][\\w$]*)\\s*[:=]" },
+  // Method modifier (public/private/.../async/readonly) is REQUIRED — without
+  // it the pattern matches `if (x) {`, `while (...) {`, and object-literal
+  // shorthand methods. False positives are cheap for retrieval (+2.0 score
+  // nudge on the wrong file) but adding noise to every TS scan isn't worth it.
+  { kind: "method", src: "^\\s+(?:public|private|protected|static|async|readonly)\\s+([A-Za-z_$][\\w$]*)\\s*\\(" },
+  { kind: "interface", src: "^(?:export\\s+)?interface\\s+([A-Za-z_$][\\w$]*)" },
+  { kind: "type", src: "^(?:export\\s+)?type\\s+([A-Za-z_$][\\w$]*)\\s*=" },
+];
 
 /** Languages the regex provider catches — keyed by file extension. */
-const REGEX_PATTERNS: Record<string, { kind: SymbolRow["kind"]; re: RegExp }[]> = {
-  ts: [
-    { kind: "function", re: /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm },
-    { kind: "class", re: /^(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/gm },
-    { kind: "const", re: /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*[:=]/gm },
-    { kind: "method", re: /^\s+(?:public|private|protected|static|async)?\s*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*[:{]/gm },
-    { kind: "interface", re: /^(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)/gm },
-    { kind: "type", re: /^(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/gm },
-  ],
-  js: [],
-  tsx: [],
-  jsx: [],
+const REGEX_PATTERNS: Record<string, RegexPattern[]> = {
+  // TS rules cover JS too (every JS construct is valid TS).
+  ts: TS_PATTERNS,
+  js: TS_PATTERNS,
+  tsx: TS_PATTERNS,
+  jsx: TS_PATTERNS,
   py: [
-    { kind: "function", re: /^(?:async\s+)?def\s+([A-Za-z_]\w*)/gm },
-    { kind: "class", re: /^class\s+([A-Za-z_]\w*)/gm },
+    { kind: "function", src: "^(?:async\\s+)?def\\s+([A-Za-z_]\\w*)" },
+    { kind: "class", src: "^class\\s+([A-Za-z_]\\w*)" },
   ],
   go: [
-    { kind: "function", re: /^func\s+(?:\([^)]+\)\s+)?([A-Za-z_]\w*)\s*\(/gm },
-    { kind: "type", re: /^type\s+([A-Za-z_]\w*)\s+(?:struct|interface|=)/gm },
+    { kind: "function", src: "^func\\s+(?:\\([^)]+\\)\\s+)?([A-Za-z_]\\w*)\\s*\\(" },
+    { kind: "type", src: "^type\\s+([A-Za-z_]\\w*)\\s+(?:struct|interface|=)" },
   ],
   rs: [
-    { kind: "function", re: /^(?:pub\s+(?:\([^)]+\)\s+)?)?(?:async\s+)?fn\s+([A-Za-z_]\w*)/gm },
-    { kind: "struct", re: /^(?:pub\s+(?:\([^)]+\)\s+)?)?struct\s+([A-Za-z_]\w*)/gm },
-    { kind: "enum", re: /^(?:pub\s+(?:\([^)]+\)\s+)?)?enum\s+([A-Za-z_]\w*)/gm },
-    { kind: "trait", re: /^(?:pub\s+(?:\([^)]+\)\s+)?)?trait\s+([A-Za-z_]\w*)/gm },
+    { kind: "function", src: "^(?:pub\\s+(?:\\([^)]+\\)\\s+)?)?(?:async\\s+)?fn\\s+([A-Za-z_]\\w*)" },
+    { kind: "struct", src: "^(?:pub\\s+(?:\\([^)]+\\)\\s+)?)?struct\\s+([A-Za-z_]\\w*)" },
+    { kind: "enum", src: "^(?:pub\\s+(?:\\([^)]+\\)\\s+)?)?enum\\s+([A-Za-z_]\\w*)" },
+    { kind: "trait", src: "^(?:pub\\s+(?:\\([^)]+\\)\\s+)?)?trait\\s+([A-Za-z_]\\w*)" },
   ],
   java: [
-    { kind: "class", re: /^(?:public\s+|private\s+|abstract\s+|final\s+)*class\s+([A-Za-z_]\w*)/gm },
-    { kind: "method", re: /^\s+(?:public\s+|private\s+|protected\s+|static\s+|final\s+)+(?:[\w<>[\],\s]+\s+)?([A-Za-z_]\w*)\s*\(/gm },
+    { kind: "class", src: "^(?:public\\s+|private\\s+|abstract\\s+|final\\s+)*class\\s+([A-Za-z_]\\w*)" },
+    { kind: "method", src: "^\\s+(?:public\\s+|private\\s+|protected\\s+|static\\s+|final\\s+)+(?:[\\w<>[\\],\\s]+\\s+)?([A-Za-z_]\\w*)\\s*\\(" },
   ],
 };
-// JS / TSX / JSX share TS rules.
-REGEX_PATTERNS["js"] = REGEX_PATTERNS["ts"]!;
-REGEX_PATTERNS["tsx"] = REGEX_PATTERNS["ts"]!;
-REGEX_PATTERNS["jsx"] = REGEX_PATTERNS["ts"]!;
 
 const REGEX_SUPPORTED = new Set(Object.keys(REGEX_PATTERNS));
 
-/** Regex extractor — the same patterns we've had since Phase D. */
+/**
+ * Build a sorted array of newline byte offsets once per file. Per-match
+ * line numbers then become a binary search instead of a fresh prefix
+ * slice + regex scan — saves O(n·m) → O(n + m·log n) per file.
+ */
+function newlineOffsets(text: string): number[] {
+  const offs: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) offs.push(i);
+  }
+  return offs;
+}
+
+function lineFor(offsets: number[], byteIndex: number): number {
+  let lo = 0;
+  let hi = offsets.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    // We want the count of newlines strictly before byteIndex + 1.
+    const v = offsets[mid];
+    if (v !== undefined && v < byteIndex) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo + 1;
+}
+
+/** Regex extractor — fresh RegExp per pattern keeps the call reentrant. */
 function extractWithRegex(text: string, ext: string): SymbolDraft[] {
   const patterns = REGEX_PATTERNS[ext];
   if (!patterns) return [];
+  const offsets = newlineOffsets(text);
   const rows: SymbolDraft[] = [];
-  for (const { kind, re } of patterns) {
-    // Each pattern is module-scoped with the `g` flag — reset lastIndex
-    // before each file to be safe.
-    re.lastIndex = 0;
+  for (const { kind, src } of patterns) {
+    const re = new RegExp(src, "gm");
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       const name = m[1];
       if (!name) continue;
-      // O(n) per match newline-count is fine at this scale.
-      const line = (text.slice(0, m.index).match(/\n/g)?.length ?? 0) + 1;
-      rows.push({ name, kind, line });
+      rows.push({ name, kind, line: lineFor(offsets, m.index) });
     }
   }
   return rows;
@@ -96,40 +135,41 @@ export async function indexWorkspaceSymbols(
   rootPath: string,
   files: FileMeta[],
 ): Promise<{ symbols: number }> {
-  const root = path.resolve(rootPath);
   // Load tree-sitter once per scan; the chooser uses it per file.
   const treeSitter = await getTreeSitterProvider();
 
-  const candidates = files
-    .filter((f) => {
-      if (f.sensitive) return false;
-      const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-      return treeSitter.supports(ext) || REGEX_SUPPORTED.has(ext);
-    })
-    .slice(0, MAX_FILES);
+  // Compute extension once per file and carry it through — used by the
+  // filter, the read step, and the provider dispatch.
+  const candidates: Array<{ relPath: string; ext: string }> = [];
+  for (const f of files) {
+    if (f.sensitive) continue;
+    const ext = normalizedExtension(f);
+    if (!treeSitter.supports(ext) && !REGEX_SUPPORTED.has(ext)) continue;
+    candidates.push({ relPath: f.path, ext });
+    if (candidates.length >= MAX_FILES) break;
+  }
 
+  // Read concurrently — file system is the bottleneck, same logic as
+  // the embedding indexer in retrieval.ts. The path-traversal guard
+  // lives inside readTextUnderRoot.
+  const loaded = await Promise.all(
+    candidates.map(async (c) => {
+      const text = await readTextUnderRoot(rootPath, c.relPath, READ_BUDGET);
+      return text == null ? null : { ...c, text };
+    }),
+  );
+
+  // Extract serially — parsing is CPU-bound and single-threaded.
   const rows: SymbolRow[] = [];
-  for (const f of candidates) {
-    const abs = path.resolve(root, f.path);
-    if (abs !== root && !abs.startsWith(root + path.sep)) continue;
-    let text: string;
-    try {
-      const buf = await fs.promises.readFile(abs, "utf-8");
-      text = buf.length > READ_BUDGET ? buf.slice(0, READ_BUDGET) : buf;
-    } catch {
-      continue;
-    }
-    const ext = (f.extension || path.extname(f.path)).replace(/^\./, "").toLowerCase();
-
-    // Pick the highest-priority provider that handles this language.
-    // The candidate filter above guarantees at least one branch matches.
+  for (const entry of loaded) {
+    if (!entry) continue;
+    const { relPath, ext, text } = entry;
     const drafts =
       treeSitter.ready && treeSitter.supports(ext)
         ? treeSitter.extract(text, ext)
         : extractWithRegex(text, ext);
-
     for (const d of drafts) {
-      rows.push({ workspaceId, path: f.path, ...d });
+      rows.push({ workspaceId, path: relPath, ...d });
     }
   }
 

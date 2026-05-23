@@ -37,6 +37,26 @@ function j<T>(v: string | null | undefined, fallback: T): T {
   return JSON.parse(v) as T;
 }
 
+/**
+ * Wrap a synchronous block in a SQLite transaction. The big payoff is
+ * for bulk inserts — without `BEGIN..COMMIT`, every `stmt.run()` is its
+ * own auto-commit and the WAL takes a write per row. Hundreds of rows
+ * collapse from hundreds of round-trips to one. Rolls back and rethrows
+ * on any error so partial writes don't land.
+ */
+function withTransaction<T>(fn: () => T): T {
+  const db = getDb();
+  db.exec("BEGIN");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Workspaces
 // ---------------------------------------------------------------------------
@@ -938,6 +958,13 @@ export interface SymbolRow {
   exported?: boolean | null;
 }
 
+/**
+ * Per-file extraction shape — same as `SymbolRow` minus the columns the
+ * indexer entry point fills in (workspaceId, path). Exported here so
+ * the chooser and each provider speak the same type without re-declaring.
+ */
+export type SymbolDraft = Omit<SymbolRow, "workspaceId" | "path">;
+
 export function dbClearWorkspaceSymbols(workspaceId: string): void {
   const db = getDb();
   db.prepare("DELETE FROM symbol_index WHERE workspace_id = ?").run(workspaceId);
@@ -951,19 +978,22 @@ export function dbInsertSymbols(rows: SymbolRow[]): void {
        (workspace_id, path, name, kind, line, end_line, parent, signature, exported)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  for (const r of rows) {
-    stmt.run(
-      r.workspaceId,
-      r.path,
-      r.name,
-      r.kind,
-      r.line,
-      r.endLine ?? null,
-      r.parent ?? null,
-      r.signature ?? null,
-      r.exported == null ? null : r.exported ? 1 : 0,
-    );
-  }
+  // Single transaction collapses hundreds of WAL writes into one.
+  withTransaction(() => {
+    for (const r of rows) {
+      stmt.run(
+        r.workspaceId,
+        r.path,
+        r.name,
+        r.kind,
+        r.line,
+        r.endLine ?? null,
+        r.parent ?? null,
+        r.signature ?? null,
+        r.exported == null ? null : r.exported ? 1 : 0,
+      );
+    }
+  });
 }
 
 /** Find file paths whose symbols match any of the query terms. Used by
@@ -1020,21 +1050,25 @@ export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
        (id, workspace_id, provider, dimensions, path, chunk, chunk_index, file_mtime, embedding, indexed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  for (const r of rows) {
-    stmt.run(
-      r.id,
-      r.workspaceId,
-      r.provider,
-      r.dimensions,
-      r.path,
-      r.chunk,
-      r.chunkIndex,
-      r.fileMtime,
-      // node:sqlite accepts Buffer / Uint8Array for BLOB.
-      Buffer.from(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength),
-      r.indexedAt,
-    );
-  }
+  // Same transaction trick as dbInsertSymbols — bulk insert without a
+  // BEGIN..COMMIT does one WAL write per row.
+  withTransaction(() => {
+    for (const r of rows) {
+      stmt.run(
+        r.id,
+        r.workspaceId,
+        r.provider,
+        r.dimensions,
+        r.path,
+        r.chunk,
+        r.chunkIndex,
+        r.fileMtime,
+        // node:sqlite accepts Buffer / Uint8Array for BLOB.
+        Buffer.from(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength),
+        r.indexedAt,
+      );
+    }
+  });
 }
 
 export interface StoredChunk {

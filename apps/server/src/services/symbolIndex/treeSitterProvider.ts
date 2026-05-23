@@ -13,10 +13,8 @@
  * surface we use is captured in the local `TSNode` interface below so
  * the rest of the file stays typed.
  */
-import type { SymbolRow } from "../../db/repo.js";
+import type { SymbolDraft, SymbolRow } from "../../db/repo.js";
 import logger from "../../logger.js";
-
-type SymbolDraft = Omit<SymbolRow, "workspaceId" | "path">;
 
 /** Subset of the tree-sitter Node API we actually call. */
 interface TSNode {
@@ -154,17 +152,50 @@ export async function getTreeSitterProvider(): Promise<TreeSitterProvider> {
   };
 }
 
+// ── Shared helpers ─────────────────────────────────────────────────────
+
+/** Iterate a node's named children, skipping nulls. The native binding
+ *  returns null for out-of-range indices; the explicit guard keeps the
+ *  callers free of `if (child)` repetition. */
+function forEachNamedChild(node: TSNode, fn: (child: TSNode) => void): void {
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (child) fn(child);
+  }
+}
+
+/**
+ * Build and push a SymbolDraft row. Both visitors funnel through this
+ * so the row shape is described in exactly one place — if SymbolRow
+ * grows a new column, only this function needs to learn it.
+ */
+function pushRow(
+  rows: SymbolDraft[],
+  node: TSNode,
+  name: string,
+  kind: SymbolRow["kind"],
+  parent: string | null,
+  exported: boolean,
+  signature: string | null,
+): void {
+  rows.push({
+    name,
+    kind,
+    line: node.startPosition.row + 1,
+    endLine: node.endPosition.row + 1,
+    parent,
+    signature,
+    exported,
+  });
+}
+
 // ── TypeScript / JavaScript extraction ─────────────────────────────────
 
 function extractTypeScript(root: TSNode, source: string): SymbolDraft[] {
   const rows: SymbolDraft[] = [];
-  // Walk only the program's direct children — we don't extract symbols
-  // from function/method bodies. (Local `const`s aren't useful in a
-  // retrieval-time symbol index; they'd flood the table.)
-  for (let i = 0; i < root.namedChildCount; i++) {
-    const child = root.namedChild(i);
-    if (child) visitTSTopLevel(child, rows, source, null, false);
-  }
+  // Walk only the program's direct children — local `const`s inside
+  // function/method bodies aren't useful for a retrieval-time index.
+  forEachNamedChild(root, (child) => visitTSTopLevel(child, rows, source, null, false));
   return rows;
 }
 
@@ -178,10 +209,7 @@ function visitTSTopLevel(
   const t = node.type;
   // `export ...` wraps the actual declaration; recurse with exported flag.
   if (t === "export_statement") {
-    for (let i = 0; i < node.namedChildCount; i++) {
-      const child = node.namedChild(i);
-      if (child) visitTSTopLevel(child, rows, source, parentName, true);
-    }
+    forEachNamedChild(node, (c) => visitTSTopLevel(c, rows, source, parentName, true));
     return;
   }
 
@@ -190,78 +218,52 @@ function visitTSTopLevel(
     const body = node.childForFieldName("body");
     if (body) {
       const nsName = nameOf(node) ?? parentName;
-      for (let i = 0; i < body.namedChildCount; i++) {
-        const child = body.namedChild(i);
-        if (child) visitTSTopLevel(child, rows, source, nsName, exported);
-      }
+      forEachNamedChild(body, (c) => visitTSTopLevel(c, rows, source, nsName, exported));
     }
     return;
   }
 
   if (t === "function_declaration") {
-    pushTS(node, rows, source, "function", parentName, exported);
+    const name = nameOf(node);
+    if (name) pushRow(rows, node, name, "function", parentName, exported, signatureOf(node, source, "function"));
     return;
   }
   if (t === "class_declaration") {
     const className = nameOf(node);
-    pushTS(node, rows, source, "class", parentName, exported, className);
+    if (!className) return;
+    pushRow(rows, node, className, "class", parentName, exported, signatureOf(node, source, "class"));
     const body = node.childForFieldName("body");
-    if (body && className) {
-      for (let i = 0; i < body.namedChildCount; i++) {
-        const child = body.namedChild(i);
-        if (!child) continue;
-        if (
-          child.type === "method_definition" ||
-          child.type === "method_signature"
-        ) {
-          pushTS(child, rows, source, "method", className, exported);
+    if (body) {
+      forEachNamedChild(body, (child) => {
+        if (child.type !== "method_definition" && child.type !== "method_signature") return;
+        const methodName = nameOf(child);
+        if (methodName) {
+          pushRow(rows, child, methodName, "method", className, exported, signatureOf(child, source, "method"));
         }
-      }
+      });
     }
     return;
   }
   if (t === "interface_declaration") {
-    pushTS(node, rows, source, "interface", parentName, exported);
+    const name = nameOf(node);
+    if (name) pushRow(rows, node, name, "interface", parentName, exported, null);
     return;
   }
   if (t === "type_alias_declaration") {
-    pushTS(node, rows, source, "type", parentName, exported);
+    const name = nameOf(node);
+    if (name) pushRow(rows, node, name, "type", parentName, exported, null);
     return;
   }
   if (t === "lexical_declaration" || t === "variable_declaration") {
     // const/let at top level — one row per declarator.
-    for (let i = 0; i < node.namedChildCount; i++) {
-      const decl = node.namedChild(i);
-      if (!decl || decl.type !== "variable_declarator") continue;
-      pushTS(decl, rows, source, "const", parentName, exported);
-    }
+    forEachNamedChild(node, (decl) => {
+      if (decl.type !== "variable_declarator") return;
+      const name = nameOf(decl);
+      if (name) pushRow(rows, decl, name, "const", parentName, exported, null);
+    });
     return;
   }
   // Anything else at top level (import_statement, expressions, …) — skip.
-}
-
-function pushTS(
-  node: TSNode,
-  rows: SymbolDraft[],
-  source: string,
-  kind: SymbolRow["kind"],
-  parentName: string | null,
-  exported: boolean,
-  /** Pre-extracted name — pass when the caller already looked it up
-   *  (e.g. a class node's name is read before recursing into the body). */
-  cachedName?: string | null,
-): void {
-  const name = cachedName !== undefined ? cachedName : nameOf(node);
-  if (!name) return;
-  rows.push({
-    name,
-    kind,
-    line: node.startPosition.row + 1,
-    endLine: node.endPosition.row + 1,
-    parent: parentName,
-    signature: signatureOf(node, source, kind),
-    exported,
-  });
 }
 
 // ── Python extraction ──────────────────────────────────────────────────
@@ -294,50 +296,24 @@ function visitPy(
   }
   if (t === "function_definition") {
     const name = nameOf(node);
-    if (name) {
-      const exported = parentExported && !name.startsWith("_");
-      const kind = parentName ? "method" : "function";
-      rows.push({
-        name,
-        kind,
-        line: node.startPosition.row + 1,
-        endLine: node.endPosition.row + 1,
-        parent: parentName,
-        signature: signatureOf(node, source, kind),
-        exported,
-      });
-    }
+    if (!name) return;
+    const exported = parentExported && !name.startsWith("_");
+    const kind = parentName ? "method" : "function";
+    pushRow(rows, node, name, kind, parentName, exported, signatureOf(node, source, kind));
     return; // don't descend into function bodies — nested defs are uncommon
   }
   if (t === "class_definition") {
     const name = nameOf(node);
-    if (name) {
-      const exported = parentExported && !name.startsWith("_");
-      rows.push({
-        name,
-        kind: "class",
-        line: node.startPosition.row + 1,
-        endLine: node.endPosition.row + 1,
-        parent: parentName,
-        signature: null,
-        exported,
-      });
-      const body = node.childForFieldName("body");
-      if (body) {
-        for (let i = 0; i < body.namedChildCount; i++) {
-          const child = body.namedChild(i);
-          if (child) visitPy(child, rows, source, name, exported);
-        }
-      }
-    }
+    if (!name) return;
+    const exported = parentExported && !name.startsWith("_");
+    pushRow(rows, node, name, "class", parentName, exported, null);
+    const body = node.childForFieldName("body");
+    if (body) forEachNamedChild(body, (c) => visitPy(c, rows, source, name, exported));
     return;
   }
   // Module-level descent only — we don't walk into function bodies.
   if (t === "module") {
-    for (let i = 0; i < node.namedChildCount; i++) {
-      const child = node.namedChild(i);
-      if (child) visitPy(child, rows, source, parentName, parentExported);
-    }
+    forEachNamedChild(node, (c) => visitPy(c, rows, source, parentName, parentExported));
   }
 }
 
@@ -346,8 +322,10 @@ function visitPy(
 function nameOf(node: TSNode): string | null {
   const nameNode = node.childForFieldName("name");
   if (!nameNode) return null;
-  const text = nameNode.text.trim();
-  return text || null;
+  // Tree-sitter returns byte-precise identifiers — no surrounding
+  // whitespace ever lives inside a `name` field, so no .trim() needed.
+  const text = nameNode.text;
+  return text.length > 0 ? text : null;
 }
 
 /**
