@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock, ChefHat, Code2, ClipboardList, Microscope } from "lucide-react";
+import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, ChefHat, Code2, ClipboardList, Microscope } from "lucide-react";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
@@ -11,7 +11,6 @@ import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import { FolderPicker } from "./FolderPicker";
-import type { WorkspaceVisibility } from "@ariadne/shared";
 
 type Starter = "blank" | "portfolio" | "budget" | "reading" | "chefbook" | "code" | "decisions" | "papers";
 
@@ -82,7 +81,6 @@ export function CreateWorkspaceDialog() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [starter, setStarter] = useState<Starter>("blank");
-  const [visibility, setVisibility] = useState<WorkspaceVisibility>("private");
 
   const errors: Record<string, string> = {};
   if (name.trim() === "") errors["name"] = t("workspace.dialog.nameRequired");
@@ -98,7 +96,6 @@ export function CreateWorkspaceDialog() {
         include: include.split("\n").filter(Boolean),
         exclude: exclude.split("\n").filter(Boolean),
         starter,
-        visibility,
       });
       setCreateWorkspaceOpen(false);
       setActiveWorkspaceId(ws.id);
@@ -108,7 +105,6 @@ export function CreateWorkspaceDialog() {
       setRootPath("");
       setShowAdvanced(false);
       setStarter("blank");
-      setVisibility("private");
     } catch (err) {
       toast({
         title: t("workspace.dialog.failed"),
@@ -197,42 +193,11 @@ export function CreateWorkspaceDialog() {
           </div>
         </div>
 
-        {/* Visibility toggle */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">
-            {t("workspace.dialog.visibilityLabel")}
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <Card
-              interactive
-              selected={visibility === "private"}
-              className="flex items-start gap-3 px-3 py-3 cursor-pointer"
-              onClick={() => setVisibility("private")}
-            >
-              <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-foreground">{t("workspace.visibility.private")}</p>
-                <p className="text-2xs text-muted-foreground mt-0.5">
-                  {t("workspace.dialog.visibilityPrivateDesc")}
-                </p>
-              </div>
-            </Card>
-            <Card
-              interactive
-              selected={visibility === "public"}
-              className="flex items-start gap-3 px-3 py-3 cursor-pointer"
-              onClick={() => setVisibility("public")}
-            >
-              <Globe className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-foreground">{t("workspace.visibility.public")}</p>
-                <p className="text-2xs text-muted-foreground mt-0.5">
-                  {t("workspace.dialog.visibilityPublicDesc")}
-                </p>
-              </div>
-            </Card>
-          </div>
-        </div>
+        {/* Visibility selector intentionally removed — the "public" option
+            isn't honoured by the access guard yet (only built-in workspaces
+            are publicly reachable). Hidden until visibility is properly wired
+            through canAccessWorkspace + read/write separation. New
+            workspaces default to "private" on the server. */}
 
         <button
           type="button"

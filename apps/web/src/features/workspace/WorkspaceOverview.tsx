@@ -30,8 +30,6 @@ import {
   Layout,
   Code2,
   Plus,
-  Globe,
-  Lock,
   Zap,
   MessageSquare,
   MessageSquarePlus,
@@ -73,7 +71,6 @@ import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
-import type { WorkspaceVisibility } from "@ariadne/shared";
 
 // The CodeMirror-backed editors are heavy; load them only when their tab opens.
 const SurfaceEditor = lazy(() =>
@@ -494,21 +491,6 @@ export function WorkspaceOverview() {
     }
   };
 
-  const handleVisibilityToggle = async () => {
-    const next: WorkspaceVisibility = ws.visibility === "public" ? "private" : "public";
-    try {
-      await updateWorkspace.mutateAsync({ id: ws.id, input: { visibility: next } });
-      toast({
-        title: next === "public"
-          ? t("workspace.visibility.madePublic")
-          : t("workspace.visibility.madePrivate"),
-        variant: "success",
-      });
-    } catch {
-      toast({ title: t("workspace.visibility.failed"), variant: "error" });
-    }
-  };
-
   const handleNewChatHere = async () => {
     try {
       const chat = await createChat.mutateAsync({ workspaceId: ws.id });
@@ -894,36 +876,17 @@ export function WorkspaceOverview() {
           description={
             <span className="flex items-center gap-2">
               <span className="font-mono text-xs">{ws.rootPath}</span>
-              {/* Visibility badge */}
-              {ws.visibility === "public" ? (
-                <span className="flex items-center gap-1 text-2xs text-accent font-medium">
-                  <Globe className="h-3 w-3" />
-                  {t("workspace.visibility.public")}
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-2xs text-muted-foreground">
-                  <Lock className="h-3 w-3" />
-                  {t("workspace.visibility.private")}
-                </span>
-              )}
+              {/* Visibility badge intentionally removed: the public option in
+                  the DB isn't honoured by the access guard yet (only built-in
+                  workspaces are treated as public), so showing a public/private
+                  badge here lied about reachability. Hidden until visibility
+                  is properly wired through canAccessWorkspace + read/write
+                  separation. */}
             </span>
           }
           action={
             <div className="flex items-center gap-2">
-              {/* Visibility toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={ws.visibility === "public"
-                  ? <Globe className="h-3.5 w-3.5" />
-                  : <Lock className="h-3.5 w-3.5" />}
-                loading={updateWorkspace.isPending}
-                onClick={() => void handleVisibilityToggle()}
-              >
-                {ws.visibility === "public"
-                  ? t("workspace.visibility.makePrivate")
-                  : t("workspace.visibility.makePublic")}
-              </Button>
+              {/* Visibility toggle hidden for the same reason as the badge. */}
               <Button
                 variant="secondary"
                 size="sm"
