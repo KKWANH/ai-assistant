@@ -305,6 +305,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         let agentSearchResults: SearchResult[] | null = null;
         let contextSearchResults: SearchResult[] | null = null;
         let generatedTitle: string | null = null;
+        // Title generation runs in parallel with the main stream — see
+        // `chatTitlePromise` below where it's kicked off. Resolved before `done`.
+        let chatTitlePromise: Promise<string> | null = null;
 
         if (!isProviderConfigured(settings.provider)) {
           // No API key for the selected provider — explain it plainly rather
@@ -319,6 +322,14 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
               : settings.model;
           const rawProvider = await getProvider({ provider: settings.provider, model });
           const provider = meteringProvider(rawProvider, assistantMsgId, model);
+
+          // First message of a fresh chat → start generating its title
+          // immediately, overlapped with the main answer. Resolved at the
+          // bottom of this block before we emit `done`.
+          if (isFirstMessage && isDefaultTitle && hasContent) {
+            chatTitlePromise = generateChatTitle(provider, content, controller.signal)
+              .catch(() => "");
+          }
 
           // Best-effort: surface a relevant workspace action as a chat
           // suggestion. Runs in parallel with the answer — never blocks it.
@@ -367,11 +378,17 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
             }
           } else {
             // Regular streaming chat. Resolve web search: off | on | auto.
+            // For "auto" we fire the classifier in parallel with the rest
+            // of context-building (attachment parsing, workspace file I/O)
+            // by passing it as a Promise — buildChatContext awaits it just
+            // before the search step, so the round-trip overlaps with I/O.
             const webMode = webSearch ?? "off";
-            let doWebSearch = webMode === "on";
+            let webSearchInput: boolean | Promise<boolean>;
             if (webMode === "auto" && hasContent) {
               emit({ type: "status", text: "Checking whether a web search helps…" });
-              doWebSearch = await decideWebSearch(provider, content, controller.signal);
+              webSearchInput = decideWebSearch(provider, content, controller.signal);
+            } else {
+              webSearchInput = webMode === "on";
             }
 
             emit({ type: "status", text: "Building context…" });
@@ -380,7 +397,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
               contextResult = await buildChatContext(chat, historyWithoutCurrent, {
                 content,
                 attachments: attachmentRefs,
-                webSearch: doWebSearch,
+                webSearch: webSearchInput,
               }, req.account?.context);
             } catch (err) {
               logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
@@ -436,10 +453,11 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
             }
           }
 
-          // First message of a fresh chat — upgrade the placeholder title to
-          // a short LLM-written summary of the user's opening message.
-          if (isFirstMessage && isDefaultTitle && hasContent && assistantContent.trim()) {
-            const title = await generateChatTitle(provider, content, controller.signal);
+          // First-message title was kicked off in parallel with the main
+          // stream — resolve it now (usually already done) and only apply it
+          // if the assistant actually produced output.
+          if (chatTitlePromise && assistantContent.trim()) {
+            const title = await chatTitlePromise;
             if (title) generatedTitle = title;
           }
         }

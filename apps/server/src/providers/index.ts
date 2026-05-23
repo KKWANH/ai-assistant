@@ -122,34 +122,56 @@ export function extractJson(raw: string): string {
   return end === -1 ? s : s.slice(0, end + 1);
 }
 
-export async function getProvider(settings: Pick<Settings, "provider" | "model">): Promise<AiProvider> {
-  const { provider } = settings;
+/**
+ * Per-process provider instance cache, keyed by `${id}|${model}`.
+ *
+ * Without this, every chat message instantiates a fresh SDK client; the
+ * underlying HTTPS keep-alive pool then has to warm up from scratch for the
+ * first request. Caching the provider keeps that pool hot across turns and
+ * shaves a measurable slice off TTFT on warm processes.
+ */
+const providerCache = new Map<string, AiProvider>();
 
+export async function getProvider(settings: Pick<Settings, "provider" | "model">): Promise<AiProvider> {
+  const { provider, model } = settings;
+  const key = `${provider}|${model}`;
+  const cached = providerCache.get(key);
+  if (cached) return cached;
+
+  let instance: AiProvider;
   switch (provider) {
     case "anthropic": {
       const { AnthropicProvider } = await import("./anthropic.js");
-      return new AnthropicProvider(settings.model);
+      instance = new AnthropicProvider(model);
+      break;
     }
     case "openai": {
       const { OpenAIProvider } = await import("./openai.js");
-      return new OpenAIProvider(settings.model);
+      instance = new OpenAIProvider(model);
+      break;
     }
     case "moonshot": {
       const { MoonshotProvider } = await import("./openai.js");
-      return new MoonshotProvider(settings.model);
+      instance = new MoonshotProvider(model);
+      break;
     }
     case "ollama": {
       const { OllamaProvider } = await import("./openai.js");
-      return new OllamaProvider(settings.model);
+      instance = new OllamaProvider(model);
+      break;
     }
     case "gemini": {
       const { GeminiProvider } = await import("./gemini.js");
-      return new GeminiProvider(settings.model);
+      instance = new GeminiProvider(model);
+      break;
     }
     case "mock":
     default: {
       const { MockProvider } = await import("./mock.js");
-      return new MockProvider();
+      instance = new MockProvider();
+      break;
     }
   }
+  providerCache.set(key, instance);
+  return instance;
 }

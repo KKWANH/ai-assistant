@@ -9,16 +9,29 @@
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
 const OLLAMA_TIMEOUT_MS = 8000;
+const MODEL_LIST_TTL_MS = 10_000;
+
+let cachedModels: { at: number; list: string[] } | null = null;
 
 /** Names of every model installed in the local Ollama daemon (empty if down). */
 export async function listOllamaModels(): Promise<string[]> {
+  // Hot path: every chat turn calls resolveOllamaModel → here. A short TTL
+  // avoids a localhost round-trip on back-to-back turns while still picking
+  // up newly-installed models within ~10s.
+  const now = Date.now();
+  if (cachedModels && now - cachedModels.at < MODEL_LIST_TTL_MS) {
+    return cachedModels.list;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
   try {
     const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: controller.signal });
     if (!res.ok) return [];
     const data = (await res.json()) as { models?: Array<{ name: string }> };
-    return (data.models ?? []).map((m) => m.name).filter((n) => n.length > 0);
+    const list = (data.models ?? []).map((m) => m.name).filter((n) => n.length > 0);
+    cachedModels = { at: now, list };
+    return list;
   } catch {
     return [];
   } finally {

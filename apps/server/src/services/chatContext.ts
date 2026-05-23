@@ -52,11 +52,32 @@ export function appendUserProfile(system: string, accountContext: string | undef
 export async function buildChatContext(
   chat: Chat,
   history: ChatMessage[],
-  userMessage: { content: string; attachments?: AttachmentRef[]; webSearch?: boolean },
+  userMessage: {
+    content: string;
+    attachments?: AttachmentRef[];
+    /**
+     * Whether to include a live web search in the context. Can be a Promise
+     * so the caller can fire a parallel "should I search?" classifier and let
+     * the slow I/O (attachment parsing, workspace files) overlap with it —
+     * the original sequential `await decide → await build` cost 300–600ms.
+     */
+    webSearch?: boolean | Promise<boolean>;
+  },
   accountContext?: string
 ): Promise<ChatContextResult> {
-  const parts: string[] = [];
+  // Resolve the web-search promise (or boolean) at the latest possible
+  // moment, so attachment parsing and workspace-snapshot I/O run in parallel
+  // with it. The actual search call still happens later, inline at its slot.
+  const webSearchPromise: Promise<boolean> =
+    userMessage.webSearch instanceof Promise
+      ? userMessage.webSearch
+      : Promise.resolve(Boolean(userMessage.webSearch));
+
   const images: ProviderImage[] = [];
+  let attachmentBlock: string | undefined;
+  let webBlock: string | undefined;
+  let workspaceBlock: string | undefined;
+  let historyBlock: string | undefined;
   let searchResults: SearchResult[] | null = null;
 
   // 1. Attached files / images
@@ -79,12 +100,14 @@ export async function buildChatContext(
       }
     }
     if (fileParts.length > 0) {
-      parts.push(fileParts.join("\n\n"));
+      attachmentBlock = fileParts.join("\n\n");
     }
   }
 
-  // 2. Web search
-  if (userMessage.webSearch && userMessage.content.trim()) {
+  // 2. Web search — await the decision (now overlapped with attachment I/O
+  //    above and the workspace I/O below).
+  const wantsWebSearch = await webSearchPromise;
+  if (wantsWebSearch && userMessage.content.trim()) {
     try {
       const searchResp = await performSearch(userMessage.content.trim());
       searchResults = searchResp.results;
@@ -92,7 +115,7 @@ export async function buildChatContext(
         const resultText = searchResults
           .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
           .join("\n\n");
-        parts.push(`--- Web search results (${searchResp.provider}) ---\n${resultText}`);
+        webBlock = `--- Web search results (${searchResp.provider}) ---\n${resultText}`;
       }
     } catch {
       // search failure is non-fatal
@@ -110,31 +133,36 @@ export async function buildChatContext(
         return `  ${f.path}${hint} (~${f.estimatedTokens.toString()} tokens)`;
       });
       const more = snapshot.files.length > 60 ? `\n  … and ${(snapshot.files.length - 60).toString()} more files` : "";
-      parts.push(
+      const indexPart =
         `--- Workspace file index (${snapshot.fileCount.toString()} files, last scanned ${snapshot.createdAt}) ---\n` +
-          manifestLines.join("\n") +
-          more
-      );
+        manifestLines.join("\n") +
+        more;
 
       // Inline the content of the smallest text files so the model can
       // reason over the workspace itself, not just its file list.
       const ws = dbGetWorkspace(chat.workspaceId);
+      let contentPart: string | undefined;
       if (ws) {
         const fileContent = await readWorkspaceFiles(ws.rootPath, snapshot.files);
         if (fileContent) {
-          parts.push(`--- Workspace file contents ---\n${fileContent}`);
+          contentPart = `--- Workspace file contents ---\n${fileContent}`;
         }
       }
+      workspaceBlock = contentPart ? `${indexPart}\n\n${contentPart}` : indexPart;
     }
   }
 
   // 4. Conversation history (cap to ~20 messages / 8k chars)
   const historyTurns = buildHistoryText(history);
   if (historyTurns) {
-    parts.push(`--- Conversation history ---\n${historyTurns}`);
+    historyBlock = `--- Conversation history ---\n${historyTurns}`;
   }
 
-  // 5. Current user message
+  // 5. Current user message — assemble in the canonical section order
+  //    (attachments → web → workspace → history → user).
+  const parts = [attachmentBlock, webBlock, workspaceBlock, historyBlock].filter(
+    (s): s is string => !!s,
+  );
   const contextBlock = parts.length > 0 ? parts.join("\n\n") + "\n\n" : "";
   const prompt = `${contextBlock}User: ${userMessage.content}`;
 
