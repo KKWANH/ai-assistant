@@ -21,6 +21,7 @@ import type { ProviderImage } from "../providers/index.js";
 import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
+import { retrieveRelevantChunks, formatChunksForPrompt } from "./retrieval.js";
 
 // ---------------------------------------------------------------------------
 // Public return type
@@ -138,14 +139,32 @@ export async function buildChatContext(
         manifestLines.join("\n") +
         more;
 
-      // Inline the content of the smallest text files so the model can
-      // reason over the workspace itself, not just its file list.
+      // Retrieve the chunks most relevant to *this* user message rather
+      // than just inlining the smallest files (which crowded out larger
+      // files that actually contained the answer). The keyword ranker
+      // here works locally with no external API; an embedding-based
+      // retriever can be substituted behind the same call later.
       const ws = dbGetWorkspace(chat.workspaceId);
       let contentPart: string | undefined;
-      if (ws) {
-        const fileContent = await readWorkspaceFiles(ws.rootPath, snapshot.files);
-        if (fileContent) {
-          contentPart = `--- Workspace file contents ---\n${fileContent}`;
+      if (ws && userMessage.content.trim()) {
+        const ranked = await retrieveRelevantChunks(
+          ws.rootPath,
+          snapshot.files,
+          userMessage.content,
+        );
+        const rendered = formatChunksForPrompt(ranked);
+        if (rendered) {
+          contentPart = `--- Workspace excerpts (most relevant to the question) ---\n${rendered}`;
+        }
+      }
+      // Fall back to the legacy "smallest files inline" pass when the
+      // query has no extractable keywords (e.g. a one-word greeting in a
+      // workspace chat) — we still want SOMETHING from the workspace in
+      // context so the model can reference it.
+      if (!contentPart && ws) {
+        const fallback = await readWorkspaceFiles(ws.rootPath, snapshot.files);
+        if (fallback) {
+          contentPart = `--- Workspace file contents ---\n${fallback}`;
         }
       }
       workspaceBlock = contentPart ? `${indexPart}\n\n${contentPart}` : indexPart;
