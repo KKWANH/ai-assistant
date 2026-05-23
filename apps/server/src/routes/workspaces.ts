@@ -21,6 +21,7 @@ import * as readingStarter from "../surface/readingStarter.js";
 import * as chefbookStarter from "../surface/chefbookStarter.js";
 import * as codeStarter from "../surface/codeStarter.js";
 import * as decisionsStarter from "../surface/decisionsStarter.js";
+import * as papersStarter from "../surface/papersStarter.js";
 import logger from "../logger.js";
 import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
@@ -80,6 +81,18 @@ const STARTERS: Record<
     surface: decisionsStarter.SURFACE_TSX,
     actions: decisionsStarter.ACTIONS_YAML,
   },
+  papers: {
+    files: {
+      "README.md": papersStarter.PAPERS_README,
+      "papers/notes/Smith24-rag-survey.md": papersStarter.NOTES_SMITH24,
+      "papers/notes/Park23-hybrid-retrieval.md": papersStarter.NOTES_PARK23,
+      "papers/notes/Lee24-graph-rag.md": papersStarter.NOTES_LEE24,
+      "references.bib": papersStarter.REFERENCES_BIB,
+      "reading-queue.md": papersStarter.READING_QUEUE,
+    },
+    surface: papersStarter.SURFACE_TSX,
+    actions: papersStarter.ACTIONS_YAML,
+  },
 };
 
 export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
@@ -114,6 +127,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       chefbook: "cooking",
       code: "code",
       decisions: "decisions",
+      papers: "research",
       blank: null,
     };
     const category = starter ? categoryByStarter[starter] ?? null : null;

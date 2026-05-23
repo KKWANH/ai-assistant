@@ -803,6 +803,14 @@ export function useOpenAttemptForChat(chatId: string) {
   });
 }
 
+export function useChatAttempts(chatId: string) {
+  return useQuery({
+    queryKey: ["chat-attempts", chatId] as const,
+    queryFn: () => api.listAttemptsForChat(chatId),
+    enabled: !!chatId,
+  });
+}
+
 export function useAttempt(attemptId: string) {
   return useQuery({
     queryKey: ["attempt", attemptId] as const,

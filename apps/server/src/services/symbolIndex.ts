@@ -1,18 +1,22 @@
 /**
- * Symbol indexer — v1 is regex-based, intentionally simple.
+ * Symbol indexer — pluggable provider architecture.
  *
- * Tree-sitter would be more accurate but each grammar bundle is
- * 500 KB–2 MB of WASM and we'd be carrying five. The regex patterns
- * below catch the symbol kinds that matter for retrieval boosting
- * (function, class, method, const) across JavaScript/TypeScript,
- * Python, Go, Rust, and Java. False positives are cheap (retrieval
- * just gets a small score nudge); false negatives mean the embedding
- * + keyword paths carry the load, which they already do well.
+ * Today the only provider is regex-based (this file's patterns). A
+ * future tree-sitter provider plugs in by implementing the same
+ * `extractSymbols(text, lang) → SymbolRow[]` shape, and the chooser
+ * here picks tree-sitter when its WASM grammars are available, falling
+ * back to regex otherwise. See docs/SYMBOL_INDEX_PLAN.md for the
+ * grammar-loading design (lazy fetch into ~/.ariadne/grammars/, cached
+ * across server restarts).
+ *
+ * The regex patterns catch the symbol kinds that matter for retrieval
+ * boosting (function, class, method, const) across JavaScript /
+ * TypeScript, Python, Go, Rust, and Java. False positives are cheap
+ * (retrieval just gets a +2.0 nudge); false negatives mean the
+ * embedding + keyword paths carry the load, which they already do well.
  *
  * The indexer runs once per scan, in the same background slot as the
- * embedding indexer. Symbols live in a tiny SQLite table; retrieval
- * adds a +1.0 bonus per chunk whose path appears in the matched-
- * symbols set for the query.
+ * embedding indexer.
  */
 import fs from "node:fs";
 import path from "node:path";

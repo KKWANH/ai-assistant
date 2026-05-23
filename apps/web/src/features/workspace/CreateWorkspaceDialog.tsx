@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock, ChefHat, Code2, ClipboardList } from "lucide-react";
+import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock, ChefHat, Code2, ClipboardList, Microscope } from "lucide-react";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
@@ -13,7 +13,7 @@ import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import { FolderPicker } from "./FolderPicker";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
-type Starter = "blank" | "portfolio" | "budget" | "reading" | "chefbook" | "code" | "decisions";
+type Starter = "blank" | "portfolio" | "budget" | "reading" | "chefbook" | "code" | "decisions" | "papers";
 
 /** Workspace templates shown in the picker — Blank plus ready-made example projects. */
 const TEMPLATE_OPTIONS = [
@@ -58,6 +58,12 @@ const TEMPLATE_OPTIONS = [
     icon: ClipboardList,
     labelKey: "workspace.dialog.starterDecisions",
     descKey: "workspace.dialog.starterDecisionsDesc",
+  },
+  {
+    id: "papers",
+    icon: Microscope,
+    labelKey: "workspace.dialog.starterPapers",
+    descKey: "workspace.dialog.starterPapersDesc",
   },
 ] as const;
 

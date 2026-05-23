@@ -9,6 +9,7 @@ import type { FastifyInstance } from "fastify";
 import {
   getAttempt,
   getOpenAttemptForChat,
+  listAttemptsForChat,
   applyAttempt,
   abandonAttempt,
   stagingIdForAttempt,
@@ -30,6 +31,20 @@ export async function attemptRoutes(app: FastifyInstance): Promise<void> {
       }
       const attempt = getOpenAttemptForChat(req.params.chatId);
       return reply.send(attempt ?? null);
+    },
+  );
+
+  // Every attempt for the chat (open + applied + abandoned), newest
+  // first. Powers the attempts list page.
+  app.get<{ Params: { chatId: string } }>(
+    "/chats/:chatId/attempts",
+    async (req, reply) => {
+      const chat = dbGetChat(req.params.chatId);
+      if (!chat) return reply.status(404).send({ error: "Chat not found" });
+      if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      return reply.send(listAttemptsForChat(req.params.chatId));
     },
   );
 

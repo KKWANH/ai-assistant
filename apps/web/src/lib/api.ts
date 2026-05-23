@@ -447,6 +447,9 @@ import type { AgentAttempt } from "@ariadne/shared";
 export const getOpenAttemptForChat = (chatId: string) =>
   request<AgentAttempt | null>("GET", `/chats/${chatId}/open-attempt`);
 
+export const listAttemptsForChat = (chatId: string) =>
+  request<AgentAttempt[]>("GET", `/chats/${chatId}/attempts`);
+
 export interface AttemptPayload {
   attempt: AgentAttempt;
   manifest: StagedManifest | null;

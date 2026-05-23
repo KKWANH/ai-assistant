@@ -23,6 +23,7 @@ import {
   dbInsertAttempt,
   dbGetAttempt,
   dbGetOpenAttemptForChat,
+  dbListAttemptsForChat,
   dbUpdateAttempt,
   dbGetWorkspace,
 } from "../db/repo.js";
@@ -72,6 +73,11 @@ export function getAttempt(id: string): AgentAttempt | null {
 export function getOpenAttemptForChat(chatId: string): AgentAttempt | null {
   const a = dbGetOpenAttemptForChat(chatId);
   return a ? decorateWithFileCount(a) : null;
+}
+
+/** Every attempt for the chat, newest first — open + applied + abandoned. */
+export function listAttemptsForChat(chatId: string): AgentAttempt[] {
+  return dbListAttemptsForChat(chatId).map(decorateWithFileCount);
 }
 
 /** Apply selected files from the attempt. Marks the attempt 'applied'

@@ -79,6 +79,11 @@ const AttemptDiffView = lazyWithReload(() =>
     default: m.AttemptDiffView,
   }))
 );
+const AttemptsListView = lazyWithReload(() =>
+  import("./features/runs/AttemptsListView").then((m) => ({
+    default: m.AttemptsListView,
+  }))
+);
 const SettingsView = lazyWithReload(() =>
   import("./features/settings/SettingsView").then((m) => ({
     default: m.SettingsView,
@@ -138,6 +143,7 @@ function AppContent() {
             <Route path="/runs/:id/diff" element={<StagedDiffView />} />
             <Route path="/runs/:id" element={<RunDetailView />} />
             <Route path="/attempts/:id/diff" element={<AttemptDiffView />} />
+            <Route path="/chat/:chatId/attempts" element={<AttemptsListView />} />
 
             {/* Utility */}
             <Route path="/settings" element={<SettingsView />} />

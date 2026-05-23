@@ -871,6 +871,17 @@ export function dbGetOpenAttemptForChat(chatId: string): AgentAttempt | null {
   return row ? rowToAttempt(row) : null;
 }
 
+/** All attempts for a chat — newest first. Used by the attempts list page. */
+export function dbListAttemptsForChat(chatId: string): AgentAttempt[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      "SELECT * FROM agent_attempts WHERE chat_id = ? ORDER BY created_at DESC",
+    )
+    .all(chatId) as Record<string, unknown>[];
+  return rows.map(rowToAttempt);
+}
+
 export function dbUpdateAttempt(
   id: string,
   patch: { status?: AttemptStatus; appliedAt?: string | null; abandonedAt?: string | null; commitSha?: string | null },

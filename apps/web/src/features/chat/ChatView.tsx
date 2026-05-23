@@ -26,6 +26,7 @@ import {
   useStopGeneration,
   useRunAction,
   useOpenAttemptForChat,
+  useChatAttempts,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
@@ -395,14 +396,32 @@ function ThreadView({ chatId }: { chatId: string }) {
 function OpenAttemptChip({ chatId }: { chatId: string }) {
   const { t } = useT();
   const { data: attempt } = useOpenAttemptForChat(chatId);
-  if (!attempt || attempt.fileCount === 0) return null;
+  const { data: allAttempts } = useChatAttempts(chatId);
+  const closedCount = (allAttempts ?? []).filter((a) => a.status !== "open").length;
+
+  // Nothing to surface — no open attempt with files AND no historical
+  // attempts. The chat shows zero chrome.
+  if ((!attempt || attempt.fileCount === 0) && closedCount === 0) return null;
+
   return (
-    <Link
-      to={`/attempts/${attempt.id}/diff`}
-      className="block mb-2 px-3 py-2 rounded-lg border border-accent/40 bg-accent/10 text-xs text-accent hover:bg-accent/15 transition-colors"
-    >
-      {t("attempts.chipSummary", { n: attempt.fileCount })}
-    </Link>
+    <div className="mb-2 flex items-center gap-2">
+      {attempt && attempt.fileCount > 0 && (
+        <Link
+          to={`/attempts/${attempt.id}/diff`}
+          className="flex-1 block px-3 py-2 rounded-lg border border-accent/40 bg-accent/10 text-xs text-accent hover:bg-accent/15 transition-colors"
+        >
+          {t("attempts.chipSummary", { n: attempt.fileCount })}
+        </Link>
+      )}
+      {closedCount > 0 && (
+        <Link
+          to={`/chat/${chatId}/attempts`}
+          className="px-3 py-2 rounded-lg border border-border bg-surface-2 text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors shrink-0"
+        >
+          {t("attempts.viewAllN", { n: closedCount })}
+        </Link>
+      )}
+    </div>
   );
 }
 
