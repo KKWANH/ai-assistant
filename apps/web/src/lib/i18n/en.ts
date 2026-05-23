@@ -265,6 +265,8 @@ const en = {
   "workspace.dialog.starterBudgetDesc": "Income & expense dashboard with cashflow and savings-rate charts.",
   "workspace.dialog.starterReading": "Reading Library",
   "workspace.dialog.starterReadingDesc": "Track books and research with status, ratings and a reading-pace chart.",
+  "workspace.dialog.starterChefbook": "Chefbook",
+  "workspace.dialog.starterChefbookDesc": "Kitchen tracker — ingredients with expiry, tools, and a calorie-tagged recipe book.",
   "workspace.dialog.patternsToggle": "Advanced — which files Ariadne reads",
   "workspace.dialog.includeLabel": "Files to include",
   "workspace.dialog.includeHelp": "Name patterns Ariadne is allowed to read — one per line. Example: **/*.pdf reads every PDF.",

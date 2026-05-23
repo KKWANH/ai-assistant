@@ -18,11 +18,20 @@ import { buildSurface } from "../services/surfaceBuild.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
 import * as budgetStarter from "../surface/budgetStarter.js";
 import * as readingStarter from "../surface/readingStarter.js";
+import * as chefbookStarter from "../surface/chefbookStarter.js";
 import logger from "../logger.js";
 import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
-/** Sample files + custom surface scaffolded for each non-blank workspace template. */
-const STARTERS: Record<string, { files: Record<string, string>; surface: string }> = {
+/**
+ * Sample files + custom surface scaffolded for each non-blank workspace
+ * template. Optional `actions` is a YAML string that lands at
+ * `.ariadne/actions.yaml` so the workspace ships with usable actions
+ * the user can run from the 'Create & Run' tab immediately.
+ */
+const STARTERS: Record<
+  string,
+  { files: Record<string, string>; surface: string; actions?: string }
+> = {
   portfolio: {
     files: {
       "holdings.csv": portfolioStarter.HOLDINGS_CSV,
@@ -30,6 +39,7 @@ const STARTERS: Record<string, { files: Record<string, string>; surface: string 
       "history.csv": portfolioStarter.HISTORY_CSV,
     },
     surface: portfolioStarter.SURFACE_TSX,
+    actions: portfolioStarter.ACTIONS_YAML,
   },
   budget: {
     files: { "budget.csv": budgetStarter.BUDGET_CSV },
@@ -38,6 +48,14 @@ const STARTERS: Record<string, { files: Record<string, string>; surface: string 
   reading: {
     files: { "library.csv": readingStarter.LIBRARY_CSV },
     surface: readingStarter.SURFACE_TSX,
+  },
+  chefbook: {
+    files: {
+      "ingredients.csv": chefbookStarter.INGREDIENTS_CSV,
+      "tools.csv": chefbookStarter.TOOLS_CSV,
+      "recipes.csv": chefbookStarter.RECIPES_CSV,
+    },
+    surface: chefbookStarter.SURFACE_TSX,
   },
 };
 
@@ -70,6 +88,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       portfolio: "finance",
       budget: "finance",
       reading: "research",
+      chefbook: "cooking",
       blank: null,
     };
     const category = starter ? categoryByStarter[starter] ?? null : null;
@@ -100,6 +119,14 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
           fs.writeFileSync(path.join(rootPath, filename), content, "utf-8");
         }
         writeSurface(rootPath, starterDef.surface);
+        if (starterDef.actions) {
+          // The .ariadne/ folder already exists from ensureAriadneFolder() above.
+          fs.writeFileSync(
+            path.join(rootPath, ".ariadne", "actions.yaml"),
+            starterDef.actions,
+            "utf-8",
+          );
+        }
         buildSurface(rootPath).catch((err: unknown) => {
           logger.warn({ err, starter }, "Starter surface build failed");
         });

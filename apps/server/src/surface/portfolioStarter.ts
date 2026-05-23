@@ -48,6 +48,62 @@ export const HISTORY_CSV = `date,value,fx_effect
 2026-05,170600,-1531
 `;
 
+/**
+ * Seed actions for the portfolio starter. Each one is a block-pipeline
+ * the user can fire from the 'Create & Run' tab. The macro_brief action
+ * is intentionally heavy — it reads holdings, pulls a fresh web slice,
+ * then asks the model for a structured monthly write-up. A scheduled
+ * trigger for this will arrive in a follow-up batch; today it's manual.
+ */
+export const ACTIONS_YAML = `# Portfolio starter — seed actions for the 'Create & Run' tab.
+# Edit names / prompts / blocks freely; the file lives at .ariadne/actions.yaml.
+
+actions:
+  - id: monthly_macro_brief
+    name: 월간 거시 분석 브리프
+    description: 시장 거시 데이터와 보유 종목 노출도를 종합해 월간 브리프를 한국어로 작성합니다.
+    category: finance
+    blocks:
+      - id: read_holdings
+        type: read_file
+        config:
+          path: holdings.csv
+      - id: macro_news
+        type: web_analysis
+        config:
+          query: "this month macroeconomic news Federal Reserve rate decision inflation US Europe Korea sector rotation"
+      - id: synthesis
+        type: ask_ai
+        config:
+          prompt: |
+            아래는 두 가지 입력입니다 — 내 보유 종목 (holdings.csv) 과 이번 달 거시 뉴스 요약입니다.
+            이것을 바탕으로 4개 섹션의 월간 거시 분석 브리프를 한국어로 작성하세요. 마크다운 헤더와 짧은 문단으로.
+
+            1) 이번 달 시장의 핵심 거시 이벤트 (Fed·금리·인플레이션·환율·주요 지정학적 뉴스)
+            2) 내 보유 포트폴리오의 섹터·통화 노출도 분석 (어떤 거시 변수에 가장 민감한지)
+            3) 다음 1–3개월 동안 주의해야 할 리스크 항목 3개
+            4) 보유 종목 단위로 짧은 액션 권고 (보유 유지 / 비중 조정 / 추가 매수 검토 / 관망 등 — 사유 1줄과 함께)
+
+            중요: 단정적인 매수·매도 추천이 아니라 "고려할 수 있는 시나리오" 어조로 작성. 인용은 출처 번호 [1], [2] 형태로 본문에 자연스럽게 섞으세요.
+
+  - id: rebalance_check
+    name: 리밸런싱 점검
+    description: 현재 자산군 배분이 목표 배분에서 얼마나 벗어났는지 분석합니다.
+    category: finance
+    blocks:
+      - id: read_holdings
+        type: read_file
+        config:
+          path: holdings.csv
+      - id: analysis
+        type: ask_ai
+        config:
+          prompt: |
+            holdings.csv를 보고 현재 자산군별 비중 (주식 / ETF / 원자재 / 암호화폐) 을 계산하고,
+            보편적으로 권장되는 분산 (예: 주식 60% / ETF 25% / 원자재 10% / 암호화폐 5%) 과 비교해
+            어느 자산군이 과도하거나 부족한지 표로 보여 주세요. 마지막에 리밸런싱 액션 한 줄을 제안하세요.
+`;
+
 export const SURFACE_TSX = `/**
  * Portfolio Analysis — custom Ariadne surface (multi-currency analyst dashboard).
  *

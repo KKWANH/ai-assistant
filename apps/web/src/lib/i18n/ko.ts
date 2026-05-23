@@ -258,6 +258,8 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.starterBudgetDesc": "수입·지출 대시보드 — 현금 흐름과 저축률 차트 포함.",
   "workspace.dialog.starterReading": "독서 라이브러리",
   "workspace.dialog.starterReadingDesc": "책과 자료를 상태·평점·독서 속도 차트로 추적합니다.",
+  "workspace.dialog.starterChefbook": "Chefbook",
+  "workspace.dialog.starterChefbookDesc": "냉장고 재료·도구·레시피를 한 곳에 — 만료 임박 알림과 칼로리 태그 포함.",
   "workspace.dialog.patternsToggle": "고급 — Ariadne가 읽을 파일 범위",
   "workspace.dialog.includeLabel": "포함할 파일",
   "workspace.dialog.includeHelp": "Ariadne가 읽을 수 있는 이름 패턴 — 한 줄에 하나씩. 예: `**/*.pdf`는 모든 PDF를 의미합니다.",
