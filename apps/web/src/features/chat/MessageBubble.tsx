@@ -555,9 +555,14 @@ function UserMessageBubble({
       cancelEdit();
       return;
     }
-    void editMessage
-      .mutateAsync({ chatId: message.chatId, messageId: message.id, content: next })
-      .finally(() => setEditing(false));
+    // Close the editor immediately — the streamed regenerate plays out in
+    // the assistant bubble below while the user message shows the new text.
+    setEditing(false);
+    void editMessage.mutateAsync({
+      chatId: message.chatId,
+      messageId: message.id,
+      content: next,
+    });
   };
 
   const revisionCount = message.revisions?.length ?? 0;

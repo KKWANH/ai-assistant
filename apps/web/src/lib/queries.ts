@@ -457,30 +457,95 @@ export function useStopGeneration() {
 }
 
 /**
- * Edit a user message's content. The previous text is appended to the
- * message's `revisions` log on the server. Patches the cached chat
- * (messages live inside the chat object, not a separate query) so the
- * UI updates without a refetch.
+ * Edit a user message and stream a fresh assistant reply. The server
+ * appends the prior content to the message's revisions log, deletes the
+ * now-stale assistant turn (and any later turns), then SSE-streams the
+ * regenerated answer — same event shape as useSendMessage.
  */
 export function useEditMessage() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      chatId,
-      messageId,
-      content,
-    }: {
-      chatId: string;
-      messageId: string;
-      content: string;
-    }) => api.editMessage(chatId, messageId, content),
-    onSuccess: (updated) => {
-      qc.setQueryData<Chat>(["chats", updated.chatId] as const, (prev) => {
-        if (!prev || !prev.messages) return prev;
-        return {
-          ...prev,
-          messages: prev.messages.map((m) => (m.id === updated.id ? updated : m)),
-        };
+  return useMutation<
+    void,
+    Error,
+    { chatId: string; messageId: string; content: string }
+  >({
+    mutationFn: async ({ chatId, messageId, content }) => {
+      const streamingId = `__streaming_${Date.now()}`;
+      await api.regenerateAfterEdit(chatId, messageId, { content }, {
+        // Replace the existing user-message bubble (revisions etc. updated)
+        // and drop every later message from the cache; add the streaming
+        // assistant placeholder right after the edited message.
+        onUserMessage: (editedMsg) => {
+          setCachedChat(qc, chatId, (old) => {
+            if (!old) return old;
+            const messages = old.messages ?? [];
+            const idx = messages.findIndex((m) => m.id === editedMsg.id);
+            if (idx === -1) return old;
+            const placeholder: ChatMessage = {
+              id: streamingId,
+              chatId,
+              role: "assistant",
+              content: "",
+              attachments: [],
+              webSearch: false,
+              searchResults: null,
+              agent: null,
+              createdAt: new Date().toISOString(),
+            };
+            return {
+              ...old,
+              messages: [
+                ...messages.slice(0, idx),
+                editedMsg,
+                placeholder,
+              ],
+            };
+          });
+        },
+        onDelta: (text) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({
+            ...m,
+            content: m.content + text,
+          }));
+        },
+        onStatus: (text) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({
+            ...m,
+            _streamStatus: text,
+          } as ChatMessage & { _streamStatus?: string }));
+        },
+        onAgentPlan: (steps) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({
+            ...m,
+            agent: { steps },
+          }));
+        },
+        onAgentStep: (step) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => {
+            const cur = m.agent?.steps ?? [];
+            const i = cur.findIndex((s) => s.id === step.id);
+            const updated: AgentStep[] = i >= 0
+              ? cur.map((s, idx) => (idx === i ? step : s))
+              : [...cur, step];
+            return { ...m, agent: { steps: updated } };
+          });
+        },
+        onDone: (finalMsg) => {
+          setCachedChat(qc, chatId, (old) => {
+            if (!old) return old;
+            const msgs = (old.messages ?? []).filter((m) => m.id !== streamingId);
+            return { ...old, messages: [...msgs, finalMsg] };
+          });
+          qc.setQueryData(["chat-active", chatId], { active: null });
+          void qc.invalidateQueries({ queryKey: ["chats"] });
+        },
+        onError: (error) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({
+            ...m,
+            _streamError: error,
+          } as ChatMessage & { _streamError?: string }));
+          qc.setQueryData(["chat-active", chatId], { active: null });
+        },
       });
     },
   });

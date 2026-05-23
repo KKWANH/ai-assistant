@@ -535,6 +535,23 @@ export function dbEditMessageContent(
   return { ...existing, content: newContent, revisions };
 }
 
+/**
+ * Delete every message in the chat with `created_at` strictly later than
+ * the given message. Used by the edit-and-regenerate flow — the old
+ * assistant reply (and any turns after it) become stale when the user
+ * edits the question.
+ */
+export function dbDeleteMessagesAfter(chatId: string, messageId: string): number {
+  const target = dbGetMessage(messageId);
+  if (!target || target.chatId !== chatId) return 0;
+  const db = getDb();
+  // `> ?` not `>= ?` — the edited user message itself stays put.
+  const res = db
+    .prepare("DELETE FROM chat_messages WHERE chat_id = ? AND created_at > ?")
+    .run(chatId, target.createdAt);
+  return Number(res.changes ?? 0);
+}
+
 export function dbListMessages(chatId: string): ChatMessage[] {
   const db = getDb();
   const rows = db

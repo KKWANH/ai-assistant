@@ -29,6 +29,7 @@ import {
   dbGetWorkspace,
   dbGetMessage,
   dbEditMessageContent,
+  dbDeleteMessagesAfter,
 } from "../db/repo.js";
 import { loadActionDefs } from "../services/actions.js";
 import { getProvider } from "../providers/index.js";
@@ -94,6 +95,193 @@ function friendlyProviderError(err: unknown, provider: ProviderId, locale: strin
   return locale === "ko"
     ? "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도하거나, 채팅 입력창의 모델 설정을 확인해 주세요."
     : "Something went wrong while generating a response. Please try again in a moment, or check the model settings in the chat box.";
+}
+
+// ---------------------------------------------------------------------------
+// Shared assistant-streaming core (used by both POST /messages and
+// POST /messages/:id/regenerate)
+// ---------------------------------------------------------------------------
+
+interface StreamReplyOptions {
+  chat: Chat;
+  /** History BEFORE the user turn we're answering. */
+  history: ChatMessage[];
+  userContent: string;
+  attachmentRefs: AttachmentRef[];
+  webSearchMode: "on" | "off" | "auto" | undefined;
+  agentMode: boolean;
+  /** Used for locale + saved profile context. */
+  accountLocale: string | undefined;
+  accountContext: string | undefined;
+  emit: (e: ChatStreamEvent) => void;
+  controller: AbortController;
+  assistantMsgId: string;
+  /** First user turn of a chat → may auto-write a title. */
+  shouldGenerateTitle: boolean;
+}
+
+interface StreamReplyResult {
+  assistantContent: string;
+  agentTrace: import("@ariadne/shared").AgentTrace | null;
+  searchResults: SearchResult[] | null;
+  generatedTitle: string | null;
+}
+
+/**
+ * Run the answer pass (no-key notice / agent / streaming chat) plus the
+ * conditional first-message title call. Returns what the caller needs to
+ * insert the assistant message and update the chat row.
+ */
+async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamReplyResult> {
+  const {
+    chat, history, userContent, attachmentRefs, webSearchMode, agentMode,
+    accountLocale, accountContext, emit, controller, assistantMsgId,
+    shouldGenerateTitle,
+  } = opts;
+
+  const settings = getActiveSettings();
+  const hasContent = userContent.trim().length > 0;
+
+  let assistantContent = "";
+  let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
+  let agentSearchResults: SearchResult[] | null = null;
+  let contextSearchResults: SearchResult[] | null = null;
+  let generatedTitle: string | null = null;
+
+  if (!isProviderConfigured(settings.provider)) {
+    assistantContent = noProviderKeyMessage(settings.provider, accountLocale);
+    emit({ type: "delta", text: assistantContent });
+    return { assistantContent, agentTrace, searchResults: null, generatedTitle: null };
+  }
+
+  const model =
+    settings.provider === "ollama"
+      ? await resolveOllamaModel(settings.model)
+      : settings.model;
+  const rawProvider = await getProvider({ provider: settings.provider, model });
+  const provider = meteringProvider(rawProvider, assistantMsgId, model);
+
+  // First-turn title generation runs in parallel with the answer, resolved
+  // before we return so the caller can apply it to the chat row.
+  const chatTitlePromise: Promise<string> | null = shouldGenerateTitle && hasContent
+    ? generateChatTitle(provider, userContent, controller.signal).catch(() => "")
+    : null;
+
+  // Best-effort: surface a relevant workspace action as a chat suggestion.
+  if (chat.workspaceId) {
+    const ws = dbGetWorkspace(chat.workspaceId);
+    if (ws) {
+      const { actions } = loadActionDefs(ws.rootPath);
+      if (actions.length > 0) {
+        void detectActionIntent(provider, userContent, actions, controller.signal)
+          .then((s) => {
+            if (s) emit({
+              type: "intent_suggestion",
+              actionId: s.actionId,
+              actionName: s.actionName,
+              reason: s.reason,
+            });
+          })
+          .catch(() => { /* fail-open */ });
+      }
+    }
+  }
+
+  if (agentMode) {
+    try {
+      const agentResult = await runAgent({
+        chat,
+        history,
+        userMessage: userContent,
+        provider,
+        emit,
+        signal: controller.signal,
+        accountContext,
+      });
+      assistantContent = agentResult.content;
+      agentTrace = agentResult.agent;
+      agentSearchResults = agentResult.searchResults;
+    } catch (err) {
+      if (controller.signal.aborted) {
+        assistantContent = "";
+      } else {
+        logger.warn({ chatId: chat.id, err }, "Agent loop error");
+        assistantContent = friendlyProviderError(err, settings.provider, accountLocale);
+        emit({ type: "delta", text: assistantContent });
+      }
+    }
+  } else {
+    const webMode = webSearchMode ?? "off";
+    let webSearchInput: boolean | Promise<boolean>;
+    if (webMode === "auto" && hasContent) {
+      emit({ type: "status", text: "Checking whether a web search helps…" });
+      webSearchInput = decideWebSearch(provider, userContent, controller.signal);
+    } else {
+      webSearchInput = webMode === "on";
+    }
+
+    emit({ type: "status", text: "Building context…" });
+    let contextResult;
+    try {
+      contextResult = await buildChatContext(chat, history, {
+        content: userContent,
+        attachments: attachmentRefs,
+        webSearch: webSearchInput,
+      }, accountContext);
+    } catch (err) {
+      logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
+      contextResult = {
+        system:
+          "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
+          "Always reply in the same language the user writes in.",
+        prompt: `User: ${userContent}`,
+        images: [],
+        searchResults: null,
+      };
+    }
+    contextSearchResults = contextResult.searchResults;
+
+    emit({ type: "status", text: "Generating…" });
+    try {
+      const hasImages = contextResult.images.length > 0;
+      if (hasImages && provider.completeWithImages) {
+        const result = await provider.completeWithImages({
+          system: contextResult.system,
+          prompt: contextResult.prompt,
+          images: contextResult.images,
+          signal: controller.signal,
+        });
+        assistantContent = result.text;
+        emit({ type: "delta", text: assistantContent });
+      } else {
+        await provider.completeStream(
+          { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },
+          (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+          (status) => { emit({ type: "status", text: status }); },
+        );
+      }
+    } catch (err) {
+      if (controller.signal.aborted) {
+        // Stopped by the user — keep whatever streamed so far.
+      } else {
+        logger.warn({ chatId: chat.id, err }, "AI provider streaming error");
+        assistantContent = friendlyProviderError(err, settings.provider, accountLocale);
+        emit({ type: "delta", text: assistantContent });
+      }
+    }
+  }
+
+  if (chatTitlePromise && assistantContent.trim()) {
+    const title = await chatTitlePromise;
+    if (title) generatedTitle = title;
+  }
+
+  return {
+    assistantContent,
+    agentTrace,
+    searchResults: agentSearchResults ?? contextSearchResults,
+    generatedTitle,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -301,168 +489,25 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           sseEmit(event);
         };
 
-        // --- Produce the answer: no-key notice, agent loop, or regular chat ---
-        let assistantContent: string;
-        let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
-        let agentSearchResults: SearchResult[] | null = null;
-        let contextSearchResults: SearchResult[] | null = null;
-        let generatedTitle: string | null = null;
-        // Title generation runs in parallel with the main stream — see
-        // `chatTitlePromise` below where it's kicked off. Resolved before `done`.
-        let chatTitlePromise: Promise<string> | null = null;
-
-        if (!isProviderConfigured(settings.provider)) {
-          // No API key for the selected provider — explain it plainly rather
-          // than letting a raw SDK auth error reach the user.
-          assistantContent = noProviderKeyMessage(settings.provider, req.account?.locale);
-          emit({ type: "delta", text: assistantContent });
-        } else {
-          // Local-first: run on whatever Ollama model is actually installed.
-          const model =
-            settings.provider === "ollama"
-              ? await resolveOllamaModel(settings.model)
-              : settings.model;
-          const rawProvider = await getProvider({ provider: settings.provider, model });
-          const provider = meteringProvider(rawProvider, assistantMsgId, model);
-
-          // First message of a fresh chat → start generating its title
-          // immediately, overlapped with the main answer. Resolved at the
-          // bottom of this block before we emit `done`.
-          if (isFirstMessage && isDefaultTitle && hasContent) {
-            chatTitlePromise = generateChatTitle(provider, content, controller.signal)
-              .catch(() => "");
-          }
-
-          // Best-effort: surface a relevant workspace action as a chat
-          // suggestion. Runs in parallel with the answer — never blocks it.
-          if (chat.workspaceId) {
-            const ws = dbGetWorkspace(chat.workspaceId);
-            if (ws) {
-              const { actions } = loadActionDefs(ws.rootPath);
-              if (actions.length > 0) {
-                void detectActionIntent(provider, content, actions, controller.signal)
-                  .then((s) => {
-                    if (s) emit({
-                      type: "intent_suggestion",
-                      actionId: s.actionId,
-                      actionName: s.actionName,
-                      reason: s.reason,
-                    });
-                  })
-                  .catch(() => { /* fail-open */ });
-              }
-            }
-          }
-
-          if (agentMode) {
-            // Agent plan-and-execute loop (it runs its own web_search steps).
-            try {
-              const agentResult = await runAgent({
-                chat,
-                history: historyWithoutCurrent,
-                userMessage: content,
-                provider,
-                emit,
-                signal: controller.signal,
-                accountContext: req.account?.context,
-              });
-              assistantContent = agentResult.content;
-              agentTrace = agentResult.agent;
-              agentSearchResults = agentResult.searchResults;
-            } catch (err) {
-              if (controller.signal.aborted) {
-                assistantContent = "";
-              } else {
-                logger.warn({ chatId: chat.id, err }, "Agent loop error");
-                assistantContent = friendlyProviderError(err, settings.provider, req.account?.locale);
-                emit({ type: "delta", text: assistantContent });
-              }
-            }
-          } else {
-            // Regular streaming chat. Resolve web search: off | on | auto.
-            // For "auto" we fire the classifier in parallel with the rest
-            // of context-building (attachment parsing, workspace file I/O)
-            // by passing it as a Promise — buildChatContext awaits it just
-            // before the search step, so the round-trip overlaps with I/O.
-            const webMode = webSearch ?? "off";
-            let webSearchInput: boolean | Promise<boolean>;
-            if (webMode === "auto" && hasContent) {
-              emit({ type: "status", text: "Checking whether a web search helps…" });
-              webSearchInput = decideWebSearch(provider, content, controller.signal);
-            } else {
-              webSearchInput = webMode === "on";
-            }
-
-            emit({ type: "status", text: "Building context…" });
-            let contextResult;
-            try {
-              contextResult = await buildChatContext(chat, historyWithoutCurrent, {
-                content,
-                attachments: attachmentRefs,
-                webSearch: webSearchInput,
-              }, req.account?.context);
-            } catch (err) {
-              logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
-              contextResult = {
-                system:
-                  "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
-                  "Always reply in the same language the user writes in.",
-                prompt: `User: ${content}`,
-                images: [],
-                searchResults: null,
-              };
-            }
-            contextSearchResults = contextResult.searchResults;
-
-            emit({ type: "status", text: "Generating…" });
-            assistantContent = "";
-            try {
-              const hasImages = contextResult.images.length > 0;
-              if (hasImages && provider.completeWithImages) {
-                // Vision call — no streaming for images.
-                const result = await provider.completeWithImages({
-                  system: contextResult.system,
-                  prompt: contextResult.prompt,
-                  images: contextResult.images,
-                  signal: controller.signal,
-                });
-                assistantContent = result.text;
-                emit({ type: "delta", text: assistantContent });
-              } else {
-                await provider.completeStream(
-                  {
-                    system: contextResult.system,
-                    prompt: contextResult.prompt,
-                    signal: controller.signal,
-                  },
-                  (delta) => {
-                    assistantContent += delta;
-                    emit({ type: "delta", text: delta });
-                  },
-                  (status) => {
-                    emit({ type: "status", text: status });
-                  },
-                );
-              }
-            } catch (err) {
-              if (controller.signal.aborted) {
-                // Stopped by the user — keep whatever streamed so far.
-              } else {
-                logger.warn({ chatId: chat.id, err }, "AI provider streaming error");
-                assistantContent = friendlyProviderError(err, settings.provider, req.account?.locale);
-                emit({ type: "delta", text: assistantContent });
-              }
-            }
-          }
-
-          // First-message title was kicked off in parallel with the main
-          // stream — resolve it now (usually already done) and only apply it
-          // if the assistant actually produced output.
-          if (chatTitlePromise && assistantContent.trim()) {
-            const title = await chatTitlePromise;
-            if (title) generatedTitle = title;
-          }
-        }
+        // --- Produce the answer: delegated to the shared core ---
+        const replyResult = await streamAssistantReply({
+          chat,
+          history: historyWithoutCurrent,
+          userContent: content,
+          attachmentRefs,
+          webSearchMode: webSearch,
+          agentMode: agentMode ?? false,
+          accountLocale: req.account?.locale,
+          accountContext: req.account?.context,
+          emit,
+          controller,
+          assistantMsgId,
+          shouldGenerateTitle: isFirstMessage && isDefaultTitle,
+        });
+        let assistantContent = replyResult.assistantContent;
+        const agentTrace = replyResult.agentTrace;
+        const searchResults = replyResult.searchResults;
+        const generatedTitle = replyResult.generatedTitle;
 
         // If the user stopped before any visible output (no text, no steps),
         // leave a small marker so the turn doesn't render blank.
@@ -482,7 +527,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           content: assistantContent,
           attachments: [],
           webSearch: false,
-          searchResults: agentSearchResults ?? contextSearchResults,
+          searchResults,
           agent: agentTrace,
           createdAt: now(),
         };
@@ -512,15 +557,14 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
-  // PATCH /api/chats/:id/messages/:messageId
-  //   Edit the text of a user-authored message in place. The previous
-  //   content is appended to the message's `revisions` log so it stays
-  //   recoverable. Does NOT auto-regenerate the assistant reply — keeping
-  //   the conversation branch model simple. Assistant messages and other
-  //   users' messages are not editable.
+  // POST /api/chats/:id/messages/:messageId/regenerate  → SSE stream
+  //   Edit a user message + drop the now-stale assistant reply that
+  //   followed it + stream a fresh answer. The previous content goes
+  //   into the message's `revisions` log so it's recoverable from the
+  //   "수정됨" history popover.
   // -------------------------------------------------------------------------
-  app.patch<{ Params: { id: string; messageId: string }; Body: unknown }>(
-    "/chats/:id/messages/:messageId",
+  app.post<{ Params: { id: string; messageId: string }; Body: unknown }>(
+    "/chats/:id/messages/:messageId/regenerate",
     async (req, reply) => {
       const chat = dbGetChat(req.params.id);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });
@@ -532,21 +576,125 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: "Message not found" });
       }
       if (existing.role !== "user") {
-        return reply.status(400).send({ error: "Only user messages can be edited" });
+        return reply.status(400).send({ error: "Only user messages can be regenerated" });
       }
-      const body = req.body as { content?: unknown } | null;
-      const next = typeof body?.content === "string" ? body.content.trim() : "";
-      if (!next) {
-        return reply.status(400).send({ error: "content must be a non-empty string" });
+      const body = (req.body ?? {}) as {
+        content?: unknown;
+        webSearch?: unknown;
+        agentMode?: unknown;
+      };
+      const nextContent =
+        typeof body.content === "string" && body.content.trim()
+          ? body.content.trim()
+          : existing.content;
+      const webSearchMode: "on" | "off" | "auto" | undefined =
+        body.webSearch === "on" || body.webSearch === "off" || body.webSearch === "auto"
+          ? body.webSearch
+          : (existing.webSearch ? "on" : "off");
+      const agentMode = Boolean(body.agentMode);
+
+      // 1. Save the prior content (if changed) and update in place.
+      let userMsg = existing;
+      if (nextContent !== existing.content) {
+        const edited = dbEditMessageContent(existing.id, nextContent, now());
+        if (edited) userMsg = edited;
       }
-      if (next === existing.content) {
-        // No-op edit — return the existing message unchanged.
-        return reply.send(existing);
+      // 2. Drop every later message (assistant reply + any following turns).
+      dbDeleteMessagesAfter(chat.id, userMsg.id);
+
+      // --- SSE scaffolding (mirrors POST /messages) ---
+      reply.hijack();
+      const raw = reply.raw;
+      raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+
+      function sseEmit(event: ChatStreamEvent): void {
+        try { raw.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* gone */ }
       }
-      const updated = dbEditMessageContent(req.params.messageId, next, now());
-      if (!updated) return reply.status(404).send({ error: "Message not found" });
-      dbUpdateChat(chat.id, { updatedAt: now() });
-      return reply.send(updated);
+      function sseEnd(): void {
+        try { raw.end(); } catch { /* ignore */ }
+      }
+      const heartbeat = setInterval(() => {
+        try { raw.write(": keep-alive\n\n"); } catch { /* gone */ }
+      }, 15_000);
+
+      try {
+        // Emit the (edited) user message so the client UI replaces the
+        // previous bubble in place.
+        sseEmit({ type: "user_message", message: userMsg });
+
+        const assistantMsgId = newId();
+        const controller = new AbortController();
+        const gen = beginGeneration({
+          chatId: chat.id,
+          messageId: assistantMsgId,
+          agentMode,
+          controller,
+        });
+        const emit = (event: ChatStreamEvent): void => {
+          applyEventToGeneration(gen, event);
+          sseEmit(event);
+        };
+
+        // History BEFORE this user message (so the model answers fresh
+        // rather than seeing its own prior — now-deleted — reply).
+        const history = dbListMessages(chat.id).filter((m) => m.id !== userMsg.id);
+
+        const result = await streamAssistantReply({
+          chat,
+          history,
+          userContent: nextContent,
+          attachmentRefs: [],   // attachments are tied to the original send
+          webSearchMode,
+          agentMode,
+          accountLocale: req.account?.locale,
+          accountContext: req.account?.context,
+          emit,
+          controller,
+          assistantMsgId,
+          // Title was already generated on the first send — don't redo it.
+          shouldGenerateTitle: false,
+        });
+
+        let assistantContent = result.assistantContent;
+        if (
+          controller.signal.aborted &&
+          !assistantContent.trim() &&
+          (result.agentTrace?.steps.length ?? 0) === 0
+        ) {
+          assistantContent = "_(stopped)_";
+        }
+
+        const assistantMsg: ChatMessage = {
+          id: assistantMsgId,
+          chatId: chat.id,
+          role: "assistant",
+          content: assistantContent,
+          attachments: [],
+          webSearch: false,
+          searchResults: result.searchResults,
+          agent: result.agentTrace,
+          createdAt: now(),
+        };
+        dbInsertMessage(assistantMsg);
+
+        setImmediate(() => void extractAccountContextInBackground(req.account.id, chat.id));
+        dbUpdateChat(chat.id, { updatedAt: now() });
+
+        sseEmit({ type: "done", message: assistantMsg });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error({ chatId: chat.id, err }, "Unexpected error in regenerate SSE handler");
+        sseEmit({ type: "error", error: msg });
+      } finally {
+        clearInterval(heartbeat);
+        endGeneration(chat.id);
+        sseEnd();
+      }
     },
   );
 

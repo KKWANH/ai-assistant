@@ -288,8 +288,24 @@ export const getActiveGeneration = (chatId: string) =>
 export const stopGeneration = (chatId: string) =>
   request<{ ok: boolean }>("POST", `/chats/${chatId}/stop`);
 
-export const editMessage = (chatId: string, messageId: string, content: string) =>
-  request<ChatMessage>("PATCH", `/chats/${chatId}/messages/${messageId}`, { content });
+/**
+ * Edit a user message and regenerate the assistant reply that followed it.
+ * SSE — same event shape as sendMessage. The server saves the prior content
+ * to the message's revisions log and deletes every later message in the
+ * chat before re-streaming.
+ */
+export async function regenerateAfterEdit(
+  chatId: string,
+  messageId: string,
+  body: { content: string; webSearch?: "on" | "off" | "auto"; agentMode?: boolean },
+  handlers: StreamHandlers,
+): Promise<void> {
+  return consumeMessageStream(
+    `${BASE}/chats/${chatId}/messages/${messageId}/regenerate`,
+    body,
+    handlers,
+  );
+}
 
 // ── Streaming sendMessage (SSE) ───────────────────────────────────────────────
 import type { ChatStreamEvent } from "@ariadne/shared";
@@ -313,11 +329,20 @@ export async function sendMessage(
   input: PostMessageInput,
   handlers: StreamHandlers
 ): Promise<void> {
-  const res = await fetch(`${BASE}/chats/${chatId}/messages`, {
+  return consumeMessageStream(`${BASE}/chats/${chatId}/messages`, input, handlers);
+}
+
+/** Shared SSE consumer for both /messages (send) and /messages/:id/regenerate. */
+async function consumeMessageStream(
+  url: string,
+  body: unknown,
+  handlers: StreamHandlers,
+): Promise<void> {
+  const res = await fetch(url, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
