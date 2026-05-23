@@ -790,6 +790,51 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
   });
 }
 
+// ── Agent attempts (Claude-Code Phase C) ──────────────────────────────────────
+
+export function useOpenAttemptForChat(chatId: string) {
+  return useQuery({
+    queryKey: ["open-attempt", chatId] as const,
+    queryFn: () => api.getOpenAttemptForChat(chatId),
+    enabled: !!chatId,
+    // The attempt's fileCount changes after every agent edit_file
+    // tool call, so don't over-cache.
+    staleTime: 0,
+  });
+}
+
+export function useAttempt(attemptId: string) {
+  return useQuery({
+    queryKey: ["attempt", attemptId] as const,
+    queryFn: () => api.getAttempt(attemptId),
+    enabled: !!attemptId,
+    retry: false,
+  });
+}
+
+export function useApplyAttempt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ attemptId, paths }: { attemptId: string; paths: string[] }) =>
+      api.applyAttempt(attemptId, paths),
+    onSuccess: (_r, vars) => {
+      void qc.invalidateQueries({ queryKey: ["attempt", vars.attemptId] });
+      void qc.invalidateQueries({ queryKey: ["open-attempt"] });
+    },
+  });
+}
+
+export function useAbandonAttempt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attemptId: string) => api.abandonAttempt(attemptId),
+    onSuccess: (_r, attemptId) => {
+      void qc.invalidateQueries({ queryKey: ["attempt", attemptId] });
+      void qc.invalidateQueries({ queryKey: ["open-attempt"] });
+    },
+  });
+}
+
 // ── Staged edits (Claude-Code Phase A) ────────────────────────────────────────
 
 export function useStagedManifest(runId: string) {

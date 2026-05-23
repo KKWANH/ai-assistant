@@ -9,7 +9,7 @@
  * No local message arrays — streaming writes directly to the cache.
  */
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   FolderOpen,
   FileText,
@@ -25,6 +25,7 @@ import {
   useActiveGeneration,
   useStopGeneration,
   useRunAction,
+  useOpenAttemptForChat,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
@@ -374,6 +375,7 @@ function ThreadView({ chatId }: { chatId: string }) {
     <div className="flex flex-col h-full overflow-hidden">
       <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
       <div className="shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
+        <OpenAttemptChip chatId={chatId} />
         <ChatComposer
           onSend={(opts) => void handleSend(opts)}
           pending={busy}
@@ -384,6 +386,23 @@ function ThreadView({ chatId }: { chatId: string }) {
         />
       </div>
     </div>
+  );
+}
+
+/** Compact chip above the composer when the chat has an open agent
+ *  attempt (i.e. the agent staged file edits the user hasn't dispositioned
+ *  yet). Links to the diff review page. */
+function OpenAttemptChip({ chatId }: { chatId: string }) {
+  const { t } = useT();
+  const { data: attempt } = useOpenAttemptForChat(chatId);
+  if (!attempt || attempt.fileCount === 0) return null;
+  return (
+    <Link
+      to={`/attempts/${attempt.id}/diff`}
+      className="block mb-2 px-3 py-2 rounded-lg border border-accent/40 bg-accent/10 text-xs text-accent hover:bg-accent/15 transition-colors"
+    >
+      {t("attempts.chipSummary", { n: attempt.fileCount })}
+    </Link>
   );
 }
 

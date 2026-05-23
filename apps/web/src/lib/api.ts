@@ -441,6 +441,26 @@ async function consumeMessageStream(
 
 export const getUploadUrl = (id: string) => `/api/uploads/${id}`;
 
+// ── Agent attempts (Claude-Code Phase C) ──────────────────────────────────────
+import type { AgentAttempt } from "@ariadne/shared";
+
+export const getOpenAttemptForChat = (chatId: string) =>
+  request<AgentAttempt | null>("GET", `/chats/${chatId}/open-attempt`);
+
+export interface AttemptPayload {
+  attempt: AgentAttempt;
+  manifest: StagedManifest | null;
+}
+
+export const getAttempt = (attemptId: string) =>
+  request<AttemptPayload>("GET", `/attempts/${attemptId}`);
+
+export const applyAttempt = (attemptId: string, paths: string[]) =>
+  request<ApplyStagedResult>("POST", `/attempts/${attemptId}/apply`, { paths });
+
+export const abandonAttempt = (attemptId: string) =>
+  request<{ ok: boolean }>("POST", `/attempts/${attemptId}/abandon`);
+
 // ── Staged edits (Claude-Code Phase A) ────────────────────────────────────────
 import type { StagedManifest } from "@ariadne/shared";
 

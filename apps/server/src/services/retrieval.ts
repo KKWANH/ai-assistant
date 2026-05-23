@@ -24,6 +24,7 @@ import {
   dbClearWorkspaceEmbeddings,
   dbInsertChunkEmbeddings,
   dbListWorkspaceChunks,
+  dbLookupSymbolMatches,
   type ChunkEmbeddingRow,
   type StoredChunk,
 } from "../db/repo.js";
@@ -120,6 +121,15 @@ export async function retrieveRelevantChunks(
   const tokens = tokenize(query);
   if (tokens.length === 0) return [];
 
+  // Symbol-boosted set — paths whose code symbols match a query token
+  // get a fixed bonus on every chunk they own. Cheap O(1) lookup
+  // against the symbol index. Empty for non-code workspaces.
+  const symbolHitPaths = options.workspaceId
+    ? new Set(
+        dbLookupSymbolMatches(options.workspaceId, tokens).map((s) => s.path),
+      )
+    : new Set<string>();
+
   const chunkChars = options.chunkChars ?? CHUNK_CHARS;
 
   // Pick candidate files. We don't read everything — sort by size so the
@@ -156,7 +166,12 @@ export async function retrieveRelevantChunks(
     if (!fc) continue;
     const chunks = chunkText(fc.content, chunkChars);
     for (const chunk of chunks) {
-      const score = scoreChunk(chunk, fc.path, tokens);
+      let score = scoreChunk(chunk, fc.path, tokens);
+      // Symbol-match nudge: + 2.0 for every chunk inside a file whose
+      // code symbols matched a query term. Strong but not dominating —
+      // a chunk with no other relevance still ranks below one with
+      // both symbol match and term hits.
+      if (symbolHitPaths.has(fc.path)) score += 2.0;
       if (score > 0) {
         allChunks.push({ path: fc.path, chunk, score });
       }

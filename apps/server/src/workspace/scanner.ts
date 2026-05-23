@@ -97,9 +97,9 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
     dbUpsertFileIndex(db, workspace.id, f.path, headings);
   }
 
-  // Re-build the embedding index in the background — never blocks the
-  // scan response. No-op when no embedding provider is reachable, in
-  // which case retrieval falls through to the keyword ranker.
+  // Re-build the embedding + symbol indexes in the background. Both
+  // are no-ops for trivial workspaces (no embedding model installed /
+  // no source-code files), so this is safe to run unconditionally.
   setImmediate(() => {
     void (async () => {
       try {
@@ -113,6 +113,18 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
         }
       } catch (err) {
         logger.warn({ workspaceId: workspace.id, err }, "embedding indexer threw");
+      }
+      try {
+        const { indexWorkspaceSymbols } = await import("../services/symbolIndex.js");
+        const r = await indexWorkspaceSymbols(workspace.id, workspace.rootPath, files);
+        if (r.symbols > 0) {
+          logger.info(
+            { workspaceId: workspace.id, symbols: r.symbols },
+            "symbol index rebuilt",
+          );
+        }
+      } catch (err) {
+        logger.warn({ workspaceId: workspace.id, err }, "symbol indexer threw");
       }
     })();
   });

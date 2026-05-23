@@ -362,23 +362,96 @@ async function runTool(
     }
 
     case "edit_file": {
-      // Agent-side edit_file is intentionally "plan-only" in v1 — the
-      // agent loop has no Run record to attach a staged manifest to,
-      // and surfacing agent-staged diffs needs a dedicated UI we'll
-      // build in Phase C. For now we describe the proposed change
-      // (using a small ask_ai pass) so the agent's plan is internally
-      // coherent; the actual staging happens by running an action.
+      // Phase C: actually stage. The chat's open attempt is the
+      // staging "branch"; multiple edit_file calls in one turn or
+      // across turns accumulate into the same manifest.
       if (!chat.workspaceId) return "[No workspace attached — cannot propose file edits]";
+      const ws = dbGetWorkspace(chat.workspaceId);
+      if (!ws) return "[Workspace not found]";
+
+      // Ask the model for a concrete, machine-readable edit. We accept
+      // either {path, search, replace} or {path, content} from the
+      // model so it can full-write when the change is too broad for
+      // a clean search/replace.
       const { text } = await provider.complete({
         system:
-          "You are a code-edit planner. Given a workspace target and a goal, " +
-          "describe a single concrete file edit that would address it — say which " +
-          "file, what to search for, what to replace with, and why. Keep it short " +
-          "(<150 words) and concrete. Do not write code outside the patch.",
+          "You produce a single file edit as JSON. Given a workspace and a goal, " +
+          "decide ONE file to change and emit exactly:\n" +
+          "  { \"path\": \"...\", \"search\": \"...\", \"replace\": \"...\" }  OR\n" +
+          "  { \"path\": \"...\", \"content\": \"...full file body...\" }\n" +
+          "Prefer search/replace; fall back to full content only when the change " +
+          "is too broad for a clean string match. The `search` must occur exactly " +
+          "once in the file. Do not add commentary outside the JSON.",
         prompt: description,
+        json: true,
         signal,
       });
-      return "[Proposed edit (plan-only — run an action with `edit_file` to actually stage):]\n" + text;
+
+      let proposal: { path?: string; search?: string; replace?: string; content?: string };
+      try {
+        proposal = JSON.parse(extractJson(text)) as typeof proposal;
+      } catch {
+        return "[edit_file: model did not return valid JSON — kept the agent's plan but did not stage]\n" + text.slice(0, 500);
+      }
+      if (!proposal.path || typeof proposal.path !== "string") {
+        return "[edit_file: missing 'path' in model output]";
+      }
+
+      // Resolve the attempt + run the same stage logic the edit_file
+      // action block uses. Path-traversal + match-count rules are
+      // shared via stageEdit().
+      const { getOrOpenAttempt, stagingIdForAttempt } = await import("./attempts.js");
+      const { stageEdit } = await import("./stagedEdits.js");
+      const attempt = getOrOpenAttempt(chat.id, chat.workspaceId);
+      const stagingId = stagingIdForAttempt(attempt.id);
+
+      const root = path.resolve(ws.rootPath);
+      const abs = path.resolve(root, proposal.path);
+      if (abs !== root && !abs.startsWith(root + path.sep)) {
+        return `[edit_file: path traversal rejected: ${proposal.path}]`;
+      }
+      const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
+
+      let proposed: string;
+      let action: "create" | "modify" | "replace";
+      if (typeof proposal.content === "string") {
+        proposed = proposal.content;
+        action = existing === null ? "create" : "replace";
+      } else if (typeof proposal.search === "string" && proposal.search.length > 0) {
+        if (existing === null) return `[edit_file: file does not exist for search/replace: ${proposal.path}]`;
+        let count = 0;
+        let from = 0;
+        while (true) {
+          const idx = existing.indexOf(proposal.search, from);
+          if (idx === -1) break;
+          count++;
+          from = idx + proposal.search.length;
+        }
+        if (count === 0) return `[edit_file: search string not found in ${proposal.path}]`;
+        if (count > 1) return `[edit_file: search matched ${count.toString()} times in ${proposal.path} (need exactly 1)]`;
+        proposed = existing.split(proposal.search).join(proposal.replace ?? "");
+        action = "modify";
+      } else {
+        return "[edit_file: model output missing 'search' or 'content']";
+      }
+      if (existing !== null && proposed === existing) {
+        return `[edit_file: proposed change is identical to current ${proposal.path}]`;
+      }
+
+      try {
+        const stats = await stageEdit({
+          runId: stagingId,
+          workspace: ws,
+          path: proposal.path,
+          action,
+          before: existing,
+          after: proposed,
+        });
+        return `Staged ${action} for ${proposal.path} (+${stats.added.toString()}/-${stats.removed.toString()}) — attempt ${attempt.id.slice(0, 8)}. Review at /attempts/${attempt.id}/diff`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return `[edit_file: staging failed: ${msg}]`;
+      }
     }
 
     case "run_tests": {

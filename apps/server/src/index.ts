@@ -31,6 +31,7 @@ import { reportRoutes } from "./routes/reports.js";
 import { marketDataRoutes } from "./routes/marketData.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
+import { attemptRoutes } from "./routes/attempts.js";
 import { startScheduler } from "./services/scheduler.js";
 import { seedAdmin } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
@@ -164,6 +165,7 @@ async function bootstrap(): Promise<void> {
       await api.register(marketDataRoutes);
       await api.register(skillRoutes);
       await api.register(scheduleRoutes);
+      await api.register(attemptRoutes);
     },
     { prefix: "/api" }
   );

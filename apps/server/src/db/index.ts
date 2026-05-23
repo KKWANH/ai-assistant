@@ -202,6 +202,39 @@ function runMigrations(db: DatabaseSync): void {
     );
   `);
 
+  // Agent attempts — per-chat staging "branches". A chat has at most
+  // one open attempt at a time; closing it (apply or abandon) is what
+  // commits or wipes the staged tree under .ariadne/staged/attempt-<id>/.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_attempts (
+      id            TEXT PRIMARY KEY,
+      chat_id       TEXT NOT NULL,
+      workspace_id  TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'open',
+      created_at    TEXT NOT NULL,
+      applied_at    TEXT,
+      abandoned_at  TEXT,
+      commit_sha    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_attempts_chat
+      ON agent_attempts(chat_id, status);
+  `);
+
+  // Symbol index — regex-extracted function/class/method/const names
+  // per file. Cheap to maintain; retrieval gives a small score nudge
+  // to chunks whose path contains a query-matched symbol.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS symbol_index (
+      workspace_id TEXT NOT NULL,
+      path         TEXT NOT NULL,
+      name         TEXT NOT NULL,
+      kind         TEXT NOT NULL,
+      line         INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_symbol_index_workspace_name
+      ON symbol_index(workspace_id, name);
+  `);
+
   // Chunk embeddings — semantic-search index over workspace text files.
   // One row per chunk. embedding is a Float32Array stored as a BLOB; the
   // provider tag captures which model produced the vector so the

@@ -615,6 +615,39 @@ export interface Chat {
 }
 
 /* ------------------------------------------------------------------ *
+ * Agent attempts — a per-chat staging "branch".
+ *
+ * When the agent uses `edit_file`, the staged manifest can't hang on
+ * an action Run (the agent loop has no Run record), so we introduce a
+ * thin parallel — an Attempt. One open attempt per chat at a time.
+ * Multiple agent `edit_file` calls in the same chat accumulate into
+ * the same staged tree. The user reviews / applies / abandons.
+ *
+ * Conceptually this is the "branch-per-attempt" idea from the Phase C
+ * plan, made concrete without any extra git plumbing: each open
+ * attempt is a working set the user can fast-forward (apply) or
+ * throw away (abandon).
+ * ------------------------------------------------------------------ */
+
+export type AttemptStatus = "open" | "applied" | "abandoned";
+
+export interface AgentAttempt {
+  id: string;
+  chatId: string;
+  workspaceId: string;
+  status: AttemptStatus;
+  /** How many staged files are currently in this attempt's manifest. */
+  fileCount: number;
+  createdAt: string;
+  /** Set when `status` flipped to applied (and the workspace commit landed). */
+  appliedAt: string | null;
+  /** Set when `status` flipped to abandoned (and the staged tree was wiped). */
+  abandonedAt: string | null;
+  /** Apply commit sha — populated only on successful apply. */
+  commitSha: string | null;
+}
+
+/* ------------------------------------------------------------------ *
  * Action schedules — recurring runs of a workspace action.
  *
  * Stored alongside accounts; a single in-process scheduler ticks every

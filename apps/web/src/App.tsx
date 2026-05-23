@@ -69,6 +69,11 @@ const StagedDiffView = lazyWithReload(() =>
     default: m.StagedDiffView,
   }))
 );
+const AttemptDiffView = lazyWithReload(() =>
+  import("./features/runs/AttemptDiffView").then((m) => ({
+    default: m.AttemptDiffView,
+  }))
+);
 const SettingsView = lazyWithReload(() =>
   import("./features/settings/SettingsView").then((m) => ({
     default: m.SettingsView,
@@ -126,6 +131,7 @@ function AppContent() {
             <Route path="/runs/:id/context" element={<ContextPickView />} />
             <Route path="/runs/:id/diff" element={<StagedDiffView />} />
             <Route path="/runs/:id" element={<RunDetailView />} />
+            <Route path="/attempts/:id/diff" element={<AttemptDiffView />} />
 
             {/* Utility */}
             <Route path="/settings" element={<SettingsView />} />

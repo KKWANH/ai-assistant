@@ -23,6 +23,8 @@ import type {
   Skill,
   ActionSchedule,
   ScheduleFrequency,
+  AgentAttempt,
+  AttemptStatus,
 } from "@ariadne/shared";
 import { getDb } from "./index.js";
 
@@ -832,6 +834,124 @@ function rowToSchedule(row: Record<string, unknown>): ActionSchedule {
     nextRunAt: row["next_run_at"] as string,
     createdAt: row["created_at"] as string,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Agent attempts — per-chat staging branches
+// ---------------------------------------------------------------------------
+
+export function dbInsertAttempt(a: Omit<AgentAttempt, "fileCount">): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO agent_attempts
+       (id, chat_id, workspace_id, status, created_at, applied_at, abandoned_at, commit_sha)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    a.id, a.chatId, a.workspaceId, a.status,
+    a.createdAt, a.appliedAt, a.abandonedAt, a.commitSha,
+  );
+}
+
+export function dbGetAttempt(id: string): AgentAttempt | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM agent_attempts WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? rowToAttempt(row) : null;
+}
+
+/** The single open attempt for a chat, if any. */
+export function dbGetOpenAttemptForChat(chatId: string): AgentAttempt | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      "SELECT * FROM agent_attempts WHERE chat_id = ? AND status = 'open' ORDER BY created_at DESC LIMIT 1",
+    )
+    .get(chatId) as Record<string, unknown> | undefined;
+  return row ? rowToAttempt(row) : null;
+}
+
+export function dbUpdateAttempt(
+  id: string,
+  patch: { status?: AttemptStatus; appliedAt?: string | null; abandonedAt?: string | null; commitSha?: string | null },
+): void {
+  const existing = dbGetAttempt(id);
+  if (!existing) return;
+  const next = { ...existing, ...patch };
+  const db = getDb();
+  db.prepare(
+    "UPDATE agent_attempts SET status = ?, applied_at = ?, abandoned_at = ?, commit_sha = ? WHERE id = ?",
+  ).run(
+    next.status,
+    next.appliedAt,
+    next.abandonedAt,
+    next.commitSha,
+    id,
+  );
+}
+
+function rowToAttempt(row: Record<string, unknown>): AgentAttempt {
+  return {
+    id: row["id"] as string,
+    chatId: row["chat_id"] as string,
+    workspaceId: row["workspace_id"] as string,
+    status: row["status"] as AttemptStatus,
+    fileCount: 0, // populated by the caller after reading the staged manifest
+    createdAt: row["created_at"] as string,
+    appliedAt: (row["applied_at"] as string | null) ?? null,
+    abandonedAt: (row["abandoned_at"] as string | null) ?? null,
+    commitSha: (row["commit_sha"] as string | null) ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Symbol index — regex-extracted code symbols, used for retrieval boosting
+// ---------------------------------------------------------------------------
+
+export interface SymbolRow {
+  workspaceId: string;
+  path: string;
+  name: string;
+  kind: "function" | "class" | "method" | "const" | "interface" | "type" | "struct" | "enum" | "trait";
+  line: number;
+}
+
+export function dbClearWorkspaceSymbols(workspaceId: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM symbol_index WHERE workspace_id = ?").run(workspaceId);
+}
+
+export function dbInsertSymbols(rows: SymbolRow[]): void {
+  if (rows.length === 0) return;
+  const db = getDb();
+  const stmt = db.prepare(
+    `INSERT INTO symbol_index (workspace_id, path, name, kind, line)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  for (const r of rows) {
+    stmt.run(r.workspaceId, r.path, r.name, r.kind, r.line);
+  }
+}
+
+/** Find file paths whose symbols match any of the query terms. Used by
+ *  the retriever to nudge those chunks' scores. */
+export function dbLookupSymbolMatches(
+  workspaceId: string,
+  terms: string[],
+): { name: string; path: string }[] {
+  if (terms.length === 0) return [];
+  const db = getDb();
+  // Case-insensitive prefix match — generous so a query for "Holdings"
+  // also picks up `HoldingsTable`, `holdings_csv` etc.
+  const placeholders = terms.map(() => "LOWER(name) LIKE ?").join(" OR ");
+  const stmt = db.prepare(
+    `SELECT DISTINCT name, path FROM symbol_index
+       WHERE workspace_id = ? AND (${placeholders})`,
+  );
+  return stmt.all(workspaceId, ...terms.map((t) => `${t.toLowerCase()}%`)) as {
+    name: string;
+    path: string;
+  }[];
 }
 
 // ---------------------------------------------------------------------------
