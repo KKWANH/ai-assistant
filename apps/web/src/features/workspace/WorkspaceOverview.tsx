@@ -3,7 +3,13 @@
  *
  * Layout model:
  *  - The outer wrapper is flex-col h-full so the surface tab can flex-1 fill.
- *  - "Custom screen" tab: SurfaceView gets flex-1, fills entire main area.
+ *  - Every workspace shows the same 5 tabs regardless of whether a custom
+ *    surface exists. The "Custom screen" tab swaps its content between
+ *    SurfaceView (when surface.tsx exists) and an "Add custom screen"
+ *    placeholder (when it doesn't). Previously workspaces without a
+ *    surface saw a completely different UI; that asymmetry made the
+ *    other four tabs (Data / Create & runs / Edit screen / Actions)
+ *    look like they didn't exist for those workspaces.
  *  - "Create & runs" and "Edit screen" tabs share a consistent-width panel
  *    (max-w-5xl mx-auto) so they look cohesive.
  */
@@ -932,107 +938,114 @@ export function WorkspaceOverview() {
         />
       </div>
 
-      {hasSurface ? (
-        /* Surface workspace: tabs between Surface / Create / Edit / Actions */
-        <Tabs defaultValue="surface" className="flex flex-col flex-1 min-h-0">
-          {/* Tab bar — pinned, scrollable on narrow screens */}
-          <div className="shrink-0 px-5 border-b border-border">
-            <TabsList>
-              <TabsTrigger value="surface">
-                <span className="flex items-center gap-1.5">
-                  <Layout className="h-3.5 w-3.5" />
-                  {t("workspace.surface.customScreen")}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="data">
-                <span className="flex items-center gap-1.5">
-                  <Database className="h-3.5 w-3.5" />
-                  {t("workspace.data.tab")}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="standard">
-                <span className="flex items-center gap-1.5">
-                  <Play className="h-3.5 w-3.5" />
-                  {t("workspace.surface.createRuns")}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="edit">
-                <span className="flex items-center gap-1.5">
-                  <Code2 className="h-3.5 w-3.5" />
-                  {t("workspace.surface.editScreen")}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="actions">
-                <span className="flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5" />
-                  {t("workspace.actions.tab")}
-                </span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+      {/* All workspaces show the same 5 tabs. The Custom screen tab swaps
+          its body between SurfaceView and an "Add custom screen" placeholder
+          depending on whether .ariadne/surface.tsx exists. The other four
+          tabs are independent of the surface and always functional. */}
+      <Tabs
+        defaultValue={hasSurface ? "surface" : "standard"}
+        className="flex flex-col flex-1 min-h-0"
+      >
+        {/* Tab bar — pinned, scrollable on narrow screens */}
+        <div className="shrink-0 px-5 border-b border-border">
+          <TabsList>
+            <TabsTrigger value="surface">
+              <span className="flex items-center gap-1.5">
+                <Layout className="h-3.5 w-3.5" />
+                {t("workspace.surface.customScreen")}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="data">
+              <span className="flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5" />
+                {t("workspace.data.tab")}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="standard">
+              <span className="flex items-center gap-1.5">
+                <Play className="h-3.5 w-3.5" />
+                {t("workspace.surface.createRuns")}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="edit">
+              <span className="flex items-center gap-1.5">
+                <Code2 className="h-3.5 w-3.5" />
+                {t("workspace.surface.editScreen")}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="actions">
+              <span className="flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5" />
+                {t("workspace.actions.tab")}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-          {/* Custom screen — fills entire remaining height, no max-w cap */}
-          <TabsContent value="surface" className="flex-1 flex flex-col min-h-0 p-0">
+        {/* Custom screen — fills the remaining height. When surface.tsx
+            exists, render it. Otherwise show a centred "add custom screen"
+            placeholder so the empty state explains the next step. */}
+        <TabsContent value="surface" className="flex-1 flex flex-col min-h-0 p-0">
+          {hasSurface ? (
             <div className="flex-1 flex flex-col min-h-0 p-4">
               <SurfaceView workspaceId={ws.id} />
             </div>
-          </TabsContent>
-
-          {/* Data — view & edit CSV files */}
-          <TabsContent value="data" className="flex-1 overflow-y-auto min-h-0">
-            <WorkspacePanel>
-              <DataFilesView workspaceId={ws.id} />
-            </WorkspacePanel>
-          </TabsContent>
-
-          {/* Create & runs — consistent-width panel */}
-          <TabsContent value="standard" className="flex-1 overflow-y-auto min-h-0">
-            <WorkspacePanel>{StandardView}</WorkspacePanel>
-          </TabsContent>
-
-          {/* Edit screen — consistent-width panel */}
-          <TabsContent value="edit" className="flex-1 overflow-y-auto min-h-0">
-            <WorkspacePanel>
-              <Suspense fallback={<EditorFallback />}>
-                <SurfaceEditor workspaceId={ws.id} />
-              </Suspense>
-            </WorkspacePanel>
-          </TabsContent>
-
-          {/* Actions editor — consistent-width panel */}
-          <TabsContent value="actions" className="flex-1 overflow-y-auto min-h-0">
-            <WorkspacePanel>
-              <Suspense fallback={<EditorFallback />}>
-                <ActionsEditor workspaceId={ws.id} />
-              </Suspense>
-            </WorkspacePanel>
-          </TabsContent>
-        </Tabs>
-      ) : (
-        /* No surface: standard overview + subtle affordance to add one, scrollable */
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <WorkspacePanel>
-            {StandardView}
-            <div className="rounded-xl border border-border border-dashed px-5 py-4 flex items-center gap-4">
-              <Layout className="h-5 w-5 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">{t("workspace.surface.addTitle")}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t("workspace.surface.addBody")}
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Plus className="h-3.5 w-3.5" />}
-                onClick={() => navigate(`/workspaces/${ws.id}/surface/edit`)}
-              >
-                {t("workspace.surface.addBtn")}
-              </Button>
+          ) : (
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <WorkspacePanel>
+                <div className="rounded-xl border border-border border-dashed px-6 py-10 flex flex-col items-center text-center gap-3 max-w-2xl mx-auto">
+                  <Layout className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-base font-medium text-foreground">
+                    {t("workspace.surface.addTitle")}
+                  </p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    {t("workspace.surface.addBody")}
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Plus className="h-3.5 w-3.5" />}
+                    onClick={() => navigate(`/workspaces/${ws.id}/surface/edit`)}
+                  >
+                    {t("workspace.surface.addBtn")}
+                  </Button>
+                </div>
+              </WorkspacePanel>
             </div>
+          )}
+        </TabsContent>
+
+        {/* Data — view & edit CSV files (independent of surface) */}
+        <TabsContent value="data" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>
+            <DataFilesView workspaceId={ws.id} />
           </WorkspacePanel>
-        </div>
-      )}
+        </TabsContent>
+
+        {/* Create & runs — templates + runs list, independent of surface */}
+        <TabsContent value="standard" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>{StandardView}</WorkspacePanel>
+        </TabsContent>
+
+        {/* Edit screen — surface.tsx editor. Doubles as the entry point
+            for creating a surface when none exists yet. */}
+        <TabsContent value="edit" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>
+            <Suspense fallback={<EditorFallback />}>
+              <SurfaceEditor workspaceId={ws.id} />
+            </Suspense>
+          </WorkspacePanel>
+        </TabsContent>
+
+        {/* Actions editor — workspace actions.yaml, independent of surface */}
+        <TabsContent value="actions" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>
+            <Suspense fallback={<EditorFallback />}>
+              <ActionsEditor workspaceId={ws.id} />
+            </Suspense>
+          </WorkspacePanel>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
