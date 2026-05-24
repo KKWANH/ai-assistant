@@ -178,10 +178,19 @@ export type UpdateScheduleInput = z.infer<typeof UpdateScheduleSchema>;
 
 /* ── Skills ─────────────────────────────────────────────────────────── */
 
+const SkillVariableSchema = z.object({
+  key: z.string().min(1).max(40).regex(/^[a-z][a-z0-9_]*$/i, "lowercase + underscore"),
+  label: z.string().max(80).optional(),
+  hint: z.string().max(200).optional(),
+  default: z.string().max(400).optional(),
+});
+
 /** POST /api/skills — create a new skill for the calling account. */
 export const CreateSkillSchema = z.object({
   name: z.string().min(1).max(40),
   prompt: z.string().min(1).max(4000),
+  description: z.string().max(200).optional(),
+  variables: z.array(SkillVariableSchema).max(8).optional(),
 });
 export type CreateSkillInput = z.infer<typeof CreateSkillSchema>;
 
@@ -189,5 +198,7 @@ export type CreateSkillInput = z.infer<typeof CreateSkillSchema>;
 export const UpdateSkillSchema = z.object({
   name: z.string().min(1).max(40).optional(),
   prompt: z.string().min(1).max(4000).optional(),
+  description: z.string().max(200).nullable().optional(),
+  variables: z.array(SkillVariableSchema).max(8).nullable().optional(),
 });
 export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>;

@@ -504,11 +504,26 @@ function SkillRow({
   return (
     <div className="rounded-md border border-border bg-background px-3 py-2 flex items-start gap-2 group">
       <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-foreground">/{skill.name}</div>
+        <div className="text-xs font-medium text-foreground flex items-center gap-1.5">
+          /{skill.name}
+          {skill.builtin && (
+            <span className="text-2xs text-muted-foreground font-normal">· built-in</span>
+          )}
+          {(skill.variables?.length ?? 0) > 0 && (
+            <span className="text-2xs text-accent font-normal">
+              · {(skill.variables?.length ?? 0).toString()} input{(skill.variables?.length ?? 0) > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        {skill.description && (
+          <div className="text-2xs text-muted-foreground mt-0.5">{skill.description}</div>
+        )}
         <div className="text-2xs text-muted-foreground line-clamp-2 mt-0.5 whitespace-pre-wrap">
           {skill.prompt}
         </div>
       </div>
+      {/* Built-in skills aren't editable — the row stays read-only. */}
+      {!skill.builtin && (
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
         <button
           type="button"
@@ -529,6 +544,7 @@ function SkillRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
+      )}
     </div>
   );
 }

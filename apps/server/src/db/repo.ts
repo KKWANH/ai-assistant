@@ -723,14 +723,30 @@ export function dbGetSkill(id: string): Skill | null {
 export function dbInsertSkill(s: Skill): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO skills (id, account_id, name, prompt, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(s.id, s.accountId, s.name, s.prompt, s.createdAt, s.updatedAt);
+    `INSERT INTO skills
+       (id, account_id, name, prompt, description, category, variables_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    s.id,
+    s.accountId,
+    s.name,
+    s.prompt,
+    s.description ?? null,
+    s.category ?? null,
+    s.variables ? JSON.stringify(s.variables) : null,
+    s.createdAt,
+    s.updatedAt,
+  );
 }
 
 export function dbUpdateSkill(
   id: string,
-  patch: { name?: string; prompt?: string },
+  patch: {
+    name?: string;
+    prompt?: string;
+    description?: string | null;
+    variables?: import("@ariadne/shared").SkillVariable[] | null;
+  },
   updatedAt: string,
 ): Skill | null {
   const existing = dbGetSkill(id);
@@ -739,12 +755,23 @@ export function dbUpdateSkill(
     ...existing,
     name: patch.name ?? existing.name,
     prompt: patch.prompt ?? existing.prompt,
+    description: patch.description === undefined ? existing.description : patch.description ?? undefined,
+    variables: patch.variables === undefined ? existing.variables : patch.variables ?? undefined,
     updatedAt,
   };
   const db = getDb();
   db.prepare(
-    "UPDATE skills SET name = ?, prompt = ?, updated_at = ? WHERE id = ?",
-  ).run(next.name, next.prompt, next.updatedAt, id);
+    `UPDATE skills
+        SET name = ?, prompt = ?, description = ?, variables_json = ?, updated_at = ?
+      WHERE id = ?`,
+  ).run(
+    next.name,
+    next.prompt,
+    next.description ?? null,
+    next.variables ? JSON.stringify(next.variables) : null,
+    next.updatedAt,
+    id,
+  );
   return next;
 }
 
@@ -754,11 +781,17 @@ export function dbDeleteSkill(id: string): void {
 }
 
 function rowToSkill(row: Record<string, unknown>): Skill {
+  const variablesRaw = row["variables_json"] as string | null | undefined;
   return {
     id: row["id"] as string,
     accountId: row["account_id"] as string,
     name: row["name"] as string,
     prompt: row["prompt"] as string,
+    description: (row["description"] as string | null) ?? undefined,
+    category: (row["category"] as string | null) ?? undefined,
+    variables: variablesRaw
+      ? (JSON.parse(variablesRaw) as import("@ariadne/shared").SkillVariable[])
+      : undefined,
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
   };

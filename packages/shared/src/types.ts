@@ -694,13 +694,37 @@ export interface ActionSchedule {
  * the "/translate / /summarize / /rewrite politely" instinct.
  * ------------------------------------------------------------------ */
 
+export interface SkillVariable {
+  /** Placeholder key as it appears in the prompt — e.g. `topic` matches
+   *  `{topic}`. Lowercase ascii + underscore, kept short. */
+  key: string;
+  /** Human-friendly label shown in the fill modal. Falls back to `key`. */
+  label?: string;
+  /** Optional hint shown under the input (e.g. "JavaScript / TypeScript / ..."). */
+  hint?: string;
+  /** Optional default; pre-fills the input so the user can keep or edit. */
+  default?: string;
+}
+
 export interface Skill {
   id: string;
-  accountId: string;
+  /** null for built-in skills shipped server-side; user id otherwise. */
+  accountId: string | null;
   /** Short label shown in the menu and as the slash-command keyword. */
   name: string;
-  /** The text inserted into the composer when this skill fires. */
+  /** The text inserted into the composer when this skill fires.
+   *  Variable placeholders use {key} syntax — e.g. "Review {file_path}". */
   prompt: string;
+  /** Optional one-line description shown in the picker beneath the name. */
+  description?: string;
+  /** Optional category to group built-in skills (`code`, `writing`,
+   *  `research`, …). Custom user skills usually leave this null. */
+  category?: string | null;
+  /** Variables to prompt the user for before inserting. Empty/undefined
+   *  means insert as-is (the legacy behaviour). */
+  variables?: SkillVariable[];
+  /** True for skills shipped by Ariadne (read-only; can't be edited/deleted). */
+  builtin?: boolean;
   createdAt: string;
   updatedAt: string;
 }

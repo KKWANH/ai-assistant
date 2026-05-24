@@ -159,7 +159,8 @@ const en = {
   "settings.skills.saveFailed": "Could not save the skill",
   "chat.composer.skills": "Skills",
   "chat.composer.skillsHint": "Insert a saved prompt — also try typing /",
-  "chat.composer.skillsEmpty": "No skills yet. Create one in Settings.",
+  "chat.composer.skillsEmpty": "No skills yet — your own and the built-ins will show here. Create one in Settings.",
+  "chat.composer.skillsInsert": "Insert",
   "chat.composer.skillsNoMatch": "No matching skill.",
   "chat.composer.skillsManage": "Manage skills",
 

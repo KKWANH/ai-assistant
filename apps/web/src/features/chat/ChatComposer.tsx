@@ -100,10 +100,119 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Small dropdown listing the account's skills, optionally filtered by
- * the slash-command keyword the user is typing. Renders no list at all
- * when there are no matches — instead shows a one-line empty state with
- * a link to the Settings page where new skills are created.
+ * Replace `{key}` placeholders in `prompt` with the supplied values.
+ * Missing keys are left unchanged (the user sees `{key}` and can edit).
+ */
+function fillPromptVariables(prompt: string, values: Record<string, string>): string {
+  return prompt.replace(/\{([a-z][a-z0-9_]*)\}/gi, (match, key: string) => {
+    const v = values[key];
+    return v == null || v === "" ? match : v;
+  });
+}
+
+/**
+ * Modal that collects variable values for a skill before insert. Multi-line
+ * inputs for keys that look long ("text", "code", "error", "draft" or any
+ * key with a default >60 chars). Cmd/Ctrl+Enter submits.
+ */
+function SkillFillModal({
+  skill,
+  onSubmit,
+  onClose,
+}: {
+  skill: import("@ariadne/shared").Skill;
+  onSubmit: (values: Record<string, string>) => void;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const vars = skill.variables ?? [];
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const v of vars) init[v.key] = v.default ?? "";
+    return init;
+  });
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div className="pointer-events-auto w-full max-w-md rounded-xl border border-border bg-card shadow-xl p-4 flex flex-col gap-3 max-h-[85vh] overflow-y-auto">
+          <div>
+            <p className="text-sm font-semibold text-foreground">/{skill.name}</p>
+            {skill.description && (
+              <p className="text-2xs text-muted-foreground mt-0.5">{skill.description}</p>
+            )}
+          </div>
+          {vars.map((v) => {
+            const isLong =
+              ["text", "code", "error", "draft", "content"].includes(v.key) ||
+              (v.default && v.default.length > 60);
+            return (
+              <div key={v.key} className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-foreground">
+                  {v.label ?? v.key}
+                  <span className="ml-1 text-muted-foreground font-mono text-2xs">{`{${v.key}}`}</span>
+                </label>
+                {isLong ? (
+                  <textarea
+                    autoFocus={v === vars[0]}
+                    rows={4}
+                    className="w-full px-2.5 py-1.5 rounded-md border border-border bg-surface-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent resize-none"
+                    style={{ minHeight: "80px", maxHeight: "240px" }}
+                    value={values[v.key] ?? ""}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        onSubmit(values);
+                      }
+                    }}
+                  />
+                ) : (
+                  <input
+                    autoFocus={v === vars[0]}
+                    className="w-full px-2.5 py-1.5 rounded-md border border-border bg-surface-2 text-xs text-foreground focus:outline-none focus:border-accent"
+                    value={values[v.key] ?? ""}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        onSubmit(values);
+                      }
+                    }}
+                  />
+                )}
+                {v.hint && (
+                  <p className="text-2xs text-muted-foreground">{v.hint}</p>
+                )}
+              </div>
+            );
+          })}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSubmit(values)}
+              className="px-3 py-1 rounded-md text-xs bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+            >
+              {t("chat.composer.skillsInsert")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Small dropdown listing skills, optionally filtered by the slash-command
+ * keyword the user is typing. Built-in skills are marked. Skills with
+ * variables open a fill modal before insert; static skills insert directly.
  */
 function SkillsDropdown({
   skills,
@@ -113,35 +222,59 @@ function SkillsDropdown({
 }: {
   skills: import("@ariadne/shared").Skill[];
   filter: string;
-  onPick: (s: import("@ariadne/shared").Skill) => void;
+  /** Called with the FINAL prompt text (variables already substituted). */
+  onPick: (finalPrompt: string) => void;
   onClose: () => void;
 }) {
   const { t } = useT();
+  const [fillFor, setFillFor] = useState<import("@ariadne/shared").Skill | null>(null);
   const filtered = filter
     ? skills.filter((s) => s.name.toLowerCase().includes(filter))
     : skills;
   return (
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} />
-      <div className="absolute bottom-full mb-1 left-0 z-30 w-72 max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg p-1">
+      <div className="absolute bottom-full mb-1 left-0 z-30 w-80 max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg p-1">
         {filtered.length > 0 ? (
           <ul className="flex flex-col">
-            {filtered.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => onPick(s)}
-                  className="w-full text-left px-3 py-2 rounded-md hover:bg-surface-3 transition-colors flex flex-col gap-0.5"
-                >
-                  <span className="text-xs font-medium text-foreground">
-                    /{s.name}
-                  </span>
-                  <span className="text-2xs text-muted-foreground truncate">
-                    {s.prompt.slice(0, 80)}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {filtered.map((s) => {
+              const hasVars = (s.variables?.length ?? 0) > 0;
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (hasVars) {
+                        setFillFor(s);
+                      } else {
+                        onPick(s.prompt);
+                      }
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-md hover:bg-surface-3 transition-colors flex flex-col gap-0.5"
+                  >
+                    <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                      /{s.name}
+                      {s.builtin && (
+                        <span className="text-2xs text-muted-foreground font-normal">·</span>
+                      )}
+                      {s.builtin && (
+                        <span className="text-2xs text-muted-foreground font-normal">
+                          built-in
+                        </span>
+                      )}
+                      {hasVars && (
+                        <span className="ml-auto text-2xs text-accent font-normal">
+                          {(s.variables?.length ?? 0).toString()} input{(s.variables?.length ?? 0) > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-2xs text-muted-foreground truncate">
+                      {s.description ?? s.prompt.slice(0, 100)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="px-3 py-3 text-xs text-muted-foreground text-center">
@@ -159,6 +292,16 @@ function SkillsDropdown({
           </a>
         </div>
       </div>
+      {fillFor && (
+        <SkillFillModal
+          skill={fillFor}
+          onSubmit={(values) => {
+            onPick(fillPromptVariables(fillFor.prompt, values));
+            setFillFor(null);
+          }}
+          onClose={() => setFillFor(null)}
+        />
+      )}
     </>
   );
 }
@@ -638,16 +781,16 @@ export function ChatComposer({
                     ? content.replace(/^\//, "").toLowerCase()
                     : ""
                 }
-                onPick={(s) => {
-                  // Replace a leading "/foo" with the skill prompt; otherwise
-                  // append at the cursor / end. Either way close the picker.
+                onPick={(finalPrompt) => {
+                  // Replace a leading "/foo" with the final (variable-filled)
+                  // prompt; otherwise append at the cursor / end. Either way
+                  // close the picker and refocus the textarea.
                   setContent((cur) =>
                     /^\/[a-z0-9가-힣_-]*$/i.test(cur)
-                      ? s.prompt
-                      : (cur ? cur + (cur.endsWith("\n") ? "" : "\n") : "") + s.prompt,
+                      ? finalPrompt
+                      : (cur ? cur + (cur.endsWith("\n") ? "" : "\n") : "") + finalPrompt,
                   );
                   setSkillsOpenMode(null);
-                  // Refocus the textarea so the user can keep typing.
                   setTimeout(() => textareaRef.current?.focus(), 0);
                 }}
                 onClose={() => setSkillsOpenMode(null)}

@@ -262,6 +262,13 @@ function runMigrations(db: DatabaseSync): void {
   // column already exists on the table; SQLite has no IF NOT EXISTS for
   // ADD COLUMN, so we PRAGMA-introspect once per table and reuse the
   // cached column list for every column on that table.
+  // Skills extension: variables (JSON), description, category. Null on rows
+  // from before this migration; built-in skills set them at startup.
+  const skills = addColumnIfMissing(db, "skills");
+  skills("variables_json", "TEXT");
+  skills("description", "TEXT");
+  skills("category", "TEXT");
+
   const chatMessages = addColumnIfMissing(db, "chat_messages");
   chatMessages("agent_json", "TEXT");
   // revisions_json — past versions of a user message's content, retained

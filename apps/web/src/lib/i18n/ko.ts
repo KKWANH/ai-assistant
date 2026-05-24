@@ -152,7 +152,8 @@ const ko: Record<TranslationKey, string> = {
   "settings.skills.saveFailed": "스킬을 저장하지 못했습니다",
   "chat.composer.skills": "스킬",
   "chat.composer.skillsHint": "저장한 프롬프트 삽입 — / 입력해도 열립니다",
-  "chat.composer.skillsEmpty": "아직 스킬이 없어요. 설정에서 만들어 보세요.",
+  "chat.composer.skillsEmpty": "스킬이 없어요 — 내가 만든 것과 기본 제공 스킬이 여기 나옵니다. 설정에서 만들어 보세요.",
+  "chat.composer.skillsInsert": "삽입",
   "chat.composer.skillsNoMatch": "일치하는 스킬이 없습니다.",
   "chat.composer.skillsManage": "스킬 관리",
 

@@ -1,12 +1,15 @@
 /**
- * Skill routes — account-scoped reusable prompt snippets.
+ * Skill routes — reusable prompt snippets, account-scoped + built-in.
  *
- * Skills are the cheapest unit of reuse in the chat composer:
- * just a name + a prompt template. The chat UI surfaces them via a
- * "Skills" button and via slash-command autocomplete.
+ * Skills now support `{variable}` placeholders that the picker fills in
+ * before insert, and ship with a curated built-in set (translate,
+ * summarise, rewrite, review-code, explain-code, debug). Built-ins are
+ * returned from GET /skills alongside the account's own skills,
+ * marked with `builtin: true` so the UI hides edit/delete affordances.
  *
- * All CRUD operations are scoped to the calling account — there is no
- * admin override, no sharing. A skill is a personal shortcut.
+ * CRUD still account-scoped — built-ins can be reordered or hidden
+ * by the UI but not edited via the API (404 from /:id paths since
+ * they aren't in the skills table).
  */
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -19,16 +22,21 @@ import {
   dbUpdateSkill,
   dbDeleteSkill,
 } from "../db/repo.js";
+import { listBuiltinSkills } from "../services/builtinSkills.js";
 
 function now(): string {
   return new Date().toISOString();
 }
 
 export async function skillRoutes(app: FastifyInstance): Promise<void> {
-  // List the calling account's skills, newest-updated first.
+  // List the calling account's skills (newest-updated first) plus the
+  // built-in skills appended at the end so the user's own picks are
+  // most reachable in the picker.
   app.get("/skills", async (req, reply) => {
     if (!req.account) return reply.status(401).send({ error: "Sign in required" });
-    return reply.send(dbListSkills(req.account.id));
+    const userSkills = dbListSkills(req.account.id);
+    const builtins = listBuiltinSkills();
+    return reply.send([...userSkills, ...builtins]);
   });
 
   // Create a new skill for the calling account.
@@ -44,6 +52,8 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
       accountId: req.account.id,
       name: parsed.data.name.trim(),
       prompt: parsed.data.prompt,
+      description: parsed.data.description,
+      variables: parsed.data.variables,
       createdAt: ts,
       updatedAt: ts,
     };
@@ -51,11 +61,16 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send(skill);
   });
 
-  // Partial update — name and/or prompt.
+  // Partial update — name / prompt / description / variables.
+  // Built-in ids (`builtin:*`) are rejected outright — they live in code,
+  // not in the DB.
   app.patch<{ Params: { id: string }; Body: unknown }>(
     "/skills/:id",
     async (req, reply) => {
       if (!req.account) return reply.status(401).send({ error: "Sign in required" });
+      if (req.params.id.startsWith("builtin:")) {
+        return reply.status(403).send({ error: "Built-in skills can't be edited" });
+      }
       const existing = dbGetSkill(req.params.id);
       if (!existing) return reply.status(404).send({ error: "Skill not found" });
       if (existing.accountId !== req.account.id) {
@@ -70,6 +85,8 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
         {
           name: parsed.data.name?.trim(),
           prompt: parsed.data.prompt,
+          description: parsed.data.description,
+          variables: parsed.data.variables,
         },
         now(),
       );
@@ -80,6 +97,9 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Params: { id: string } }>("/skills/:id", async (req, reply) => {
     if (!req.account) return reply.status(401).send({ error: "Sign in required" });
+    if (req.params.id.startsWith("builtin:")) {
+      return reply.status(403).send({ error: "Built-in skills can't be deleted" });
+    }
     const existing = dbGetSkill(req.params.id);
     if (!existing) return reply.status(404).send({ error: "Skill not found" });
     if (existing.accountId !== req.account.id) {
