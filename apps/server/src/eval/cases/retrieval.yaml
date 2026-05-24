@@ -1,0 +1,205 @@
+# Retrieval golden-set — eval cases for runRetrievalEval.
+#
+# Each case names the fixture workspace (folder under eval/fixtures/),
+# the query, the files that MUST appear in the top-k, and the files
+# that MUST NOT (distractors). `mustHit.contains` is an optional
+# substring that the matched chunk's text should include — if absent,
+# any chunk from that file counts.
+#
+# Add cases liberally — coverage matters more than elegance.
+
+cases:
+  # ── code-small ─────────────────────────────────────────────────────
+  - id: code-symbol-boost-001
+    workspace: code-small
+    query: "where is the symbol boost code"
+    mustHit:
+      - path: "src/retrieval.ts"
+        contains: "applySymbolBoost"
+    shouldNotHit:
+      - "notes-distractor.md"
+
+  - id: code-symbol-boost-002
+    workspace: code-small
+    query: "applySymbolBoost"
+    mustHit:
+      - path: "src/retrieval.ts"
+
+  - id: code-extract-symbols-001
+    workspace: code-small
+    query: "how do we extract symbols"
+    mustHit:
+      - path: "src/symbolIndex.ts"
+        contains: "extractSymbols"
+
+  - id: code-scoring-001
+    workspace: code-small
+    query: "chunk scoring function"
+    mustHit:
+      - path: "src/retrieval.ts"
+        contains: "scoreChunk"
+
+  - id: code-readme-001
+    workspace: code-small
+    query: "what's the project about"
+    mustHit:
+      - path: "README.md"
+
+  - id: code-distractor-001
+    workspace: code-small
+    query: "magic number for the bonus"
+    # The README + notes both mention the bonus; the harness should
+    # at minimum return one of them. Distractor is acceptable here
+    # because the actual constant value is in retrieval.ts.
+    mustHit:
+      - path: "src/retrieval.ts"
+
+  - id: code-typename-001
+    workspace: code-small
+    query: "Chunk interface fields"
+    mustHit:
+      - path: "src/retrieval.ts"
+        contains: "Chunk"
+
+  - id: code-mention-only-001
+    # Pure mention search — the README mentions both retrieval and
+    # the symbol index but doesn't define them.
+    workspace: code-small
+    query: "files in this project"
+    mustHit:
+      - path: "README.md"
+
+  # ── portfolio-small ────────────────────────────────────────────────
+  - id: portfolio-tsla-001
+    workspace: portfolio-small
+    query: "TSLA quantity"
+    mustHit:
+      - path: "holdings.csv"
+        contains: "TSLA"
+
+  - id: portfolio-tsla-002
+    workspace: portfolio-small
+    query: "TSLA 보유 수량은?"
+    mustHit:
+      - path: "holdings.csv"
+
+  - id: portfolio-fx-001
+    workspace: portfolio-small
+    query: "USD to KRW exchange rate"
+    mustHit:
+      - path: "fx-rates.csv"
+        contains: "KRW"
+
+  - id: portfolio-fx-002
+    workspace: portfolio-small
+    query: "환율 정보"
+    mustHit:
+      - path: "fx-rates.csv"
+
+  - id: portfolio-samsung-001
+    workspace: portfolio-small
+    query: "Samsung Electronics 005930"
+    mustHit:
+      - path: "holdings.csv"
+        contains: "005930"
+
+  - id: portfolio-notes-001
+    workspace: portfolio-small
+    query: "what's my largest USD position"
+    mustHit:
+      - path: "notes.md"
+        contains: "TSLA"
+
+  - id: portfolio-noisy-currency-001
+    # The reading list says "currency" but isn't about finance — the
+    # retriever should prefer the actual fx file.
+    workspace: portfolio-small
+    query: "currency conversion rate"
+    mustHit:
+      - path: "fx-rates.csv"
+    shouldNotHit:
+      - "unrelated.md"
+
+  - id: portfolio-cost-basis-001
+    workspace: portfolio-small
+    query: "average cost per share"
+    mustHit:
+      - path: "holdings.csv"
+        contains: "avg_cost"
+
+  - id: portfolio-realized-001
+    # The question is in notes.md (open question section).
+    workspace: portfolio-small
+    query: "realized P&L tracking"
+    mustHit:
+      - path: "notes.md"
+
+  - id: portfolio-quantity-units-001
+    workspace: portfolio-small
+    query: "150 shares of which stock"
+    mustHit:
+      - path: "holdings.csv"
+        contains: "005930"
+
+  # ── korean-mixed ───────────────────────────────────────────────────
+  - id: korean-realism-001
+    workspace: korean-mixed
+    query: "조형예술론에서 사실성이 어디서 다뤄"
+    mustHit:
+      - path: "조형예술론.md"
+        contains: "사실성"
+    shouldNotHit:
+      - "random.md"
+
+  - id: korean-color-001
+    workspace: korean-mixed
+    query: "색과 형태 관계"
+    mustHit:
+      - path: "조형예술론.md"
+        contains: "색"
+
+  - id: korean-schedule-001
+    workspace: korean-mixed
+    query: "이번 학기 강의 시간표"
+    mustHit:
+      - path: "강의계획.md"
+
+  - id: korean-schedule-002
+    workspace: korean-mixed
+    query: "finals week schedule"
+    mustHit:
+      - path: "강의계획.md"
+        contains: "기말"
+
+  - id: korean-monday-class-001
+    workspace: korean-mixed
+    query: "월요일 강의는 뭐"
+    mustHit:
+      - path: "강의계획.md"
+        contains: "조형예술론"
+
+  - id: korean-noisy-distractor-001
+    # The random memo includes art terms as decoys; the harness should
+    # prefer the actual art-theory file for a query about art concepts.
+    workspace: korean-mixed
+    query: "추상이 어떤 의미"
+    mustHit:
+      - path: "조형예술론.md"
+        contains: "추상"
+    shouldNotHit:
+      - "random.md"
+
+  - id: korean-data-structures-001
+    workspace: korean-mixed
+    query: "데이터구조론 강의 시간"
+    mustHit:
+      - path: "강의계획.md"
+        contains: "데이터구조론"
+
+  - id: korean-romanised-class-001
+    workspace: korean-mixed
+    query: "art theory lecture schedule"
+    # English-ish query against a mostly-Korean fixture — the harness
+    # should still hit at least one of the two relevant files.
+    mustHit:
+      - path: "강의계획.md"
