@@ -41,3 +41,12 @@ id_rsa.*
 
 # os
 .DS_Store
+
+# eval fixtures are intentionally named like real credentials so the
+# safety harness has something to test. The contents are clearly
+# labelled "FAKE-DO-NOT-USE"; force them into the repo so fresh
+# clones can run `npm run eval:strategy`.
+!apps/server/src/eval/fixtures/**/.ariadne/
+!apps/server/src/eval/fixtures/**/.ariadne/**
+!apps/server/src/eval/fixtures/**/credentials*.json
+!apps/server/src/eval/fixtures/**/*.env
