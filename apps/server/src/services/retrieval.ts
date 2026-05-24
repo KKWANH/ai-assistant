@@ -87,6 +87,18 @@ export interface RetrieveOptions {
   /** When set, the retriever first checks for a stored embedding index
    *  and uses it before falling back to keyword search. */
   workspaceId?: string;
+  /**
+   * Pin the retrieval strategy instead of using the default `auto`
+   * waterfall (semantic → keyword+symbol). Used by the eval harness to
+   * compare strategies head-to-head; chat / actions stay on `auto`.
+   *
+   *   "auto"            current behaviour
+   *   "semantic-only"   semantic; empty result if no index / no provider
+   *                     (caller gets the warning, no fallback)
+   *   "keyword-only"    keyword ranker only, no symbol nudge
+   *   "keyword+symbol"  keyword ranker + symbol-boost
+   */
+  forceStrategy?: "auto" | "semantic-only" | "keyword-only" | "keyword+symbol";
 }
 
 /**
@@ -168,12 +180,31 @@ export async function retrieveWithMeta(
 ): Promise<RetrievalResult> {
   const topK = options.topK ?? DEFAULT_TOP_K;
   const warnings: string[] = [];
+  const force = options.forceStrategy ?? "auto";
 
-  // ── Embedding path — only used if a workspace_id is provided AND an
-  //    index already exists. The chat route passes the id; ad-hoc
-  //    callers without one fall through to keyword.
-  if (options.workspaceId) {
-    const semantic = await retrieveBySimilarityMeta(options.workspaceId, query, topK);
+  // ── semantic-only honesty: when the caller pinned this strategy and
+  //    can't run it (no workspaceId), return empty + warning instead of
+  //    silently falling through to keyword. The strategy harness
+  //    depends on this — its whole purpose is to compare paths fairly.
+  if (force === "semantic-only" && !options.workspaceId) {
+    return {
+      chunks: [],
+      strategy: "none",
+      hasEmbeddingIndex: false,
+      embeddingProvider: null,
+      candidateCount: 0,
+      warnings: ["forceStrategy=semantic-only requires workspaceId (none provided)"],
+    };
+  }
+
+  // ── Embedding path — used when (a) the strategy is "auto" or
+  //    "semantic-only" AND (b) a workspaceId is provided AND (c) an
+  //    index actually exists. On "semantic-only" we return whatever
+  //    the semantic path produces (including empty) WITHOUT falling
+  //    through to keyword — that's the point of the comparison flag.
+  const allowSemantic = (force === "auto" || force === "semantic-only") && !!options.workspaceId;
+  if (allowSemantic) {
+    const semantic = await retrieveBySimilarityMeta(options.workspaceId!, query, topK);
     if (semantic.usable) {
       return {
         chunks: semantic.chunks,
@@ -184,9 +215,29 @@ export async function retrieveWithMeta(
         warnings: semantic.warnings,
       };
     }
+    if (force === "semantic-only") {
+      // Honest empty result — caller asked for pure semantic and the
+      // index wasn't usable. No keyword fallback.
+      return {
+        chunks: [],
+        strategy: "none",
+        hasEmbeddingIndex: false,
+        embeddingProvider: semantic.provider,
+        candidateCount: 0,
+        warnings: ["forceStrategy=semantic-only and no usable index", ...semantic.warnings],
+      };
+    }
     // Carry forward semantic warnings (out-of-date provider, etc.) into
     // the keyword fallback so the UI / harness sees the full story.
     if (semantic.warnings.length > 0) warnings.push(...semantic.warnings);
+  }
+
+  // ── keyword+symbol honesty: caller asked for the symbol boost but
+  //    can't run the symbol lookup (no workspaceId → no symbol_index
+  //    table to query). Emit a warning so the harness comparison row
+  //    isn't misread as "keyword+symbol passed, same as keyword".
+  if (force === "keyword+symbol" && !options.workspaceId) {
+    warnings.push("forceStrategy=keyword+symbol requires workspaceId for symbol lookup — degenerates to keyword");
   }
 
   const tokens = tokenize(query);
@@ -202,9 +253,11 @@ export async function retrieveWithMeta(
   }
 
   // Symbol-boosted set — paths whose code symbols match a query token
-  // get a fixed bonus on every chunk they own. Cheap O(1) lookup
-  // against the symbol index. Empty for non-code workspaces.
-  const symbolHitPaths = options.workspaceId
+  // get a fixed bonus on every chunk they own. Skipped when the caller
+  // pinned "keyword-only" (the harness uses that to isolate the
+  // boost's effect from the raw keyword baseline).
+  const useSymbolBoost = force === "auto" || force === "keyword+symbol";
+  const symbolHitPaths = useSymbolBoost && options.workspaceId
     ? new Set(
         dbLookupSymbolMatches(options.workspaceId, tokens).map((s) => s.path),
       )
@@ -251,9 +304,20 @@ export async function retrieveWithMeta(
   // Sort by descending score, then prefer earlier (likely more focused)
   // chunks as a deterministic tiebreaker.
   allChunks.sort((a, b) => b.score - a.score);
+  // Strategy label: when the harness pinned "keyword-only" we report
+  // exactly that even when no symbol matches existed (so the column
+  // in the comparison table reflects the *requested* strategy, not an
+  // accidental degenerate case). Otherwise the label reflects what
+  // actually happened.
+  const finalStrategy: RetrievalStrategy =
+    force === "keyword-only"
+      ? "keyword"
+      : symbolHitPaths.size > 0
+        ? "keyword+symbol"
+        : "keyword";
   return {
     chunks: allChunks.slice(0, topK),
-    strategy: symbolHitPaths.size > 0 ? "keyword+symbol" : "keyword",
+    strategy: finalStrategy,
     hasEmbeddingIndex: false,
     embeddingProvider: null,
     candidateCount: allChunks.length,
