@@ -24,7 +24,7 @@ import * as codeStarter from "../surface/codeStarter.js";
 import * as decisionsStarter from "../surface/decisionsStarter.js";
 import * as papersStarter from "../surface/papersStarter.js";
 import logger from "../logger.js";
-import { canAccessWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+import { canViewWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 
 /**
  * Sample files + custom surface scaffolded for each non-blank workspace
@@ -97,10 +97,13 @@ const STARTERS: Record<
 };
 
 export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/workspaces
+  // GET /api/workspaces — uses the read predicate so public workspaces
+  // (visibility="public") show up in the list for any authenticated
+  // account, not just the owner. Owner/admin-only operations on those
+  // public rows are still gated at the per-route level via mode="write".
   app.get("/workspaces", async (req, reply) => {
     const all = dbListWorkspaces();
-    const visible = all.filter((w) => canAccessWorkspace(w, req.account));
+    const visible = all.filter((w) => canViewWorkspace(w, req.account));
     return reply.send(visible);
   });
 
@@ -184,7 +187,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/workspaces/:id
   app.get<{ Params: { id: string } }>("/workspaces/:id", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
     return reply.send(workspace);
   });
@@ -196,7 +199,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
     "/workspaces/:id/history",
     async (req, reply) => {
-      const workspace = await requireWorkspace(req.params.id, req, reply);
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
       if (!workspace) return;
       const { listWorkspaceHistory } = await import("../services/workspaceGit.js");
       const { listAppliedCommits } = await import("../services/stagedEdits.js");
@@ -218,7 +221,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string; sha: string } }>(
     "/workspaces/:id/history/:sha",
     async (req, reply) => {
-      const workspace = await requireWorkspace(req.params.id, req, reply);
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
       if (!workspace) return;
       // Sha sanity guard — accept short or full hex; service double-checks.
       if (!/^[a-f0-9]{7,40}$/i.test(req.params.sha)) {
@@ -311,7 +314,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/workspaces/:id/snapshot
   app.get<{ Params: { id: string } }>("/workspaces/:id/snapshot", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
 
     const snapshot = dbGetLatestSnapshot(req.params.id);
@@ -329,7 +332,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { q?: string; topK?: string } }>(
     "/workspaces/:id/search",
     async (req, reply) => {
-      const workspace = await requireWorkspace(req.params.id, req, reply);
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
       if (!workspace) return;
 
       const query = (req.query.q ?? "").trim();

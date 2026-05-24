@@ -19,7 +19,7 @@ import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 export async function actionRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces/:id/actions
   app.get<{ Params: { id: string } }>("/workspaces/:id/actions", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
 
     ensureAriadneFolder(workspace.rootPath);
@@ -62,7 +62,7 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces/:id/action-defs — the unified "create & run" list:
   // built-in templates (scoped to the workspace category) + custom actions.
   app.get<{ Params: { id: string } }>("/workspaces/:id/action-defs", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
 
     ensureAriadneFolder(workspace.rootPath);

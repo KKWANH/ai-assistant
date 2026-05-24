@@ -1,8 +1,21 @@
 /**
- * Shared access-control helpers.
+ * Shared access-control helpers — read and write are now distinct gates.
  *
- * Content is private by default: every account sees only what it created.
- * An admin sees everything. The built-in workspaces are public.
+ *   canViewWorkspace    — reading metadata, files, runs, surfaces, snapshots.
+ *   canModifyWorkspace  — mutating: edit, scan, delete, build, scripts, etc.
+ *
+ *   Private (default)   → view + modify: owner/admin only.
+ *   Public (visibility="public") → view: any authenticated account.
+ *                                 modify: owner/admin only.
+ *   Built-in (tutorial/demo) → view: any authenticated account.
+ *                              modify: any authenticated account (current behaviour;
+ *                                       could be tightened to admin-only in a
+ *                                       follow-up, kept loose so the tutorial
+ *                                       walkthrough doesn't break).
+ *
+ * `requireWorkspace` takes a mode that defaults to "write" — strict by
+ * default, so a route that forgot to specify can't accidentally over-share.
+ * GET endpoints opt into "read" explicitly.
  */
 
 import type { FastifyRequest, FastifyReply } from "fastify";
@@ -19,28 +32,53 @@ export function isOwnerOrAdmin(createdBy: string | null, account: Account): bool
   return createdBy != null && createdBy === account.id;
 }
 
-export function canAccessWorkspace(workspace: Workspace, account: Account): boolean {
-  // Built-in workspaces (the tutorial and the Portfolio demo) are public.
+/** Can `account` read this workspace's content? */
+export function canViewWorkspace(workspace: Workspace, account: Account): boolean {
+  if (isBuiltinWorkspace(workspace.id)) return true;
+  if (workspace.visibility === "public") return true;
+  return isOwnerOrAdmin(workspace.createdBy, account);
+}
+
+/** Can `account` mutate this workspace (edit files, scan, delete, ...)? */
+export function canModifyWorkspace(workspace: Workspace, account: Account): boolean {
   if (isBuiltinWorkspace(workspace.id)) return true;
   return isOwnerOrAdmin(workspace.createdBy, account);
+}
+
+/**
+ * Deprecated alias — kept so unaudited call sites still compile and stay
+ * strict (treat unknown access as write-level). Prefer canViewWorkspace
+ * or canModifyWorkspace explicitly.
+ */
+export function canAccessWorkspace(workspace: Workspace, account: Account): boolean {
+  return canModifyWorkspace(workspace, account);
 }
 
 /**
  * Fetch a workspace by id and enforce the access guard. On a missing workspace
  * or denied access this sends the appropriate 404/403 response and returns
  * null — callers should `return` immediately when the result is null.
+ *
+ * `mode` defaults to "write" — the strict choice. Pass `"read"` on GET
+ * endpoints and on read-only inspection sites so visibility="public"
+ * workspaces are reachable by other authenticated accounts.
  */
 export async function requireWorkspace(
   id: string,
   req: FastifyRequest,
   reply: FastifyReply,
+  mode: "read" | "write" = "write",
 ): Promise<Workspace | null> {
   const workspace = dbGetWorkspace(id);
   if (!workspace) {
     await reply.status(404).send({ error: "Workspace not found" });
     return null;
   }
-  if (!canAccessWorkspace(workspace, req.account)) {
+  const allowed =
+    mode === "read"
+      ? canViewWorkspace(workspace, req.account)
+      : canModifyWorkspace(workspace, req.account);
+  if (!allowed) {
     await reply.status(403).send({ error: "Forbidden" });
     return null;
   }

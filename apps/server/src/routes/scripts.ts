@@ -35,7 +35,7 @@ function getRunner(name: string): { cmd: string; args: string[] } | null {
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces/:id/scripts
   app.get<{ Params: { id: string } }>("/workspaces/:id/scripts", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
 
     ensureAriadneFolder(workspace.rootPath);
@@ -53,7 +53,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/workspaces/:id/scripts/:name
   app.get<{ Params: { id: string; name: string } }>("/workspaces/:id/scripts/:name", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
 
     const { name } = req.params;

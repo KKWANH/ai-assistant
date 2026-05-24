@@ -49,7 +49,7 @@ function getSurfaceState(workspaceRoot: string): SurfaceState {
 export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces/:id/surface
   app.get<{ Params: { id: string } }>("/workspaces/:id/surface", async (req, reply) => {
-    const workspace = await requireWorkspace(req.params.id, req, reply);
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
 
     ensureAriadneFolder(workspace.rootPath);
@@ -113,7 +113,7 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { path?: string } }>(
     "/workspaces/:id/file",
     async (req, reply) => {
-      const workspace = await requireWorkspace(req.params.id, req, reply);
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
       if (!workspace) return;
 
       const relPath = req.query.path;
