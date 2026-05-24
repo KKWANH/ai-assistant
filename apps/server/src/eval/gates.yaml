@@ -1,0 +1,32 @@
+# Eval gates — what the harness expects retrieval quality to look like.
+#
+# As of BATCH-2 these are **soft** gates: the runner prints PASS / FAIL
+# per metric and exits 0 either way. Once the harness has hardened
+# (more cases, real hybrid retrieval landed, CI integration), the
+# `--ci` flag should switch to exit 1 on any FAIL.
+#
+# Values track the spec's `gates.retrieval` block in docs/RAG_HARNESS.md.
+# Adjusting any of these counts as a quality decision — the commit
+# message should explain why the bar moved.
+
+retrieval:
+  # Top-of-funnel: any mustHit lands in the top-6 of returned chunks.
+  hitAt6Min: 0.85
+  # First-hit rank discipline.
+  mrrMin: 0.65
+  # Of the top-6 chunks, this fraction should be from mustHit paths.
+  # Current baseline sits at ~37% so the bar is aspirational — moving
+  # it up is what the next slice (better chunking / reranking) buys.
+  contextPrecisionMin: 0.60
+  # p95 retrieval latency in milliseconds. Spec target is 500ms.
+  p95LatencyMsMax: 500
+  # Distractor-leak rate — shouldNotHit entries that landed in the top-6.
+  # 0 is the goal; let's start by holding at 10%.
+  distractorLeakRateMax: 0.10
+
+# Generation gates left as a placeholder — the generation harness
+# itself isn't built yet (priority #6 in the spec).
+generation:
+  faithfulnessMin: 0.85
+  unsupportedClaimRateMax: 0.08
+  answerRelevanceMin: 0.80

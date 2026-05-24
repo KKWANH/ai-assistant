@@ -24,6 +24,7 @@ import { retrieveWithMeta } from "../services/retrieval.js";
 import { loadRetrievalCases, fixturesRoot, type RetrievalCase } from "./cases.js";
 import { evaluateCase, aggregate, type CaseMetrics } from "./metrics.js";
 import { writeReports } from "./reporters/index.js";
+import { loadGates, evaluateRetrievalGates, summariseVerdicts } from "./gates.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,11 +33,19 @@ interface CliArgs {
   workspaces?: string[];
   topK: number;
   outDir: string;
+  /** When set, after the aggregate prints, also evaluate gates.yaml
+   *  thresholds and print PASS / FAIL per metric. Exit code is still
+   *  0 (soft gates) — flip to `--strict` once the bar is stable. */
+  ci: boolean;
+  /** When set with `--ci`, exit 1 if any gate FAILs. */
+  strict: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
   let workspaces: string[] | undefined;
   let topK = 10;
+  let ci = false;
+  let strict = false;
   let outDir = path.join(
     __dirname,
     "..",
@@ -55,10 +64,14 @@ function parseArgs(argv: string[]): CliArgs {
       topK = parseInt(arg.slice("--topK=".length), 10) || topK;
     } else if (arg.startsWith("--out=")) {
       outDir = arg.slice("--out=".length);
+    } else if (arg === "--ci") {
+      ci = true;
+    } else if (arg === "--strict") {
+      strict = true;
     }
   }
 
-  return { workspaces, topK, outDir };
+  return { workspaces, topK, outDir, ci, strict };
 }
 
 /** Walk a fixture folder and build a FileMeta[] using the production
@@ -152,6 +165,21 @@ async function main(): Promise<void> {
     },
   });
   console.log(`\nReport written to: ${args.outDir}`);
+
+  if (args.ci) {
+    const gates = loadGates();
+    const verdicts = evaluateRetrievalGates(agg, gates.retrieval ?? {});
+    const summary = summariseVerdicts(verdicts);
+    console.log("\n— CI gates —");
+    for (const v of verdicts) {
+      console.log(`  ${v.pass ? "PASS" : "FAIL"}  ${v.name.padEnd(36)} (${v.detail})`);
+    }
+    console.log(`  ${summary.pass.toString()}/${summary.total.toString()} gates pass`);
+    if (args.strict && summary.fail > 0) {
+      console.error(`\n--strict: ${summary.fail.toString()} gate(s) failed, exiting 1`);
+      process.exit(1);
+    }
+  }
 }
 
 async function runOne(

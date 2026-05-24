@@ -250,6 +250,202 @@ Append one entry per batch. Each entry: date, range of commits, what the
 batch *did*, what it left *for the next batch*, what re-reading the spec
 above made me notice that I missed.
 
-### BATCH-1 (date TBD on commit)
+### BATCH-1 — 2026-05-24 — commits `3942024..7a05194`
 
-— pending —
+**Shipped**
+
+- P0 mobile fix (composer no longer disappears on iPhone SE / S8+).
+  Root cause: `min-h-0` missing on the flex chain hosting the scrolling
+  MessageList. Fix at three levels: ChatView root, MessageList outer,
+  AppShell `<main>` + its child container. (`78408f5`)
+- P1 — this doc.
+- P2 — four spec-flagged bugs:
+  - `retrieveWithMeta()` introduced, returns `{ chunks, strategy,
+    hasEmbeddingIndex, embeddingProvider, candidateCount, warnings }`.
+    Chunks-only wrapper kept for chat / action callers.
+  - `/api/workspaces/:id/search` now reports `indexed` honestly
+    (`hasEmbeddingIndex`, NOT `chunks.length > 0`) plus `strategy`,
+    `embeddingProvider`, `candidateCount`, `warnings`.
+  - `WorkspaceSearchView` renders truthful strategy label
+    ("semantic match" / "keyword + symbol boost" / "keyword only" /
+    "no matches") + warnings footer.
+  - `ask_ai` retrieval query joins `instruction + priorOutput.slice(1500)`.
+  - Manual data-edit synthetic Run: `provider: "mock"`,
+    `startedAt = completedAt = now`. Was lying as `"anthropic"` with
+    `completedAt: null`. (`3942024`)
+- P3 — retrieval harness v1 (`7a05194`):
+  - 3 fixture workspaces (`code-small`, `portfolio-small`,
+    `korean-mixed`) with intentional distractor files.
+  - 26 cases in `apps/server/src/eval/cases/retrieval.yaml`.
+  - `metrics.ts` (Hit@k, MRR, context P+R@6, distractor leak rate,
+    p50+p95 latency, strategy mix).
+  - `runRetrievalEval.ts` runner + `reporters/` writing JSON summary,
+    JSON details, and Markdown report to `data/evals/<isoTimestamp>/`.
+  - `npm run eval:retrieval` works from repo root.
+  - **Baseline numbers (keyword-only)**:
+    Hit@1=53.8 % · Hit@3=Hit@6=80.8 % · MRR=0.667 ·
+    P@6=37.0 % · R@6=80.8 % · distractor leak=7.7 % ·
+    p95 latency=0.2 ms.
+
+**What re-reading the spec surfaced that I haven't covered**
+
+- **nDCG** — spec listed it; I shipped only MRR + hit rates. MRR is
+  enough when each case has 1 relevant doc; once cases get multiple
+  relevant docs nDCG becomes a real signal. Mark deferred.
+- **indexed coverage** — spec listed it; not in metrics today. Needs
+  knowing the workspace's total file count and what fraction of it
+  was actually considered (after `MAX_FILES_READ=40` cap). Easy to
+  add — note for the next batch.
+- **Synthetic workspace generator** (`createFixtureWorkspace({seed, files})`)
+  — spec proposed it; I shipped static fixtures instead. Static is
+  fine for v1 (versioned, debuggable, no flakes); generator is
+  needed when we want hundreds of cases or stress-tests of "small
+  signal inside large file". Defer.
+- **Safety harness** — spec priority #5. Not covered yet:
+  - sensitive files must never appear in retrieval
+  - `.ariadne/` files must be excluded
+  - paths cannot escape the workspace root
+  - These are testable with the existing harness (just add cases with
+    `shouldNotHit`-style assertions on `.ariadne/secrets.json` etc.).
+- **Generation harness** — spec priority #6, biggest deferred chunk.
+  Requires LLM calls which means cost + non-determinism. Use
+  `provider: "mock"` for the deterministic path and a separate
+  `--live` flag for real calls. Defer to a follow-up chip.
+
+**Next batch — P5 Strategy comparison**
+
+The natural next slice given the spec's priority order. Plan:
+
+1. Add `strategy: "auto" | "keyword-only" | "keyword+symbol" | "semantic"` 
+   option to `retrieveWithMeta`. `auto` = today's behaviour; the
+   others let the harness pin which path to run.
+2. `runStrategyEval.ts` — runs the same case set under each strategy
+   and emits a side-by-side comparison table (keyword-only vs
+   keyword+symbol vs semantic).
+3. Semantic strategy needs a populated `chunk_embeddings` table for
+   each fixture. Either:
+   - boot openDb against a scratch path + run the embedding indexer
+     against each fixture once at harness start (proper, slow)
+   - skip semantic when no provider is reachable, mark its row as
+     "skipped" in the report (pragmatic, fast)
+   Going pragmatic for v1.
+4. `eval:strategy` npm script.
+
+Then P6 (light CI gates YAML, no hard fail in v1) and P7 (final
+self-eval + chips for the deferred items).
+
+### BATCH-2 — 2026-05-24 — commits `7a05194..HEAD`
+
+**Shipped**
+
+- P5 — strategy comparison harness (`e333404`):
+  - `retrieveWithMeta` accepts `forceStrategy: "auto" | "keyword-only"
+    | "keyword+symbol" | "semantic-only"`. Default `"auto"` preserves
+    today's chat / action behaviour.
+  - Two honesty fixes the harness immediately surfaced:
+    - `semantic-only` without `workspaceId` returned empty + warning
+      (was silently falling through to keyword).
+    - `keyword+symbol` without `workspaceId` records a warning that
+      it's degenerating to keyword-only (no symbol index to query).
+  - `runStrategyEval.ts` runs the same case set under each strategy
+    + writes a side-by-side report (`strategy-summary.json`,
+    `strategy-details.json`, `strategy-report.md`).
+  - `--use-db` mode: boots a scratch SQLite under `tmpdir`, indexes
+    symbols + embeddings per fixture under `eval:<fixture>` ids so
+    `keyword+symbol` and `semantic-only` have real data. Embeddings
+    skipped (with a clear log line) when no provider reachable.
+  - `npm run eval:strategy [-- --use-db]` from repo root.
+  - **Real numbers (Ollama nomic-embed-text:latest, 26 cases)**:
+
+    | strategy        | Hit@1 | Hit@6 | MRR   | P@6   | R@6    | p95     |
+    |-----------------|-------|-------|-------|-------|--------|---------|
+    | keyword-only    | 53.8% | 80.8% | 0.667 | 37.0% | 80.8%  |   2.1ms |
+    | keyword+symbol  | 61.5% | 80.8% | 0.705 | 37.0% | 80.8%  |   0.3ms |
+    | semantic-only   | 38.5% |100.0% | 0.604 | 27.6% |100.0%  |  27.6ms |
+
+  - Three findings the harness produced (not guessed):
+    1. Symbol boost: +7.7 pp Hit@1, +0.038 MRR, P@6 unchanged. Pure win.
+    2. Semantic: R@6=100 % but Hit@1 drops 15 pp. Trades rank-1
+       precision for total recall.
+    3. Semantic solved every Korean cross-language failure the
+       keyword baseline missed (5/5). "Auto" default is therefore
+       the right shape — semantic when there's an index, fall
+       through to keyword+symbol otherwise.
+- P6 — soft CI gates (`HEAD`):
+  - `apps/server/src/eval/gates.yaml` with the spec's thresholds.
+  - `gates.ts` reads the file + returns per-metric verdicts; missing
+    gate values are silently skipped.
+  - `runRetrievalEval --ci` prints PASS / FAIL per gate and exits 0
+    (soft). `--strict` flips to exit 1 on any FAIL — for later when
+    the bar is stable.
+  - `npm run eval:retrieval:ci` script.
+  - Current baseline against gates: 3/5 PASS.
+    - FAIL  Hit@6 ≥ 85.0% (actual 80.8% — Korean misses pull this down)
+    - PASS  MRR ≥ 0.650 (0.667)
+    - FAIL  Context P@6 ≥ 60.0% (37.0% — chunk-size + reranking territory)
+    - PASS  p95 latency ≤ 500 ms (0.4 ms)
+    - PASS  Distractor leak ≤ 10 % (7.7%)
+
+**Spec coverage now**
+
+| Spec item                                  | Status |
+|--------------------------------------------|--------|
+| 1) Retrieval golden-set harness            | ✅ BATCH-1 |
+| 2) Strategy comparison harness             | ✅ BATCH-2 |
+| 3) Regression CI harness (soft gates)      | ✅ BATCH-2 (strict mode wired but off) |
+| 4) Performance harness (latency tracked)   | ✅ covered by latency metrics |
+| 5) Safety harness (sensitive / .ariadne)   | ❌ deferred — chip below |
+| 6) Generation faithfulness harness         | ❌ deferred — chip below |
+| 7) User feedback → case promotion          | ❌ deferred — chip below |
+| nDCG metric                                | ❌ deferred (MRR sufficient for 1-doc cases) |
+| indexed coverage metric                    | ❌ deferred — small add |
+| Synthetic workspace generator              | ❌ deferred (static fixtures are fine for v1) |
+
+**Re-read of the spec — what BATCH-2 surfaced that I missed**
+
+- "Workspace-wide semantic search" claim is more truthful now that the
+  search UI says exactly which strategy ran. But the indexing-side
+  story is still: `MAX_FILES_READ = 40`, `FILE_READ_BUDGET = 25 000`.
+  The strategy harness measured 7 chunks indexed across the
+  portfolio-small fixture and 3 across korean-mixed — within the
+  budget, but the harness should explicitly compute **indexed coverage**
+  (files considered / total files) and surface it. Small follow-up.
+- Reranking research the spec cites (LiveRAG MAP boost, RAG hyper-
+  parameter studies) is moot until the retrieval surface actually
+  produces enough candidates to rerank. Today the keyword path's
+  `MAX_FILES_READ = 40` cap means anything beyond the smallest 40
+  files is invisible. Real hybrid retrieval (BM25 + sqlite-vec + RRF)
+  is the chip below; reranking is the chip after that.
+- Generation harness is the largest remaining gap. The spec was
+  explicit: "검색만 잘해도 LLM이 retrieved context를 무시하면 RAG는
+  실패한다." Once landed, the loop tightens.
+
+**Follow-up chips spawned**
+
+1. **Real Hybrid Retrieval v1** — BM25 (sqlite FTS5) + vector +
+   symbol-boost merged with reciprocal rank fusion + the
+   `forceStrategy: "hybrid"` option. Strategy harness already has a
+   slot for the column.
+2. **Safety eval cases** — sensitive files (e.g. `secrets.json`),
+   `.ariadne/` files, path-traversal patterns added to
+   `retrieval.yaml` with `shouldNotHit` guarantees.
+3. **Generation faithfulness harness** — `runRagEval.ts`, deterministic
+   `provider: "mock"` path + opt-in `--live` for real provider calls.
+4. **Incremental indexing** — file hash + mtime so a re-scan only
+   re-embeds changed files. Currently the embedding indexer clears
+   and rebuilds — fine for the fixture sizes, breaks on real
+   workspaces with thousands of files.
+5. **nDCG + indexed coverage** in the metrics module — small additions
+   the spec called out.
+
+**Where this leaves Ariadne's RAG**
+
+Before BATCH-1: "we have retrieval, no idea how good it is."
+After BATCH-2: a single command (`npm run eval:strategy -- --use-db`)
+produces a comparison table that lets a contributor say things like
+"this PR moved Hit@1 from 61.5 % to 64.3 % without latency cost" and
+have receipts.
+
+That capability is the chip the spec was actually asking for. Now the
+algorithm work (real hybrid, reranking, etc.) has a place to land
+with measurable verdicts attached.

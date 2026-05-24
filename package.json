@@ -19,6 +19,7 @@
     "start:supervisor": "tsx apps/admin/src/supervisor.ts",
     "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p apps/server && tsc --noEmit -p apps/admin && tsc --noEmit -p apps/web",
     "eval:retrieval": "tsx apps/server/src/eval/runRetrievalEval.ts",
+    "eval:retrieval:ci": "tsx apps/server/src/eval/runRetrievalEval.ts --ci",
     "eval:strategy": "tsx apps/server/src/eval/runStrategyEval.ts"
   },
   "devDependencies": {
