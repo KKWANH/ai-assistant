@@ -1,0 +1,75 @@
+# Generation cases — retrieve → generate → score.
+#
+# `requiredContext` is the set of paths the retrieved chunks must cover;
+# absent files lower context recall but don't hard-fail.
+# `expectedClaims` are substrings (case-insensitive) the answer SHOULD contain.
+# `forbiddenClaims` are substrings the answer MUST NOT contain.
+# `expectedAbstention: true` means the correct response is "I don't know" /
+# "the context doesn't say" — the generator is deliberately given no
+# useful context.
+
+cases:
+  - id: gen-tsla-quantity-001
+    workspace: portfolio-small
+    query: "What's my TSLA quantity?"
+    requiredContext: ["holdings.csv"]
+    expectedClaims: ["12"]
+    forbiddenClaims: ["I don't have access", "no information"]
+    expectedAbstention: false
+
+  - id: gen-fx-rate-001
+    workspace: portfolio-small
+    query: "What's the USD to KRW exchange rate?"
+    requiredContext: ["fx-rates.csv"]
+    expectedClaims: ["1380"]
+    forbiddenClaims: ["unknown", "no rate"]
+    expectedAbstention: false
+
+  - id: gen-portfolio-largest-001
+    workspace: portfolio-small
+    query: "What's my largest USD position by share count?"
+    requiredContext: ["notes.md", "holdings.csv"]
+    expectedClaims: ["TSLA"]
+    forbiddenClaims: []
+    expectedAbstention: false
+
+  - id: gen-symbol-boost-001
+    workspace: code-small
+    query: "What constant controls the symbol boost amount?"
+    requiredContext: ["src/retrieval.ts"]
+    expectedClaims: ["SYMBOL_BOOST"]
+    forbiddenClaims: []
+    expectedAbstention: false
+
+  - id: gen-korean-realism-001
+    workspace: korean-mixed
+    query: "조형예술론에서 사실성을 어떻게 설명하나?"
+    requiredContext: ["조형예술론.md"]
+    expectedClaims: ["사실성"]
+    forbiddenClaims: []
+    expectedAbstention: false
+
+  - id: gen-korean-schedule-001
+    workspace: korean-mixed
+    query: "월요일 강의는 뭐가 있나?"
+    requiredContext: ["강의계획.md"]
+    expectedClaims: ["조형예술론"]
+    forbiddenClaims: []
+    expectedAbstention: false
+
+  - id: gen-abstain-001
+    # Question that no fixture file answers — abstention check.
+    workspace: portfolio-small
+    query: "What was the closing price of Bitcoin on March 17, 1998?"
+    requiredContext: []
+    expectedClaims: []
+    forbiddenClaims: ["$"]
+    expectedAbstention: true
+
+  - id: gen-abstain-002
+    workspace: code-small
+    query: "What's the company's quarterly revenue target?"
+    requiredContext: []
+    expectedClaims: []
+    forbiddenClaims: ["$", "billion", "million"]
+    expectedAbstention: true

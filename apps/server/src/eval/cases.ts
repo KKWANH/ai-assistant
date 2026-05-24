@@ -79,3 +79,51 @@ export function loadRetrievalCases(): RetrievalCase[] {
 export function loadRetrievalCasesFromFile(filePath: string): RetrievalCase[] {
   return loadCasesFile(filePath);
 }
+
+// ── Generation cases (runRagEval) ────────────────────────────────────────
+
+export interface GenerationCase {
+  id: string;
+  workspace: string;
+  query: string;
+  requiredContext: string[];
+  expectedClaims: string[];
+  forbiddenClaims: string[];
+  /** True when the correct answer is "I don't know" — context is
+   *  intentionally absent / off-topic. */
+  expectedAbstention: boolean;
+}
+
+export function defaultGenerationCasesPath(): string {
+  return path.join(__dirname, "cases", "rag-answer.yaml");
+}
+
+export function loadGenerationCases(
+  filePath: string = defaultGenerationCasesPath(),
+): GenerationCase[] {
+  if (!fs.existsSync(filePath)) return [];
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const parsed = yaml.parse(raw) as { cases?: unknown };
+  const cases = parsed.cases;
+  if (!Array.isArray(cases)) {
+    throw new Error(`Generation cases file ${filePath} has no top-level "cases" array`);
+  }
+  const out: GenerationCase[] = [];
+  for (const raw of cases) {
+    const c = raw as Partial<GenerationCase>;
+    if (!c.id || !c.workspace || !c.query) {
+      console.warn(`[eval] skipping generation case missing id/workspace/query: ${JSON.stringify(raw)}`);
+      continue;
+    }
+    out.push({
+      id: c.id,
+      workspace: c.workspace,
+      query: c.query,
+      requiredContext: c.requiredContext ?? [],
+      expectedClaims: c.expectedClaims ?? [],
+      forbiddenClaims: c.forbiddenClaims ?? [],
+      expectedAbstention: c.expectedAbstention === true,
+    });
+  }
+  return out;
+}
