@@ -834,9 +834,12 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </nav>
 
-        {/* Main canvas */}
-        <main className="flex-1 overflow-hidden flex flex-col min-w-0">
-          <div className="flex-1 overflow-hidden flex flex-col">{children}</div>
+        {/* Main canvas — `min-w-0` lets it shrink under flex parents that
+            don't, and `min-h-0` lets children with `overflow-y-auto` clip
+            properly so following `shrink-0` siblings (chat composer, page
+            footer pills) stay pinned to the viewport bottom on iOS Safari. */}
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col min-w-0">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
         </main>
 
         {/* Right Inspector — contextual; rendered ≥lg */}

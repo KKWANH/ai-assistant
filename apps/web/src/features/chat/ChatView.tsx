@@ -202,8 +202,13 @@ function MessageList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="flex flex-col gap-6 px-5 py-5 max-w-4xl mx-auto">
+    // `min-h-0` is the fix for the iPhone-SE composer-disappears bug. A
+    // `flex-1 overflow-y-auto` child inside a `flex flex-col` parent will
+    // ignore its parent's bounds (default `min-height: auto`) and the
+    // following `shrink-0` siblings get pushed off-screen. `min-h-0`
+    // restores the expected clipping.
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex flex-col gap-6 px-3 sm:px-5 py-4 sm:py-5 max-w-4xl mx-auto">
         {chat && (
           <div className="text-center text-xs text-muted-foreground">
             {chat.createdByName && (
@@ -373,7 +378,7 @@ function ThreadView({ chatId }: { chatId: string }) {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
       <div className="shrink-0 px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
         <OpenAttemptChip chatId={chatId} />
@@ -494,7 +499,7 @@ export function ChatView() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       <EmptyState onCreate={() => void handleCreateEmpty()} />
       <div className="shrink-0 px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
         <ChatComposer
