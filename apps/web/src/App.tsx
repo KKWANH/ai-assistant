@@ -49,6 +49,11 @@ const WorkspaceSearchView = lazyWithReload(() =>
     default: m.WorkspaceSearchView,
   }))
 );
+const WorkspaceFileEditor = lazyWithReload(() =>
+  import("./features/workspace/WorkspaceFileEditor").then((m) => ({
+    default: m.WorkspaceFileEditor,
+  }))
+);
 const ScriptsView = lazyWithReload(() =>
   import("./features/workspace/ScriptsView").then((m) => ({
     default: m.ScriptsView,
@@ -142,6 +147,7 @@ function AppContent() {
             <Route path="/workspaces/:id/surface/edit" element={<SurfaceEditorRoute />} />
             <Route path="/workspaces/:id/history" element={<HistoryView />} />
             <Route path="/workspaces/:id/search" element={<WorkspaceSearchView />} />
+            <Route path="/workspaces/:id/edit" element={<WorkspaceFileEditor />} />
 
             {/* Templates & Runs */}
             <Route path="/templates/:id" element={<TemplateRunView />} />
