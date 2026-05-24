@@ -41,9 +41,14 @@ import { evaluateCase, aggregate, type CaseMetrics, type AggregateMetrics } from
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-type StrategyId = "keyword-only" | "keyword+symbol" | "semantic-only";
+type StrategyId = "keyword-only" | "keyword+symbol" | "semantic-only" | "hybrid";
 
-const DEFAULT_STRATEGIES: StrategyId[] = ["keyword-only", "keyword+symbol", "semantic-only"];
+const DEFAULT_STRATEGIES: StrategyId[] = [
+  "keyword-only",
+  "keyword+symbol",
+  "semantic-only",
+  "hybrid",
+];
 
 interface CliArgs {
   workspaces?: string[];

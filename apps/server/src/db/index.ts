@@ -258,6 +258,21 @@ function runMigrations(db: DatabaseSync): void {
       ON chunk_embeddings(workspace_id);
   `);
 
+  // FTS5 chunk index — populated alongside chunk_embeddings for the
+  // hybrid retrieval path (BM25 + vector + symbol via RRF). `unicode61`
+  // tokeniser handles Korean / mixed-script content; `simple` would
+  // drop non-ASCII codepoints. workspace_id is UNINDEXED so it doesn't
+  // participate in scoring — we just need it for per-workspace filter.
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
+      workspace_id UNINDEXED,
+      path,
+      chunk_index UNINDEXED,
+      chunk,
+      tokenize='unicode61 remove_diacritics 2'
+    );
+  `);
+
   // Guarded ALTER TABLE blocks. Each `addColumn(...)` is a no-op if the
   // column already exists on the table; SQLite has no IF NOT EXISTS for
   // ADD COLUMN, so we PRAGMA-introspect once per table and reuse the

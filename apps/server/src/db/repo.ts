@@ -1076,24 +1076,33 @@ export interface ChunkEmbeddingRow {
 /** Wipe the workspace's embedding index — called before a fresh reindex. */
 export function dbClearWorkspaceEmbeddings(workspaceId: string): void {
   const db = getDb();
-  db.prepare("DELETE FROM chunk_embeddings WHERE workspace_id = ?").run(workspaceId);
+  // Clear both the vector store AND the FTS5 mirror in one transaction —
+  // hybrid retrieval breaks badly if these drift out of sync.
+  withTransaction(() => {
+    db.prepare("DELETE FROM chunk_embeddings WHERE workspace_id = ?").run(workspaceId);
+    db.prepare("DELETE FROM chunk_fts WHERE workspace_id = ?").run(workspaceId);
+  });
 }
 
 /** Bulk-insert chunks for one workspace. Caller passes a Float32Array
- *  per row; we store it as a BLOB. */
+ *  per row; we store it as a BLOB. The same chunks are mirrored into
+ *  the FTS5 table so the hybrid path's BM25 leg can search them. */
 export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
   if (rows.length === 0) return;
   const db = getDb();
-  const stmt = db.prepare(
+  const embStmt = db.prepare(
     `INSERT INTO chunk_embeddings
        (id, workspace_id, provider, dimensions, path, chunk, chunk_index, file_mtime, embedding, indexed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  // Same transaction trick as dbInsertSymbols — bulk insert without a
-  // BEGIN..COMMIT does one WAL write per row.
+  const ftsStmt = db.prepare(
+    `INSERT INTO chunk_fts (workspace_id, path, chunk_index, chunk)
+     VALUES (?, ?, ?, ?)`,
+  );
+  // One transaction collapses hundreds of WAL writes into one.
   withTransaction(() => {
     for (const r of rows) {
-      stmt.run(
+      embStmt.run(
         r.id,
         r.workspaceId,
         r.provider,
@@ -1106,8 +1115,64 @@ export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
         Buffer.from(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength),
         r.indexedAt,
       );
+      ftsStmt.run(r.workspaceId, r.path, r.chunkIndex, r.chunk);
     }
   });
+}
+
+/**
+ * BM25 search via the chunk_fts virtual table. Returns top-k chunks
+ * for `workspaceId` ranked by FTS5's built-in bm25 (smaller = better).
+ * Sanitises the query so FTS5 operators (`"` `*` `:` `(` `)` `-`) in
+ * a user string don't blow up the parser.
+ *
+ * Returns `[]` for unrecoverable queries (only operator chars left
+ * after sanitisation, or no FTS rows for the workspace).
+ */
+export function dbBm25Search(
+  workspaceId: string,
+  query: string,
+  topK: number,
+): Array<{ path: string; chunkIndex: number; chunk: string; score: number }> {
+  // Strip FTS5 special characters; keep CJK + ASCII alphanumerics +
+  // spaces. Empty query after sanitisation → no rows.
+  const cleaned = query
+    .replace(/["*:()\-+~^]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map((t) => `"${t}"`)
+    .join(" OR ");
+  if (!cleaned) return [];
+
+  const db = getDb();
+  try {
+    const rows = db
+      .prepare(
+        `SELECT path, chunk_index, chunk, bm25(chunk_fts) AS score
+           FROM chunk_fts
+          WHERE workspace_id = ? AND chunk_fts MATCH ?
+          ORDER BY score
+          LIMIT ?`,
+      )
+      .all(workspaceId, cleaned, topK) as Array<{
+      path: string;
+      chunk_index: number;
+      chunk: string;
+      score: number;
+    }>;
+    return rows.map((r) => ({
+      path: r.path,
+      chunkIndex: r.chunk_index,
+      chunk: r.chunk,
+      score: r.score,
+    }));
+  } catch {
+    // FTS5 throws on a few exotic queries (e.g. all-operator strings
+    // that survive sanitisation). Treat as zero-result rather than
+    // crashing the request.
+    return [];
+  }
 }
 
 export interface StoredChunk {

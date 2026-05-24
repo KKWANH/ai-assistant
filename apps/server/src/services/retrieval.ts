@@ -26,6 +26,7 @@ import {
 } from "../workspace/readWithinRoot.js";
 import { getEmbeddingProvider } from "../providers/embedding.js";
 import {
+  dbBm25Search,
   dbClearWorkspaceEmbeddings,
   dbInsertChunkEmbeddings,
   dbListWorkspaceChunks,
@@ -97,8 +98,11 @@ export interface RetrieveOptions {
    *                     (caller gets the warning, no fallback)
    *   "keyword-only"    keyword ranker only, no symbol nudge
    *   "keyword+symbol"  keyword ranker + symbol-boost
+   *   "hybrid"          BM25 (FTS5) + semantic + symbol via reciprocal
+   *                     rank fusion. Requires workspaceId + an embedding
+   *                     index (falls back honestly otherwise).
    */
-  forceStrategy?: "auto" | "semantic-only" | "keyword-only" | "keyword+symbol";
+  forceStrategy?: "auto" | "semantic-only" | "keyword-only" | "keyword+symbol" | "hybrid";
 }
 
 /**
@@ -115,6 +119,7 @@ export type RetrievalStrategy =
   | "semantic"
   | "keyword"
   | "keyword+symbol"
+  | "hybrid"
   | "none";
 
 export interface RetrievalResult {
@@ -195,6 +200,24 @@ export async function retrieveWithMeta(
       candidateCount: 0,
       warnings: ["forceStrategy=semantic-only requires workspaceId (none provided)"],
     };
+  }
+
+  // ── hybrid: BM25 + semantic + symbol candidates merged via RRF.
+  //    Requires workspaceId for all three sub-searches. We deliberately
+  //    don't have hybrid fall through to keyword when the index is
+  //    missing — same honesty rule as semantic-only.
+  if (force === "hybrid") {
+    if (!options.workspaceId) {
+      return {
+        chunks: [],
+        strategy: "none",
+        hasEmbeddingIndex: false,
+        embeddingProvider: null,
+        candidateCount: 0,
+        warnings: ["forceStrategy=hybrid requires workspaceId (none provided)"],
+      };
+    }
+    return retrieveByHybridMeta(options.workspaceId, query, topK);
   }
 
   // ── Embedding path — used when (a) the strategy is "auto" or
@@ -696,6 +719,136 @@ async function retrieveBySimilarity(
     chunk: s.chunk.chunk,
     score: s.score,
   }));
+}
+
+/**
+ * Hybrid retrieval — three sub-searches merged via reciprocal rank
+ * fusion. Returns `RetrievalResult` directly so the caller doesn't
+ * need to know about RRF mechanics.
+ *
+ * Sources:
+ *   - BM25 over `chunk_fts` (FTS5)
+ *   - vector cosine over `chunk_embeddings`
+ *   - symbol matches: each chunk inside a path with a matching code
+ *     symbol gets a synthetic rank in this list (ordered by chunk_index)
+ *
+ * Fusion: standard RRF with k=60. Each chunk's hybrid score is
+ *   sum(1 / (k + rank_i))  for i in {bm25, vector, symbol}
+ * where missing-from-list means that term contributes 0.
+ *
+ * Returns empty + warning when neither BM25 nor vector produced any
+ * candidates (symbol-only is rarely strong enough by itself).
+ */
+async function retrieveByHybridMeta(
+  workspaceId: string,
+  query: string,
+  topK: number,
+): Promise<RetrievalResult> {
+  // Pull a larger candidate set per source than the final topK so
+  // the fusion has something to merge. 30 each is a reasonable v1.
+  const SUB_TOPK = Math.max(topK * 3, 30);
+  const RRF_K = 60;
+  const warnings: string[] = [];
+
+  // ── BM25 (FTS5) — synchronous in-process SQLite, runs instantly.
+  const bm25 = dbBm25Search(workspaceId, query, SUB_TOPK);
+
+  // ── Symbol matches — same prefix-LIKE used by the keyword+symbol
+  //    path. Returns paths; we expand to all chunks for those paths
+  //    by querying chunk_fts (cheap, already in memory after BM25).
+  const tokens = tokenize(query);
+  const symbolPaths = tokens.length > 0
+    ? new Set(dbLookupSymbolMatches(workspaceId, tokens).map((s) => s.path))
+    : new Set<string>();
+
+  // ── Vector cosine — same path the semantic-only strategy uses.
+  const semantic = await retrieveBySimilarityMeta(workspaceId, query, SUB_TOPK);
+  if (!semantic.usable && semantic.warnings.length > 0) {
+    warnings.push(...semantic.warnings);
+  }
+
+  // Build a per-chunk RRF score, keyed by `${path}#${chunk_index}`.
+  // chunkData maps key → the chunk record itself (for the final result).
+  const rrf = new Map<string, number>();
+  const chunkData = new Map<string, RetrievedChunk>();
+
+  function addRank(key: string, rank: number, chunk: RetrievedChunk): void {
+    const inc = 1 / (RRF_K + rank);
+    rrf.set(key, (rrf.get(key) ?? 0) + inc);
+    if (!chunkData.has(key)) chunkData.set(key, chunk);
+  }
+
+  // BM25 contributes its ranking.
+  for (let i = 0; i < bm25.length; i++) {
+    const b = bm25[i]!;
+    const key = `${b.path}#${b.chunkIndex.toString()}`;
+    addRank(key, i + 1, { path: b.path, chunk: b.chunk, score: 0 });
+  }
+
+  // Vector contributes its ranking. The vector path doesn't expose
+  // chunk_index directly through StoredChunk, so we fall back to the
+  // stored chunk text itself as a disambiguator when chunk_index is
+  // absent (it's optional on StoredChunk). For most cases the same
+  // path+text combo is unique inside a workspace.
+  if (semantic.usable) {
+    for (let i = 0; i < semantic.chunks.length; i++) {
+      const v = semantic.chunks[i]!;
+      // Best-effort chunk_index: match against BM25 row with same path
+      // + text. Falls back to a stable hash-ish key when not present.
+      const known = bm25.find((b) => b.path === v.path && b.chunk === v.chunk);
+      const key = `${v.path}#${known ? known.chunkIndex.toString() : "v" + i.toString()}`;
+      addRank(key, i + 1, v);
+    }
+  }
+
+  // Symbol contributes via path membership — every chunk inside a
+  // symbol-matched path gets the same synthetic rank (the first
+  // available rank in the symbol list). We don't have a natural
+  // ordering across paths; rank 1 for every symbol path is reasonable.
+  // Limited to chunks we've already seen via BM25 / vector so we
+  // don't synthesise chunk records we don't have text for.
+  if (symbolPaths.size > 0) {
+    for (const [key, chunk] of chunkData.entries()) {
+      if (symbolPaths.has(chunk.path)) {
+        addRank(key, 1, chunk);
+      }
+    }
+  }
+
+  // Sort by descending RRF score, slice topK. Score field on the
+  // returned chunks carries the RRF score (not BM25 / cosine) so the
+  // harness / UI can show a meaningful number.
+  const ranked = Array.from(rrf.entries())
+    .map(([key, score]) => {
+      const chunk = chunkData.get(key)!;
+      return { ...chunk, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+
+  // Strategy = "none" only when there were no candidates at all.
+  if (ranked.length === 0) {
+    return {
+      chunks: [],
+      strategy: "none",
+      hasEmbeddingIndex: semantic.usable,
+      embeddingProvider: semantic.provider,
+      candidateCount: 0,
+      warnings: [
+        ...warnings,
+        "hybrid: no BM25 + vector + symbol candidates",
+      ],
+    };
+  }
+
+  return {
+    chunks: ranked,
+    strategy: "hybrid",
+    hasEmbeddingIndex: semantic.usable,
+    embeddingProvider: semantic.provider,
+    candidateCount: rrf.size,
+    warnings,
+  };
 }
 
 function vectorNorm(v: Float32Array): number {
