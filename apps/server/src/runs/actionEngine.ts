@@ -197,10 +197,19 @@ async function runBlock(
       // Without this, actions could only see the previous block's output,
       // which forced action authors to chain a read_file before every
       // ask_ai and left the workspace's broader content inaccessible.
+      //
+      // The retrieval query is `instruction` + (a head slice of)
+      // `priorOutput`. A common pipeline shape is `web_analysis` (or any
+      // earlier block) → `ask_ai`, where the *useful* search terms live
+      // in the previous output, not the instruction. Joining both before
+      // tokenisation lets the keyword + semantic paths see the same
+      // signal the model is going to read.
       let workspaceContext = "";
       const snapshot = dbGetLatestSnapshot(workspace.id);
       if (snapshot && snapshot.files.length > 0) {
-        const query = instruction.trim().slice(0, 500);
+        const queryParts = [instruction];
+        if (priorOutput) queryParts.push(priorOutput.slice(0, 1500));
+        const query = queryParts.join("\n\n").trim().slice(0, 2500);
         try {
           const ranked = await retrieveRelevantChunks(
             workspace.rootPath,

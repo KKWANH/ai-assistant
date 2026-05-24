@@ -15,7 +15,7 @@ import {
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
-import { retrieveRelevantChunks } from "../services/retrieval.js";
+import { retrieveWithMeta } from "../services/retrieval.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
 import * as budgetStarter from "../surface/budgetStarter.js";
 import * as readingStarter from "../surface/readingStarter.js";
@@ -348,18 +348,25 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: "No snapshot found — run a scan first" });
       }
 
-      const chunks = await retrieveRelevantChunks(
+      const result = await retrieveWithMeta(
         workspace.rootPath,
         snapshot.files,
         query,
         { workspaceId: workspace.id, topK },
       );
-      // `indexed` reflects whether the workspace has an embedding index —
-      // useful for the UI to show "semantic search active" vs "keyword only".
+      // Honest fields. `indexed` is "an embedding index was actually used",
+      // *not* "any result came back". `strategy` says which path ran, so
+      // the UI can render "Semantic match" / "Keyword + symbol boost" /
+      // "Keyword only" without lying. `warnings` surfaces things like
+      // "index provider X ≠ active Y — reindex needed".
       return reply.send({
         query,
-        chunks,
-        indexed: chunks.length > 0,
+        chunks: result.chunks,
+        strategy: result.strategy,
+        indexed: result.hasEmbeddingIndex,
+        embeddingProvider: result.embeddingProvider,
+        candidateCount: result.candidateCount,
+        warnings: result.warnings,
         fileCount: snapshot.files.length,
       });
     },

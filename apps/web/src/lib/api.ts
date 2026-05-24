@@ -86,10 +86,26 @@ export interface WorkspaceSearchChunk {
   chunk: string;
   score: number;
 }
+export type WorkspaceRetrievalStrategy =
+  | "semantic"
+  | "keyword"
+  | "keyword+symbol"
+  | "none";
 export interface WorkspaceSearchResult {
   query: string;
   chunks: WorkspaceSearchChunk[];
+  /** Which retrieval path actually ran. */
+  strategy: WorkspaceRetrievalStrategy;
+  /** True only when an embedding index was actually used. */
   indexed: boolean;
+  /** Provider id of the stored chunks ("openai", "ollama", …) — null
+   *  when there's no semantic index. */
+  embeddingProvider?: string | null;
+  /** Total chunks the scorer evaluated before slicing topK. */
+  candidateCount?: number;
+  /** Notes from the retriever — "index out of date", "no extractable
+   *  tokens", etc. Surfaced in the UI as a small footer. */
+  warnings?: string[];
   fileCount?: number;
 }
 export const searchWorkspace = (id: string, query: string, topK = 10) =>

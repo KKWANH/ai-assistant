@@ -105,15 +105,30 @@ export function WorkspaceSearchView() {
                 <>
                   {" · "}
                   {t("workspace.search.resultsLabel", { n: data.chunks.length.toString() })}
-                  {data.indexed && (
-                    <>
-                      {" · "}
-                      <span className="text-accent">{t("workspace.search.semantic")}</span>
-                    </>
+                  {" · "}
+                  <span className={data.indexed ? "text-accent" : ""}>
+                    {data.strategy === "semantic"
+                      ? t("workspace.search.semantic")
+                      : data.strategy === "keyword+symbol"
+                        ? t("workspace.search.keywordSymbol")
+                        : data.strategy === "keyword"
+                          ? t("workspace.search.keyword")
+                          : t("workspace.search.noStrategy")}
+                  </span>
+                  {data.embeddingProvider && data.indexed && (
+                    <span className="font-mono text-2xs"> ({data.embeddingProvider})</span>
                   )}
                 </>
               )}
             </p>
+          )}
+
+          {data?.warnings && data.warnings.length > 0 && (
+            <div className="text-2xs text-muted-foreground border-l-2 border-warning/40 pl-2 py-0.5 flex flex-col gap-0.5">
+              {data.warnings.map((w, i) => (
+                <span key={i}>⚠ {w}</span>
+              ))}
+            </div>
           )}
 
           {error && (

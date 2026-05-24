@@ -89,23 +89,46 @@ export interface RetrieveOptions {
   workspaceId?: string;
 }
 
+/**
+ * Full retrieval result: chunks **plus** the metadata describing how
+ * they were produced. The metadata is what `/api/workspaces/:id/search`
+ * and the eval harness need to know — which path actually ran,
+ * whether the semantic index was usable, how many candidates we
+ * considered, anything that went wrong.
+ *
+ * The earlier `retrieveRelevantChunks` (chunks-only) form is kept as a
+ * thin wrapper for the chat path which doesn't care about the meta.
+ */
+export type RetrievalStrategy =
+  | "semantic"
+  | "keyword"
+  | "keyword+symbol"
+  | "none";
+
+export interface RetrievalResult {
+  chunks: RetrievedChunk[];
+  /** Which path actually produced the chunks. */
+  strategy: RetrievalStrategy;
+  /** True only if at least one stored chunk exists for the workspace AND
+   *  the active embedding provider matches it. False means the keyword
+   *  fallback ran even if `chunk_embeddings` had rows. */
+  hasEmbeddingIndex: boolean;
+  /** Provider id of the stored chunks (e.g. "openai", "ollama") — null
+   *  when there is no semantic index or it is unusable. */
+  embeddingProvider: string | null;
+  /** How many chunks the scorer actually evaluated before slicing topK. */
+  candidateCount: number;
+  /** Free-form notes — index out of date, no extractable tokens, … */
+  warnings: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
 /**
- * Return up to `topK` workspace chunks that look most relevant to `query`.
- *
- * Strategy (in order):
- *   1. If an embedding index exists for the workspace and an embedding
- *      provider is reachable, score by cosine similarity against the
- *      query embedding.
- *   2. Otherwise fall back to the local keyword ranker (sublinear TF +
- *      path-match bonus). The semantic path is opt-in via indexing;
- *      keyword always works with no setup.
- *
- * Empty array if the query has no extractable keywords AND there's no
- * embedding index (i.e. nothing to score against).
+ * Chunks-only wrapper kept for the chat / action paths that don't
+ * inspect retrieval metadata. New callers should prefer `retrieveWithMeta`.
  */
 export async function retrieveRelevantChunks(
   rootPath: string,
@@ -113,18 +136,70 @@ export async function retrieveRelevantChunks(
   query: string,
   options: RetrieveOptions = {},
 ): Promise<RetrievedChunk[]> {
+  const result = await retrieveWithMeta(rootPath, files, query, options);
+  return result.chunks;
+}
+
+/**
+ * Return up to `topK` workspace chunks plus the metadata describing
+ * what actually happened.
+ *
+ * Strategy:
+ *   1. If a workspaceId is set AND an embedding index exists for that
+ *      workspace AND the active embedding provider matches the stored
+ *      one, score by cosine similarity. → strategy = "semantic".
+ *   2. Otherwise fall back to the local keyword ranker. When the
+ *      symbol_index has matches for the query tokens, the per-file
+ *      symbol-hit set adds a +2.0 nudge on every chunk inside those
+ *      files. → strategy = "keyword+symbol" (or just "keyword" when
+ *      no symbol matches were found).
+ *   3. When the query has no extractable tokens AND there's no semantic
+ *      index, chunks is empty. → strategy = "none".
+ *
+ * The metadata fields let `/api/workspaces/:id/search` and the eval
+ * harness say true things — "indexed" was previously equivalent to
+ * "any result exists", which is wrong.
+ */
+export async function retrieveWithMeta(
+  rootPath: string,
+  files: FileMeta[],
+  query: string,
+  options: RetrieveOptions = {},
+): Promise<RetrievalResult> {
   const topK = options.topK ?? DEFAULT_TOP_K;
+  const warnings: string[] = [];
 
   // ── Embedding path — only used if a workspace_id is provided AND an
   //    index already exists. The chat route passes the id; ad-hoc
   //    callers without one fall through to keyword.
   if (options.workspaceId) {
-    const semantic = await retrieveBySimilarity(options.workspaceId, query, topK);
-    if (semantic !== null) return semantic;
+    const semantic = await retrieveBySimilarityMeta(options.workspaceId, query, topK);
+    if (semantic.usable) {
+      return {
+        chunks: semantic.chunks,
+        strategy: "semantic",
+        hasEmbeddingIndex: true,
+        embeddingProvider: semantic.provider,
+        candidateCount: semantic.candidateCount,
+        warnings: semantic.warnings,
+      };
+    }
+    // Carry forward semantic warnings (out-of-date provider, etc.) into
+    // the keyword fallback so the UI / harness sees the full story.
+    if (semantic.warnings.length > 0) warnings.push(...semantic.warnings);
   }
 
   const tokens = tokenize(query);
-  if (tokens.length === 0) return [];
+  if (tokens.length === 0) {
+    return {
+      chunks: [],
+      strategy: "none",
+      hasEmbeddingIndex: false,
+      embeddingProvider: null,
+      candidateCount: 0,
+      warnings: [...warnings, "no extractable tokens in query"],
+    };
+  }
 
   // Symbol-boosted set — paths whose code symbols match a query token
   // get a fixed bonus on every chunk they own. Cheap O(1) lookup
@@ -176,7 +251,14 @@ export async function retrieveRelevantChunks(
   // Sort by descending score, then prefer earlier (likely more focused)
   // chunks as a deterministic tiebreaker.
   allChunks.sort((a, b) => b.score - a.score);
-  return allChunks.slice(0, topK);
+  return {
+    chunks: allChunks.slice(0, topK),
+    strategy: symbolHitPaths.size > 0 ? "keyword+symbol" : "keyword",
+    hasEmbeddingIndex: false,
+    embeddingProvider: null,
+    candidateCount: allChunks.length,
+    warnings,
+  };
 }
 
 /** Render a ranked chunk list as one labelled block for the LLM prompt. */
@@ -399,9 +481,106 @@ export async function indexWorkspaceEmbeddings(
 }
 
 /**
- * Semantic retrieval — returns null if there's no usable index, signal
- * to the caller to fall through to keyword search. Returns an empty
- * array (not null) when the index exists but nothing scores above noise.
+ * Metadata-returning semantic retrieval. The caller decides what to
+ * report based on `usable`:
+ *  - `usable: false` → fall through to keyword. `warnings` says why
+ *    (no stored chunks, no provider, provider/index mismatch, embed
+ *    call failed, zero-norm query embedding).
+ *  - `usable: true` → use `chunks` as-is. `provider` + `candidateCount`
+ *    feed into the upstream RetrievalResult.
+ */
+interface SemanticResultMeta {
+  usable: boolean;
+  chunks: RetrievedChunk[];
+  provider: string | null;
+  candidateCount: number;
+  warnings: string[];
+}
+
+async function retrieveBySimilarityMeta(
+  workspaceId: string,
+  query: string,
+  topK: number,
+): Promise<SemanticResultMeta> {
+  const stored = dbListWorkspaceChunks(workspaceId);
+  if (stored.length === 0) {
+    return { usable: false, chunks: [], provider: null, candidateCount: 0, warnings: ["no embedding index"] };
+  }
+
+  const provider = await getEmbeddingProvider();
+  if (!provider) {
+    return {
+      usable: false,
+      chunks: [],
+      provider: stored[0]?.provider ?? null,
+      candidateCount: 0,
+      warnings: ["no embedding provider configured"],
+    };
+  }
+
+  const indexProvider = stored[0]?.provider ?? null;
+  if (!indexProvider || indexProvider !== provider.id) {
+    logger.info(
+      { workspaceId, indexProvider, activeProvider: provider.id },
+      "embedding index out of date — falling back",
+    );
+    return {
+      usable: false,
+      chunks: [],
+      provider: indexProvider,
+      candidateCount: 0,
+      warnings: [`index provider "${indexProvider ?? "unknown"}" ≠ active "${provider.id}" — reindex needed`],
+    };
+  }
+
+  let queryVec: Float32Array;
+  try {
+    queryVec = new Float32Array(await provider.embed(query));
+  } catch (err) {
+    logger.warn({ workspaceId, err }, "embedding query failed — falling back");
+    return {
+      usable: false,
+      chunks: [],
+      provider: provider.id,
+      candidateCount: 0,
+      warnings: ["embedding the query failed — falling back to keyword"],
+    };
+  }
+
+  const qNorm = vectorNorm(queryVec);
+  if (qNorm === 0) {
+    return {
+      usable: true,
+      chunks: [],
+      provider: provider.id,
+      candidateCount: 0,
+      warnings: ["zero-norm query vector (empty query?)"],
+    };
+  }
+
+  const scored: { chunk: StoredChunk; score: number }[] = [];
+  for (const s of stored) {
+    const sim = cosineSimilarity(queryVec, qNorm, s.embedding);
+    if (sim > 0) scored.push({ chunk: s, score: sim });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return {
+    usable: true,
+    chunks: scored.slice(0, topK).map((s) => ({
+      path: s.chunk.path,
+      chunk: s.chunk.chunk,
+      score: s.score,
+    })),
+    provider: provider.id,
+    candidateCount: scored.length,
+    warnings: [],
+  };
+}
+
+/**
+ * Legacy chunks-or-null helper — kept so the older signature compiles
+ * for any caller that still uses it directly. Prefer
+ * `retrieveBySimilarityMeta` for new code; this one drops the warnings.
  */
 async function retrieveBySimilarity(
   workspaceId: string,

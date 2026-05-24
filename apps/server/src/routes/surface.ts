@@ -252,6 +252,12 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
       // kind="action" with a manual-data-edit actionId is the smallest
       // change that fits the existing schema; the diff/apply UI doesn't
       // care where the staged manifest came from.
+      //
+      // provider: "mock" is the honest tag here — no AI call happened,
+      // so it shouldn't pollute usage analytics that filter on real
+      // provider invocations. startedAt + completedAt are stamped now
+      // because the "run" conceptually starts and finishes the moment
+      // the stage is recorded.
       const runId = makeDateRunId(dbListRuns());
       const now = new Date().toISOString();
       const run: Run = {
@@ -263,10 +269,10 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
         status: "completed",
         input: { path: relPath },
         model: "",
-        provider: "anthropic",
+        provider: "mock",
         createdAt: now,
-        startedAt: null,
-        completedAt: null,
+        startedAt: now,
+        completedAt: now,
         candidateFiles: [],
         selectedFiles: [],
         tokenEstimate: 0,
