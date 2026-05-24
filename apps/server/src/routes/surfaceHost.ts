@@ -86,6 +86,7 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
      *   listTemplates()
      *   listRuns()
      *   runTemplate(id, input)
+     *   stageFile(path, content)     → { runId, added, removed }
      *   getRun(runId)
      *   getQuotes(symbols)          → Array<{ symbol, price, currency }>
      *   getFxRates(base, currencies) → Record<currency, rate>
@@ -114,6 +115,7 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
         listTemplates: function () { return call('listTemplates', []); },
         listRuns: function () { return call('listRuns', []); },
         runTemplate: function (id, input) { return call('runTemplate', [id, input]); },
+        stageFile: function (p, content) { return call('stageFile', [p, content]); },
         getRun: function (id) { return call('getRun', [id]); },
         getQuotes: function (symbols) { return call('getQuotes', [symbols]); },
         getFxRates: function (base, currencies) { return call('getFxRates', [base, currencies]); },

@@ -127,6 +127,17 @@ async function handleBridgeRequest(
       return api.createRun({ workspaceId, templateId, input: input ?? {} });
     }
 
+    case "stageFile": {
+      // Stage a data-file edit from inside a surface. Same shape as the
+      // Data tab's Save → stage flow; returns { runId, added, removed }
+      // so the surface can render its own "Review & apply" CTA.
+      const [path, content] = args as [string, string];
+      if (typeof path !== "string" || typeof content !== "string") {
+        throw new Error("stageFile: path and content must be strings");
+      }
+      return api.stageWorkspaceFile(workspaceId, path, content);
+    }
+
     case "getRun": {
       const [runId] = args as [string];
       return api.getRun(runId);

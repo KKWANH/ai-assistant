@@ -219,10 +219,19 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
       if (typeof relPath !== "string" || !relPath || typeof content !== "string") {
         return reply.status(400).send({ error: "path and content are required" });
       }
-      if (!/\.(csv|tsv|txt|json|md|ya?ml)$/i.test(relPath)) {
+      // Wider allow-list than the direct PUT — staging doesn't touch disk
+      // until the user clicks Apply on the diff view, so the safety check
+      // here only needs to keep out clearly-dangerous filenames (executable
+      // entry points, dotfiles outside the project, etc.). Most plain-text
+      // editable types are fine to stage. The Apply step still rejects
+      // anything outside the workspace root via the same safeResolveUnderRoot.
+      if (
+        !/\.(c|h|cc|cpp|hpp|ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|rb|php|sh|bash|zsh|css|html|svg|csv|tsv|txt|json|md|ya?ml|toml|ini|conf|env\.example|sql)$/i.test(relPath) &&
+        !/(^|\/)Makefile$/i.test(relPath)
+      ) {
         return reply
           .status(400)
-          .send({ error: "Only data files (csv, tsv, txt, json, md, yaml) may be staged" });
+          .send({ error: "File type not allowed for staging" });
       }
 
       const resolved = safeResolveUnderRoot(workspace.rootPath, relPath);

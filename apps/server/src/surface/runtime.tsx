@@ -64,6 +64,12 @@ export interface AriadneTheme {
   mode: "dark" | "light";
 }
 
+export interface StageFileResult {
+  runId: string;
+  added: number;
+  removed: number;
+}
+
 export interface AriadneSDK {
   listFiles(): Promise<string[]>;
   readText(path: string): Promise<string>;
@@ -71,6 +77,11 @@ export interface AriadneSDK {
   listTemplates(): Promise<Array<{ id: string; name: string }>>;
   listRuns(): Promise<unknown[]>;
   runTemplate(id: string, input: Record<string, string>): Promise<unknown>;
+  /** Stage a data-file edit for review. Does not write to disk; the host
+   *  creates a staged manifest under a new Run, returns its id so the
+   *  caller can deep-link to /runs/:runId/diff for review + apply.
+   *  Same shape the AI's edit_file uses. */
+  stageFile(path: string, content: string): Promise<StageFileResult>;
   getRun(runId: string): Promise<unknown>;
   /** Live stock/crypto quotes for the given symbols (best-effort; may be partial). */
   getQuotes(symbols: string[]): Promise<Quote[]>;
@@ -137,6 +148,8 @@ export function useAriadne(): AriadneSDK {
     listTemplates: () => callHost<Array<{ id: string; name: string }>>("listTemplates", []),
     listRuns: () => callHost<unknown[]>("listRuns", []),
     runTemplate: (id: string, input: Record<string, string>) => callHost<unknown>("runTemplate", [id, input]),
+    stageFile: (p: string, content: string) =>
+      callHost<StageFileResult>("stageFile", [p, content]),
     getRun: (runId: string) => callHost<unknown>("getRun", [runId]),
     getQuotes: (symbols: string[]) => callHost<Quote[]>("getQuotes", [symbols]),
     getFxRates: (base: string, currencies: string[]) =>
