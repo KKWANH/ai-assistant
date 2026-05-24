@@ -326,6 +326,20 @@ function runMigrations(db: DatabaseSync): void {
   symbolIndex("parent", "TEXT");
   symbolIndex("signature", "TEXT");
   symbolIndex("exported", "INTEGER");
+
+  // chunk_embeddings: file_hash for incremental indexing. mtime is the
+  // cheap pre-check, hash is truth. NULL on rows from before this
+  // migration — those count as "unknown content" and get re-embedded
+  // on the next scan, which is the safe default.
+  const chunkEmb = addColumnIfMissing(db, "chunk_embeddings");
+  chunkEmb("file_hash", "TEXT");
+
+  // Path-scoped index — incremental indexing wants to enumerate "all
+  // rows for workspace X / path Y" cheaply (per-file invalidation).
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_workspace_path
+      ON chunk_embeddings(workspace_id, path);
+  `);
 }
 
 /**

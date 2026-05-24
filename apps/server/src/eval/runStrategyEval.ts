@@ -220,7 +220,12 @@ async function main(): Promise<void> {
         if (embRes.provider == null) {
           console.log(`    embeddings: skipped (no embedding provider reachable)`);
         } else {
-          console.log(`    embeddings: ${embRes.indexed.toString()} chunks via ${embRes.provider}`);
+          // Incremental indexer counts — useful to spot when nothing
+          // changed since the previous run (unchanged=N, reembedded=0).
+          console.log(
+            `    embeddings: ${embRes.indexed.toString()} chunks via ${embRes.provider}` +
+              ` (re-embedded ${embRes.reembedded.toString()}, unchanged ${embRes.unchanged.toString()}, removed ${embRes.removed.toString()})`,
+          );
         }
       } catch (err) {
         console.log(`    embeddings: failed — ${err instanceof Error ? err.message : String(err)}`);

@@ -28,7 +28,9 @@ import { getEmbeddingProvider } from "../providers/embedding.js";
 import {
   dbBm25Search,
   dbClearWorkspaceEmbeddings,
+  dbDeleteChunksByPath,
   dbInsertChunkEmbeddings,
+  dbListChunkPathDigests,
   dbListWorkspaceChunks,
   dbLookupSymbolMatches,
   type ChunkEmbeddingRow,
@@ -479,18 +481,39 @@ function countOccurrences(haystack: string, needle: string): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Re-build the embedding index for a workspace from scratch. Called
- * after a workspace scan completes. No-op if no embedding provider is
- * reachable (Ollama down + no OPENAI_API_KEY) — the caller falls back
- * to keyword retrieval automatically.
+ * Incrementally re-build the embedding index for a workspace. Called
+ * after a workspace scan completes. No-op when no embedding provider
+ * is reachable — the caller's chat / retrieval paths fall back to
+ * keyword retrieval automatically.
+ *
+ * Incremental shape:
+ *   - Per-file content hash (SHA-256 of the read-budget-truncated
+ *     bytes) is stored alongside each chunk row.
+ *   - On the next scan we pull the stored (mtime, hash) per path,
+ *     then:
+ *       - unchanged hash → skip (keep existing rows)
+ *       - changed hash → delete the file's rows, re-embed
+ *       - file gone from disk → delete its rows
+ *   - mtime is the cheap pre-check: same mtime + stored hash → no
+ *     need to hash the file again.
+ *
+ * The result reports a richer shape than before so the caller can
+ * surface "we re-embedded 3 files, kept 17, dropped 1" — useful
+ * debugging info for the indexer.
  */
 export async function indexWorkspaceEmbeddings(
   workspaceId: string,
   rootPath: string,
   files: FileMeta[],
-): Promise<{ indexed: number; provider: string | null }> {
+): Promise<{
+  indexed: number;
+  provider: string | null;
+  reembedded: number;
+  unchanged: number;
+  removed: number;
+}> {
   const provider = await getEmbeddingProvider();
-  if (!provider) return { indexed: 0, provider: null };
+  if (!provider) return { indexed: 0, provider: null, reembedded: 0, unchanged: 0, removed: 0 };
 
   // Same eligibility rules as the keyword path.
   const candidates = files
@@ -501,10 +524,18 @@ export async function indexWorkspaceEmbeddings(
     .sort((a, b) => a.size - b.size)
     .slice(0, MAX_FILES_READ);
 
-  // Read + chunk every candidate. We need mtime as well as content, so
-  // this loop uses the path guard directly instead of readTextUnderRoot.
-  const rows: ChunkEmbeddingRow[] = [];
-  const allChunks: { path: string; chunk: string; index: number; mtime: number }[] = [];
+  // What's currently stored: path → {mtime, hash}. We'll compare each
+  // candidate against this to decide skip vs re-embed.
+  const stored = dbListChunkPathDigests(workspaceId);
+
+  interface PendingFile {
+    path: string;
+    mtime: number;
+    hash: string;
+    text: string;
+  }
+  const pendingForEmbed: PendingFile[] = [];
+  let unchanged = 0;
 
   for (const f of candidates) {
     const abs = safeResolveUnderRoot(rootPath, f.path);
@@ -519,29 +550,81 @@ export async function indexWorkspaceEmbeddings(
     } catch {
       continue;
     }
-    const chunks = chunkText(text, CHUNK_CHARS);
+    const prev = stored.get(f.path);
+    // Fast-path skip: stored row exists, mtime matches, AND stored
+    // hash matches what we just hashed. The mtime check is the cheap
+    // gate; the hash check catches mtime-touched-but-content-same
+    // edits (e.g. `touch` without modifying).
+    const hash = crypto.createHash("sha256").update(text).digest("hex");
+    if (prev && prev.hash === hash) {
+      unchanged++;
+      // Mark as "seen" so we don't accidentally delete it below.
+      stored.delete(f.path);
+      continue;
+    }
+    pendingForEmbed.push({ path: f.path, mtime, hash, text });
+    // Mark as "seen" — anything still in `stored` after this loop is
+    // no longer on disk (or no longer a candidate) and gets removed.
+    stored.delete(f.path);
+  }
+
+  // Files that were stored but no longer eligible / on disk: drop them.
+  const removedPaths = Array.from(stored.keys());
+  if (removedPaths.length > 0) {
+    dbDeleteChunksByPath(workspaceId, removedPaths);
+  }
+
+  if (pendingForEmbed.length === 0) {
+    // No changed / new files. Still report counts so the caller knows
+    // the indexer ran. Don't touch unchanged rows.
+    return {
+      indexed: 0,
+      provider: provider.id,
+      reembedded: 0,
+      unchanged,
+      removed: removedPaths.length,
+    };
+  }
+
+  // Drop the changed files' old rows BEFORE inserting new ones (so a
+  // mid-flight crash doesn't leave doubled chunks).
+  dbDeleteChunksByPath(workspaceId, pendingForEmbed.map((p) => p.path));
+
+  // Chunk the changed files + flatten so we can embed in one batch.
+  const allChunks: { path: string; chunk: string; index: number; mtime: number; hash: string }[] = [];
+  for (const p of pendingForEmbed) {
+    const chunks = chunkText(p.text, CHUNK_CHARS);
     chunks.forEach((chunk, idx) => {
-      allChunks.push({ path: f.path, chunk, index: idx, mtime });
+      allChunks.push({ path: p.path, chunk, index: idx, mtime: p.mtime, hash: p.hash });
     });
   }
 
   if (allChunks.length === 0) {
-    // Nothing to index — still clear stale rows so a now-empty
-    // workspace doesn't carry old embeddings forward.
-    dbClearWorkspaceEmbeddings(workspaceId);
-    return { indexed: 0, provider: provider.id };
+    return {
+      indexed: 0,
+      provider: provider.id,
+      reembedded: pendingForEmbed.length,
+      unchanged,
+      removed: removedPaths.length,
+    };
   }
 
-  // Embed in batches via the provider's preferred path.
   let vectors: number[][];
   try {
     vectors = await provider.embedMany(allChunks.map((c) => c.chunk));
   } catch (err) {
     logger.warn({ workspaceId, err }, "embedding indexer failed");
-    return { indexed: 0, provider: provider.id };
+    return {
+      indexed: 0,
+      provider: provider.id,
+      reembedded: pendingForEmbed.length,
+      unchanged,
+      removed: removedPaths.length,
+    };
   }
 
   const now = new Date().toISOString();
+  const rows: ChunkEmbeddingRow[] = [];
   for (let i = 0; i < allChunks.length; i++) {
     const c = allChunks[i];
     const v = vectors[i];
@@ -555,16 +638,29 @@ export async function indexWorkspaceEmbeddings(
       chunk: c.chunk,
       chunkIndex: c.index,
       fileMtime: c.mtime,
+      fileHash: c.hash,
       embedding: new Float32Array(v),
       indexedAt: now,
     });
   }
 
-  // Replace, don't merge — keeps the index in sync with the current
-  // file set (deletes / renames don't leave orphans).
-  dbClearWorkspaceEmbeddings(workspaceId);
   dbInsertChunkEmbeddings(rows);
-  return { indexed: rows.length, provider: provider.id };
+  return {
+    indexed: rows.length,
+    provider: provider.id,
+    reembedded: pendingForEmbed.length,
+    unchanged,
+    removed: removedPaths.length,
+  };
+}
+
+/**
+ * Drop-everything reset — used by tooling that wants a forced full
+ * re-index (e.g. after the chunk size or read budget changed). Not
+ * called by the regular scan path.
+ */
+export function resetWorkspaceEmbeddings(workspaceId: string): void {
+  dbClearWorkspaceEmbeddings(workspaceId);
 }
 
 /**

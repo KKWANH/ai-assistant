@@ -1069,6 +1069,10 @@ export interface ChunkEmbeddingRow {
   chunk: string;
   chunkIndex: number;
   fileMtime: number;
+  /** SHA-256 hex of the file content (after the read-budget truncate).
+   *  Used by incremental indexing — mtime is a cheap pre-check, hash
+   *  is truth. Nullable on rows from before the migration. */
+  fileHash?: string | null;
   embedding: Float32Array;
   indexedAt: string;
 }
@@ -1092,8 +1096,9 @@ export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
   const db = getDb();
   const embStmt = db.prepare(
     `INSERT INTO chunk_embeddings
-       (id, workspace_id, provider, dimensions, path, chunk, chunk_index, file_mtime, embedding, indexed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, workspace_id, provider, dimensions, path, chunk, chunk_index,
+        file_mtime, file_hash, embedding, indexed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const ftsStmt = db.prepare(
     `INSERT INTO chunk_fts (workspace_id, path, chunk_index, chunk)
@@ -1111,6 +1116,7 @@ export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
         r.chunk,
         r.chunkIndex,
         r.fileMtime,
+        r.fileHash ?? null,
         // node:sqlite accepts Buffer / Uint8Array for BLOB.
         Buffer.from(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength),
         r.indexedAt,
@@ -1118,6 +1124,53 @@ export function dbInsertChunkEmbeddings(rows: ChunkEmbeddingRow[]): void {
       ftsStmt.run(r.workspaceId, r.path, r.chunkIndex, r.chunk);
     }
   });
+}
+
+/**
+ * Delete all chunk rows for `paths` within a workspace — both the
+ * embedding rows AND the FTS5 mirror. Used by the incremental indexer
+ * to invalidate a single file's chunks before re-embedding, or to
+ * drop rows for files that no longer exist on disk.
+ */
+export function dbDeleteChunksByPath(workspaceId: string, paths: string[]): void {
+  if (paths.length === 0) return;
+  const db = getDb();
+  const placeholders = paths.map(() => "?").join(",");
+  withTransaction(() => {
+    db.prepare(
+      `DELETE FROM chunk_embeddings WHERE workspace_id = ? AND path IN (${placeholders})`,
+    ).run(workspaceId, ...paths);
+    db.prepare(
+      `DELETE FROM chunk_fts WHERE workspace_id = ? AND path IN (${placeholders})`,
+    ).run(workspaceId, ...paths);
+  });
+}
+
+/**
+ * Return per-path mtime + hash for what's currently stored — enough
+ * to decide which files are unchanged. Returns one row per path
+ * (the indexer writes the same mtime/hash to every chunk of a file,
+ * so MIN+MAX collapse to a single value).
+ */
+export function dbListChunkPathDigests(
+  workspaceId: string,
+): Map<string, { mtime: number; hash: string | null }> {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT path,
+              MAX(file_mtime) AS file_mtime,
+              MAX(file_hash)  AS file_hash
+         FROM chunk_embeddings
+        WHERE workspace_id = ?
+        GROUP BY path`,
+    )
+    .all(workspaceId) as Array<{ path: string; file_mtime: number; file_hash: string | null }>;
+  const out = new Map<string, { mtime: number; hash: string | null }>();
+  for (const r of rows) {
+    out.set(r.path, { mtime: r.file_mtime, hash: r.file_hash });
+  }
+  return out;
 }
 
 /**
