@@ -375,7 +375,7 @@ function ThreadView({ chatId }: { chatId: string }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
-      <div className="shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
+      <div className="shrink-0 px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
         <OpenAttemptChip chatId={chatId} />
         <ChatComposer
           onSend={(opts) => void handleSend(opts)}
@@ -496,7 +496,7 @@ export function ChatView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <EmptyState onCreate={() => void handleCreateEmpty()} />
-      <div className="shrink-0 px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
+      <div className="shrink-0 px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
         <ChatComposer
           onSend={(opts) => void handleSend(opts)}
           pending={pending}

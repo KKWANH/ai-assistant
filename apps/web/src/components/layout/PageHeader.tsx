@@ -22,8 +22,8 @@ export function PageHeader({
   breadcrumb,
 }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4 pb-4 border-b border-border mb-5">
-      <div className="flex flex-col gap-0.5 min-w-0">
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 pb-4 border-b border-border mb-5">
+      <div className="flex flex-col gap-0.5 min-w-0 flex-1 basis-full sm:basis-auto">
         {breadcrumb && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
             {breadcrumb}
@@ -42,13 +42,13 @@ export function PageHeader({
           )}
         </h1>
         {description && (
-          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed min-w-0 break-words">
             {description}
           </p>
         )}
       </div>
       {action && (
-        <div className="shrink-0 flex items-center gap-2">{action}</div>
+        <div className="shrink-0 flex items-center flex-wrap gap-2">{action}</div>
       )}
     </div>
   );

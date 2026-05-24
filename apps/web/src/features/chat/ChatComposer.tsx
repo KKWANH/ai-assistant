@@ -549,10 +549,12 @@ export function ChatComposer({
             }}
           />
 
-          {/* Web search toggle — cycles Off → Auto → On */}
+          {/* Web search toggle — cycles Off → Auto → On.
+              Mobile (<sm): icon only with tooltip. ≥sm: icon + label. */}
           <Tooltip content={t("chat.composer.webSearchCycle")} className="shrink-0">
             <button
               type="button"
+              aria-label={t("chat.composer.webSearchCycle")}
               className={[
                 "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
                 webMode !== "off"
@@ -565,7 +567,7 @@ export function ChatComposer({
               disabled={disabled}
             >
               <Globe className="h-3.5 w-3.5" />
-              <span>
+              <span className="hidden sm:inline">
                 {webMode === "on"
                   ? t("chat.composer.webOn")
                   : webMode === "auto"
@@ -596,7 +598,7 @@ export function ChatComposer({
               title={t("chat.composer.agentCycle")}
             >
               <Bot className="h-3.5 w-3.5" />
-              <span>
+              <span className="hidden sm:inline">
                 {agentMode === "on"
                   ? t("chat.composer.agentOn")
                   : agentMode === "auto"
@@ -622,9 +624,10 @@ export function ChatComposer({
                 onClick={() => setSkillsOpenMode((m) => (m ? null : "button"))}
                 disabled={disabled}
                 aria-label={t("chat.composer.skills")}
+                title={t("chat.composer.skills")}
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                <span>{t("chat.composer.skills")}</span>
+                <span className="hidden sm:inline">{t("chat.composer.skills")}</span>
               </button>
             </Tooltip>
             {skillsOpenMode && (
