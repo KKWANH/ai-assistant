@@ -66,10 +66,15 @@ function renderMarkdown(input: ReportInput): string {
   lines.push(`- Hit@3: **${pct(a.hits.at3)}**`);
   lines.push(`- Hit@6: **${pct(a.hits.at6)}**`);
   lines.push(`- MRR: **${a.mrr.toFixed(3)}**`);
+  lines.push(`- nDCG@6: **${a.meanNdcgAt6.toFixed(3)}**`);
   lines.push(`- Context Precision@6: **${pct(a.meanContextPrecisionAt6)}**`);
   lines.push(`- Context Recall@6: **${pct(a.meanContextRecallAt6)}**`);
   lines.push(`- Distractor leak rate: **${pct(a.distractorLeakRate)}**`);
   lines.push(`- Latency: mean ${ms(a.meanLatencyMs)} · p50 ${ms(a.p50LatencyMs)} · p95 ${ms(a.p95LatencyMs)}`);
+  if (typeof ctx["indexedCoverage"] === "number") {
+    const pctCov = (ctx["indexedCoverage"] * 100).toFixed(1);
+    lines.push(`- Indexed coverage: **${pctCov}%** (${(ctx["totalCandidates"] ?? "?").toString()}/${(ctx["totalFiles"] ?? "?").toString()} files)`);
+  }
   lines.push("");
 
   lines.push("## Strategy mix\n");

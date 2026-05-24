@@ -74,6 +74,23 @@ const READABLE_EXT = new Set<string>([
   "html", "css", "scss", "xml", "sql", "toml", "ini", "env", "log", "conf",
 ]);
 
+/**
+ * Same eligibility check the retriever uses for candidate selection.
+ * Exported so the eval harness (or anything else that wants to compute
+ * "indexed coverage") doesn't have to duplicate the rule. Keep this
+ * function authoritative — if the retriever's filter changes, update
+ * here.
+ */
+export function isRetrievalEligible(f: FileMeta): boolean {
+  if (f.sensitive) return false;
+  return READABLE_EXT.has(normalizedExtension(f));
+}
+
+/** MAX_FILES_READ exposed so the harness can compute the upper bound
+ *  on indexed coverage. Stays in lockstep with the module-private
+ *  MAX_FILES_READ constant below. */
+export const RETRIEVAL_MAX_FILES = 40;
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------

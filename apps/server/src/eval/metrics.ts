@@ -29,6 +29,11 @@ export interface CaseMetrics {
   precisionAt6: number;
   /** Of the mustHit paths, how many appear in the top-6. */
   recallAt6: number;
+  /** Normalised discounted cumulative gain @ 6 — rewards multi-relevant
+   *  cases where the rank order matters. For single-mustHit cases this
+   *  effectively becomes 1 / log2(firstHitRank+1), matching MRR's intent
+   *  but on a log scale. */
+  ndcgAt6: number;
   /** Any `shouldNotHit` entry that appeared in the top-6. */
   distractorLeaks: string[];
   /** Strategy the retriever reported (echoed for the per-case row). */
@@ -43,6 +48,10 @@ export interface AggregateMetrics {
     at6: number;
   };
   mrr: number;
+  /** Mean nDCG@6 across cases. Equivalent in spirit to MRR for the
+   *  current single-mustHit case shape; becomes a distinct signal once
+   *  cases gain multiple relevant docs. */
+  meanNdcgAt6: number;
   meanContextPrecisionAt6: number;
   meanContextRecallAt6: number;
   meanLatencyMs: number;
@@ -99,6 +108,23 @@ export function evaluateCase(
 
   const distractorLeaks = shouldNot.filter((dist) => top6Paths.includes(dist));
 
+  // nDCG@6: each top-6 chunk gets relevance 1 if its path is in
+  // mustPathSet (and matches the optional `contains`), else 0. DCG
+  // sums rel_i / log2(i+1) for i in 1..6; ideal DCG sorts those
+  // relevances descending. For single-mustHit cases this collapses
+  // to 1 / log2(rank+1) when found, 0 when missed.
+  const top6Rels: number[] = top6.map((ch) =>
+    matchesAnyMustHit(ch, must) ? 1 : 0,
+  );
+  const dcg = top6Rels.reduce((s, rel, i) => s + rel / Math.log2(i + 2), 0);
+  // Ideal: as many 1s up front as there are mustHits, capped at 6.
+  const idealCount = Math.min(must.length, 6);
+  const idcg = Array.from({ length: idealCount }, (_, i) => 1 / Math.log2(i + 2)).reduce(
+    (s, x) => s + x,
+    0,
+  );
+  const ndcgAt6 = idcg === 0 ? 0 : dcg / idcg;
+
   return {
     caseId: c.id,
     workspace: c.workspace,
@@ -113,6 +139,7 @@ export function evaluateCase(
     reciprocalRank: firstHitRank === 0 ? 0 : 1 / firstHitRank,
     precisionAt6,
     recallAt6,
+    ndcgAt6,
     distractorLeaks,
     strategy,
   };
@@ -128,6 +155,7 @@ export function aggregate(rows: CaseMetrics[]): AggregateMetrics {
       cases: 0,
       hits: { at1: 0, at3: 0, at6: 0 },
       mrr: 0,
+      meanNdcgAt6: 0,
       meanContextPrecisionAt6: 0,
       meanContextRecallAt6: 0,
       meanLatencyMs: 0,
@@ -142,6 +170,7 @@ export function aggregate(rows: CaseMetrics[]): AggregateMetrics {
   const at3 = rows.filter((r) => r.hitAt3).length / n;
   const at6 = rows.filter((r) => r.hitAt6).length / n;
   const mrr = rows.reduce((s, r) => s + r.reciprocalRank, 0) / n;
+  const ndcg = rows.reduce((s, r) => s + r.ndcgAt6, 0) / n;
   const precision = rows.reduce((s, r) => s + r.precisionAt6, 0) / n;
   const recall = rows.reduce((s, r) => s + r.recallAt6, 0) / n;
   const meanLatency = rows.reduce((s, r) => s + r.latencyMs, 0) / n;
@@ -159,6 +188,7 @@ export function aggregate(rows: CaseMetrics[]): AggregateMetrics {
     cases: n,
     hits: { at1, at3, at6 },
     mrr,
+    meanNdcgAt6: ndcg,
     meanContextPrecisionAt6: precision,
     meanContextRecallAt6: recall,
     meanLatencyMs: meanLatency,

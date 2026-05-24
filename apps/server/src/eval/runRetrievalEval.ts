@@ -20,7 +20,11 @@ import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import type { FileMeta } from "@ariadne/shared";
 import { buildFileMeta } from "../workspace/metadata.js";
-import { retrieveWithMeta } from "../services/retrieval.js";
+import {
+  retrieveWithMeta,
+  isRetrievalEligible,
+  RETRIEVAL_MAX_FILES,
+} from "../services/retrieval.js";
 import { loadRetrievalCases, fixturesRoot, type RetrievalCase } from "./cases.js";
 import { evaluateCase, aggregate, type CaseMetrics } from "./metrics.js";
 import { writeReports } from "./reporters/index.js";
@@ -149,11 +153,24 @@ async function main(): Promise<void> {
   console.log("\n— Aggregate —");
   console.log(`Cases: ${agg.cases.toString()}`);
   console.log(`Hit@1: ${(agg.hits.at1 * 100).toFixed(1)}%  Hit@3: ${(agg.hits.at3 * 100).toFixed(1)}%  Hit@6: ${(agg.hits.at6 * 100).toFixed(1)}%`);
-  console.log(`MRR: ${agg.mrr.toFixed(3)}`);
+  console.log(`MRR: ${agg.mrr.toFixed(3)}  nDCG@6: ${agg.meanNdcgAt6.toFixed(3)}`);
   console.log(`Context P@6: ${(agg.meanContextPrecisionAt6 * 100).toFixed(1)}%  R@6: ${(agg.meanContextRecallAt6 * 100).toFixed(1)}%`);
   console.log(`Distractor leak rate: ${(agg.distractorLeakRate * 100).toFixed(1)}%`);
   console.log(`Latency: mean ${agg.meanLatencyMs.toFixed(1)} ms  p50 ${agg.p50LatencyMs.toFixed(1)} ms  p95 ${agg.p95LatencyMs.toFixed(1)} ms`);
   console.log("Strategies:", agg.byStrategy);
+
+  // Indexed coverage = how many files the retriever's candidate filter
+  // actually saw, vs how many files exist in the fixture. < 1.0 means
+  // either the MAX_FILES_READ cap is biting OR the sensitive/extension
+  // filters dropped rows. Both are useful signals — surface them.
+  let totalFiles = 0;
+  let totalCandidates = 0;
+  for (const fix of fixturesByName.values()) {
+    totalFiles += fix.files.length;
+    const eligible = fix.files.filter(isRetrievalEligible);
+    totalCandidates += Math.min(eligible.length, RETRIEVAL_MAX_FILES);
+  }
+  const indexedCoverage = totalFiles === 0 ? 0 : totalCandidates / totalFiles;
 
   writeReports(args.outDir, {
     agg,
@@ -162,9 +179,13 @@ async function main(): Promise<void> {
       topK: args.topK,
       mode: "keyword-only (no DB)",
       casesPath: "apps/server/src/eval/cases/retrieval.yaml",
+      indexedCoverage,
+      totalFiles,
+      totalCandidates,
     },
   });
   console.log(`\nReport written to: ${args.outDir}`);
+  console.log(`Indexed coverage: ${(indexedCoverage * 100).toFixed(1)}% (${totalCandidates.toString()}/${totalFiles.toString()} files)`);
 
   if (args.ci) {
     const gates = loadGates();
