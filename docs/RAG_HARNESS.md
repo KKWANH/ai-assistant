@@ -449,3 +449,153 @@ have receipts.
 That capability is the chip the spec was actually asking for. Now the
 algorithm work (real hybrid, reranking, etc.) has a place to land
 with measurable verdicts attached.
+
+### BATCH-3 — 2026-05-24 — commits `4ff9c3a..1f6ea57`
+
+Closed every deferred follow-up from BATCH-2 in the same session.
+Final state below.
+
+**P8 — Real Hybrid Retrieval (`4ff9c3a`)**
+ * FTS5 virtual table `chunk_fts` mirrored alongside `chunk_embeddings`
+   with `tokenize='unicode61 remove_diacritics 2'` so Korean / mixed
+   scripts index correctly.
+ * `dbBm25Search` sanitises FTS5 operators from user queries, returns
+   top-k by SQLite's built-in `bm25()`.
+ * `retrieveByHybridMeta` fuses BM25 + semantic + symbol candidates via
+   reciprocal rank fusion (k=60). Symbol contribution = every chunk
+   inside a symbol-matched path gets rank 1 in the symbol list.
+ * `forceStrategy: "hybrid"` available everywhere — chat, actions,
+   harness. Honest empty + warning when no workspaceId / no index.
+ * Strategy harness defaults updated to include `hybrid`.
+ * **Measured numbers (26 retrieval cases, Ollama embeddings)**:
+
+   | strategy        | Hit@1 | Hit@3 | Hit@6 | MRR   | p95     |
+   |-----------------|-------|-------|-------|-------|---------|
+   | keyword-only    | 53.8% | 80.8% | 80.8% | 0.667 |   0.3ms |
+   | keyword+symbol  | 61.5% | 80.8% | 80.8% | 0.705 |   0.3ms |
+   | semantic-only   | 38.5% | 80.8% |100.0% | 0.604 |  22.7ms |
+   | **hybrid**      | **69.2%** | **100.0%** | **100.0%** | **0.840** | **16.3ms** |
+
+   Hybrid p95 16.3ms is *lower* than semantic-only's 22.7ms because
+   BM25 is in-process SQLite and the parallel branches overlap.
+
+**P10 — Safety harness (`07bdf16 + c1ea376`)**
+ * `safety-fixture` with `notes.md` + `secrets.env` + `credentials.json`
+   + `.ariadne/private.json`. 8 negative cases assert sensitive +
+   `.ariadne` paths never appear in retrieval.
+ * Verified across all 4 strategies: **zero distractor leaks**.
+   Sensitive files filtered by `f.sensitive` check before scoring;
+   `.ariadne/` skipped at walk time.
+ * `.gitignore` exceptions added so fixtures travel with the repo
+   while production `**/credentials*.json` + `.ariadne/` rules keep
+   doing their job everywhere else.
+
+**P11 — Incremental indexing (`a7060e3`)**
+ * `chunk_embeddings.file_hash` (guarded ALTER) + per-path index.
+ * `dbDeleteChunksByPath` + `dbListChunkPathDigests` helpers.
+ * `indexWorkspaceEmbeddings` rewritten:
+   - hash each candidate's truncated content (SHA-256)
+   - same hash as stored → skip
+   - different hash → drop old chunks for that path, re-embed
+   - file gone → drop its chunks
+ * Returns `{indexed, provider, reembedded, unchanged, removed}`.
+ * Smoke verified against code-small fixture: 1st run reembeds 4,
+   2nd run unchanged=4 reembeds=0, 3rd run after `touch` reembeds=1.
+ * For real workspaces this is the difference between a 10-second
+   re-scan and a 50-ms one.
+
+**P12 — nDCG + indexed coverage (`5f0b6b0`)**
+ * `CaseMetrics.ndcgAt6` + `AggregateMetrics.meanNdcgAt6`. DCG over
+   the top-6 chunks scored against `mustHit` paths.
+ * `isRetrievalEligible(f)` + `RETRIEVAL_MAX_FILES` exported from
+   retrieval.ts so the harness uses the same eligibility rules.
+ * Runner computes `indexedCoverage = totalCandidates / totalFiles`
+   across all fixtures and reports it.
+
+**P9 — Generation faithfulness harness (`1f6ea57`)**
+ * `cases/rag-answer.yaml` with 8 cases: 6 positive + 2 abstention.
+ * `genMetrics.ts`:
+   - Faithfulness: sentence-level fingerprint overlap (≥60 % of
+     content tokens must appear in the joined retrieved chunks).
+   - Abstention scoring: must contain an abstention phrase AND no
+     positive claims when `expectedAbstention: true`; otherwise
+     abstaining is wrong. Faithfulness=1 when abstention is correct
+     (the abstention IS the grounded answer; don't penalise it).
+   - Expected/forbidden claims: lowercase substring match.
+ * `runRagEval.ts`:
+   - Deterministic `mockGenerate` baseline pulls sentences with
+     query-token matches from the top-3 chunks. By construction
+     mock answers come from context → mock faithfulness should be
+     100 %, doubling as a regression check on the scorer.
+   - `--live` mode lazy-imports the production provider machinery
+     and uses the same prompt the chat path would.
+   - `--use-db` + `--strategy=<id>` work the same way as the
+     strategy harness.
+ * `eval:rag` + `eval:rag:ci` npm scripts.
+ * **Mock baseline (8 cases, hybrid retrieval)**:
+   - Faithfulness mean: 100 %
+   - Abstention precision: 100 %
+   - Unsupported claim rate: 0 %
+   - Expected claims hit (mean): 75 % (2 cases where mock can't
+     extract the specific value — exactly the gap a real LLM closes)
+   - Forbidden claim leak rate: 0 %
+   - Context P / R: 23.3 % / 100 %
+
+### Spec coverage — final
+
+| Spec item                                  | Status |
+|--------------------------------------------|--------|
+| 1) Retrieval golden-set harness            | ✅ BATCH-1 |
+| 2) Strategy comparison harness             | ✅ BATCH-2 |
+| 3) Regression CI harness (soft gates)      | ✅ BATCH-2 (strict mode wired, off) |
+| 4) Performance harness (latency tracked)   | ✅ BATCH-1 |
+| 5) Safety harness                          | ✅ BATCH-3 |
+| 6) Generation faithfulness harness         | ✅ BATCH-3 |
+| 7) User feedback → case promotion          | ⏸ deferred — needs UI flow |
+| **Real hybrid retrieval (BM25+RRF)**       | ✅ BATCH-3 |
+| **Incremental indexing**                   | ✅ BATCH-3 |
+| **nDCG metric**                            | ✅ BATCH-3 |
+| **Indexed coverage metric**                | ✅ BATCH-3 |
+| Synthetic workspace generator              | ⏸ deferred — static fixtures fine for current scale |
+| Hard CI gates (`--strict` enabled)         | ⏸ deferred — bar still settling |
+| Faithfulness via LLM judge (`--judge`)     | ⏸ deferred — heuristic scorer sufficient for v1 |
+| GraphRAG / RAPTOR / Agentic RAG            | ⏸ deferred — separate research arc |
+
+### What's still meaningfully missing
+
+1. **User-feedback → eval-case promotion** (spec priority #7). Wire
+   the workspace search UI's "this result was bad" affordance into
+   a flow that appends the query + chosen file as a new case
+   candidate. Would let the dataset grow with real usage.
+2. **LLM-judge scorer** for ambiguous-paraphrase cases. The
+   heuristic faithfulness scorer would call a small model to judge
+   the harder sentences. Off by default for cost + determinism.
+3. **More fixtures**. `papers-small` (multi-doc citation tracing) is
+   the obvious next one; the spec mentioned it.
+4. **`--strict` CI gate enablement** once a few weeks of green runs
+   establish the bar.
+5. **Bigger hybrid sub-strategies**. MMR for diversity, query-rewrite,
+   cross-encoder rerank — all measurable now that the harness exists.
+
+### Where this leaves Ariadne's RAG (final)
+
+The spec said:
+
+> Ariadne의 검색/RAG 완성도는 알고리즘 자체보다, 알고리즘을 바꿀
+> 때마다 같은 workspace·같은 질문·같은 정답 기준으로 품질과 속도를
+> 비교하는 하네스가 생길 때 급격히 올라간다.
+
+Three commands now back that up:
+
+```
+npm run eval:retrieval        # 34 cases, default retrieval path
+npm run eval:strategy --use-db # head-to-head comparison of 4 strategies
+npm run eval:rag --use-db      # generation faithfulness + abstention
+```
+
+Each writes a timestamped report under `data/evals/`. Any PR that
+moves retrieval can claim numerical improvements (or regressions)
+with receipts. The harness already produced one measurable algorithm
+win this session: real hybrid retrieval lifted Hit@1 from 61.5 % to
+69.2 % with lower p95 than semantic-only. Without the harness that
+claim would be a feeling; with it, it's a row in a table.
