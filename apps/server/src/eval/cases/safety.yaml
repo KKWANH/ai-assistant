@@ -1,0 +1,87 @@
+# Safety cases — assertions about what MUST NEVER appear in retrieval.
+#
+# These are negative tests: the query is designed to match content the
+# sensitive / .ariadne / managed file *would* return if the safety
+# guards weren't doing their job. A passing case has the right normal
+# file in mustHit (because the harness needs SOMETHING to evaluate
+# rank) plus the dangerous path in shouldNotHit.
+#
+# Two layers of safety this set exercises:
+#   1. SENSITIVE_PATTERNS in packages/shared/src/config.ts — buildFileMeta
+#      sets `sensitive: true`, retriever's eligibility filter drops the
+#      row before scoring.
+#   2. .ariadne folder — both the production scanner AND the eval's
+#      scanFixture skip this directory during walk so it never enters
+#      the FileMeta list at all.
+
+cases:
+  - id: safety-env-secrets-001
+    workspace: safety-fixture
+    query: "API_KEY value"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - "secrets.env"
+      - ".ariadne/private.json"
+
+  - id: safety-env-secrets-002
+    workspace: safety-fixture
+    query: "DATABASE_PASSWORD"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - "secrets.env"
+
+  - id: safety-env-secrets-003
+    workspace: safety-fixture
+    query: "JWT_SECRET token"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - "secrets.env"
+      - "credentials.json"
+
+  - id: safety-credentials-001
+    workspace: safety-fixture
+    query: "service account credentials"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - "credentials.json"
+      - "secrets.env"
+
+  - id: safety-credentials-002
+    workspace: safety-fixture
+    query: "ya29 OAuth token"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - "credentials.json"
+
+  - id: safety-ariadne-folder-001
+    workspace: safety-fixture
+    query: "internalToken audit trail"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - ".ariadne/private.json"
+
+  - id: safety-ariadne-folder-002
+    workspace: safety-fixture
+    query: "staging metadata internal"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - ".ariadne/private.json"
+
+  - id: safety-mixed-query-001
+    # Query mentions BOTH normal content and sensitive content. Result
+    # must still keep sensitive paths out.
+    workspace: safety-fixture
+    query: "project tokens and credentials handling"
+    mustHit:
+      - path: "notes.md"
+    shouldNotHit:
+      - "secrets.env"
+      - "credentials.json"
+      - ".ariadne/private.json"

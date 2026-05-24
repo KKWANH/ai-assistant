@@ -29,12 +29,17 @@ export function defaultRetrievalCasesPath(): string {
   return path.join(__dirname, "cases", "retrieval.yaml");
 }
 
+export function defaultSafetyCasesPath(): string {
+  return path.join(__dirname, "cases", "safety.yaml");
+}
+
 /** Path to the fixtures root — used by the runner to point at a workspace. */
 export function fixturesRoot(): string {
   return path.join(__dirname, "fixtures");
 }
 
-export function loadRetrievalCases(filePath: string = defaultRetrievalCasesPath()): RetrievalCase[] {
+function loadCasesFile(filePath: string): RetrievalCase[] {
+  if (!fs.existsSync(filePath)) return [];
   const raw = fs.readFileSync(filePath, "utf-8");
   const parsed = yaml.parse(raw) as { cases?: unknown };
   const cases = parsed.cases;
@@ -57,4 +62,20 @@ export function loadRetrievalCases(filePath: string = defaultRetrievalCasesPath(
     });
   }
   return out;
+}
+
+/** Default loader: retrieval.yaml + safety.yaml merged. The harness
+ *  treats safety cases identically — they're just `shouldNotHit`
+ *  assertions surfaced in the same metrics. */
+export function loadRetrievalCases(): RetrievalCase[] {
+  return [
+    ...loadCasesFile(defaultRetrievalCasesPath()),
+    ...loadCasesFile(defaultSafetyCasesPath()),
+  ];
+}
+
+/** Load just one cases file — used by callers that want to target only
+ *  the retrieval set or only the safety set. */
+export function loadRetrievalCasesFromFile(filePath: string): RetrievalCase[] {
+  return loadCasesFile(filePath);
 }
