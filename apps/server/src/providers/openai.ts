@@ -102,21 +102,36 @@ export class OpenAIProvider implements AiProvider {
   }
 }
 
-/** Moonshot / Kimi — OpenAI-compatible, different base URL.
- *  Endpoint routing by key prefix:
- *    - `ak-...` → platform.moonshot.cn (Kimi China platform)
- *    - `sk-...` → api.moonshot.ai      (Moonshot international)
- *  Override either with MOONSHOT_BASE_URL. */
+/** Moonshot / Kimi — OpenAI-compatible.
+ *
+ *  Three independent platforms (per Kimi docs); keys cannot be mixed.
+ *  Pick by where the key was issued:
+ *    - platform.kimi.ai  / platform.moonshot.ai  (international API) → api.moonshot.ai/v1
+ *    - platform.kimi.com / platform.moonshot.cn  (China API)         → api.moonshot.cn/v1
+ *    - kimi.com → Kimi Code (membership-bundled) console              → api.kimi.com/coding/v1
+ *
+ *  Both API platforms issue both `sk-` and `ak-` prefixed keys, so the
+ *  prefix is NOT a reliable platform signal. Kimi Code uses its own
+ *  console and only accepts model id `kimi-for-coding`.
+ *
+ *  Selection priority:
+ *    1. MOONSHOT_BASE_URL — direct override
+ *    2. MOONSHOT_PLATFORM = "kimi-code" | "china" | "international"
+ *    3. model id matches `/^kimi-for-coding/` → kimi-code endpoint
+ *    4. default → international (api.moonshot.ai/v1) */
 export class MoonshotProvider extends OpenAIProvider {
   override readonly id: ProviderId = "moonshot";
 
   constructor(model: string) {
     const key = process.env.MOONSHOT_API_KEY ?? "dummy";
+    const platform = (process.env.MOONSHOT_PLATFORM ?? "").toLowerCase();
     const baseURL =
       process.env.MOONSHOT_BASE_URL
-      ?? (key.startsWith("ak-")
-        ? "https://api.moonshot.cn/v1"
-        : "https://api.moonshot.ai/v1");
+      ?? (platform === "kimi-code" || /^kimi-for-coding/i.test(model)
+        ? "https://api.kimi.com/coding/v1"
+        : platform === "china" || platform === "cn"
+          ? "https://api.moonshot.cn/v1"
+          : "https://api.moonshot.ai/v1");
     super(model, { apiKey: key, baseURL });
   }
 }

@@ -962,6 +962,7 @@ const en = {
   "model.trait.geminiFlash": "Fast, capable general-purpose model",
   "model.trait.geminiFlashLite": "The fastest, lightest option",
   "model.trait.kimi": "Strong with very long documents",
+  "model.trait.kimiCoding": "Kimi membership-bundled coding model (separate key from kimi.com)",
   "model.trait.qwen8b": "Solid local model for reasoning and analysis",
   "model.trait.qwen4b": "A lighter, faster local model",
   "model.trait.qwen06b": "Fastest local model — for simple tasks",

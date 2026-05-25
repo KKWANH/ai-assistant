@@ -42,7 +42,8 @@ const KNOWN: Record<string, ModelInfo> = {
   "gemini-3.5-flash":      { label: "Gemini Flash",      traitKey: "model.trait.geminiFlash",     speed: "fast", costTier: "mid" },
   "gemini-3.1-flash-lite": { label: "Gemini Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low" },
   // Moonshot / Kimi
-  "kimi-k2.6": { label: "Kimi K2", traitKey: "model.trait.kimi", speed: "normal", costTier: "low" },
+  "kimi-k2.6":       { label: "Kimi K2",       traitKey: "model.trait.kimi",       speed: "normal", costTier: "low" },
+  "kimi-for-coding": { label: "Kimi for Coding", traitKey: "model.trait.kimiCoding", speed: "normal", costTier: "low" },
   // Ollama (local)
   "qwen3:8b":   { label: "Qwen 3 (8B)",   traitKey: "model.trait.qwen8b",  speed: "normal", costTier: "low" },
   "qwen3:4b":   { label: "Qwen 3 (4B)",   traitKey: "model.trait.qwen4b",  speed: "fast",   costTier: "low" },
@@ -71,6 +72,9 @@ const MODEL_PRICING: Record<string, ModelPrice> = {
   "gemini-3.5-flash":      { inUsd: 1.5,  outUsd: 9 },
   "gemini-3.1-flash-lite": { inUsd: 0.25, outUsd: 1.5 },
   "kimi-k2.6":             { inUsd: 0.6,  outUsd: 2.5 },
+  // Kimi Code: bundled in Kimi membership ($8-19/mo) with quota-window
+  // billing, not per-token. Display as 0 so the cost UI doesn't lie.
+  "kimi-for-coding":       { inUsd: 0,    outUsd: 0 },
   "qwen3:8b":   { inUsd: 0, outUsd: 0 },
   "qwen3:4b":   { inUsd: 0, outUsd: 0 },
   "qwen3:0.6b": { inUsd: 0, outUsd: 0 },

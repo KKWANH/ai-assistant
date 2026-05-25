@@ -40,7 +40,7 @@ export const MODEL_CHOICES: Record<ProviderId, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
   gemini: ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
-  moonshot: ["kimi-k2.6", "moonshot-v1-128k", "moonshot-v1-32k"],
+  moonshot: ["kimi-k2.6", "moonshot-v1-128k", "moonshot-v1-32k", "kimi-for-coding"],
   ollama: ["qwen3:8b", "qwen3:4b", "qwen3:0.6b"],
   mock: ["mock"],
 };
@@ -70,6 +70,9 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   "moonshot-v1-128k":   { input: 1.63,  output: 6.53  },
   "moonshot-v1-32k":    { input: 0.81,  output: 3.26  },
   "kimi-k2-0711-preview": { input: 0.60, output: 2.50 },
+  // Kimi Code (membership-bundled, separate quota system — pricing isn't
+  // per-token but per-quota-window. List as 0 so cost UI doesn't lie.)
+  "kimi-for-coding":    { input: 0, output: 0 },
   // Ollama (local) — free. Any unlisted local model also resolves to free.
   "qwen3:8b":           { input: 0, output: 0 },
   "qwen3:4b":           { input: 0, output: 0 },
