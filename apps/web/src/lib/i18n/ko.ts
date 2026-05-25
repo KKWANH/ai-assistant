@@ -97,7 +97,7 @@ const ko: Record<TranslationKey, string> = {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "무엇을 도와드릴까요?",
-  "chat.empty.subtitle": "내 컴퓨터에서 돌아가는 AI — 어디서 가져온 답인지 끝까지 추적해요.",
+  "chat.empty.subtitle": "내 컴퓨터에서 실행되는 AI — 답의 출처를 끝까지 추적합니다.",
   "chat.empty.startNew": "새 대화 시작하기",
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
 
@@ -211,7 +211,7 @@ const ko: Record<TranslationKey, string> = {
   // translator-qa §3: "쿼리·retrieval·임베딩·코사인 유사도·키워드
   // 랭커" 모두 jargon. 평이한 한국어로.
   "workspace.search.emptyState": "위에 검색어를 입력해 보세요. 채팅이 쓰는 것과 같은 검색 엔진으로 이 자료 폴더의 파일들을 찾아 줍니다.",
-  "workspace.search.noResults": "검색 결과가 없어요. 다른 단어로 다시 해 보거나, 아직 폴더를 읽지 않았다면 '파일 스캔'을 먼저 눌러 주세요.",
+  "workspace.search.noResults": "검색 결과가 없습니다. 다른 단어로 다시 시도하시거나, 아직 폴더를 읽지 않았다면 '파일 스캔'을 먼저 눌러 주십시오.",
   "workspace.fileEditor.stage": "변경 스테이지",
   "workspace.fileEditor.staged": "리뷰용으로 스테이지됨",
   "workspace.fileEditor.stageFailed": "스테이지 실패",
@@ -240,6 +240,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.runs.empty.body": "위의 템플릿을 사용해 첫 번째 브리핑이나 근거 묶음을 만들어 보세요.",
   "workspace.runs.getStarted": "시작하기",
   "workspace.chats.title": "대화",
+  "workspace.chats.tab": "대화",
   "workspace.chats.subtitle": "이 워크스페이스의 파일에 대해 무엇이든 물어보세요.",
   "workspace.chats.new": "새 대화",
   "workspace.chats.empty": "이 워크스페이스에 연결된 대화가 아직 없습니다.",
@@ -307,7 +308,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.excludeLabel": "제외할 파일",
   "workspace.dialog.excludeHelp": "위 목록에 맞더라도 제외할 패턴 — 한 줄에 하나씩.",
   "workspace.dialog.createBtn": "워크스페이스 만들기",
-  "workspace.dialog.created": "새 자료 폴더가 준비됐어요",
+  "workspace.dialog.created": "워크스페이스를 만들었습니다",
   "workspace.dialog.failed": "워크스페이스를 만들 수 없습니다",
 
   // FolderPicker
@@ -575,20 +576,20 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.mcp.shortTitle": "MCP",
   "tutorial.page.ready.shortTitle": "준비됐어요",
   "tutorial.page.welcome.title": "Ariadne에 오신 것을 환영합니다",
-  "tutorial.page.welcome.p1": "Ariadne는 내 컴퓨터에서 돌아가는 AI 도우미예요. 답을 줄 때마다 어디서 가져온 정보인지 함께 알려줘서, 그대로 믿어도 되는지 바로 확인할 수 있어요.",
-  "tutorial.page.welcome.p2": "이 가이드는 몇 분이면 됩니다. 페이지마다 그림과 함께 하나씩 설명해요 — 컴퓨터 잘 몰라도 괜찮아요. 이전·다음 버튼이나 왼쪽 목록으로 원하는 곳으로 바로 갈 수 있어요.",
+  "tutorial.page.welcome.p1": "Ariadne는 내 컴퓨터에서 실행되는 AI 도우미입니다. 답을 줄 때마다 출처가 어디인지 함께 알려주므로, 답을 그대로 믿어도 되는지 즉시 확인할 수 있습니다.",
+  "tutorial.page.welcome.p2": "이 가이드는 몇 분이면 완료됩니다. 페이지마다 그림과 함께 한 가지 개념을 설명합니다 — 기술 지식은 필요하지 않습니다. 이전·다음 버튼이나 왼쪽 목록으로 원하는 페이지로 바로 이동하십시오.",
   "tutorial.page.chat.title": "그냥 대화부터 시작하세요",
   "tutorial.page.chat.p1": "복잡하게 생각 마세요. 평소에 쓰는 AI 챗봇처럼, 화면 아래 칸에 질문을 적고 보내기만 하면 답이 옵니다.",
-  "tutorial.page.chat.p2": "어떤 AI 모델이 답할지는 직접 고르고 언제든 바꿀 수 있어요. 모델 이름 위에 마우스를 올리면 어떤 모델인지, 얼마나 빠른지, 비용은 어떻게 되는지 비교할 수 있어요. 빠른 답이 필요하면 채팅창 옆 토끼 아이콘(즉답 모드)을 켜세요.",
+  "tutorial.page.chat.p2": "어떤 AI 모델이 답할지 직접 고르고 언제든 바꿀 수 있습니다. 모델 이름 위에 마우스를 올리면 모델 종류·속도·비용을 비교할 수 있습니다. 빠른 답이 필요하면 채팅창 옆 토끼 아이콘(즉답 모드)을 켜십시오.",
   "tutorial.page.chat.user": "프로젝트 진행 보고 이메일은 어떻게 구성하면 좋을까요?",
   "tutorial.page.chat.assistant": "좋은 진행 보고 이메일은 네 부분으로 짧게 나뉩니다: 진행 상황, 막힌 점, 다음 단계, 그리고 필요한 결정…",
   "tutorial.page.attach.title": "파일을 그냥 끌어다 놓으세요",
-  "tutorial.page.attach.p1": "PDF·워드·엑셀·이미지를 채팅창 옆 📎 클립 아이콘을 눌러 골라 보내거나, 그냥 끌어서 놓으세요. AI가 내용을 읽고 그 안에서 답해요.",
-  "tutorial.page.attach.p2": "표 데이터를 복사해서 붙여넣거나 CSV·엑셀 파일을 올리면, 보내기 전에 표 모양으로 보고 수정할 수 있어요. 잘못된 칸이 있으면 그 자리에서 고치고 보내세요.",
+  "tutorial.page.attach.p1": "PDF·워드·엑셀·이미지를 채팅창 옆 📎 클립 아이콘을 눌러 첨부하거나, 그냥 끌어서 놓으십시오. AI가 내용을 읽고 그 안에서 답합니다.",
+  "tutorial.page.attach.p2": "표 데이터를 복사해 붙여넣거나 CSV·엑셀 파일을 올리면, 보내기 전에 표 모양으로 보고 수정할 수 있습니다. 잘못된 칸이 있으면 그 자리에서 고친 뒤 전송하십시오.",
   "tutorial.page.attach.prompt": "이 두 파일의 핵심을 요약해 줘…",
   "tutorial.page.workspaces.title": "자료 폴더 연결하기 (= 워크스페이스)",
-  "tutorial.page.workspaces.p1": "자주 쓰는 내 컴퓨터의 폴더를 Ariadne에 한 번 연결해 두면, 그 폴더 안의 자료를 매번 첨부하지 않아도 AI가 알아서 찾아 답해요. 이 연결 단위를 '워크스페이스'라고 불러요 — 그냥 '자료 폴더'라고 생각하시면 돼요.",
-  "tutorial.page.workspaces.p2": "처음엔 기본으로 깔린 '튜토리얼 워크스페이스'로 안전하게 연습해 보세요 — 내 진짜 파일은 건드리지 않아요. 익숙해지면 왼쪽 사이드바의 '+ 새 자료 폴더'로 본격 시작하면 돼요.",
+  "tutorial.page.workspaces.p1": "자주 쓰는 폴더를 Ariadne에 한 번 연결해 두면, 그 폴더 안의 자료를 매번 첨부하지 않아도 AI가 알아서 찾아 답합니다. 이 연결 단위를 '워크스페이스'라고 하며, 평이하게는 '자료 폴더'로 생각하시면 됩니다.",
+  "tutorial.page.workspaces.p2": "처음에는 기본 제공되는 '튜토리얼 워크스페이스'로 안전하게 연습하십시오 — 실제 파일은 건드리지 않습니다. 익숙해지면 왼쪽 사이드바의 '+ 새 자료 폴더'로 본격적으로 시작하십시오.",
   "tutorial.page.workspaces.nodeFolder": "내 폴더",
   "tutorial.page.workspaces.nodeWorkspace": "워크스페이스",
   "tutorial.page.workspaces.nodeChat": "무엇이든 질문",
@@ -627,12 +628,12 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.reports.statLabel": "이번 달",
   "tutorial.page.reports.queueLabel": "대기 중 신고",
   "tutorial.page.mcp.title": "MCP: 외부 도구를 끼워 쓰기",
-  "tutorial.page.mcp.p1": "MCP(Model Context Protocol)는 AI가 외부 서비스와 대화하기 위한 공개 표준이에요. 'AI용 USB'라고 생각하시면 됩니다 — MCP를 지원하는 도구는 별도 작업 없이 Ariadne에 그대로 끼울 수 있어요.",
-  "tutorial.page.mcp.p2": "MCP 서버는 설정 → MCP 서버에서 등록해요. 대표적인 예: @modelcontextprotocol/server-filesystem (에이전트에게 특정 폴더 접근 권한 부여), @modelcontextprotocol/server-github (이슈·PR 조회), 또는 직접 만든 서버까지 어떤 언어든 가능. 등록된 서버는 처음 사용될 때 자식 프로세스로 자동 실행됩니다.",
-  "tutorial.page.mcp.p3": "에이전트가 MCP 도구가 필요하다고 판단하면 'mcp_call'이라는 도구를 골라요 — 실행 트레이스에서 확인할 수 있어요. MCP 서버 등록은 보안상 로컬(내 컴퓨터)에서만 가능합니다.",
+  "tutorial.page.mcp.p1": "MCP(Model Context Protocol)는 AI가 외부 서비스와 대화하기 위한 공개 표준입니다. 'AI용 USB'로 이해하시면 됩니다 — MCP를 지원하는 도구는 별도 작업 없이 Ariadne에 끼울 수 있습니다.",
+  "tutorial.page.mcp.p2": "MCP 서버는 설정 → MCP 서버에서 등록합니다. 대표적인 예: @modelcontextprotocol/server-filesystem (에이전트에게 특정 폴더 접근 권한 부여), @modelcontextprotocol/server-github (이슈·PR 조회), 또는 직접 만든 서버까지 어떤 언어든 가능합니다. 등록된 서버는 처음 사용될 때 자식 프로세스로 자동 실행됩니다.",
+  "tutorial.page.mcp.p3": "에이전트가 MCP 도구가 필요하다고 판단하면 'mcp_call' 도구를 선택합니다 — 실행 트레이스에서 확인할 수 있습니다. MCP 서버 등록은 보안상 로컬(내 컴퓨터)에서만 가능합니다.",
   "tutorial.page.ready.title": "준비됐어요",
   "tutorial.page.ready.p1": "투어는 여기까지입니다. 가장 좋은 다음 단계는 직접 해 보는 것 — '튜토리얼 워크스페이스'를 열거나 채팅에 질문을 입력해 보세요.",
-  "tutorial.page.ready.p2": "이 튜토리얼은 언제든 다시 열 수 있어요 — 빈 채팅 화면의 \"처음이신가요? 튜토리얼 보기 →\" 링크나, 표준 모드일 때 상단의 도움말(?) 버튼에서 볼 수 있습니다.",
+  "tutorial.page.ready.p2": "이 튜토리얼은 언제든 다시 열 수 있습니다 — 빈 채팅 화면의 \"처음이신가요? 튜토리얼 보기 →\" 링크 또는 표준 모드 상단의 도움말(?) 버튼에서 접근하십시오.",
 
   // ── Inspector ───────────────────────────────────────────────────────────────
   "inspector.title": "인스펙터",
@@ -996,14 +997,14 @@ const ko: Record<TranslationKey, string> = {
   "memory.panel.title": "워크스페이스 메모리",
   "memory.panel.subtitle": "이 워크스페이스에 대해 확인된 사실들. 매번 답하기 전 시스템 프롬프트에 포함됩니다.",
   // Easy 모드 전용 — translator-qa §7: "시스템 프롬프트"는 jargon.
-  "memory.panel.subtitle.simple": "이 자료 폴더에 대해 기억해 둔 내용. AI가 답하기 전 자동으로 함께 읽어요.",
+  "memory.panel.subtitle.simple": "이 자료 폴더에 대해 기억해 둔 내용입니다. AI가 답하기 전 자동으로 함께 읽습니다.",
   "memory.panel.addLabel": "메모리를 직접 추가",
   "memory.panel.addHint": "이 워크스페이스에서 채팅할 때 AI가 다음번에도 기억해야 할 내용.",
   "memory.panel.addPlaceholder": "이 워크스페이스의 CSV는 세미콜론 구분자를 씁니다.",
-  "memory.panel.addPlaceholder.simple": "이 폴더에는 우리 가족 월별 가계부가 들어 있어요.",
+  "memory.panel.addPlaceholder.simple": "이 폴더는 우리 가족 월별 가계부 자료입니다.",
   "memory.panel.addButton": "추가",
   "memory.panel.delete": "메모리 제거",
-  "memory.panel.empty": "아직 메모리가 없어요. 채팅 답변에 📌 표시를 누르거나, 위에서 직접 추가하세요.",
+  "memory.panel.empty": "아직 메모리가 없습니다. 채팅 답변에 📌 표시를 누르거나, 위에서 직접 추가하십시오.",
   "memory.source.chat": "채팅에서",
   "memory.source.manual": "직접 추가",
 
@@ -1072,7 +1073,7 @@ const ko: Record<TranslationKey, string> = {
 
   // ── 답변 모드 (T1 — Instant + Agent를 하나의 선택지로 통합) ─────────────
   "chat.composer.replyModeLabel": "답변 모드",
-  "chat.composer.replyModeTip": "즉답 = 바로 답, 가장 빠름. 자동 = 표준 흐름(자료 폴더 + 메모리 참조, 에이전트 필요 여부는 자동 판단). Agent = 항상 다단계 계획 실행. 평소엔 '자동'이면 충분해요.",
+  "chat.composer.replyModeTip": "즉답 = 바로 답, 가장 빠름. 자동 = 표준 흐름(자료 폴더 + 메모리 참조, 에이전트 필요 여부는 자동 판단). Agent = 항상 다단계 계획 실행. 평소에는 '자동'이면 충분합니다.",
   // Easy 모드 전용 — translator-qa §4: "에이전트·다단계 계획" 단어가
   // Easy 사용자에게 무거움. ChatComposer가 isSimple일 때 이 키를 씁니다.
   "chat.composer.replyModeTip.simple": "즉답: 바로 답. 자동: 알아서 처리. Agent: 시간이 걸려도 꼼꼼히 처리.",
@@ -1081,16 +1082,16 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.replyMode.agent": "Agent",
 
   // ── 비전 가드 (W1.1) ───────────────────────────────────────────────────
-  "chat.composer.visionBlocked": "현재 모델 ({model})은 이미지를 읽을 수 없어요. 이 사진을 보내려면 위쪽에서 비전 지원 모델 (Claude, GPT-4o, Gemini)로 바꿔주세요.",
+  "chat.composer.visionBlocked": "현재 모델 ({model})은 이미지를 읽을 수 없습니다. 이 사진을 보내려면 위쪽에서 비전 지원 모델 (Claude, GPT-4o, Gemini)로 변경하십시오.",
 
   // ── 빌트인 템플릿 이름/설명 (W2.1) — 서버는 한국어 원문을 보내고, 웹이
   // 사용자 로케일에 맞춰 여기 키로 매핑합니다.
   // "브리프" → "브리핑" 통일 — translator-qa §2 (runs.detail.brief 등
   // 다른 모든 곳이 "브리핑"인데 템플릿 이름만 "브리프"였음)
   "template.research-brief.name": "리서치 브리핑",
-  "template.research-brief.description": "내 자료 폴더의 메모·논문·파일을 근거로, 출처가 연결된 리서치 브리핑을 만들어요.",
+  "template.research-brief.description": "내 자료 폴더의 메모·논문·파일을 근거로 출처가 연결된 리서치 브리핑을 생성합니다.",
   "template.lecture-brief.name": "강의 브리핑",
-  "template.lecture-brief.description": "강의 노트와 자료를 근거로, 출처가 연결된 강의 준비 브리핑을 만들어요.",
+  "template.lecture-brief.description": "강의 노트와 자료를 근거로 출처가 연결된 강의 준비 브리핑을 생성합니다.",
   "template.investment-decision-memo.name": "투자 결정 메모",
   "template.investment-decision-memo.description": "리서치 노트·재무 자료·시장 데이터를 근거로, 구조화된 투자 결정 메모를 생성합니다.",
   "template.job-search-review.name": "구직 활동 점검",

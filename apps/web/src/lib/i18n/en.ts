@@ -245,6 +245,7 @@ const en = {
   "workspace.runs.empty.body": "Use a template above to produce your first brief or evidence pack.",
   "workspace.runs.getStarted": "Get started",
   "workspace.chats.title": "Conversations",
+  "workspace.chats.tab": "Chat",
   "workspace.chats.subtitle": "Ask anything about the files in this workspace.",
   "workspace.chats.new": "New chat",
   "workspace.chats.empty": "No conversations linked to this workspace yet.",

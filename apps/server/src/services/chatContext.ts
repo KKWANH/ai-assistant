@@ -20,11 +20,13 @@ import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared"
 import type { ProviderImage } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { tryParseDocument } from "./safeParse.js";
-import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
+import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
 import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
+import { loadWorkspaceActions } from "./actions.js";
+import { loadHooks } from "./hooks.js";
 
 // ---------------------------------------------------------------------------
 // Public return type
@@ -81,6 +83,7 @@ export async function buildChatContext(
   let attachmentBlock: string | undefined;
   let webBlock: string | undefined;
   let memoryBlock: string | undefined;
+  let workspaceMetaBlock: string | undefined;
   let workspaceBlock: string | undefined;
   let historyBlock: string | undefined;
   let searchResults: SearchResult[] | null = null;
@@ -135,6 +138,34 @@ export async function buildChatContext(
     const ws = dbGetWorkspace(chat.workspaceId);
     if (ws) {
       memoryBlock = renderMemoryForPrompt(listMemories(ws.rootPath)) ?? undefined;
+      // Workspace meta — answers "이 프로젝트 설정 알려줘" / "이 폴더에
+      // 메모리 몇 개 있어?" type questions without needing a tool call.
+      // Cheap to compute (all local DB / .ariadne reads) so always
+      // included when a workspace is attached. Counts only — full
+      // memory text already in memoryBlock, full hooks YAML is too
+      // long for this preamble.
+      const memCount = listMemories(ws.rootPath).length;
+      const { actions } = loadWorkspaceActions(ws.rootPath);
+      const hooks = loadHooks(ws.rootPath);
+      const mcpServers = chat.createdBy
+        ? dbListMcpServers(chat.createdBy).filter((s) => s.enabled)
+        : [];
+      const scanLine = ws.lastScanAt
+        ? `last scanned ${ws.lastScanAt}`
+        : "never scanned";
+      workspaceMetaBlock =
+        `--- Workspace settings ("${ws.name}") ---\n` +
+        `Root: ${ws.rootPath}\n` +
+        `Files indexed: ${ws.fileCount.toString()} (${scanLine})\n` +
+        `Memories: ${memCount.toString()}\n` +
+        `Custom actions: ${actions.length.toString()}` +
+        (actions.length > 0 ? ` (${actions.slice(0, 5).map((a) => a.id).join(", ")}${actions.length > 5 ? ", …" : ""})` : "") +
+        `\n` +
+        `Hooks: ${hooks.length.toString()}` +
+        (hooks.length > 0 ? ` (${hooks.slice(0, 5).map((h) => `${h.id}/${h.event}`).join(", ")}${hooks.length > 5 ? ", …" : ""})` : "") +
+        `\n` +
+        `MCP servers: ${mcpServers.length.toString()}` +
+        (mcpServers.length > 0 ? ` (${mcpServers.map((s) => s.name).join(", ")})` : "");
     }
     const snapshot = dbGetLatestSnapshot(chat.workspaceId);
     if (snapshot && snapshot.files.length > 0) {
@@ -195,9 +226,18 @@ export async function buildChatContext(
   //    Memory comes BEFORE web/workspace excerpts because confirmed
   //    facts should anchor everything else; the model should read
   //    them first and treat them as authoritative.
-  const parts = [memoryBlock, attachmentBlock, webBlock, workspaceBlock, historyBlock].filter(
-    (s): s is string => !!s,
-  );
+  // Section order: workspace settings (what is this project) → memory
+  // (confirmed facts) → attachments → web → workspace file excerpts →
+  // history. Settings goes first so questions like "이 프로젝트 설정
+  // 알려줘" can be answered from the system prompt alone.
+  const parts = [
+    workspaceMetaBlock,
+    memoryBlock,
+    attachmentBlock,
+    webBlock,
+    workspaceBlock,
+    historyBlock,
+  ].filter((s): s is string => !!s);
   const contextBlock = parts.length > 0 ? parts.join("\n\n") + "\n\n" : "";
   const prompt = `${contextBlock}User: ${userMessage.content}`;
 

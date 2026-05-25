@@ -554,6 +554,80 @@ export function WorkspaceOverview() {
   const hasCreatables = templates.length > 0 || customActions.length > 0;
   const hasSurface = surfaceData?.state?.exists ?? false;
 
+  // ── Chats block — workspace-scoped conversations + "new chat" CTA.
+  //    Z1: promoted out of StandardView into its own first tab so chat
+  //    is the workspace's top-level surface, not buried under
+  //    "Create & Run".
+  const ChatsBlock = (
+    <section>
+      <div className="flex items-end justify-between mb-3 gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground mb-0.5 flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-accent" />
+            {t("workspace.chats.title")}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {t("workspace.chats.subtitle")}
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          leftIcon={<MessageSquarePlus className="h-3.5 w-3.5" />}
+          loading={createChat.isPending}
+          onClick={() => void handleNewChatHere()}
+          className="shrink-0"
+        >
+          {t("workspace.chats.new")}
+        </Button>
+      </div>
+      {workspaceChats.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          {workspaceChats.map((c) => (
+            <Card
+              key={c.id}
+              interactive
+              className="flex items-center gap-3 px-4 py-2.5"
+              onClick={() => navigate(`/chat/${c.id}`)}
+            >
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm text-foreground truncate flex-1">
+                {c.title || t("commandMenu.untitledChat")}
+              </span>
+              <span className="text-2xs text-muted-foreground shrink-0">
+                {new Date(c.updatedAt).toLocaleDateString()}
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="px-6 py-8 flex flex-col items-center gap-3 text-center bg-surface-2">
+          <div className="h-10 w-10 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <MessageSquare className="h-5 w-5 text-accent" />
+          </div>
+          <div className="max-w-md">
+            <p className="text-sm font-medium text-foreground mb-1">
+              {t("workspace.chats.empty.title")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("workspace.chats.empty.body")}
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<MessageSquarePlus className="h-3.5 w-3.5" />}
+            loading={createChat.isPending}
+            onClick={() => void handleNewChatHere()}
+          >
+            {t("workspace.chats.new")}
+          </Button>
+        </Card>
+      )}
+    </section>
+  );
+
   // ── Standard overview content (templates + runs) ──────────────────────────
   const StandardView = (
     <>
@@ -597,76 +671,8 @@ export function WorkspaceOverview() {
         )}
       </Card>
 
-      {/* ── Conversations — primary action for this workspace ─────────────
-          Lifted above templates/runs because chatting is the main thing a
-          non-developer does in a workspace; templates are power-user tools. */}
-      <section>
-        <div className="flex items-end justify-between mb-3 gap-3">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground mb-0.5 flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-accent" />
-              {t("workspace.chats.title")}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {t("workspace.chats.subtitle")}
-            </p>
-          </div>
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<MessageSquarePlus className="h-3.5 w-3.5" />}
-            loading={createChat.isPending}
-            onClick={() => void handleNewChatHere()}
-            className="shrink-0"
-          >
-            {t("workspace.chats.new")}
-          </Button>
-        </div>
-        {workspaceChats.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
-            {workspaceChats.map((c) => (
-              <Card
-                key={c.id}
-                interactive
-                className="flex items-center gap-3 px-4 py-2.5"
-                onClick={() => navigate(`/chat/${c.id}`)}
-              >
-                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-sm text-foreground truncate flex-1">
-                  {c.title || t("commandMenu.untitledChat")}
-                </span>
-                <span className="text-2xs text-muted-foreground shrink-0">
-                  {new Date(c.updatedAt).toLocaleDateString()}
-                </span>
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card className="px-6 py-8 flex flex-col items-center gap-3 text-center bg-surface-2">
-            <div className="h-10 w-10 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center">
-              <MessageSquare className="h-5 w-5 text-accent" />
-            </div>
-            <div className="max-w-md">
-              <p className="text-sm font-medium text-foreground mb-1">
-                {t("workspace.chats.empty.title")}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("workspace.chats.empty.body")}
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<MessageSquarePlus className="h-3.5 w-3.5" />}
-              loading={createChat.isPending}
-              onClick={() => void handleNewChatHere()}
-            >
-              {t("workspace.chats.new")}
-            </Button>
-          </Card>
-        )}
-      </section>
+      {/* Conversations section moved to its own first tab (Z1). The
+          Standard tab now focuses on templates + runs only. */}
 
       {/* ── What do you want to create? ─────────────────────────────────── */}
       <section>
@@ -967,12 +973,22 @@ export function WorkspaceOverview() {
           depending on whether .ariadne/surface.tsx exists. The other four
           tabs are independent of the surface and always functional. */}
       <Tabs
-        defaultValue={hasSurface ? "surface" : "standard"}
+        // Z1: Chats is the top-level surface — land here by default.
+        // Power users with a custom surface still see the Surface tab
+        // first in the list, but landing-tab priority is:
+        //   chats (always)  >  surface (if exists)  >  standard
+        defaultValue="chats"
         className="flex flex-col flex-1 min-h-0"
       >
         {/* Tab bar — pinned, scrollable on narrow screens */}
         <div className="shrink-0 px-5 border-b border-border">
           <TabsList>
+            <TabsTrigger value="chats">
+              <span className="flex items-center gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5" />
+                {t("workspace.chats.tab")}
+              </span>
+            </TabsTrigger>
             <TabsTrigger value="surface">
               <span className="flex items-center gap-1.5">
                 <Layout className="h-3.5 w-3.5" />
@@ -1021,6 +1037,13 @@ export function WorkspaceOverview() {
             )}
           </TabsList>
         </div>
+
+        {/* Chats — the primary surface. Lifted out of the Standard
+            tab so chatting is one click in, not buried under "Create
+            & Run". */}
+        <TabsContent value="chats" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>{ChatsBlock}</WorkspacePanel>
+        </TabsContent>
 
         {/* Custom screen — fills the remaining height. When surface.tsx
             exists, render it. Otherwise show a centred "add custom screen"

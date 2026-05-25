@@ -89,11 +89,23 @@ function noProviderKeyMessage(provider: ProviderId, locale: string | undefined):
 /** Turn a raw provider/SDK error into a plain-language message. */
 function friendlyProviderError(err: unknown, provider: ProviderId, locale: string | undefined): string {
   const raw = err instanceof Error ? err.message : String(err);
+  // 401 / auth failures split into two cases:
+  //   (a) NO key configured at all → use the "set up a key" message.
+  //   (b) Key IS configured but provider rejected it → distinct "key
+  //       was rejected, check it's valid" message. Without this split,
+  //       a typo'd key shows "no API key configured" which sends the
+  //       user looking in the wrong place.
   if (/api[\s-]?key|authentication|unauthoriz|\b401\b/i.test(raw)) {
-    return noProviderKeyMessage(provider, locale);
+    if (!isProviderConfigured(provider)) {
+      return noProviderKeyMessage(provider, locale);
+    }
+    const label = PROVIDER_LABELS[provider];
+    return locale === "ko"
+      ? `'${label}' API 키가 거부되었습니다 (401 Invalid Authentication). \`.env\` 파일의 키 값이 정확한지, 만료되지 않았는지 확인하시고 서버를 재시작해 주십시오.`
+      : `The "${label}" API key was rejected (401 Invalid Authentication). Check the key value in your \`.env\` is correct and not expired, then restart the server.`;
   }
   return locale === "ko"
-    ? "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도하거나, 채팅 입력창의 모델 설정을 확인해 주세요."
+    ? "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도하거나, 채팅 입력창의 모델 설정을 확인해 주십시오."
     : "Something went wrong while generating a response. Please try again in a moment, or check the model settings in the chat box.";
 }
 
