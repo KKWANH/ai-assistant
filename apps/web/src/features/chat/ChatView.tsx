@@ -218,29 +218,26 @@ function MessageList({
             {formatStarted(chat.createdAt, locale)}
           </div>
         )}
-        {messages.map((msg, i) => {
-          // For an assistant reply, the eval-case promotion modal needs
-          // the *question* that produced it. Walk backwards to find the
-          // most recent user message before this one.
-          let queryHint: string | undefined;
-          if (msg.role === "assistant") {
-            for (let j = i - 1; j >= 0; j--) {
-              const prev = messages[j];
-              if (prev?.role === "user") {
-                queryHint = prev.content;
-                break;
-              }
-            }
+        {(() => {
+          // One pass: for each assistant message, attach the text of the
+          // most recent preceding user message. The eval-case promotion
+          // modal uses it as the question to file. O(n) instead of the
+          // n × n/2 backwards walk per render.
+          const hints: (string | undefined)[] = [];
+          let lastUserContent: string | undefined;
+          for (const m of messages) {
+            if (m.role === "user") lastUserContent = m.content;
+            hints.push(m.role === "assistant" ? lastUserContent : undefined);
           }
-          return (
+          return messages.map((msg, i) => (
             <MessageBubble
               key={msg.id}
               message={msg}
               workspaceId={chat?.workspaceId ?? null}
-              queryHint={queryHint}
+              queryHint={hints[i]}
             />
-          );
-        })}
+          ));
+        })()}
         {synthetic && <MessageBubble key={synthetic.id} message={synthetic} />}
         {streaming && messages.length === 0 && <StreamingIndicator statusText="" />}
         <div ref={bottomRef} />

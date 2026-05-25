@@ -217,8 +217,10 @@ export const PromoteEvalCaseSchema = z
     workspaceId: z.string().min(1),
     query: z.string().min(1).max(500),
     source: z.enum(["chat", "search"]),
-    /** Linked message / search call for traceability. */
-    sourceMessageId: z.string().optional(),
+    /** Free-form traceability handle: chat message id for source="chat",
+     *  chunk file path for source="search". Both kinds get written to the
+     *  YAML as `source.ref` so a single field works for both. */
+    sourceRef: z.string().max(500).optional(),
     /** "This file should have been retrieved." */
     mustHitPath: z.string().max(500).optional(),
     /** Optional substring on the mustHit file's chunk. */

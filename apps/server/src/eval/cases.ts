@@ -140,13 +140,7 @@ export function loadPromotedCases(workspaceId: string): RetrievalCase[] {
   const out: RetrievalCase[] = [];
   for (const entry of fs.readdirSync(dir)) {
     if (entry === "workspace.yaml" || !entry.endsWith(".yaml")) continue;
-    const file = path.join(dir, entry);
-    for (const c of loadCasesFile(file)) {
-      // Stamp the workspace id so callers know which dir it came from
-      // without re-reading the path. The yaml already carries `workspace`
-      // (set to the workspaceId at promotion time); we trust it.
-      out.push(c);
-    }
+    out.push(...loadCasesFile(path.join(dir, entry)));
   }
   return out;
 }

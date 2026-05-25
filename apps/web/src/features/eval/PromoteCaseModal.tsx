@@ -9,6 +9,7 @@
  * Backend rejects unless at least one of path / note is provided.
  */
 import { useState } from "react";
+import type { PromoteEvalCaseInput } from "@ariadne/shared";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Textarea";
@@ -22,11 +23,12 @@ export interface PromoteCaseModalProps {
   onClose: () => void;
   workspaceId: string;
   query: string;
-  source: "chat" | "search";
-  /** Chat message id (when source = chat). Optional, stored for traceability. */
-  sourceMessageId?: string;
-  /** If the user already saw a chunk path they want to flag as the
-   *  "correct" answer, pre-fill it here. */
+  source: PromoteEvalCaseInput["source"];
+  /** Traceability handle: a chat message id for source="chat", a chunk
+   *  file path for source="search". Stored on the YAML as `source.ref`. */
+  sourceRef?: string;
+  /** If the caller already knows the file that *should* have been
+   *  retrieved, pre-fill the mustHit input. */
   initialMustHitPath?: string;
 }
 
@@ -36,7 +38,7 @@ export function PromoteCaseModal({
   workspaceId,
   query,
   source,
-  sourceMessageId,
+  sourceRef,
   initialMustHitPath,
 }: PromoteCaseModalProps) {
   const { t } = useT();
@@ -45,9 +47,9 @@ export function PromoteCaseModal({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Reset on each open so a previous attempt doesn't bleed in.
-  // (Cheaper than wiring useEffect with `open` since onClose unmounts via parent.)
-  const canSave = (mustHitPath.trim().length > 0 || note.trim().length > 0) && !saving;
+  // Backend requires at least one positive/negative/note hint or the case
+  // is meaningless. Button's `loading` prop handles the in-flight disable.
+  const canSave = mustHitPath.trim().length > 0 || note.trim().length > 0;
 
   function reset(): void {
     setMustHitPath("");
@@ -56,14 +58,14 @@ export function PromoteCaseModal({
   }
 
   async function handleSave(): Promise<void> {
-    if (!canSave) return;
+    if (!canSave || saving) return;
     setSaving(true);
     try {
       const res = await promoteEvalCase({
         workspaceId,
         query,
         source,
-        sourceMessageId,
+        sourceRef,
         mustHitPath: mustHitPath.trim() || undefined,
         note: note.trim() || undefined,
       });

@@ -831,14 +831,14 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
             </span>
           </div>
         )}
-        {workspaceId && queryHint && (
+        {workspaceId && queryHint && promoteOpen && (
           <PromoteCaseModal
-            open={promoteOpen}
+            open
             onClose={() => setPromoteOpen(false)}
             workspaceId={workspaceId}
             query={queryHint}
             source="chat"
-            sourceMessageId={message.id}
+            sourceRef={message.id}
           />
         )}
       </div>

@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import yaml from "yaml";
-import { PromoteEvalCaseSchema } from "@ariadne/shared";
+import { PromoteEvalCaseSchema, type PromoteEvalCaseInput } from "@ariadne/shared";
 import { requireWorkspace } from "./workspaceGuard.js";
 import { userPromotedCasesRoot } from "../eval/cases.js";
 import logger from "../logger.js";
@@ -39,7 +39,7 @@ interface PromotedCase {
   promotedBy: string | null;
   promotedByName: string | null;
   promotedAt: string;
-  source: { kind: "chat" | "search"; messageId?: string };
+  source: { kind: PromoteEvalCaseInput["source"]; ref?: string };
   note?: string;
 }
 
@@ -95,7 +95,7 @@ export async function evalCaseRoutes(app: FastifyInstance): Promise<void> {
       promotedAt: now,
       source: {
         kind: input.source,
-        ...(input.sourceMessageId ? { messageId: input.sourceMessageId } : {}),
+        ...(input.sourceRef ? { ref: input.sourceRef } : {}),
       },
     };
     if (input.mustHitPath) {
@@ -117,7 +117,7 @@ export async function evalCaseRoutes(app: FastifyInstance): Promise<void> {
     const header =
       `# Promoted by ${account.displayName} on ${now}\n` +
       `# Source: ${input.source}` +
-      (input.sourceMessageId ? ` (${input.sourceMessageId})` : "") +
+      (input.sourceRef ? ` (${input.sourceRef})` : "") +
       `\n` +
       (input.note ? `# Note: ${input.note}\n` : "");
     const savedPath = path.join(dir, `${caseId}.yaml`);

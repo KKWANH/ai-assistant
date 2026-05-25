@@ -195,14 +195,16 @@ export function WorkspaceSearchView() {
         </div>
       </div>
 
-      <PromoteCaseModal
-        open={promoteState.open}
-        onClose={() => setPromoteState({ open: false })}
-        workspaceId={ws.id}
-        query={query}
-        source="search"
-        sourceMessageId={promoteState.chunkPath}
-      />
+      {promoteState.open && (
+        <PromoteCaseModal
+          open
+          onClose={() => setPromoteState({ open: false })}
+          workspaceId={ws.id}
+          query={query}
+          source="search"
+          sourceRef={promoteState.chunkPath}
+        />
+      )}
     </div>
   );
 }
