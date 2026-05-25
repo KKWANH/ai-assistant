@@ -69,10 +69,42 @@ const STOP_WORDS = new Set<string>([
 // File extensions worth reading verbatim. Mirrors EMBEDDABLE_EXT in
 // chatContext.ts intentionally — keep these in sync.
 const READABLE_EXT = new Set<string>([
-  "md", "markdown", "txt", "text", "csv", "tsv", "json", "yaml", "yml",
-  "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "java", "sh", "bash",
-  "html", "css", "scss", "xml", "sql", "toml", "ini", "env", "log", "conf",
+  // Text + structured
+  "md", "markdown", "mdx", "txt", "text", "csv", "tsv", "json", "jsonl",
+  "ndjson", "yaml", "yml", "toml", "ini", "env", "log", "conf", "properties",
+  "xml", "sql",
+  // Web / scripting
+  "js", "jsx", "ts", "tsx", "vue", "svelte", "astro", "py", "rb", "php",
+  "lua", "dart", "sh", "bash", "zsh", "fish",
+  // Compiled-language source the agent should be able to read
+  "c", "h", "cc", "cpp", "cxx", "hpp", "hxx", "hh", "m", "mm",
+  "go", "rs", "java", "kt", "kts", "scala", "swift", "ex", "exs",
+  "clj", "cljs", "ml", "fs", "fsx", "hs",
+  // Markup + style
+  "html", "htm", "css", "scss", "sass", "less",
+  // Misc dev
+  "proto", "graphql", "gql", "pl", "pm", "gradle", "groovy", "tex", "rmd",
 ]);
+
+// Files with NO extension that are still worth reading. Matched by
+// lowercased basename when normalizedExtension() returns "". Covers
+// the C/Make project that surfaced the bug (Makefile + Dockerfile),
+// plus the usual top-level metadata files most repos have.
+const READABLE_BASENAME = new Set<string>([
+  "makefile", "dockerfile", "containerfile", "vagrantfile", "procfile",
+  "rakefile", "gemfile", "guardfile", "license", "license.txt",
+  "readme", "readme.txt", "changelog", "changelog.txt", "authors",
+  "contributors", "contributing", "notice", "copying", "version",
+  ".gitignore", ".gitattributes", ".dockerignore", ".npmrc", ".nvmrc",
+  ".tool-versions", ".editorconfig", ".env.example", ".prettierrc",
+  ".eslintrc",
+]);
+
+function basenameLower(p: string): string {
+  const idx = p.lastIndexOf("/");
+  const base = idx >= 0 ? p.slice(idx + 1) : p;
+  return base.toLowerCase();
+}
 
 /**
  * Same eligibility check the retriever uses for candidate selection.
@@ -83,7 +115,9 @@ const READABLE_EXT = new Set<string>([
  */
 export function isRetrievalEligible(f: FileMeta): boolean {
   if (f.sensitive) return false;
-  return READABLE_EXT.has(normalizedExtension(f));
+  const ext = normalizedExtension(f);
+  if (ext) return READABLE_EXT.has(ext);
+  return READABLE_BASENAME.has(basenameLower(f.path));
 }
 
 /** MAX_FILES_READ exposed so the harness can compute the upper bound
@@ -309,14 +343,27 @@ export async function retrieveWithMeta(
 
   // Pick candidate files. We don't read everything — sort by size so the
   // small content-dense files (READMEs, configs) lead, while still letting
-  // mid-size files be considered.
+  // mid-size files be considered. Eligibility goes through the shared
+  // helper so the basename allowlist (Makefile, Dockerfile, ...) and
+  // the extension allowlist stay in one place.
   const candidates = files
-    .filter((f) => {
-      if (f.sensitive) return false;
-      return READABLE_EXT.has(normalizedExtension(f));
-    })
+    .filter(isRetrievalEligible)
     .sort((a, b) => a.size - b.size)
     .slice(0, MAX_FILES_READ);
+  // Coverage warning: if the workspace has files but most aren't
+  // readable, the user will get sparse answers and no idea why.
+  // Surface it as a structured warning so the UI / chat / search
+  // route can show it. Threshold 0.5 catches the C-project case
+  // (1/7 = 14%) without firing on a workspace that's mostly
+  // images/binaries by intent.
+  if (files.length >= 3) {
+    const ratio = candidates.length / files.length;
+    if (ratio < 0.5) {
+      warnings.push(
+        `Only ${candidates.length.toString()} of ${files.length.toString()} files are readable by the retriever (${(ratio * 100).toFixed(0)}% coverage). Files with unsupported extensions or no extension are skipped — add them to READABLE_EXT/READABLE_BASENAME in services/retrieval.ts if they should be searchable.`,
+      );
+    }
+  }
 
   // Read concurrently — file system is the bottleneck, not CPU.
   const fileContents = await Promise.all(
@@ -532,12 +579,11 @@ export async function indexWorkspaceEmbeddings(
   const provider = await getEmbeddingProvider();
   if (!provider) return { indexed: 0, provider: null, reembedded: 0, unchanged: 0, removed: 0 };
 
-  // Same eligibility rules as the keyword path.
+  // Same eligibility rules as the keyword path — routed through the
+  // shared helper so the C-family + Makefile/Dockerfile basename
+  // allowlist applies to indexing too.
   const candidates = files
-    .filter((f) => {
-      if (f.sensitive) return false;
-      return READABLE_EXT.has(normalizedExtension(f));
-    })
+    .filter(isRetrievalEligible)
     .sort((a, b) => a.size - b.size)
     .slice(0, MAX_FILES_READ);
 

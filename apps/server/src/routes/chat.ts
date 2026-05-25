@@ -199,10 +199,27 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     const prompt = historyText
       ? `${historyText}\nUser: ${userContent}`
       : `User: ${userContent}`;
+    // Instant mode intentionally emits zero status pre-roll — that's
+    // the whole point. But on a cold local model the user sees nothing
+    // for 10+ seconds. If no delta has arrived in 3s, emit ONE
+    // "warming up" status so the user knows the request is alive.
+    let firstDeltaSeen = false;
+    const warmupTimer = setTimeout(() => {
+      if (!firstDeltaSeen && !controller.signal.aborted) {
+        emit({ type: "status", text: "Warming up the model…" });
+      }
+    }, 3_000);
     try {
       await provider.completeStream(
         { system, prompt, signal: controller.signal },
-        (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+        (delta) => {
+          if (!firstDeltaSeen) {
+            firstDeltaSeen = true;
+            clearTimeout(warmupTimer);
+          }
+          assistantContent += delta;
+          emit({ type: "delta", text: delta });
+        },
         (status) => { emit({ type: "status", text: status }); },
       );
     } catch (err) {
@@ -211,6 +228,8 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         assistantContent = friendlyProviderError(err, settings.provider, accountLocale);
         emit({ type: "delta", text: assistantContent });
       }
+    } finally {
+      clearTimeout(warmupTimer);
     }
     return {
       assistantContent,
@@ -273,6 +292,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         emit,
         signal: controller.signal,
         accountContext,
+        webSearchMode,
       });
       assistantContent = agentResult.content;
       agentTrace = agentResult.agent;

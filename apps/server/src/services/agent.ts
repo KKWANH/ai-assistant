@@ -27,7 +27,7 @@ import { focusedRead } from "../gasp/filter.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { createRun } from "../runs/engine.js";
 import { loadWorkspaceActions } from "./actions.js";
-import { callTool as mcpCallTool } from "./mcpClient.js";
+import { callTool as mcpCallTool, listTools as mcpListTools } from "./mcpClient.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 import { scriptEnv } from "./scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
@@ -60,6 +60,10 @@ export interface RunAgentOptions {
   signal: AbortSignal;
   /** The user's saved profile, injected into the answer prompts. */
   accountContext?: string;
+  /** Web-search policy forwarded from the request. "on" overrides the
+   *  planner's "no tools needed" decision — if the user explicitly
+   *  toggled web search, we honor it even when the plan is empty. */
+  webSearchMode?: "off" | "auto" | "on";
 }
 
 export interface RunAgentResult {
@@ -70,7 +74,7 @@ export interface RunAgentResult {
 }
 
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
-  const { chat, history, userMessage, provider, emit, signal, accountContext } = opts;
+  const { chat, history, userMessage, provider, emit, signal, accountContext, webSearchMode } = opts;
 
   // Load custom actions for this workspace (if any), plus a short summary
   // of workspace state so the planner knows whether file/list tools are
@@ -79,11 +83,33 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   let customActions: WorkspaceAction[] = [];
   let workspaceHint: WorkspaceHint = { attached: false, fileCount: 0 };
   let workspaceMemoryBlock: string | null = null;
-  // MCP servers are per-account, not per-workspace — they're visible to
-  // the planner regardless of whether a workspace is attached.
-  const mcpServerNames = dbListMcpServers(chat.createdBy ?? undefined)
-    .filter((s) => s.enabled)
-    .map((s) => s.name);
+  // MCP servers are per-account, not per-workspace. Pre-fetch each
+  // enabled server's tool list concurrently so the planner sees the
+  // REAL tool names. Without this the planner guesses English-y names
+  // (e.g. "list_files" instead of the canonical "list_directory") and
+  // every mcp_call step fails with -32602 Tool not found.
+  const enabledMcpServers = dbListMcpServers(chat.createdBy ?? undefined)
+    .filter((s) => s.enabled);
+  const mcpInventory: McpInventoryEntry[] = await Promise.all(
+    enabledMcpServers.map(async (s) => {
+      try {
+        // Cheap when the connection is cached (R3); a few seconds
+        // worst-case on the first call of the session. The 10s
+        // connect timeout in mcpClient still bounds the worst case.
+        const tools = await mcpListTools(s.id);
+        return {
+          name: s.name,
+          tools: tools.map((t) => ({ name: t.name, description: t.description })),
+        };
+      } catch (err) {
+        logger.warn(
+          { serverId: s.id, name: s.name, err: (err as Error).message },
+          "MCP server failed to list tools at agent start — excluding from planner inventory",
+        );
+        return { name: s.name, tools: [] };
+      }
+    }),
+  );
   if (chat.workspaceId) {
     const ws = dbGetWorkspace(chat.workspaceId);
     if (ws) {
@@ -93,17 +119,17 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       workspaceHint = {
         attached: true,
         fileCount: snapshot?.files.length ?? 0,
-        mcpServers: mcpServerNames,
+        mcpServers: mcpInventory,
       };
       // Memory rides on the planner AND the synthesis system so both the
       // step-picking and the final write-up reflect the user's confirmed
       // facts. Chat-direct already had this; the agent path was the gap.
       workspaceMemoryBlock = renderMemoryForPrompt(listMemories(ws.rootPath));
     } else {
-      workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpServerNames };
+      workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpInventory };
     }
   } else {
-    workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpServerNames };
+    workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpInventory };
   }
 
   // ── 1. Plan ──────────────────────────────────────────────────────────────
@@ -126,8 +152,26 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     status: "pending" as const,
   }));
 
-  // Simple message — the planner decided no tools/research are needed.
-  // Skip the plan-and-execute loop and answer directly.
+  // Explicit-on web search must always reach the answer. If the planner
+  // returned an empty plan but the user explicitly toggled web search
+  // on, prepend a single web_search step so the standard execution
+  // loop runs the search + feeds the results into the synthesis. Without
+  // this, the planner silently overrules the user (the bug the dev-
+  // persona audit V3 caught: "TensorFlow is MIT" hallucination on a
+  // license-comparison prompt with web search explicitly on).
+  if (steps.length === 0 && webSearchMode === "on" && userMessage.trim()) {
+    steps.push({
+      id: crypto.randomUUID(),
+      description: userMessage.trim().slice(0, 240),
+      tool: "web_search",
+      note: "User explicitly enabled web search.",
+      status: "pending" as const,
+    });
+  }
+
+  // Simple message — the planner decided no tools/research are needed
+  // and the user didn't force web search either. Skip the plan-and-
+  // execute loop and answer directly.
   if (steps.length === 0) {
     emit({ type: "status", text: "Answering…" });
     let direct = "";
@@ -593,14 +637,25 @@ async function runTool(
       const candidate = dbListMcpServers(chat.createdBy ?? undefined)
         .find((s) => s.enabled && s.name === serverName);
       if (!candidate) {
-        return `[mcp_call: no enabled MCP server named "${serverName}" — registered: ${dbListMcpServers(chat.createdBy ?? undefined).filter((s) => s.enabled).map((s) => s.name).join(", ") || "(none)"}]`;
+        const enabled = dbListMcpServers(chat.createdBy ?? undefined)
+          .filter((s) => s.enabled).map((s) => s.name).join(", ") || "(none)";
+        // Throw so the caller's catch block sets step.status="failed"
+        // and the conditional re-plan kicks in. Re-planner sees the
+        // refreshed inventory and can pick the right server.
+        throw new Error(`no enabled MCP server named "${serverName}" — registered: ${enabled}`);
       }
-      try {
-        const result = await mcpCallTool(candidate.id, toolName, args);
-        return result.slice(0, 8_000);
-      } catch (err) {
-        return `[mcp_call failed: ${err instanceof Error ? err.message : String(err)}]`;
+      const result = await mcpCallTool(candidate.id, toolName, args);
+      // mcpClient.callTool maps tool-level errors to "[mcp_call error] ..."
+      // strings (preserves the body for the re-planner). Throw on that
+      // prefix so the step status flips to "failed" — without this the
+      // UI checklist renders ✓ for a step that visibly failed (the
+      // audit V3 bug). The re-plan loop already triggers on
+      // step.status === "failed", so a tool-name typo gets a second
+      // chance with the full inventory in the planner prompt.
+      if (result.startsWith("[mcp_call error]")) {
+        throw new Error(result.slice("[mcp_call error]".length).trim());
       }
+      return result.slice(0, 8_000);
     }
 
     default: {
@@ -711,13 +766,27 @@ async function executeCustomAction(
 // Prompt builders
 // ---------------------------------------------------------------------------
 
+interface McpInventoryEntry {
+  /** Server name as registered (e.g. "audit-fs"). The agent picks
+   *  steps by name, not id. */
+  name: string;
+  /** Tools the server actually exposed when we listed them. Empty
+   *  array means listTools failed — we still include the server so
+   *  the planner sees its name but it won't generate confident
+   *  `serverName::toolName` choices. */
+  tools: Array<{ name: string; description: string }>;
+}
+
 interface WorkspaceHint {
   attached: boolean;
   fileCount: number;
-  /** Names of enabled MCP servers visible to this account — shown to the
-   *  planner so it knows which `mcp_call` targets are valid. Empty list
-   *  ⇒ the planner is told NOT to pick mcp_call. */
-  mcpServers?: string[];
+  /** Enabled MCP servers visible to this account, each carrying its
+   *  current tool list. The planner system prompt renders these so
+   *  the model picks REAL tool names (e.g. `list_directory`) instead
+   *  of guessing English-sounding ones (`list_files`) that don't
+   *  exist on the server. Pre-fetched concurrently at agent start;
+   *  servers that fail to list are skipped from the inventory. */
+  mcpServers?: McpInventoryEntry[];
 }
 
 /** Append the workspace memory block to a system prompt, no-op when empty.
@@ -741,8 +810,27 @@ function buildPlannerSystem(
         .map((a) => `  - "${a.id}": ${a.name} — ${a.description}${a.constraints ? ` [constraints: ${a.constraints}]` : ""}`)
         .join("\n")}`
     : "";
+  // Render the FULL MCP inventory: each enabled server with its exact
+  // tool names + descriptions. Without this, the planner guesses
+  // English-sounding names ("list_files") that don't exist on the
+  // server — see audit V3. With it, the planner sees that the fs
+  // server's actual list-files tool is `list_directory`.
   const mcpSection = mcpAvailable
-    ? `\n\nMCP servers available (use the "mcp_call" tool):\n  - ${(workspace.mcpServers ?? []).join("\n  - ")}\nFor mcp_call, the "description" MUST be: <serverName>::<toolName> <json-args>\nExample: { "tool": "mcp_call", "description": "fs::read_text_file {\\"path\\":\\"/tmp/x.txt\\"}", "note": "Read the requested file via the fs MCP server" }`
+    ? `\n\nMCP servers available (use the "mcp_call" tool). Each server's exact tool names are listed — DO NOT guess tool names, use one from this list verbatim:\n${
+        (workspace.mcpServers ?? [])
+          .map((s) => {
+            if (s.tools.length === 0) {
+              return `  - ${s.name} (no tools — server failed to list; pick a different server or skip mcp_call)`;
+            }
+            const toolLines = s.tools
+              .slice(0, 30)
+              .map((t) => `      · ${t.name}${t.description ? ` — ${t.description.slice(0, 100)}` : ""}`)
+              .join("\n");
+            const more = s.tools.length > 30 ? `\n      … and ${(s.tools.length - 30).toString()} more` : "";
+            return `  - ${s.name}\n${toolLines}${more}`;
+          })
+          .join("\n")
+      }\n\nFor mcp_call, the "description" MUST be: <serverName>::<toolName> <json-args>\nExample: { "tool": "mcp_call", "description": "fs::read_text_file {\\"path\\":\\"/tmp/x.txt\\"}", "note": "Read the requested file via the fs MCP server" }`
     : "";
   // A short, structured fact block beats burying these in prose — the
   // planner respects it more reliably and avoids picking `read_file` when

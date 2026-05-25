@@ -19,12 +19,11 @@ import path from "node:path";
 import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared";
 import type { ProviderImage } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
-import { normalizedExtension } from "../workspace/readWithinRoot.js";
 import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
-import { retrieveRelevantChunks, formatChunksForPrompt } from "./retrieval.js";
+import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 
 // ---------------------------------------------------------------------------
@@ -223,23 +222,16 @@ export interface AttachmentRef {
   uploadId: string;
 }
 
-// Extensions whose content is worth embedding verbatim into chat context.
-const EMBEDDABLE_EXT = new Set([
-  "md", "markdown", "txt", "text", "csv", "tsv", "json", "yaml", "yml",
-  "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "java", "sh", "bash",
-  "html", "css", "scss", "xml", "sql", "toml", "ini", "env", "log", "conf",
-]);
-
 /**
  * Read the smallest non-sensitive text files of a workspace and return them
- * as one labelled block, under a fixed character budget.
+ * as one labelled block, under a fixed character budget. Eligibility is
+ * delegated to retrieval.isRetrievalEligible so the file allowlist
+ * (extensions + extensionless basenames like Makefile/Dockerfile)
+ * lives in exactly one place.
  */
 async function readWorkspaceFiles(rootPath: string, files: FileMeta[]): Promise<string> {
   const candidates = files
-    .filter((f) => {
-      if (f.sensitive) return false;
-      return EMBEDDABLE_EXT.has(normalizedExtension(f));
-    })
+    .filter(isRetrievalEligible)
     .sort((a, b) => a.size - b.size)
     .slice(0, 8);
 

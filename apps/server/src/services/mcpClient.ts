@@ -63,7 +63,15 @@ function buildTransport(server: McpServer): StdioClientTransport {
  *  users at least see what went wrong instead of "ENOENT". */
 function friendlyError(raw: string, server: McpServer, stderr: string): string {
   if (raw.includes("ENOENT") && raw.includes(server.command)) {
-    return `Command not found: "${server.command}". Check the spelling, or install it (e.g. \`npm i -g ${server.command}\`).${stderr ? `\n— stderr —\n${stderr}` : ""}`;
+    // Only suggest `npm i -g` when the command looks like a package
+    // name (no slash). For absolute/relative paths the user already
+    // told us where the binary lives — the right hint is "fix the
+    // path" not "install a package named /full/path".
+    const looksLikePath = server.command.includes("/") || server.command.startsWith(".");
+    const hint = looksLikePath
+      ? `Check the path is correct and the file is executable.`
+      : `Check the spelling, or install it (e.g. \`npm i -g ${server.command}\`).`;
+    return `Command not found: "${server.command}". ${hint}${stderr ? `\n— stderr —\n${stderr}` : ""}`;
   }
   if (raw.includes("EACCES")) {
     return `Permission denied running "${server.command}". The binary exists but isn't executable.${stderr ? `\n— stderr —\n${stderr}` : ""}`;
