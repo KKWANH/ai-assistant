@@ -737,7 +737,7 @@ export interface MessageBubbleProps {
 export function MessageBubble({ message, workspaceId, queryHint }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
-  const { t } = useT();
+  const { t, locale } = useT();
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [saveMemOpen, setSaveMemOpen] = useState(false);
 
@@ -746,10 +746,14 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
   const streamStatus = (message as MessageBubbleProps["message"])._streamStatus ?? "";
   const streamError = (message as MessageBubbleProps["message"])._streamError;
 
-  const time = new Date(message.createdAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // Format the message time in the user's chosen locale, not the
+  // browser default. Without explicit locale tag, a Korean OS shows
+  // "오후 2:14" even when the UI language is English (non-dev
+  // report N5).
+  const time = new Date(message.createdAt).toLocaleTimeString(
+    locale === "ko" ? "ko-KR" : "en-US",
+    { hour: "2-digit", minute: "2-digit" },
+  );
 
   if (isUser) {
     // Don't allow editing while a streaming placeholder for this turn is

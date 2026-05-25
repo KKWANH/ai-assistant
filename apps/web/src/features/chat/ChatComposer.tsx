@@ -27,6 +27,7 @@ import {
   PROVIDER_LABELS,
   MODEL_CHOICES,
   DEFAULT_MODELS,
+  modelHasVision,
 } from "@ariadne/shared";
 import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
@@ -376,14 +377,17 @@ export function ChatComposer({
   // Easy mode shows friendly model names + a one-line trait instead of raw ids.
   const isSimple = me?.account.mode === "simple";
 
-  // Simple-mode users default to "instant" — the multi-stage pipeline
-  // wastes seconds on mom-grade queries that just want a quick answer.
-  // Use a one-shot effect keyed on isSimple so toggling Easy mode in
-  // Settings flips this immediately without forcing the user to
-  // re-toggle in every chat. Standard users keep "auto".
+  // Simple-mode default: "instant" for chats with no workspace
+  // (mom asks "what time is it?" — wants fast answer, no pipeline).
+  // But for workspace-scoped chats, default to "auto" so questions
+  // like "what's in this folder?" actually see the workspace context
+  // instead of hallucinating a labyrinth (non-dev report N5). The
+  // user can still pick any of the three modes manually; this is
+  // just a smarter default.
   useEffect(() => {
-    if (isSimple) setReplyMode("instant");
-  }, [isSimple]);
+    if (!isSimple) return;
+    setReplyMode(chatComposerWorkspaceId ? "auto" : "instant");
+  }, [isSimple, chatComposerWorkspaceId]);
 
   const selectedWs = workspaces?.find((w) => w.id === chatComposerWorkspaceId);
 
@@ -515,7 +519,15 @@ export function ChatComposer({
     }
   };
 
-  const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending;
+  // Vision guard — if the user attached images but the active model
+  // can't see them, surface the warning + block send. Without this
+  // the user sends an image, the model cheerfully accepts then replies
+  // "I cannot view images", which reads as a broken app (non-dev
+  // report N4). The chip below the composer points at the fix.
+  const hasImageAttachment = attachments.some((a) => IMAGE_TYPES.includes(a.mediaType));
+  const visionBlocked = hasImageAttachment && !modelHasVision(currentModel);
+
+  const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending && !visionBlocked;
   const editingAtt = editingIndex !== null ? attachments[editingIndex] ?? null : null;
 
   // Rich hover tooltip for the model picker — friendly name, what it's good
@@ -614,6 +626,20 @@ export function ChatComposer({
           }
           onClose={() => setEditingIndex(null)}
         />
+      )}
+
+      {/* Vision-guard banner — shown when at least one image is attached
+          but the active model can't read images. Without this the user
+          sends the image, model replies "I cannot view images", and the
+          app reads as broken. The banner blocks send and tells the
+          user exactly what to do. */}
+      {visionBlocked && (
+        <div className="mx-1 mt-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 flex items-start gap-2 text-2xs">
+          <AlertCircle className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
+          <span className="text-foreground">
+            {t("chat.composer.visionBlocked", { model: currentModelInfo.label })}
+          </span>
+        </div>
       )}
 
       {/* Attachment previews */}

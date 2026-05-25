@@ -617,7 +617,7 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.mcp.p3": "에이전트가 MCP 도구가 필요하다고 판단하면 'mcp_call'이라는 도구를 골라요 — 실행 트레이스에서 확인할 수 있어요. MCP 서버 등록은 보안상 로컬(내 컴퓨터)에서만 가능합니다.",
   "tutorial.page.ready.title": "준비됐어요",
   "tutorial.page.ready.p1": "투어는 여기까지입니다. 가장 좋은 다음 단계는 직접 해 보는 것 — '튜토리얼 워크스페이스'를 열거나 채팅에 질문을 입력해 보세요.",
-  "tutorial.page.ready.p2": "이 튜토리얼은 상단 바의 도움말 버튼에서 언제든 다시 열 수 있습니다.",
+  "tutorial.page.ready.p2": "이 튜토리얼은 언제든 다시 열 수 있어요 — 빈 채팅 화면의 \"처음이신가요? 튜토리얼 보기 →\" 링크나, Standard 모드일 때 상단의 도움말(?) 버튼에서 볼 수 있습니다.",
 
   // ── Inspector ───────────────────────────────────────────────────────────────
   "inspector.title": "인스펙터",
@@ -1026,6 +1026,7 @@ const ko: Record<TranslationKey, string> = {
 
   // ── 기능 간 통합 (R5) ────────────────────────────────────────────────────
   "chat.contextStrip.memoryCount": "메모리 {n}",
+  "chat.contextStrip.memoryCountPlural": "메모리 {n}",
   "chat.contextStrip.mcpCount": "MCP {n}",
   "chat.contextStrip.memoryTitle": "이 워크스페이스의 메모리는 모든 답변에 자동 주입됩니다.",
   "chat.contextStrip.mcpTitle": "에이전트가 사용할 수 있는 MCP 서버.",
@@ -1039,6 +1040,22 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.replyMode.instant": "즉답",
   "chat.composer.replyMode.auto": "자동",
   "chat.composer.replyMode.agent": "Agent",
+
+  // ── 비전 가드 (W1.1) ───────────────────────────────────────────────────
+  "chat.composer.visionBlocked": "현재 모델 ({model})은 이미지를 읽을 수 없어요. 이 사진을 보내려면 위쪽에서 비전 지원 모델 (Claude, GPT-4o, Gemini)로 바꿔주세요.",
+
+  // ── 빌트인 템플릿 이름/설명 (W2.1) — 서버는 한국어 원문을 보내고, 웹이
+  // 사용자 로케일에 맞춰 여기 키로 매핑합니다.
+  "template.research-brief.name": "리서치 브리프",
+  "template.research-brief.description": "로컬 폴더의 메모·논문·자료를 근거로, 출처가 연결된 리서치 브리프를 생성합니다.",
+  "template.lecture-brief.name": "강의 브리프",
+  "template.lecture-brief.description": "강의 노트와 자료를 근거로, 출처가 연결된 강의 준비 브리프를 생성합니다.",
+  "template.investment-decision-memo.name": "투자 결정 메모",
+  "template.investment-decision-memo.description": "리서치 노트·재무 자료·시장 데이터를 근거로, 구조화된 투자 결정 메모를 생성합니다.",
+  "template.job-search-review.name": "구직 활동 점검",
+  "template.job-search-review.description": "지원 현황·면접 노트·오퍼 비교를 주기적으로 점검합니다.",
+  "template.source-audit.name": "출처 점검",
+  "template.source-audit.description": "초안의 모든 주장에 대해 출처가 올바르게 인용되었는지 검증합니다.",
 };
 
 export default ko;

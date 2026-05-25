@@ -40,7 +40,26 @@ function Body({ paras }: { paras: string[] }) {
   );
 }
 
-export function getTutorialSections(t: TFn): TutorialSection[] {
+/** Section-id allowlist for Simple/Easy mode. Pages with developer
+ *  jargon (Agent, MCP, Actions, suggestions-from-chat) are hidden;
+ *  the resulting tour is 7 pages instead of 12 and lands on plain-
+ *  language essentials. Standard mode sees everything. */
+const SIMPLE_MODE_PAGES = new Set([
+  "welcome",
+  "chat",
+  "attach",
+  "workspaces",
+  "templates",
+  "evidence",
+  "ready",
+]);
+
+export function getTutorialSections(t: TFn, isSimple = false): TutorialSection[] {
+  const all = sectionsAll(t);
+  return isSimple ? all.filter((s) => SIMPLE_MODE_PAGES.has(s.id)) : all;
+}
+
+function sectionsAll(t: TFn): TutorialSection[] {
   return [
     {
       id: "welcome",

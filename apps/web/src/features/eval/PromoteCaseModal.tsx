@@ -57,6 +57,11 @@ export function PromoteCaseModal({
     setSaving(false);
   }
 
+  // See SaveToMemoryModal: inline "✓ Saved" pulse before close so the
+  // user's eye (focused on the modal) sees confirmation, not just a
+  // toast in the bottom-right they missed.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
   async function handleSave(): Promise<void> {
     if (!canSave || saving) return;
     setSaving(true);
@@ -74,8 +79,12 @@ export function PromoteCaseModal({
         description: res.caseId,
         variant: "success",
       });
-      reset();
-      onClose();
+      setSaving(false);
+      setSavedAt(Date.now());
+      setTimeout(() => {
+        reset();
+        onClose();
+      }, 700);
     } catch (err) {
       toast({
         title: t("eval.promote.failed"),
@@ -125,26 +134,35 @@ export function PromoteCaseModal({
         />
 
         <div className="flex items-center justify-end gap-2 mt-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-            disabled={saving}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => void handleSave()}
-            disabled={!canSave}
-            loading={saving}
-          >
-            {t("eval.promote.save")}
-          </Button>
+          {savedAt !== null ? (
+            <span className="text-xs text-success font-medium inline-flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              {t("eval.promote.saved")}
+            </span>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  reset();
+                  onClose();
+                }}
+                disabled={saving}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleSave()}
+                disabled={!canSave}
+                loading={saving}
+              >
+                {t("eval.promote.save")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </Dialog>

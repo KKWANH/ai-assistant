@@ -9,13 +9,19 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import { useT } from "../../lib/i18n";
+import { useMe } from "../../lib/queries";
 import { Button } from "../../components/ui/Button";
 import { getTutorialSections } from "./tutorialSections";
 
 export function TutorialPage() {
   const { t } = useT();
   const navigate = useNavigate();
-  const sections = getTutorialSections(t);
+  const { data: me } = useMe();
+  // Simple/Easy mode hides the developer-flavored pages (Agent, MCP,
+  // Actions, suggestions, reports). The 12-page tour collapses to 7
+  // plain-language pages for non-devs.
+  const isSimple = me?.account.mode === "simple";
+  const sections = getTutorialSections(t, isSimple);
   const total = sections.length;
   const [step, setStep] = useState(0);
   const section = sections[step] ?? sections[0]!;

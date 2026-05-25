@@ -53,6 +53,11 @@ export function SaveToMemoryModal({
   // bubble — the user is editing anyway.
 
   const canSave = text.trim().length > 0;
+  // Inline success pulse before the modal closes. Non-dev report:
+  // toast fires in the bottom-right but the user's eye is at the
+  // modal in the center — they don't see it. Showing "✓ Saved" right
+  // where they clicked makes the confirmation impossible to miss.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   async function handleSave(): Promise<void> {
     if (!canSave || saving) return;
@@ -68,8 +73,12 @@ export function SaveToMemoryModal({
         variant: "success",
       });
       setSaving(false);
+      setSavedAt(Date.now());
       onSaved?.();
-      onClose();
+      // Hold the "Saved" state visible for 700ms before unmounting
+      // the modal — long enough to register, short enough not to feel
+      // like the app stalled.
+      setTimeout(() => onClose(), 700);
     } catch (err) {
       toast({
         title: t("memory.saveFailed"),
@@ -102,18 +111,27 @@ export function SaveToMemoryModal({
           {text.length.toString()} / {MAX_LEN.toString()}
         </div>
         <div className="flex items-center justify-end gap-2 mt-1">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => void handleSave()}
-            disabled={!canSave}
-            loading={saving}
-          >
-            {t("memory.save.button")}
-          </Button>
+          {savedAt !== null ? (
+            <span className="text-xs text-success font-medium inline-flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              {t("memory.saved")}
+            </span>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleSave()}
+                disabled={!canSave}
+                loading={saving}
+              >
+                {t("memory.save.button")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </Dialog>

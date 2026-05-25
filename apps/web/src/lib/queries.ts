@@ -772,11 +772,21 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
           });
           // Clean finish — clear the reconnect poll so its view never flashes.
           qc.setQueryData(["chat-active", chatId], { active: null });
-          // Don't invalidate the chat list here — the title isn't on the
-          // chat row yet (it comes via the follow-up chat_updated event).
-          // Invalidating now would refetch and replace the optimistic
-          // title with the stale untitled one. We patch the cache when
-          // chat_updated arrives instead.
+          // Don't invalidate the chat list immediately — the title isn't
+          // on the chat row yet (it arrives via the follow-up
+          // chat_updated event from S1). Invalidating now would refetch
+          // and replace the optimistic title with the stale untitled
+          // one. We patch the cache when chat_updated arrives.
+          //
+          // BUT: if the title gen takes longer than the 2s SSE race
+          // budget, chat_updated never fires and the sidebar shows the
+          // raw user-message snippet until the next manual refresh
+          // (non-dev report: N1 renamed, N3 didn't — inconsistent).
+          // Schedule one refetch 4s after done as a safety net — by
+          // then the async DB write should have landed.
+          setTimeout(() => {
+            void qc.invalidateQueries({ queryKey: ["chats"] });
+          }, 4_000);
         },
 
         onChatUpdated: (chatIdEv, title) => {

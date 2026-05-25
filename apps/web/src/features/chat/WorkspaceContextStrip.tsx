@@ -50,7 +50,12 @@ export function WorkspaceContextStrip({ workspaceId }: { workspaceId: string }) 
           title={t("chat.contextStrip.memoryTitle")}
         >
           <BrainCircuit className="h-3 w-3 text-accent" />
-          {t("chat.contextStrip.memoryCount", { n: memoryCount.toString() })}
+          {/* English needs proper plural — "1 memory" vs "N memories". Korean
+              ignores the distinction so memoryCountPlural === memoryCount
+              in ko.ts. */}
+          {t(memoryCount === 1 ? "chat.contextStrip.memoryCount" : "chat.contextStrip.memoryCountPlural", {
+            n: memoryCount.toString(),
+          })}
         </Link>
       )}
       {mcpCount > 0 && (

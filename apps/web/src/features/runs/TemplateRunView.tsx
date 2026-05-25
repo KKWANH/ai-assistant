@@ -4,6 +4,7 @@ import { Play, FileText, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react"
 import { useTemplate, useCreateRun, useSettings, useWorkspace } from "../../lib/queries";
 import { costOf } from "@ariadne/shared";
 import { useT } from "../../lib/i18n";
+import { templateName, templateDescription } from "../../lib/templateLabels";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Textarea";
@@ -124,15 +125,15 @@ export function TemplateRunView() {
         <Play className="h-3.5 w-3.5 text-accent shrink-0" />
         <span className="text-xs text-muted-foreground">
           {workspace
-            ? t("runs.youAreCreatingIn", { template: template.name, workspace: workspace.name })
-            : t("runs.youAreCreating", { template: template.name })}
+            ? t("runs.youAreCreatingIn", { template: templateName(template, t), workspace: workspace.name })
+            : t("runs.youAreCreating", { template: templateName(template, t) })}
         </span>
       </div>
 
       <PageHeader
         icon={<Play className="h-5 w-5" />}
-        title={template.name}
-        description={template.description}
+        title={templateName(template, t)}
+        description={templateDescription(template, t)}
       />
 
       {/* Badges */}

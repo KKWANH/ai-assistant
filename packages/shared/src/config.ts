@@ -88,6 +88,35 @@ export function costOf(model: string, inputTokens: number, outputTokens: number)
 }
 
 /**
+ * Known-vision-capable models. The composer uses this to guard image
+ * attachments — without the guard, a user attaches a photo to a chat
+ * with qwen3:8b active, the model cheerfully accepts and then replies
+ * "I cannot view images" which reads as a broken app (non-dev report N4).
+ *
+ * Keep this list manually for the named hosted models. For Ollama
+ * (and other unknown locals) we infer from the model id: anything
+ * containing "vision", "llava", "bakllava", or "moondream" is treated
+ * as vision-capable. Everything else returns false — safer to false-
+ * negative an obscure vision model (user picks a different one) than
+ * false-positive a text model (user hits the dead-end).
+ */
+const VISION_CAPABLE_MODELS = new Set<string>([
+  // Anthropic — Claude 3+ all support vision
+  "claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5",
+  // OpenAI — GPT-4o family supports images
+  "gpt-4o", "gpt-4o-mini",
+  // Google Gemini — current flash/pro support vision
+  "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro",
+  // Mock claims vision so tests don't have to special-case it
+  "mock",
+]);
+
+export function modelHasVision(model: string): boolean {
+  if (VISION_CAPABLE_MODELS.has(model)) return true;
+  return /vision|llava|bakllava|moondream/i.test(model);
+}
+
+/**
  * Read an env var safely. This module is imported by the browser bundle too,
  * where `process` does not exist — so every access must be guarded.
  */

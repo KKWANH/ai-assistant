@@ -567,8 +567,8 @@ const en = {
   "tutorial.page.progress": "{current} / {total}",
   "tutorial.page.exampleBadge": "Example",
   "tutorial.page.welcome.title": "Welcome to Ariadne",
-  "tutorial.page.welcome.p1": "Ariadne is a local-first AI workspace. It runs on your own machine and your own AI models, turning the files and folders you already have into clear, source-backed answers.",
-  "tutorial.page.welcome.p2": "This walkthrough takes a few minutes. Each page covers one idea, with a picture — no technical background needed. Use Back and Next, or jump around with the list on the left.",
+  "tutorial.page.welcome.p1": "Ariadne is an AI assistant that runs on your own computer. When it answers a question about your files, it points back at exactly which file the answer came from — so you can check it yourself.",
+  "tutorial.page.welcome.p2": "This walkthrough takes a few minutes. Each page covers one idea with a picture — no technical background needed. Use Back and Next, or jump around with the list on the left.",
   "tutorial.page.chat.title": "Start a conversation",
   "tutorial.page.chat.p1": "At its simplest, Ariadne is a chat. Ask a question and get an answer — the same as any AI assistant you may have used.",
   "tutorial.page.chat.p2": "You choose which AI model answers, and you can switch any time. Hover the model button to compare each one's strengths, speed, and price.",
@@ -579,8 +579,8 @@ const en = {
   "tutorial.page.attach.p2": "Paste a table or drop a CSV or Excel file and it becomes an editable table you can review and tweak before sending.",
   "tutorial.page.attach.prompt": "Summarise the key points from these two files…",
   "tutorial.page.workspaces.title": "Workspaces: connect a folder",
-  "tutorial.page.workspaces.p1": "A workspace is a folder on your computer that you connect to Ariadne. Once connected, the assistant can read and reason over everything in it.",
-  "tutorial.page.workspaces.p2": "A built-in Tutorial workspace is already set up, so you can practise safely without touching your own files.",
+  "tutorial.page.workspaces.p1": "A workspace is just a folder on your computer that you've connected to the app. Once it's connected, the assistant can look inside that folder and use its files to answer your questions. Think of it as \"linking up\" a folder for the AI to read.",
+  "tutorial.page.workspaces.p2": "There's a built-in \"Tutorial\" workspace already set up, so you can practise without touching any of your own files. When you're comfortable, click \"+ New workspace\" on the left to add one of your own.",
   "tutorial.page.workspaces.nodeFolder": "Your folder",
   "tutorial.page.workspaces.nodeWorkspace": "Workspace",
   "tutorial.page.workspaces.nodeChat": "Ask anything",
@@ -624,7 +624,7 @@ const en = {
   "tutorial.page.mcp.p3": "When the agent thinks an MCP tool is the right fit, it picks the 'mcp_call' tool — you'll see this in the run trace. Add MCP servers from local-only sessions only (they spawn shell processes on your machine).",
   "tutorial.page.ready.title": "You're ready",
   "tutorial.page.ready.p1": "That's the tour. The best next step is simply to try it — open the Tutorial workspace, or ask a question in the chat.",
-  "tutorial.page.ready.p2": "You can reopen this tutorial any time from the Help button in the top bar.",
+  "tutorial.page.ready.p2": "You can reopen this tutorial any time — there's a \"New here? Take the tutorial →\" link on the empty chat screen, and a Help (?) button in the top bar in Standard mode.",
 
   // ── Inspector ───────────────────────────────────────────────────────────────
   "inspector.title": "Inspector",
@@ -1032,7 +1032,8 @@ const en = {
   "hooks.log.refresh": "Refresh",
 
   // ── Cross-feature surfaces (R5) ─────────────────────────────────────────────
-  "chat.contextStrip.memoryCount": "{n} memories",
+  "chat.contextStrip.memoryCount": "{n} memory",
+  "chat.contextStrip.memoryCountPlural": "{n} memories",
   "chat.contextStrip.mcpCount": "{n} MCP",
   "chat.contextStrip.memoryTitle": "Workspace memories injected into every reply against this workspace.",
   "chat.contextStrip.mcpTitle": "MCP servers available to the agent.",
@@ -1046,6 +1047,25 @@ const en = {
   "chat.composer.replyMode.instant": "Instant",
   "chat.composer.replyMode.auto": "Auto",
   "chat.composer.replyMode.agent": "Agent",
+
+  // ── Vision guard (W1.1) ────────────────────────────────────────────────────
+  "chat.composer.visionBlocked": "The current model ({model}) can't read images. Pick a vision-capable model (Claude, GPT-4o, Gemini) from the model selector to send this.",
+
+  // ── Built-in template names + descriptions (W2.1) ──────────────────────────
+  // The server ships templates with Korean copy; the web maps id →
+  // these keys so English users see English labels in the template
+  // picker. Add a key here when a new built-in lands in
+  // apps/server/src/runs/templates.ts.
+  "template.research-brief.name": "Research brief",
+  "template.research-brief.description": "Generate a sources-linked research brief grounded in the notes, papers, and files in your folder.",
+  "template.lecture-brief.name": "Lecture brief",
+  "template.lecture-brief.description": "Turn lecture notes + materials into a sources-linked study brief.",
+  "template.investment-decision-memo.name": "Investment decision memo",
+  "template.investment-decision-memo.description": "Structured investment memo grounded in research notes, financials, and market data.",
+  "template.job-search-review.name": "Job search check-in",
+  "template.job-search-review.description": "Weekly check-in over your applications + interview notes + offer comparisons.",
+  "template.source-audit.name": "Source audit",
+  "template.source-audit.description": "Walk every claim in a draft and verify each source is cited correctly.",
 } as const;
 
 export type TranslationKey = keyof typeof en;

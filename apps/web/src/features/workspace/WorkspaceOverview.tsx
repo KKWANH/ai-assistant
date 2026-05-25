@@ -79,6 +79,7 @@ import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { HooksPanel } from "../hooks/HooksPanel";
+import { templateName, templateDescription } from "../../lib/templateLabels";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
 // The CodeMirror-backed editors are heavy; load them only when their tab opens.
@@ -691,9 +692,9 @@ export function WorkspaceOverview() {
                   <FileText className="h-4 w-4 text-accent" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{tmpl.name}</p>
+                  <p className="text-sm font-medium text-foreground">{templateName(tmpl, t)}</p>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {tmpl.description}
+                    {templateDescription(tmpl, t)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
