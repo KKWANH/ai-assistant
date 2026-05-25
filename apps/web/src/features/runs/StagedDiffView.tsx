@@ -13,7 +13,8 @@
  */
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { GitCommit, Trash2, Check } from "lucide-react";
+import { GitCommit, Trash2, Check, Workflow } from "lucide-react";
+import type { HookRunSummary } from "@ariadne/shared";
 import { useStagedManifest, useApplyStagedEdits, useDiscardStagedEdits } from "../../lib/queries";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -88,6 +89,7 @@ export function StagedDiffView() {
     else setSelected(new Set(allPaths));
   };
 
+  const [hookResults, setHookResults] = useState<HookRunSummary[]>([]);
   const apply = async () => {
     if (selected.size === 0) return;
     try {
@@ -95,11 +97,28 @@ export function StagedDiffView() {
         runId,
         paths: Array.from(selected),
       });
-      toast({
-        title: t("diff.applySuccess", { n: result.applied.length }),
-        variant: "success",
-      });
-      navigate(`/runs/${runId}`);
+      const hooks = result.hookResults ?? [];
+      setHookResults(hooks);
+      // Don't navigate away if any hooks ran — the user wants to see
+      // the typecheck / format outcome inline before they decide what
+      // to do next. With no hooks the flow stays one-click as before.
+      if (hooks.length === 0) {
+        toast({
+          title: t("diff.applySuccess", { n: result.applied.length }),
+          variant: "success",
+        });
+        navigate(`/runs/${runId}`);
+      } else {
+        const failed = hooks.filter((h) => h.exitCode !== 0).length;
+        toast({
+          title: t("diff.applySuccess", { n: result.applied.length }),
+          description:
+            failed === 0
+              ? t("diff.hooks.allPassed", { n: hooks.length.toString() })
+              : t("diff.hooks.someFailed", { failed: failed.toString(), total: hooks.length.toString() }),
+          variant: failed === 0 ? "success" : "warning",
+        });
+      }
     } catch (err) {
       toast({
         title: t("diff.applyFailed"),
@@ -137,6 +156,38 @@ export function StagedDiffView() {
               </span>
             )}
           </p>
+        </Card>
+      )}
+
+      {hookResults.length > 0 && (
+        <Card className="px-4 py-3 flex flex-col gap-2">
+          <div className="text-xs font-medium text-foreground flex items-center gap-2">
+            <Workflow className="h-3.5 w-3.5 text-accent" />
+            {t("diff.hooks.title", { n: hookResults.length.toString() })}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {hookResults.map((h) => {
+              const ok = h.exitCode === 0;
+              return (
+                <div key={h.hookId} className="text-2xs font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className={ok ? "text-success" : "text-destructive"}>
+                      {ok ? "✓" : "✗"}
+                    </span>
+                    <span className="text-foreground">{h.hookId}</span>
+                    <span className="text-muted-foreground">
+                      · {h.durationMs.toString()}ms · exit={h.exitCode ?? "n/a"}
+                    </span>
+                  </div>
+                  {h.outputTail && (
+                    <pre className="mt-0.5 ml-4 px-2 py-1 rounded bg-surface-2 whitespace-pre-wrap break-words text-foreground/80 max-h-40 overflow-y-auto">
+                      {h.outputTail.trim().slice(-1000)}
+                    </pre>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </Card>
       )}
 

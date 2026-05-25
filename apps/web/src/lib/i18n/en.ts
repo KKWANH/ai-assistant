@@ -1024,6 +1024,15 @@ const en = {
   "hooks.save.failed": "Couldn't save hooks",
   "hooks.log.show": "View recent log",
   "hooks.log.refresh": "Refresh",
+
+  // ── Cross-feature surfaces (R5) ─────────────────────────────────────────────
+  "chat.contextStrip.memoryCount": "{n} memories",
+  "chat.contextStrip.mcpCount": "{n} MCP",
+  "chat.contextStrip.memoryTitle": "Workspace memories injected into every reply against this workspace.",
+  "chat.contextStrip.mcpTitle": "MCP servers available to the agent.",
+  "diff.hooks.title": "{n} hook(s) ran",
+  "diff.hooks.allPassed": "All {n} hook(s) passed",
+  "diff.hooks.someFailed": "{failed} of {total} hook(s) failed",
 } as const;
 
 export type TranslationKey = keyof typeof en;

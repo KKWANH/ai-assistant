@@ -26,6 +26,7 @@ import { getActiveSettings } from "../config.js";
 import { performSearch } from "../services/search.js";
 import { loadActionDefs } from "../services/actions.js";
 import { retrieveRelevantChunks, formatChunksForPrompt } from "../services/retrieval.js";
+import { listMemories, renderMemoryForPrompt } from "../services/workspaceMemory.js";
 import { scriptEnv } from "../services/scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import { meteringProvider, makeDateRunId, traceEvent, appendTrace, failRun } from "./engine.js";
@@ -234,12 +235,17 @@ async function runBlock(
         ? `\n\nPrevious step output:\n${priorOutput}`
         : "";
       const prompt = `Instruction:\n${instruction}${priorBlock}${workspaceContext}`;
+      // Memory in the action engine has the same value as in chat —
+      // confirmed facts anchor the answer. Renders to null when there
+      // is no memory, so empty workspaces don't pay any prompt cost.
+      const memoryBlock = renderMemoryForPrompt(listMemories(workspace.rootPath));
+      const baseSystem =
+        "You are an assistant inside an Ariadne action pipeline. " +
+        "Follow the instruction and answer clearly and concisely in Markdown. " +
+        "When workspace excerpts are provided, ground your answer in them; " +
+        "say so plainly when the excerpts don't contain the answer.";
       const { text } = await provider.complete({
-        system:
-          "You are an assistant inside an Ariadne action pipeline. " +
-          "Follow the instruction and answer clearly and concisely in Markdown. " +
-          "When workspace excerpts are provided, ground your answer in them; " +
-          "say so plainly when the excerpts don't contain the answer.",
+        system: memoryBlock ? `${baseSystem}\n\n${memoryBlock}` : baseSystem,
         prompt,
         signal: AbortSignal.timeout(BLOCK_LLM_TIMEOUT_MS),
       });

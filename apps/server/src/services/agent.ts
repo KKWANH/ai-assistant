@@ -28,6 +28,7 @@ import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/rep
 import { createRun } from "../runs/engine.js";
 import { loadWorkspaceActions } from "./actions.js";
 import { callTool as mcpCallTool } from "./mcpClient.js";
+import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 import { scriptEnv } from "./scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import logger from "../logger.js";
@@ -77,6 +78,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   // workspace-less chats and burned a tool call on "[No workspace attached]".
   let customActions: WorkspaceAction[] = [];
   let workspaceHint: WorkspaceHint = { attached: false, fileCount: 0 };
+  let workspaceMemoryBlock: string | null = null;
   // MCP servers are per-account, not per-workspace — they're visible to
   // the planner regardless of whether a workspace is attached.
   const mcpServerNames = dbListMcpServers(chat.createdBy ?? undefined)
@@ -93,6 +95,10 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         fileCount: snapshot?.files.length ?? 0,
         mcpServers: mcpServerNames,
       };
+      // Memory rides on the planner AND the synthesis system so both the
+      // step-picking and the final write-up reflect the user's confirmed
+      // facts. Chat-direct already had this; the agent path was the gap.
+      workspaceMemoryBlock = renderMemoryForPrompt(listMemories(ws.rootPath));
     } else {
       workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpServerNames };
     }
@@ -105,7 +111,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   emit({ type: "status", text: "Planning steps…" });
 
   const planRaw = await safeComplete(provider, {
-    system: buildPlannerSystem(customActions, workspaceHint),
+    system: withMemory(buildPlannerSystem(customActions, workspaceHint), workspaceMemoryBlock),
     prompt: buildPlannerPrompt(history, userMessage),
     json: true,
     signal,
@@ -249,7 +255,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     try {
       await provider.completeStream(
         {
-          system: buildSynthesisSystem(accountContext),
+          system: withMemory(buildSynthesisSystem(accountContext), workspaceMemoryBlock),
           prompt: buildSynthesisPrompt(userMessage, stepResults),
           signal,
         },
@@ -712,6 +718,14 @@ interface WorkspaceHint {
    *  planner so it knows which `mcp_call` targets are valid. Empty list
    *  ⇒ the planner is told NOT to pick mcp_call. */
   mcpServers?: string[];
+}
+
+/** Append the workspace memory block to a system prompt, no-op when empty.
+ *  Kept tiny + at the top of the prompt builders so every system prompt
+ *  that wants memory follows the same single concatenation. */
+function withMemory(system: string, memoryBlock: string | null): string {
+  if (!memoryBlock) return system;
+  return system + "\n\n" + memoryBlock;
 }
 
 function buildPlannerSystem(

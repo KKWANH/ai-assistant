@@ -1017,6 +1017,15 @@ const ko: Record<TranslationKey, string> = {
   "hooks.save.failed": "훅 저장 실패",
   "hooks.log.show": "최근 로그 보기",
   "hooks.log.refresh": "새로고침",
+
+  // ── 기능 간 통합 (R5) ────────────────────────────────────────────────────
+  "chat.contextStrip.memoryCount": "메모리 {n}",
+  "chat.contextStrip.mcpCount": "MCP {n}",
+  "chat.contextStrip.memoryTitle": "이 워크스페이스의 메모리는 모든 답변에 자동 주입됩니다.",
+  "chat.contextStrip.mcpTitle": "에이전트가 사용할 수 있는 MCP 서버.",
+  "diff.hooks.title": "훅 {n}개 실행됨",
+  "diff.hooks.allPassed": "훅 {n}개 모두 통과",
+  "diff.hooks.someFailed": "훅 {failed}/{total} 실패",
 };
 
 export default ko;

@@ -23,7 +23,7 @@ import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { computeDiffOps, toUnifiedDiff, diffStats } from "./diff.js";
 import { commitWorkspaceHistory } from "./workspaceGit.js";
 import { dbGetWorkspace, dbGetRun } from "../db/repo.js";
-import { fireHooksDetached } from "./hooks.js";
+import { fireHooks } from "./hooks.js";
 import logger from "../logger.js";
 
 function stagedRoot(workspace: Workspace, runId: string): string {
@@ -135,6 +135,10 @@ export interface ApplyResult {
   skipped: string[];
   errors: { path: string; reason: string }[];
   commitSha: string | null;
+  /** Summaries of any staged_apply hooks that fired. Surfaced inline
+   *  on the apply-success UI so users see auto-typecheck / format
+   *  results without a second hop. */
+  hookResults?: import("@ariadne/shared").HookRunSummary[];
 }
 
 /**
@@ -215,11 +219,13 @@ export async function applyStagedEdits(
   manifest.appliedAt = new Date().toISOString();
   writeManifest(ws, manifest);
 
-  // Fire staged_apply hooks — detached so a slow / failing hook can't
-  // wedge the apply response. Only fires when at least one file
-  // actually landed on disk (skip the no-op case).
+  // Fire staged_apply hooks AWAITED — for the canonical case
+  // (typecheck-on-apply, format-on-apply) the user wants to know the
+  // outcome before they move on. Per-hook timeout is in the YAML
+  // (default 30s, max 5m), so a runaway hook can't wedge apply
+  // forever. Returned summaries surface inline on the apply page.
   if (result.applied.length > 0) {
-    fireHooksDetached("staged_apply", ws.rootPath, {
+    result.hookResults = await fireHooks("staged_apply", ws.rootPath, {
       runId,
       paths: result.applied,
       commitSha: result.commitSha,

@@ -34,6 +34,7 @@ import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import { ChatComposer, type WebSearchMode } from "./ChatComposer";
 import { MessageBubble, StreamingIndicator } from "./MessageBubble";
+import { WorkspaceContextStrip } from "./WorkspaceContextStrip";
 import { Card } from "../../components/ui/Card";
 import { NotFoundRedirect } from "../../components/NotFoundRedirect";
 
@@ -210,12 +211,15 @@ function MessageList({
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="flex flex-col gap-6 px-3 sm:px-5 py-4 sm:py-5 max-w-4xl mx-auto">
         {chat && (
-          <div className="text-center text-xs text-muted-foreground">
-            {chat.createdByName && (
-              <span className="font-medium text-foreground/70">{chat.createdByName}</span>
-            )}
-            {chat.createdByName ? "  ·  " : ""}
-            {formatStarted(chat.createdAt, locale)}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="text-center text-xs text-muted-foreground">
+              {chat.createdByName && (
+                <span className="font-medium text-foreground/70">{chat.createdByName}</span>
+              )}
+              {chat.createdByName ? "  ·  " : ""}
+              {formatStarted(chat.createdAt, locale)}
+            </div>
+            {chat.workspaceId && <WorkspaceContextStrip workspaceId={chat.workspaceId} />}
           </div>
         )}
         {(() => {

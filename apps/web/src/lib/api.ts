@@ -532,6 +532,8 @@ export interface ApplyStagedResult {
   skipped: string[];
   errors: { path: string; reason: string }[];
   commitSha: string | null;
+  /** Summaries of any staged_apply hooks that fired (typecheck-on-apply etc.). */
+  hookResults?: import("@ariadne/shared").HookRunSummary[];
 }
 
 export const applyStagedEdits = (runId: string, paths: string[]) =>
