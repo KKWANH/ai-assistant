@@ -33,11 +33,21 @@ export function CommandMenu({ items }: CommandMenuProps) {
     setSelectedIdx(0);
   }, [query]);
 
+  // Focus restore — capture wherever focus was when the menu opened,
+  // put it back on close. Without this, dismissing the menu drops
+  // focus on document.body, breaking keyboard flow.
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (commandMenuOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
       setQuery("");
       setTimeout(() => inputRef.current?.focus(), 50);
+      return () => {
+        const prev = previouslyFocusedRef.current;
+        if (prev && document.body.contains(prev)) prev.focus();
+      };
     }
+    return undefined;
   }, [commandMenuOpen]);
 
   useEffect(() => {
