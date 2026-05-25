@@ -14,19 +14,32 @@ export class OpenAIProvider implements AiProvider {
   }
 
   async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {
+    // Prefer json_schema (guided decoding) when caller supplied a schema —
+    // OpenAI's json_schema mode constrains generation so parse failures
+    // are impossible. vLLM honors the same flag via xgrammar. Fall back
+    // to json_object when only `json: true` is set; some old endpoints
+    // (older Moonshot, some Ollama models) don't accept either, so the
+    // outer try/catch in callers handles those by relying on
+    // `extractJson` to salvage the raw text.
+    const wantsJson = req.json || !!req.jsonSchema;
+    const responseFormat = req.jsonSchema
+      ? { type: "json_schema" as const, json_schema: { name: req.jsonSchema.name, schema: req.jsonSchema.schema, strict: true } }
+      : req.json
+        ? { type: "json_object" as const }
+        : undefined;
     const res = await this.client.chat.completions.create({
       model: this.model,
       messages: [
         { role: "system", content: req.system },
         { role: "user", content: req.prompt },
       ],
-      ...(req.json ? { response_format: { type: "json_object" } } : {}),
+      ...(responseFormat ? { response_format: responseFormat } : {}),
     }, { signal: req.signal });
     const raw = res.choices[0]?.message.content ?? "";
     const usage = res.usage
       ? { inputTokens: res.usage.prompt_tokens, outputTokens: res.usage.completion_tokens }
       : undefined;
-    return { text: req.json ? extractJson(raw) : raw, usage };
+    return { text: wantsJson ? extractJson(raw) : raw, usage };
   }
 
   async completeStream(

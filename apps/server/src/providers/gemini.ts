@@ -13,21 +13,28 @@ export class GeminiProvider implements AiProvider {
   }
 
   async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {
+    // Gemini supports schema-constrained JSON via responseSchema —
+    // server-side validation, no parse failures. Falls back to mime-type
+    // JSON when only `json: true` is set.
+    const wantsJson = req.json || !!req.jsonSchema;
+    const generationConfig = req.jsonSchema
+      ? { responseMimeType: "application/json", responseSchema: req.jsonSchema.schema }
+      : req.json
+        ? { responseMimeType: "application/json" }
+        : undefined;
     const result = await this.client.models.generateContent({
       model: this.model,
       contents: [
         { role: "user", parts: [{ text: `${req.system}\n\n${req.prompt}` }] },
       ],
-      ...(req.json
-        ? { generationConfig: { responseMimeType: "application/json" } }
-        : {}),
+      ...(generationConfig ? { generationConfig } : {}),
     });
     const raw = result.text ?? "";
     const meta = result.usageMetadata;
     const usage = meta
       ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: meta.candidatesTokenCount ?? 0 }
       : undefined;
-    return { text: req.json ? extractJson(raw) : raw, usage };
+    return { text: wantsJson ? extractJson(raw) : raw, usage };
   }
 
   async completeStream(

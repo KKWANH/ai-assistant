@@ -136,10 +136,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
   emit({ type: "status", text: "Planning steps…" });
 
+  const plannerSchema = buildPlannerSchema(customActions);
   const planRaw = await safeComplete(provider, {
     system: withMemory(buildPlannerSystem(customActions, workspaceHint), workspaceMemoryBlock),
     prompt: buildPlannerPrompt(history, userMessage),
     json: true,
+    jsonSchema: plannerSchema,
     signal,
   });
 
@@ -269,6 +271,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         system: buildReplannerSystem(customActions),
         prompt: buildReplannerPrompt(userMessage, stepResults, remaining),
         json: true,
+        jsonSchema: plannerSchema,
         signal,
       }).catch(() => null);
 
@@ -801,6 +804,45 @@ interface WorkspaceHint {
 function withMemory(system: string, memoryBlock: string | null): string {
   if (!memoryBlock) return system;
   return system + "\n\n" + memoryBlock;
+}
+
+/** Build a JSON schema for the planner output so providers that support
+ *  guided decoding (OpenAI json_schema, vLLM xgrammar, Anthropic
+ *  tool input_schema, Gemini responseSchema) enforce the shape at the
+ *  decoding layer. Without this, a malformed planner response slips
+ *  through parsePlan's catch block as `{steps:[]}` → agentic mode
+ *  silently disables. With it, the model literally cannot emit
+ *  invalid JSON in the first place. */
+function buildPlannerSchema(customActions: WorkspaceAction[] = []) {
+  const toolEnum = [
+    "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
+    "edit_file", "run_tests", "calculate", "mcp_call",
+    ...customActions.map((a) => a.id),
+  ];
+  return {
+    name: "ariadne_plan",
+    schema: {
+      type: "object" as const,
+      additionalProperties: false,
+      required: ["summary", "steps"],
+      properties: {
+        summary: { type: "string" },
+        steps: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["description", "tool"],
+            properties: {
+              description: { type: "string" },
+              tool: { type: "string", enum: toolEnum },
+              note: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  };
 }
 
 function buildPlannerSystem(

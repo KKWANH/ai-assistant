@@ -13,19 +13,41 @@ export class AnthropicProvider implements AiProvider {
   }
 
   async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {
+    // Anthropic has no `response_format` knob, but tool-use input_schema
+    // is enforced server-side — so we forge a single one-tool call when
+    // a jsonSchema is supplied. The tool's input becomes the structured
+    // response. Falls back to plain text + extractJson when no schema.
+    const useTool = !!req.jsonSchema;
     const msg = await this.client.messages.create({
       model: this.model,
       max_tokens: 4096,
       system: req.system,
       messages: [{ role: "user", content: req.prompt }],
+      ...(useTool ? {
+        tools: [{
+          name: req.jsonSchema!.name,
+          description: "Return the structured response.",
+          input_schema: req.jsonSchema!.schema as Anthropic.Tool.InputSchema,
+        }],
+        tool_choice: { type: "tool" as const, name: req.jsonSchema!.name },
+      } : {}),
     }, { signal: req.signal });
 
-    const content = msg.content[0];
-    const raw = content?.type === "text" ? content.text : "";
+    const wantsJson = req.json || useTool;
+    let raw = "";
+    if (useTool) {
+      const toolUse = msg.content.find((b) => b.type === "tool_use");
+      if (toolUse && toolUse.type === "tool_use") {
+        raw = JSON.stringify(toolUse.input);
+      }
+    } else {
+      const content = msg.content[0];
+      raw = content?.type === "text" ? content.text : "";
+    }
     const usage = msg.usage
       ? { inputTokens: msg.usage.input_tokens, outputTokens: msg.usage.output_tokens }
       : undefined;
-    return { text: req.json ? extractJson(raw) : raw, usage };
+    return { text: wantsJson ? extractJson(raw) : raw, usage };
   }
 
   async completeStream(

@@ -14,6 +14,21 @@ export interface CompleteRequest {
   system: string;
   prompt: string;
   json?: boolean;
+  /**
+   * If supplied, enforce a JSON schema on the response. Providers that
+   * support guided/constrained decoding (OpenAI `response_format:
+   * json_schema`, vLLM xgrammar) restrict token choices to the schema
+   * → parse failures become impossible. Providers that don't (Anthropic,
+   * Gemini, Ollama, Moonshot's older endpoints) fall back to `json:
+   * true` and the same downstream `extractJson` + `JSON.parse` path.
+   * Implies `json: true`.
+   *
+   * Shape: a JSON Schema draft-07 object (without the `$schema` line
+   * unless the provider needs it). Example:
+   *   { type: "object", required: ["steps"], properties: { steps:
+   *     { type: "array", items: { type: "object", ... } } } }
+   */
+  jsonSchema?: { name: string; schema: Record<string, unknown> };
   /** Abort signal — cancels the underlying provider call when triggered. */
   signal?: AbortSignal;
 }
