@@ -39,9 +39,21 @@ const STARTERS: Record<
 > = {
   portfolio: {
     files: {
+      // v1 compatibility — the current surface still reads these.
       "holdings.csv": portfolioStarter.HOLDINGS_CSV,
       "fx_rates.csv": portfolioStarter.FX_RATES_CSV,
       "history.csv": portfolioStarter.HISTORY_CSV,
+      // v2 layout — see docs/PORTFOLIO_STARTER_V2.md. The actions
+      // already read from this v2 layout; the surface upgrade is
+      // Phase 2.
+      "accounts/_index.yaml":          portfolioStarter.ACCOUNTS_INDEX_YAML,
+      "positions/current.csv":         portfolioStarter.POSITIONS_CURRENT_CSV,
+      "positions/watchlist.csv":       portfolioStarter.POSITIONS_WATCHLIST_CSV,
+      "cash/_index.yaml":              portfolioStarter.CASH_INDEX_YAML,
+      "analysis/macro/sample.md":      portfolioStarter.ANALYSIS_MACRO_SAMPLE_MD,
+      "analysis/meso/sample.md":       portfolioStarter.ANALYSIS_MESO_SAMPLE_MD,
+      "analysis/micro/AAPL-2026-01.md": portfolioStarter.ANALYSIS_MICRO_AAPL_MD,
+      "goals/2026-allocation.md":      portfolioStarter.GOALS_2026_ALLOCATION_MD,
     },
     surface: portfolioStarter.SURFACE_TSX,
     actions: portfolioStarter.ACTIONS_YAML,

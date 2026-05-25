@@ -2,11 +2,30 @@
  * Portfolio starter — sample files injected when a workspace is created with
  * starter="portfolio".
  *
- * Provides:
- *   holdings.csv   — multi-currency holdings (stocks, ETFs and base assets)
- *   fx_rates.csv   — exchange rates (current + at purchase) per currency
- *   history.csv    — monthly portfolio value and cumulative currency effect
- *   surface.tsx    — a multi-currency financial-analyst dashboard
+ * v2 layout (per docs/PORTFOLIO_STARTER_V2.md). The v1 single-CSV shape is
+ * preserved for the surface (which still reads holdings.csv today); the v2
+ * files seed the new multi-account / 3-tier-analysis architecture. The
+ * surface will read v2 files in a follow-up batch; until then the v2 files
+ * power the action templates and act as live documentation of the schema.
+ *
+ * Files seeded:
+ *   holdings.csv               — v1 compatibility (the surface reads this)
+ *   fx_rates.csv               — exchange rates (current + at purchase)
+ *   history.csv                — monthly portfolio value + cumulative FX effect
+ *   accounts/_index.yaml       — v2: multi-account metadata (tax-advantaged,
+ *                                  status: closing, etc.)
+ *   positions/current.csv      — v2: per-position thesis + target + last_reviewed
+ *   positions/watchlist.csv    — v2: tracked-but-not-held
+ *   cash/_index.yaml           — v2: idle cash buckets ("놀고있는 돈")
+ *   analysis/macro/sample.md   — v2: user-maintained macro thesis template
+ *   analysis/meso/sample.md    — v2: sector / region review template
+ *   analysis/micro/AAPL.md     — v2: per-position thesis template
+ *   goals/2026-allocation.md   — v2: annual target allocation + rebalance cadence
+ *   surface.tsx                — the v1 dashboard (v2 surface is Phase 2)
+ *
+ * All example data is anonymized / illustrative — generic tickers, round
+ * numbers. Real portfolio data lives only in the user's local files and
+ * never in this repo.
  *
  * All colours use CSS custom-property tokens (rgb(var(--token))) — no hardcoded
  * hex — so the surface is fully legible in both dark and light mode.
@@ -49,19 +68,292 @@ export const HISTORY_CSV = `date,value,fx_effect
 `;
 
 /**
- * Seed actions for the portfolio starter. Each one is a block-pipeline
- * the user can fire from the 'Create & Run' tab. The macro_brief action
- * is intentionally heavy — it reads holdings, pulls a fresh web slice,
- * then asks the model for a structured monthly write-up. A scheduled
- * trigger for this will arrive in a follow-up batch; today it's manual.
+ * Seed actions for the portfolio starter. v2 ships 5 + 1 templates that
+ * map to the 3-tier analysis (macro → meso → micro) plus operational
+ * concerns (rebalance audit + closing-account planner).
+ *
+ * Every template is intentionally conservative about *advice*. The AI
+ * summarises news / data and compares them against the **user's own
+ * stated thesis** in analysis/micro/*.md. It does NOT generate target
+ * prices, buy/sell calls, or directional forecasts. The user reviews
+ * each brief and decides — Ariadne provides structure, not opinion.
+ *
+ * The macro_brief_monthly action is intentionally heavy — it reads
+ * holdings + the previous month's macro brief, pulls a fresh web
+ * slice, then asks the model for a structured monthly write-up. A
+ * scheduled trigger lives in .ariadne/hooks.yaml (commented out by
+ * default so a first run doesn't surprise the user).
  */
-export const ACTIONS_YAML = `# Portfolio starter — seed actions for the 'Create & Run' tab.
+export const ACTIONS_YAML = `# Portfolio starter v2 — seed actions for the 'Create & Run' tab.
 # Edit names / prompts / blocks freely; the file lives at .ariadne/actions.yaml.
+# See docs/PORTFOLIO_STARTER_V2.md for the full architecture.
 
 actions:
+  # ── 1. MACRO (monthly) ─────────────────────────────────────────────────────
+  - id: macro_brief_monthly
+    name: 월간 거시 브리프
+    description: |
+      Fed/ECB/BoK 금리, 인플레이션, 주요 지정학 이벤트를 이번 달 단위로 요약하고,
+      내 포트폴리오가 그 이벤트들에 얼마나 노출돼 있는지 \`positions/current.csv\`
+      숫자에서 직접 계산. 권고가 아니라 "검토할 질문" 어조.
+    category: finance
+    blocks:
+      - id: read_positions
+        type: read_file
+        config:
+          path: positions/current.csv
+      - id: read_prev_macro
+        type: read_file
+        config:
+          path: analysis/macro/sample.md
+      - id: macro_news
+        type: web_analysis
+        config:
+          query: "this month Federal Reserve ECB BOK rate decision inflation CPI geopolitics tech cycle sector rotation"
+      - id: synthesis
+        type: ask_ai
+        config:
+          prompt: |
+            아래 세 가지를 입력으로 받았습니다:
+            (1) positions/current.csv — 내가 직접 적은 보유 종목과 thesis_id
+            (2) 직전 월의 analysis/macro/*.md — 내가 이미 정리해 둔 거시 뷰
+            (3) 이번 달 거시 뉴스 요약 (Fed / ECB / BoK / CPI / 주요 지정학)
+
+            4-섹션 마크다운 브리프를 작성하세요. 짧은 단락으로.
+
+            ## 1) 이번 달 거시 이벤트
+            금리·인플레·환율·지정학에서 무엇이 새로 들어왔는지. 출처 번호 [1], [2].
+
+            ## 2) 내 포트폴리오 노출도
+            positions/current.csv 의 currency / sector / asset_class 컬럼을 직접 합산해서
+            노출 표를 만들기. 숫자를 만들어내지 말고 CSV 행에서만 가져올 것.
+            예: "USD 노출 X%, KRW Y%, EUR Z%" / "기술 섹터 A%, 분산투자 B%".
+
+            ## 3) 다음 1–3개월 watch list
+            거시 이벤트가 포트폴리오의 어느 섹터·통화에 어떻게 부딪힐 수 있는지 3개 항목.
+            "팔아라" 같은 표현 절대 금지. "다음 review 시 확인할 질문" 형식.
+
+            ## 4) 사용자가 답해야 할 질문
+            이 거시 변화가 내가 적어 둔 thesis 와 어긋날 수 있는 지점.
+            (예: "BoK 금리 path가 내 KRW 비중 thesis와 일치하나?")
+
+            중요:
+            - target price / 매수·매도 권고를 만들지 마세요. 사용자가 직접 결정.
+            - 인용은 [1], [2] 형태로 본문에 자연스럽게.
+            - "AI가 ~을 추천한다" 같은 표현 금지. "다음 질문을 고려할 수 있음" 어조.
+      - id: archive
+        type: write_file
+        config:
+          path: analysis/macro/{date}.md
+          mode: replace
+
+  # ── 2. MESO — sector review (quarterly) ────────────────────────────────────
+  - id: sector_review_quarterly
+    name: 분기 섹터 리뷰
+    description: |
+      분기마다 내 섹터별 노출이 거시 뷰와 일치하는지 점검. positions/current.csv
+      섹터 컬럼과 \`goals/2026-allocation.md\` 목표 비중을 직접 비교.
+    category: finance
+    blocks:
+      - id: read_positions
+        type: read_file
+        config:
+          path: positions/current.csv
+      - id: read_goals
+        type: read_file
+        config:
+          path: goals/2026-allocation.md
+      - id: read_macro
+        type: read_file
+        config:
+          path: analysis/macro/sample.md
+      - id: synthesis
+        type: ask_ai
+        config:
+          prompt: |
+            positions/current.csv 의 sector 컬럼을 합산해서 현재 섹터 비중을 만들고,
+            goals/2026-allocation.md 에 적어 둔 목표 섹터 비중과 비교 표를 만드세요.
+
+            각 섹터에 대해 다음 4 항목을 채우세요. 추측 금지 — CSV 행에 직접 보이는 것만.
+
+            ## <섹터명>
+            - 현재 비중 / 목표 비중 / 차이
+            - 이 섹터에서 thesis_id가 비어 있거나 last_reviewed > 90일인 포지션 (있다면 list)
+            - 직전 macro 브리프가 이 섹터에 대해 적어 둔 risk
+            - 사용자가 다음에 답할 질문 1개
+
+            마지막에 "다음 액션 후보" 섹션 — 권고가 아니라 "사용자가 선택할 수 있는 옵션 list" 형식.
+      - id: archive
+        type: write_file
+        config:
+          path: analysis/meso/sectors-{date}.md
+          mode: replace
+
+  # ── 3. MICRO — per-position thesis check ──────────────────────────────────
+  - id: position_check
+    name: 포지션 thesis 점검
+    description: |
+      특정 종목 1개에 대해, analysis/micro/<thesis>.md 의 thesis와 exit trigger를
+      최근 뉴스·실적·가격 움직임에 대조. Review log에 새 항목 추가 (덮어쓰기 X).
+      실행 시 thesis_id를 입력으로 받습니다 — 예: AAPL-2026-01.
+    category: finance
+    inputs:
+      - name: thesis_id
+        label: thesis_id (예: AAPL-2026-01)
+        required: true
+    blocks:
+      - id: read_thesis
+        type: read_file
+        config:
+          path: analysis/micro/{{thesis_id}}.md
+      - id: read_positions
+        type: read_file
+        config:
+          path: positions/current.csv
+      - id: news
+        type: web_analysis
+        config:
+          query: "{{thesis_id}} latest earnings news guidance margin"
+      - id: synthesis
+        type: ask_ai
+        config:
+          prompt: |
+            아래 입력:
+            - analysis/micro/{{thesis_id}}.md — 사용자가 적어 둔 thesis + exit trigger + target/stop
+            - positions/current.csv 에서 이 thesis_id 의 현재 가격 / 매입가 / 비중
+            - 최근 뉴스 요약
+
+            review log 항목을 1개 작성하세요 (전체 파일을 덮어쓰지 말고, append 형식의 단일 블록만).
+
+            ## YYYY-MM-DD — review
+            - **Exit trigger 점검**: 사용자가 적어 둔 각 exit trigger 가 현재 충족됐는지 / 안 됐는지 / 모름 (1줄씩, 출처 [1])
+            - **Target / stop**: 현재가가 target 또는 stop 을 통과했는지
+            - **시간 horizon**: 매입 시점부터 경과 개월 / horizon 의 X%
+            - **다음 review 권장 시점**: 1개월 / 3개월 / 6개월 (사용자 thesis에 적힌 horizon 기준)
+            - **상태**: thesis intact / 일부 미스 / 재검토 필요
+
+            중요: "지금 팔아라" 같은 표현 금지. exit trigger가 trigger 됐는지 *사실 확인*만.
+            target / stop 을 새로 만들지 마세요 — 사용자가 적어 둔 것만 인용.
+      - id: append_log
+        type: write_file
+        config:
+          path: analysis/micro/{{thesis_id}}.md
+          mode: append
+
+  # ── 4. Operational — rebalance audit ──────────────────────────────────────
+  - id: rebalance_audit
+    name: 리밸런싱 점검
+    description: |
+      positions/current.csv + cash/_index.yaml + accounts/_index.yaml 을 합산해
+      현재 배분 vs goals/2026-allocation.md 목표를 표로. ISA 한도 등 세제 우대
+      라우팅 hint 포함.
+    category: finance
+    blocks:
+      - id: read_positions
+        type: read_file
+        config:
+          path: positions/current.csv
+      - id: read_cash
+        type: read_file
+        config:
+          path: cash/_index.yaml
+      - id: read_accounts
+        type: read_file
+        config:
+          path: accounts/_index.yaml
+      - id: read_goals
+        type: read_file
+        config:
+          path: goals/2026-allocation.md
+      - id: synthesis
+        type: ask_ai
+        config:
+          prompt: |
+            세 입력을 합산하세요:
+            (1) positions/current.csv  — 보유 (asset_class, currency, sector, account_id)
+            (2) cash/_index.yaml       — 유휴 / 비상금 / brokerage 예수금
+            (3) accounts/_index.yaml   — 세제 우대 / 통화 / 한도
+
+            출력 4 섹션:
+
+            ## 현재 배분 (asset_class × currency)
+            CSV / YAML 에서 직접 계산해서 표로. 사용자 reporting currency 는 goals/ 에 적혀 있음.
+
+            ## 목표 배분 (goals/2026-allocation.md 인용)
+            그대로 표로.
+
+            ## 차이
+            차이 항목과 절대 금액. "팔아라" / "사라" 표현 금지.
+
+            ## 세제 우대 라우팅 hint
+            accounts/_index.yaml 에서 tax_advantaged: true 계좌의 annual_cap_used vs annual_cap_amount.
+            ETF 매수 갭이 있고 ISA 한도가 남아 있으면: "ISA 잔여 한도 X 만원 — 다음 ETF 매수를
+            여기 우선 라우팅 검토". (권고가 아니라 *옵션* 형식.)
+
+            마지막 한 줄: "이 점검을 토대로 사용자가 직접 결정할 항목" 3개 (질문 형식).
+      - id: archive
+        type: write_file
+        config:
+          path: briefs/{date}-rebalance.md
+          mode: replace
+
+  # ── 5. Operational — closing account planner ─────────────────────────────
+  - id: account_closure_planner
+    name: 폐쇄 임박 계좌 정리 계획
+    description: |
+      accounts/_index.yaml 의 status: closing 계좌에 대해, closing_options 각각의
+      operational 체크리스트를 작성. 세금 implication은 *답*이 아니라 *질문* 형식.
+    category: finance
+    inputs:
+      - name: account_id
+        label: 폐쇄 임박 account_id (예: foreign_a)
+        required: true
+    blocks:
+      - id: read_accounts
+        type: read_file
+        config:
+          path: accounts/_index.yaml
+      - id: read_positions
+        type: read_file
+        config:
+          path: positions/current.csv
+      - id: synthesis
+        type: ask_ai
+        config:
+          prompt: |
+            accounts/_index.yaml 에서 account_id = {{account_id}} 의 closing_date,
+            closing_options, 그리고 positions/current.csv 에서 이 계좌의 모든 포지션 list.
+
+            출력:
+
+            ## 폐쇄 D-day / 잔여 일수
+            accounts/_index.yaml 의 closing_date 인용 + 오늘 날짜 기준 잔여 일수.
+
+            ## 보유 포지션 요약
+            positions/current.csv 에서 이 account_id 의 모든 행. 통화 / 시장 / 평가금액.
+
+            ## 옵션별 체크리스트
+            accounts/_index.yaml 의 각 closing_options 항목에 대해:
+            - 비용 (yaml 에 적혀 있는 경우만 인용)
+            - operational step 5–8 개 (broker 문의, 환전, 이체 한도, 세금 자문 등)
+            - 예상 소요 일수
+
+            ## 답해야 할 질문
+            이 결정을 위해 사용자가 회계사 / broker 에 확인해야 할 것 3–5 개.
+
+            중요:
+            - 세금 계산을 *하지* 마세요. "회계사와 확인할 질문" 형식만.
+            - 옵션 중 어떤 게 더 낫다고 결론 내리지 마세요. 정보만 정리.
+      - id: archive
+        type: write_file
+        config:
+          path: briefs/{date}-closure-{{account_id}}.md
+          mode: replace
+
+  # ── Legacy v1 actions (kept for the v1 surface compatibility) ────────────
   - id: monthly_macro_brief
-    name: 월간 거시 분석 브리프
-    description: 시장 거시 데이터와 보유 종목 노출도를 종합해 월간 브리프를 한국어로 작성합니다.
+    name: (v1) 월간 거시 브리프 - 단순
+    description: v1 호환용. v2는 macro_brief_monthly 사용.
     category: finance
     blocks:
       - id: read_holdings
@@ -71,45 +363,294 @@ actions:
       - id: macro_news
         type: web_analysis
         config:
-          query: "this month macroeconomic news Federal Reserve rate decision inflation US Europe Korea sector rotation"
+          query: "this month macroeconomic news Fed rate inflation Europe Korea sector rotation"
       - id: synthesis
         type: ask_ai
         config:
           prompt: |
-            아래는 두 가지 입력입니다 — 내 보유 종목 (holdings.csv) 과 이번 달 거시 뉴스 요약입니다.
-            이것을 바탕으로 4개 섹션의 월간 거시 분석 브리프를 한국어로 작성하세요. 마크다운 헤더와 짧은 문단으로.
-
-            1) 이번 달 시장의 핵심 거시 이벤트 (Fed·금리·인플레이션·환율·주요 지정학적 뉴스)
-            2) 내 보유 포트폴리오의 섹터·통화 노출도 분석 (어떤 거시 변수에 가장 민감한지)
-            3) 다음 1–3개월 동안 주의해야 할 리스크 항목 3개
-            4) 보유 종목 단위로 짧은 액션 권고 (보유 유지 / 비중 조정 / 추가 매수 검토 / 관망 등 — 사유 1줄과 함께)
-
-            중요: 단정적인 매수·매도 추천이 아니라 "고려할 수 있는 시나리오" 어조로 작성. 인용은 출처 번호 [1], [2] 형태로 본문에 자연스럽게 섞으세요.
-      # Closes the loop: the synthesis lands at briefs/{date}.md so a
-      # monthly schedule produces a permanent record per run rather than
-      # a one-shot screen output.
+            holdings.csv 와 이번 달 거시 요약을 받아서, 4-섹션 한국어 마크다운 브리프 작성:
+            1) 거시 이벤트  2) 포트폴리오 노출  3) 1–3개월 watch  4) 사용자가 답할 질문.
+            target / 매수·매도 권고 절대 만들지 마세요.
       - id: archive
         type: write_file
         config:
           path: briefs/{date}.md
           mode: replace
+`;
 
-  - id: rebalance_check
-    name: 리밸런싱 점검
-    description: 현재 자산군 배분이 목표 배분에서 얼마나 벗어났는지 분석합니다.
-    category: finance
-    blocks:
-      - id: read_holdings
-        type: read_file
-        config:
-          path: holdings.csv
-      - id: analysis
-        type: ask_ai
-        config:
-          prompt: |
-            holdings.csv를 보고 현재 자산군별 비중 (주식 / ETF / 원자재 / 암호화폐) 을 계산하고,
-            보편적으로 권장되는 분산 (예: 주식 60% / ETF 25% / 원자재 10% / 암호화폐 5%) 과 비교해
-            어느 자산군이 과도하거나 부족한지 표로 보여 주세요. 마지막에 리밸런싱 액션 한 줄을 제안하세요.
+// ── v2 file seeds ──────────────────────────────────────────────────────────
+// All values anonymized / illustrative. The real portfolio's shape lives only
+// in the user's local workspace — never in this repo.
+
+export const ACCOUNTS_INDEX_YAML = `# Multi-account metadata for the portfolio workspace.
+# See docs/PORTFOLIO_STARTER_V2.md §1.1 for the schema.
+#
+# Real values replace these illustrative ones — but the values themselves
+# never leave your machine. Ariadne reads this file locally; the AI sees
+# the schema (which account is tax-advantaged, which is closing) without
+# ever seeing the dollar / won amounts unless you ask it to.
+
+accounts:
+  # Tax-advantaged: route ETF buys here first to use the annual cap.
+  - id: broker_a_isa
+    label: "Broker A — ISA"
+    type: brokerage
+    currency: KRW
+    tax_advantaged: true
+    annual_cap_currency: KRW
+    annual_cap_amount: 20000000
+    annual_cap_used: 500000        # user-maintained
+    preferred_asset_classes: [ETF]
+    notes: "Tax shield up to 20M KRW/year — route ETF buys here first."
+
+  # Standard brokerage — no tax shield.
+  - id: broker_a_std
+    label: "Broker A — Standard"
+    type: brokerage
+    currency: KRW
+
+  # Second broker — different rules.
+  - id: broker_b
+    label: "Broker B"
+    type: brokerage
+    currency: KRW
+
+  # Foreign-resident broker — closing in this region by closing_date.
+  # The surface flags this on the action strip with days-to-close.
+  - id: foreign_a
+    label: "Foreign Broker A"
+    type: brokerage
+    currency: MIXED                # EUR + USD positions
+    status: closing
+    closing_date: 2026-06-30
+    closing_action_required: true
+    closing_options:
+      - migrate_to: broker_b_eu
+        cost: "USD 35 per position transfer fee"
+      - liquidate_and_repatriate
+    notes: "Must decide before 2026-06-30 — see briefs/ for the planner output."
+
+  # Cash buckets — flagged on the 'idle cash' card in the surface.
+  - id: bank_a_savebox
+    label: "Bank A — SaveBox"
+    type: cash
+    currency: KRW
+    is_idle: true
+
+  - id: bank_b
+    label: "Bank B"
+    type: cash
+    currency: KRW
+    is_idle: true
+`;
+
+export const POSITIONS_CURRENT_CSV = `account_id,symbol,name,asset_class,sector,currency,shares,buy_price,current_price,target_price,stop_loss,thesis_id,horizon_months,confidence,last_reviewed
+broker_a_isa,SPY,SPDR S&P 500 ETF,ETF,분산투자,USD,10,617.00,686.00,740.00,,SPY-2026-01,60,medium,2026-04-15
+broker_a_std,AAPL,Apple Inc.,주식,기술,USD,40,271.00,309.00,345.00,250.00,AAPL-2026-01,24,medium,2026-04-12
+broker_a_std,MSFT,Microsoft Corp.,주식,기술,USD,25,384.00,419.00,470.00,360.00,MSFT-2026-01,36,medium,2026-04-12
+broker_b,005930,Samsung Electronics,주식,기술,KRW,200,261000,292500,330000,250000,005930-2026-01,12,low,2026-03-21
+broker_b,069500,KODEX 200 ETF,ETF,분산투자,KRW,150,114200,123350,,,069500-2026-01,60,medium,2026-04-01
+foreign_a,NVDA,NVIDIA Corp.,주식,기술,USD,3,176.00,215.00,260.00,180.00,NVDA-2026-01,18,high,2026-04-29
+foreign_a,GOOGL,Alphabet Class A,주식,기술,USD,7,178.00,231.00,,,GOOGL-2026-01,24,medium,2026-02-10
+foreign_a,VUSA,Vanguard S&P 500 ETF,ETF,분산투자,EUR,18,108.00,123.00,,,VUSA-2026-01,60,medium,
+foreign_a,XAU,Gold (paper),원자재,원자재,EUR,0.5,3700.00,3950.00,,,XAU-2026-01,60,low,2026-03-15
+`;
+
+export const POSITIONS_WATCHLIST_CSV = `symbol,name,asset_class,sector,currency,trigger_price,thesis_id,notes
+AMD,Advanced Micro Devices,주식,기술,USD,120.00,AMD-watch-2026-01,Wait for AI infra capex cycle to confirm
+TSM,Taiwan Semiconductor,주식,기술,USD,170.00,TSM-watch-2026-01,Geopolitical risk premium considered acceptable below 170
+SCHD,Schwab US Dividend Equity,ETF,분산투자,USD,28.00,SCHD-watch-2026-01,Income leg of the long-term allocation
+`;
+
+export const CASH_INDEX_YAML = `# Idle / savings / emergency-fund cash buckets.
+# The surface aggregates 'is_idle: true' rows into the 'Idle cash' card.
+# All amounts are user-maintained — Ariadne does not connect to bank APIs.
+
+buckets:
+  - id: bank_a_savebox
+    label: "Bank A — SaveBox"
+    currency: KRW
+    amount: 0                      # user-maintained
+    apr: 2.5
+    is_emergency_fund: false
+    target_amount: 0
+    notes: "Yields below CPI — candidate for reallocation."
+
+  - id: bank_b_checking
+    label: "Bank B — Checking"
+    currency: KRW
+    amount: 0
+    apr: 0.1
+    is_emergency_fund: true
+    target_amount: 6000000         # ~3 months expenses
+    notes: "Emergency fund — keep liquid; not for reallocation."
+
+  - id: broker_a_deposit
+    label: "Broker A — Uninvested deposit"
+    currency: KRW
+    amount: 0
+    apr: 0
+    is_emergency_fund: false
+    notes: "Sweeps after dividends — re-route to a buy or move to SaveBox."
+`;
+
+export const ANALYSIS_MACRO_SAMPLE_MD = `# 2026-05 — Macro brief (sample)
+
+> User-maintained file. The \`macro_brief_monthly\` action **writes a new
+> file per month** under \`analysis/macro/YYYY-MM.md\`; this sample is the
+> seed showing the expected shape. Edit freely.
+
+## 1) This month's macro events
+
+Federal Reserve held the policy rate at 5.00–5.25%. The dot plot now
+implies two cuts in 2026, down from three. CPI came in at 2.9% y/y
+(consensus 3.0%). ECB cut 25 bps. BoK held.
+
+## 2) My portfolio's exposure
+
+From positions/current.csv (computed, not invented):
+
+- **USD exposure**: ~70% of total.
+- **KRW exposure**: ~25%.
+- **EUR exposure**: ~5%.
+- **Tech concentration**: ~60% of equity sleeve.
+- **Tax-advantaged utilization**: 2.5% of ISA cap used.
+
+If the dot plot stays at two cuts, the USD weight is the most sensitive
+slice. The KRW slice (Samsung + KODEX 200) is most sensitive to the
+BoK rate path and the global tech cycle.
+
+## 3) 1–3 month watchlist
+
+- BoK September meeting — does the rate path align with the KRW thesis
+  I wrote down?
+- US labor data — softening labor is the bullish-cuts case for the
+  S&P slice; firming labor is the opposite.
+- Sector rotation indicators — if defensive sectors outperform
+  consistently, that's an early warning the tech overweight is
+  off-target vs goals/2026-allocation.md.
+
+## 4) Questions for me to answer this month
+
+1. Is the BoK rate path priced into the KRW exposure thesis?
+2. Should the next ETF buy go through the ISA (cap room is 97.5%) ?
+3. Is the foreign_a closing decision urgent enough to override
+   normal rebalance cadence?
+`;
+
+export const ANALYSIS_MESO_SAMPLE_MD = `# 2026-Q2 — Sector / region review (sample)
+
+> User-maintained file. The \`sector_review_quarterly\` and
+> \`region_review_quarterly\` actions write new files per quarter; this
+> sample is the seed.
+
+## Sectors — current vs target
+
+(Computed from positions/current.csv \`sector\` column — AI cites the
+table, doesn't invent it.)
+
+| Sector | Current | Target (2026 plan) | Delta |
+|---|---|---|---|
+| Tech | 60% | 40% | +20pp |
+| 분산투자 (ETF) | 30% | 35% | -5pp |
+| 원자재 | 3% | 5% | -2pp |
+| Bio | 0% | 10% | -10pp |
+| Defense | 0% | 5% | -5pp |
+| Cash | 7% | 5% | +2pp |
+
+## Stale theses
+
+Positions with \`last_reviewed\` > 90 days (auto-flagged on the surface):
+
+- GOOGL — last reviewed 2026-02-10 — 87 days ago, still inside window
+- VUSA — never reviewed (blank \`last_reviewed\`)
+
+## Regions
+
+| Region | Current | Notes |
+|---|---|---|
+| US | 70% | Tech-heavy via individual + SPY |
+| KR | 25% | Samsung + KODEX 200 |
+| EU | 5% | VUSA + XAU (gold in EUR) |
+
+## Questions for me
+
+1. Is the tech overweight (+20pp) a deliberate bet or drift?
+2. Bio (-10pp) — start a position or revise the 2026 plan?
+3. Should the cash bucket move into a short-duration KR bond ETF?
+`;
+
+export const ANALYSIS_MICRO_AAPL_MD = `# AAPL-2026-01 — Apple thesis (opened 2026-01-12, sample)
+
+> User-maintained file. The \`position_check\` action **appends** to the
+> Review log section — it does not overwrite the thesis or exit triggers.
+
+## Why I bought
+- Services revenue >25% of total, growing
+- Vision Pro adoption curve uncertain but cheap-tail-option priced in
+- Buyback support floor near $250
+
+## What would change my mind (exit triggers)
+- Services growth deceleration below 10% YoY for 2 consecutive quarters
+- Margin compression on Mac/iPad below 35% gross
+- China revenue continues -15% YoY beyond 2026-Q2
+- Catastrophic regulatory action in EU (DMA) costing >$20B/yr
+
+## Target / stop / horizon
+- **Target**: \$345 (12-month, ~13% from buy)
+- **Stop loss**: \$250 (8% below cost basis — fundamentals trigger,
+  not a price-action stop)
+- **Horizon**: 24 months
+- **Confidence**: medium
+
+## Review log
+- **2026-04-12** — Services beat by 4%. Thesis intact. Margin trend
+  holding. Next review at 2026-07-12 unless macro/sector brief
+  flags earlier.
+- **2026-03-08** — China revenue disclosed -12% YoY (Q2). Inside the
+  -15% tolerance band. Continue.
+- **2026-02-15** — Vision Pro install base disclosed ~600k. Below
+  consensus 1M but priced in. No action.
+`;
+
+export const GOALS_2026_ALLOCATION_MD = `# 2026 — Target allocation + rebalance cadence
+
+> User-maintained file. The \`rebalance_audit\` action reads this to
+> compute the gap.
+
+## Target allocation (annual)
+
+| Asset class | Target | Notes |
+|---|---|---|
+| US equities | 35% | Mix of SPY + 5–8 individual names |
+| KR equities | 20% | Samsung + KODEX 200 + 1–2 sector ETFs |
+| EU equities | 10% | VUSA + region ETFs |
+| ETF (broad) | 15% | SPY / VUSA / KODEX 200 — broad index |
+| Bonds | 10% | Short-duration sovereign — TBD |
+| Gold | 5% | XAU paper or ETF |
+| Cash (deployable) | 5% | Above the emergency fund |
+
+## Tax-advantaged routing
+
+- ISA (KRW 20M/year cap): **ETF purchases routed here first**.
+- Standard brokerage: individual stocks + non-ETF positions.
+
+## Rebalance cadence
+
+- **Quarterly**: full \`rebalance_audit\` action run.
+- **Monthly**: just look at the surface allocation tab. No action
+  unless drift > 5pp.
+- **Trigger-based**: macro brief flags a sector / currency drift
+  meaningful enough to act.
+
+## What does *not* belong in this file
+- Specific price targets — those live in \`analysis/micro/<thesis>.md\`.
+- Decisions — those live in \`decisions/\` (future, see PORTFOLIO_STARTER_V2 §6).
+- Macro forecasts — those live in \`analysis/macro/YYYY-MM.md\`.
+
+## 2026 review history
+- 2026-01-05 — initial plan committed.
+- (next review: 2026-Q3)
 `;
 
 export const SURFACE_TSX = `/**
