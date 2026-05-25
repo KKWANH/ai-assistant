@@ -6,7 +6,7 @@
  * - Agent messages: live step checklist above the final markdown answer.
  * - Streaming state: live status line / token cursor while generating.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -137,7 +137,13 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
   },
 };
 
-function MarkdownContent({ content }: { content: string }) {
+// memo() because ReactMarkdown reparses + re-renders on every prop
+// change. Without it, each streaming-delta re-renders the parent
+// MessageBubble, which re-runs the full markdown parse on the
+// accumulated text → O(n²) parses by the time a long response is done.
+// Memoizing on `content` means we only reparse when content actually
+// grows — once per delta instead of once per re-render.
+const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="text-sm text-foreground leading-relaxed">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={markdownComponents}>
@@ -145,7 +151,7 @@ function MarkdownContent({ content }: { content: string }) {
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 // ── Tool icon ─────────────────────────────────────────────────────────────────
 function ToolIcon({ tool }: { tool: AgentTool }) {

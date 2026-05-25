@@ -38,6 +38,15 @@ interface CachedConnection {
 const CONNECTIONS = new Map<string, CachedConnection>();
 const CONNECT_TIMEOUT_MS = 10_000;
 
+/** Cached per-server tool list. Tool inventories don't change without
+ *  an explicit server restart / disconnect, so a short TTL eliminates
+ *  the round-trip on every chat message. 60s is conservative — if a
+ *  user adds a tool live, the next chat picks it up. Invalidated on
+ *  disconnect / disable. */
+interface CachedTools { tools: McpTool[]; cachedAt: number }
+const TOOL_LISTS = new Map<string, CachedTools>();
+const TOOL_LIST_TTL_MS = 60_000;
+
 function clientIdentity(): { name: string; version: string } {
   return { name: "ariadne-mcp-client", version: "0.1.0" };
 }
@@ -148,17 +157,22 @@ async function getOrConnect(serverId: string): Promise<Client> {
 }
 
 export async function listTools(serverId: string): Promise<McpTool[]> {
+  const cached = TOOL_LISTS.get(serverId);
+  if (cached && Date.now() - cached.cachedAt < TOOL_LIST_TTL_MS) return cached.tools;
+
   const client = await getOrConnect(serverId);
   const resp = (await client.listTools()) as { tools?: Array<{
     name: string;
     description?: string;
     inputSchema?: Record<string, unknown>;
   }> };
-  return (resp.tools ?? []).map((t) => ({
+  const tools: McpTool[] = (resp.tools ?? []).map((t) => ({
     name: t.name,
     description: t.description ?? "",
     inputSchema: t.inputSchema ?? null,
   }));
+  TOOL_LISTS.set(serverId, { tools, cachedAt: Date.now() });
+  return tools;
 }
 
 export async function callTool(
@@ -205,6 +219,10 @@ export function isConnected(serverId: string): boolean {
 }
 
 export async function disconnect(serverId: string): Promise<void> {
+  // Always drop the tool-list cache, even if there's no live connection
+  // — a no-op disconnect after a server update should still surface the
+  // new tools on the next listTools() call.
+  TOOL_LISTS.delete(serverId);
   const cached = CONNECTIONS.get(serverId);
   if (!cached) return;
   CONNECTIONS.delete(serverId);

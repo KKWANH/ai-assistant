@@ -112,23 +112,18 @@ export async function buildChatContext(
     }
   }
 
-  // 2. Web search — await the decision (now overlapped with attachment I/O
-  //    above and the workspace I/O below).
+  // 2. Web search — kick off as soon as the decision resolves, but DO
+  //    NOT await it here. The actual HTTP round-trip runs in parallel
+  //    with the workspace I/O below; we await the result at the end,
+  //    just before assembling the final context block. This saves the
+  //    full search latency (typically 200–600ms with Tavily/Brave) when
+  //    a workspace chat also needs to read files.
   const wantsWebSearch = await webSearchPromise;
-  if (wantsWebSearch && userMessage.content.trim()) {
-    try {
-      const searchResp = await performSearch(userMessage.content.trim());
-      searchResults = searchResp.results;
-      if (searchResults.length > 0) {
-        const resultText = searchResults
-          .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
-          .join("\n\n");
-        webBlock = `--- Web search results (${searchResp.provider}) ---\n${resultText}`;
-      }
-    } catch {
-      // search failure is non-fatal
-    }
-  }
+  type SearchOk = Awaited<ReturnType<typeof performSearch>>;
+  const searchPromise: Promise<SearchOk | null> =
+    wantsWebSearch && userMessage.content.trim()
+      ? performSearch(userMessage.content.trim()).catch(() => null)
+      : Promise.resolve(null);
 
   // 3. Workspace context — file index + inline content of key files
   if (chat.workspaceId) {
@@ -137,14 +132,19 @@ export async function buildChatContext(
     // no block, no padding.
     const ws = dbGetWorkspace(chat.workspaceId);
     if (ws) {
-      memoryBlock = renderMemoryForPrompt(listMemories(ws.rootPath)) ?? undefined;
+      // Read memories once; used twice (full text for the block, count
+      // for the workspace-meta preamble). Each call scans the memories
+      // dir, so the prior double-call burned a directory walk per
+      // message.
+      const wsMemories = listMemories(ws.rootPath);
+      memoryBlock = renderMemoryForPrompt(wsMemories) ?? undefined;
       // Workspace meta — answers "이 프로젝트 설정 알려줘" / "이 폴더에
       // 메모리 몇 개 있어?" type questions without needing a tool call.
       // Cheap to compute (all local DB / .ariadne reads) so always
       // included when a workspace is attached. Counts only — full
       // memory text already in memoryBlock, full hooks YAML is too
       // long for this preamble.
-      const memCount = listMemories(ws.rootPath).length;
+      const memCount = wsMemories.length;
       const { actions } = loadWorkspaceActions(ws.rootPath);
       const hooks = loadHooks(ws.rootPath);
       const mcpServers = chat.createdBy
@@ -220,6 +220,20 @@ export async function buildChatContext(
   const historyTurns = buildHistoryText(history);
   if (historyTurns) {
     historyBlock = `--- Conversation history ---\n${historyTurns}`;
+  }
+
+  // Now resolve the parallel web-search promise — by this point the
+  // workspace I/O above has already happened, so we only pay the
+  // remaining search latency. If search hasn't finished yet, we wait
+  // here; if it errored or returned no results, webBlock stays
+  // undefined and the section drops out of `parts`.
+  const searchResp = await searchPromise;
+  if (searchResp && searchResp.results.length > 0) {
+    searchResults = searchResp.results;
+    const resultText = searchResp.results
+      .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
+      .join("\n\n");
+    webBlock = `--- Web search results (${searchResp.provider}) ---\n${resultText}`;
   }
 
   // 5. Current user message — assemble in the canonical section order.
@@ -339,9 +353,12 @@ async function parseUploadedFile(data: Buffer, name: string, _uploadId: string):
     return tryParseDocument(name, async () => {
       const mammoth = await import("mammoth");
       const tmp = path.join("/tmp", `ariadne-upload-${Date.now().toString()}.docx`);
-      fs.writeFileSync(tmp, data);
+      // Async writeFile — sync version blocks the event loop for the
+      // entire write, freezing the chat stream that's running on the
+      // same Fastify worker for the duration of the disk write.
+      await fs.promises.writeFile(tmp, data);
       const result = await mammoth.extractRawText({ path: tmp });
-      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+      try { await fs.promises.unlink(tmp); } catch { /* ignore */ }
       const text = result.value ?? "";
       return text.length > 8000 ? text.slice(0, 6000) + "\n[...truncated...]" : text;
     });
