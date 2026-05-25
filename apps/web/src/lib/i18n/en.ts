@@ -618,6 +618,10 @@ const en = {
   "tutorial.page.reports.p2": "Spot something off anywhere in the app? The report button sends it straight to the team. Attach a screenshot if helpful.",
   "tutorial.page.reports.statLabel": "This month",
   "tutorial.page.reports.queueLabel": "Open reports",
+  "tutorial.page.mcp.title": "MCP: plug in external tools",
+  "tutorial.page.mcp.p1": "MCP (Model Context Protocol) is an open standard for letting AI tools talk to external services. Think of it as USB for AI — any MCP-compatible tool plugs into Ariadne without custom integration.",
+  "tutorial.page.mcp.p2": "Register an MCP server in Settings → MCP servers. Common examples: @modelcontextprotocol/server-filesystem to give the agent access to a folder, @modelcontextprotocol/server-github for issues + PRs, or your own server in any language. Each registration spawns a local subprocess on first use.",
+  "tutorial.page.mcp.p3": "When the agent thinks an MCP tool is the right fit, it picks the 'mcp_call' tool — you'll see this in the run trace. Add MCP servers from local-only sessions only (they spawn shell processes on your machine).",
   "tutorial.page.ready.title": "You're ready",
   "tutorial.page.ready.p1": "That's the tour. The best next step is simply to try it — open the Tutorial workspace, or ask a question in the chat.",
   "tutorial.page.ready.p2": "You can reopen this tutorial any time from the Help button in the top bar.",
@@ -1036,11 +1040,12 @@ const en = {
   "diff.hooks.allPassed": "All {n} hook(s) passed",
   "diff.hooks.someFailed": "{failed} of {total} hook(s) failed",
 
-  // ── Instant chat mode (S2) ──────────────────────────────────────────────────
-  "chat.composer.instant": "Instant",
-  "chat.composer.instantOn": "Instant",
-  "chat.composer.instantLabel": "Instant mode — skip the pipeline for a fast reply",
-  "chat.composer.instantTip": "Skip retrieval, memory, and the agent classifier. Direct answer, no grounding. For chitchat or quick lookups when speed matters more than depth.",
+  // ── Reply mode (T1 — replaces separate Instant + Agent toggles) ────────────
+  "chat.composer.replyModeLabel": "Reply mode",
+  "chat.composer.replyModeTip": "Instant = direct answer, fastest. Auto = standard pipeline (workspace + memory + classifier decides if the agent is needed). Agent = always run the plan-and-execute loop. Default 'Auto' is right for most messages.",
+  "chat.composer.replyMode.instant": "Instant",
+  "chat.composer.replyMode.auto": "Auto",
+  "chat.composer.replyMode.agent": "Agent",
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -15,7 +15,6 @@ import {
   FileText,
   Play,
   MessageSquarePlus,
-  Globe,
 } from "lucide-react";
 import type { Chat, ChatMessage, GenerationStatus } from "@ariadne/shared";
 import {
@@ -81,13 +80,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       action: () => navigate("/workspaces"),
       actionLabel: t("chat.example.template.action"),
     },
-    {
-      icon: <Globe className="h-4 w-4 text-muted-foreground" />,
-      title: t("chat.example.web.title"),
-      body: t("chat.example.web.body"),
-      action: () => pulseComposer("toggle_web_search"),
-      actionLabel: t("chat.example.web.action"),
-    },
+    // Removed: web-search chip. The composer already has a permanent
+    // web toggle visible on every chat — promoting it as an empty-state
+    // chip duplicated discoverability without adding value.
   ];
 
   return (
@@ -354,23 +349,26 @@ function ThreadView({ chatId }: { chatId: string }) {
     attachments: { name: string; mediaType: string; dataBase64: string }[];
     webSearch: WebSearchMode;
     workspaceId: string | null;
-    agentMode: import("./ChatComposer").AgentMode;
-    mode: import("./ChatComposer").ReplyMode;
+    replyMode: import("./ChatComposer").ReplyMode;
   }) => {
     setSuggestion(null); // clear any stale chip from the previous turn
     setStreaming(true);
     try {
+      // Map the single-axis ReplyMode back to the server's (mode, agentMode)
+      // pair. The composer surface stays clean; the API contract stays
+      // backwards-compatible.
+      const apiMode = opts.replyMode === "instant" ? "instant" : undefined;
+      const apiAgentMode =
+        opts.replyMode === "agent" ? "on" :
+        opts.replyMode === "auto" ? "auto" : undefined;
       await sendMessage.mutateAsync({
         chatId,
         input: {
           content: opts.content,
           attachments: opts.attachments,
           webSearch: opts.webSearch,
-          // Forward the tri-state directly; backend accepts "off"|"auto"|"on"
-          // and legacy booleans. Skip the field for "off" to keep payloads slim.
-          agentMode: opts.agentMode === "off" ? undefined : opts.agentMode,
-          // Skip "standard" to keep the default payload unchanged.
-          mode: opts.mode === "instant" ? "instant" : undefined,
+          agentMode: apiAgentMode,
+          mode: apiMode,
         },
       });
     } catch (err) {
@@ -484,8 +482,7 @@ export function ChatView() {
     attachments: { name: string; mediaType: string; dataBase64: string }[];
     webSearch: WebSearchMode;
     workspaceId: string | null;
-    agentMode: import("./ChatComposer").AgentMode;
-    mode: import("./ChatComposer").ReplyMode;
+    replyMode: import("./ChatComposer").ReplyMode;
   }) => {
     setPending(true);
     try {
@@ -500,6 +497,10 @@ export function ChatView() {
       // Navigate immediately so user sees the thread
       navigate(`/chat/${chat.id}`, { replace: true });
 
+      const apiMode = opts.replyMode === "instant" ? "instant" : undefined;
+      const apiAgentMode =
+        opts.replyMode === "agent" ? "on" :
+        opts.replyMode === "auto" ? "auto" : undefined;
       // Send the message — streaming writes to the cache directly
       await sendMessage.mutateAsync({
         chatId: chat.id,
@@ -507,8 +508,8 @@ export function ChatView() {
           content: opts.content,
           attachments: opts.attachments,
           webSearch: opts.webSearch,
-          agentMode: opts.agentMode === "off" ? undefined : opts.agentMode,
-          mode: opts.mode === "instant" ? "instant" : undefined,
+          agentMode: apiAgentMode,
+          mode: apiMode,
         },
       });
     } catch (err) {

@@ -611,6 +611,10 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.reports.p2": "앱 어디서든 이상한 점이 보이나요? 신고 버튼이 곧바로 팀에 전달합니다. 스크린샷도 첨부 가능.",
   "tutorial.page.reports.statLabel": "이번 달",
   "tutorial.page.reports.queueLabel": "대기 중 신고",
+  "tutorial.page.mcp.title": "MCP: 외부 도구를 끼워 쓰기",
+  "tutorial.page.mcp.p1": "MCP(Model Context Protocol)는 AI가 외부 서비스와 대화하기 위한 공개 표준이에요. 'AI용 USB'라고 생각하시면 됩니다 — MCP를 지원하는 도구는 별도 작업 없이 Ariadne에 그대로 끼울 수 있어요.",
+  "tutorial.page.mcp.p2": "MCP 서버는 설정 → MCP 서버에서 등록해요. 대표적인 예: @modelcontextprotocol/server-filesystem (에이전트에게 특정 폴더 접근 권한 부여), @modelcontextprotocol/server-github (이슈·PR 조회), 또는 직접 만든 서버까지 어떤 언어든 가능. 등록된 서버는 처음 사용될 때 자식 프로세스로 자동 실행됩니다.",
+  "tutorial.page.mcp.p3": "에이전트가 MCP 도구가 필요하다고 판단하면 'mcp_call'이라는 도구를 골라요 — 실행 트레이스에서 확인할 수 있어요. MCP 서버 등록은 보안상 로컬(내 컴퓨터)에서만 가능합니다.",
   "tutorial.page.ready.title": "준비됐어요",
   "tutorial.page.ready.p1": "투어는 여기까지입니다. 가장 좋은 다음 단계는 직접 해 보는 것 — '튜토리얼 워크스페이스'를 열거나 채팅에 질문을 입력해 보세요.",
   "tutorial.page.ready.p2": "이 튜토리얼은 상단 바의 도움말 버튼에서 언제든 다시 열 수 있습니다.",
@@ -1029,11 +1033,12 @@ const ko: Record<TranslationKey, string> = {
   "diff.hooks.allPassed": "훅 {n}개 모두 통과",
   "diff.hooks.someFailed": "훅 {failed}/{total} 실패",
 
-  // ── 즉답 모드 (S2) ──────────────────────────────────────────────────────
-  "chat.composer.instant": "즉답",
-  "chat.composer.instantOn": "즉답",
-  "chat.composer.instantLabel": "즉답 모드 — 파이프라인 생략하고 빠르게 답변",
-  "chat.composer.instantTip": "검색·메모리·에이전트 판단 다 건너뛰고 모델에 바로 물어봅니다. 잡담이나 빠른 한 줄 답이 필요할 때 좋아요. 워크스페이스 자료는 참조하지 않습니다.",
+  // ── 답변 모드 (T1 — Instant + Agent를 하나의 선택지로 통합) ─────────────
+  "chat.composer.replyModeLabel": "답변 모드",
+  "chat.composer.replyModeTip": "즉답 = 바로 답, 가장 빠름. 자동 = 표준 흐름(자료 폴더 + 메모리 참조, 에이전트 필요 여부는 자동 판단). Agent = 항상 다단계 계획 실행. 평소엔 '자동'이면 충분해요.",
+  "chat.composer.replyMode.instant": "즉답",
+  "chat.composer.replyMode.auto": "자동",
+  "chat.composer.replyMode.agent": "Agent",
 };
 
 export default ko;

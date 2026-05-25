@@ -17,11 +17,9 @@ import {
   Image,
   Cpu,
   AlertCircle,
-  Bot,
   Zap,
   Play,
   Sparkles,
-  Rabbit,
 } from "lucide-react";
 import type { PostAttachmentInput } from "@ariadne/shared";
 import {
@@ -33,6 +31,7 @@ import {
 import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe, useSkills } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
 import { modelInfo, modelPrice } from "../../lib/modelInfo";
@@ -58,11 +57,20 @@ export interface PendingAttachment {
 
 /** Web-search mode: off (never), auto (the server decides), on (always). */
 export type WebSearchMode = "off" | "auto" | "on";
+/** Public, single-axis reply mode that wraps the prior server-side
+ *  (mode, agentMode) pair into one ergonomic state:
+ *    - "instant" → fastest path, skips every classifier + retrieval +
+ *      memory. Direct provider stream. (server: mode="instant")
+ *    - "auto" → standard pipeline; the server's classifier decides
+ *      whether to spin up the plan-and-execute agent per message.
+ *      The everyday default. (server: mode="standard", agentMode="auto")
+ *    - "agent" → standard pipeline + always-on agent loop. For
+ *      multi-step research / coding work. (server: mode="standard",
+ *      agentMode="on") */
+export type ReplyMode = "instant" | "auto" | "agent";
+/** Legacy alias kept so older callers that destructure {agentMode}
+ *  from onSend still compile. New code should use ReplyMode. */
 export type AgentMode = "off" | "auto" | "on";
-/** "standard" runs the full pipeline (retrieval, memory, optional agent).
- *  "instant" skips everything for a direct provider stream — fastest
- *  reply, no workspace grounding. */
-export type ReplyMode = "standard" | "instant";
 
 export interface ChatComposerProps {
   onSend: (opts: {
@@ -70,8 +78,7 @@ export interface ChatComposerProps {
     attachments: PostAttachmentInput[];
     webSearch: WebSearchMode;
     workspaceId: string | null;
-    agentMode: AgentMode;
-    mode: ReplyMode;
+    replyMode: ReplyMode;
   }) => void;
   disabled?: boolean;
   pending?: boolean;
@@ -323,16 +330,12 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  // Plain chat is the default: agent mode is opt-in, web search is "auto"
-  // (the server decides per message). Both stay sticky across messages.
+  // Plain chat is the default: web search is "auto" (server decides
+  // per message), reply mode is "auto" (server's classifier picks
+  // between standard chat and the agent loop per message). Both stay
+  // sticky across messages within a chat.
   const [webMode, setWebMode] = useState<WebSearchMode>("auto");
-  const [agentMode, setAgentMode] = useState<AgentMode>("off");
-  // Reply mode — sticky across messages within a chat. "instant" skips
-  // the multi-stage pipeline (no classifier, no retrieval, no memory)
-  // for fast answers. Standard users keep the existing default;
-  // Simple-mode (Easy) users default to instant so mom's "ask question,
-  // get answer fast" expectation is met out of the box.
-  const [replyMode, setReplyMode] = useState<ReplyMode>("standard");
+  const [replyMode, setReplyMode] = useState<ReplyMode>("auto");
   // Skill picker — opens via the Sparkles button OR when the composer
   // starts with "/" (slash-command autocomplete). The state below tracks
   // which trigger opened it so the filter logic stays separate.
@@ -373,11 +376,11 @@ export function ChatComposer({
   // Easy mode shows friendly model names + a one-line trait instead of raw ids.
   const isSimple = me?.account.mode === "simple";
 
-  // Simple-mode users default to instant — the multi-stage pipeline
+  // Simple-mode users default to "instant" — the multi-stage pipeline
   // wastes seconds on mom-grade queries that just want a quick answer.
   // Use a one-shot effect keyed on isSimple so toggling Easy mode in
   // Settings flips this immediately without forcing the user to
-  // re-toggle in every chat.
+  // re-toggle in every chat. Standard users keep "auto".
   useEffect(() => {
     if (isSimple) setReplyMode("instant");
   }, [isSimple]);
@@ -496,14 +499,13 @@ export function ChatComposer({
         dataBase64: a.dataBase64,
       })),
       webSearch: webMode,
-      mode: replyMode,
       workspaceId: chatComposerWorkspaceId,
-      agentMode,
+      replyMode,
     });
 
     setContent("");
     setAttachments([]);
-    // webMode & agentMode stay sticky across messages within a chat.
+    // webMode & replyMode stay sticky across messages within a chat.
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -729,32 +731,24 @@ export function ChatComposer({
             }}
           />
 
-          {/* Instant-mode toggle. When on, the server skips every
-              classifier / retrieval / memory step and streams the
-              direct provider reply — speed-first, no workspace
-              grounding. Off = standard pipeline (the default). */}
-          <Tooltip content={t("chat.composer.instantTip")} className="shrink-0">
-            <button
-              type="button"
-              aria-label={t("chat.composer.instantLabel")}
-              className={[
-                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-                replyMode === "instant"
-                  ? "text-accent bg-accent/10 border border-accent/20"
-                  : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
-              ].join(" ")}
-              onClick={() =>
-                setReplyMode((m) => (m === "instant" ? "standard" : "instant"))
-              }
-              disabled={disabled}
-            >
-              <Rabbit className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">
-                {replyMode === "instant"
-                  ? t("chat.composer.instantOn")
-                  : t("chat.composer.instant")}
-              </span>
-            </button>
+          {/* Reply mode — single tri-state selector replacing the prior
+              Instant + Agent toggles. Visible in BOTH simple and standard
+              modes so non-developers also discover that "Agent" is an
+              option, not a hidden feature. */}
+          <Tooltip content={t("chat.composer.replyModeTip")} rich className="shrink-0">
+            <span>
+              <SegmentedControl<ReplyMode>
+                ariaLabel={t("chat.composer.replyModeLabel")}
+                options={[
+                  { value: "instant", label: t("chat.composer.replyMode.instant") },
+                  { value: "auto", label: t("chat.composer.replyMode.auto") },
+                  { value: "agent", label: t("chat.composer.replyMode.agent") },
+                ]}
+                value={replyMode}
+                onChange={setReplyMode}
+                disabled={disabled}
+              />
+            </span>
           </Tooltip>
 
           {/* Web search toggle — cycles Off → Auto → On.
@@ -784,40 +778,6 @@ export function ChatComposer({
               </span>
             </button>
           </Tooltip>
-
-          {/* Agent mode toggle — off → auto → on, mirrors the web-search cycle.
-              auto lets the server's classifier decide per message. Hidden in
-              Simple mode (Easy users don't need plan-and-execute). */}
-          {!isSimple && (
-            <Tooltip content={t("composer.tip.agent")} rich className="shrink-0">
-              <button
-                type="button"
-                className={[
-                  "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-                  agentMode === "on"
-                    ? "text-accent bg-accent/10 border border-accent/20"
-                    : agentMode === "auto"
-                      ? "text-foreground hover:bg-surface-3"
-                      : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
-                ].join(" ")}
-                onClick={() =>
-                  setAgentMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
-                }
-                disabled={disabled}
-                aria-label={t("chat.composer.agentCycle")}
-                title={t("chat.composer.agentCycle")}
-              >
-                <Bot className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {agentMode === "on"
-                    ? t("chat.composer.agentOn")
-                    : agentMode === "auto"
-                      ? t("chat.composer.agentAuto")
-                      : t("chat.composer.agent")}
-                </span>
-              </button>
-            </Tooltip>
-          )}
 
           {/* Skills picker — account-scoped reusable prompt snippets.
               Opens via this button or via slash-command autocomplete in the

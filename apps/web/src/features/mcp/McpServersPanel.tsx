@@ -22,6 +22,7 @@ import {
   ChevronDown,
   ChevronRight,
   Network,
+  AlertCircle,
 } from "lucide-react";
 import type { McpTool } from "@ariadne/shared";
 import {
@@ -200,6 +201,17 @@ function McpServerCard({
           <div className="mt-1 text-2xs text-muted-foreground font-mono break-all">
             {server.command} {server.args.join(" ")}
           </div>
+          {/* Inline persistent error — without this the only place the
+              user sees WHY a test failed is the toast (which dismisses
+              in ~3s) or the badge tooltip (hidden on mobile). */}
+          {lastTest && !lastTest.ok && lastTest.detail && (
+            <div className="mt-2 rounded-md bg-destructive/10 border border-destructive/30 px-2.5 py-1.5 flex items-start gap-1.5">
+              <AlertCircle className="h-3 w-3 text-destructive shrink-0 mt-0.5" />
+              <pre className="text-2xs text-destructive whitespace-pre-wrap break-words leading-relaxed font-mono">
+                {lastTest.detail}
+              </pre>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <Button

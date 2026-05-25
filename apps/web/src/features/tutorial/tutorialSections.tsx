@@ -103,6 +103,14 @@ export function getTutorialSections(t: TFn): TutorialSection[] {
       visual: <DashboardDemo />,
     },
     {
+      id: "mcp",
+      title: t("tutorial.page.mcp.title"),
+      body: <Body paras={[t("tutorial.page.mcp.p1"), t("tutorial.page.mcp.p2"), t("tutorial.page.mcp.p3")]} />,
+      // Reuse the agent flow diagram — MCP is "agent calls an external
+      // tool", same shape, no need to draw a separate visual yet.
+      visual: <AgentFlowDiagram />,
+    },
+    {
       id: "ready",
       title: t("tutorial.page.ready.title"),
       body: <Body paras={[t("tutorial.page.ready.p1"), t("tutorial.page.ready.p2")]} />,
