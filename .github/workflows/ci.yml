@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch — no value in finishing
+# a stale build when a new commit is already in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        # ci is strict-lockfile + skips lifecycle scripts we don't need.
+        # If/when a package-lock.json conflict appears, swap to `npm install`
+        # behind a clear PR description; don't auto-fix in CI.
+        run: npm ci
+
+      - name: Typecheck (all packages)
+        run: npm run typecheck
+
+      - name: Retrieval eval (gate — fails build on regression)
+        # eval:retrieval:ci runs against the in-repo fixtures with no
+        # AI keys required (keyword-only path). Thresholds are encoded
+        # in apps/server/src/eval/gates.yaml; this job fails if any
+        # metric drops below them on the current commit.
+        run: npm run eval:retrieval:ci
+
+  build-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: typecheck-and-eval
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build:web
+      # Upload as an artifact so a reviewer on a PR can grab the bundle
+      # without needing a local environment. Cheap; expires in 7 days.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-bundle-${{ github.sha }}
+          path: apps/web/dist
+          retention-days: 7

@@ -16,7 +16,26 @@ this owns *why it exists*.
 > automates, and edits with staged-diff review, and gets measurably better
 > the more you use it.**
 
-Six load-bearing words:
+### Promotion-learning, not "self-learning"
+
+> **Ariadne does not train on your data. It improves by turning your
+> corrections into eval cases the next version has to pass.**
+
+This is the tagline that goes on the launch post + the top of the
+README + every external pitch. It is the **honest** version of the
+"self-learning agent" claim other tools make. Importantly, it is
+*also* the version we can prove: every promoted eval case is a public
+artifact in `apps/server/src/eval/cases/` that any reviewer can
+re-run with `npm run eval:retrieval:promoted`.
+
+Drop this language in three places, in this order of priority:
+
+1. **README headline** (above-the-fold quote)
+2. **Show HN / r/LocalLLaMA / GeekNews launch posts** — leads the body
+3. **Onboarding / tutorial page 1** — replaces any vague "AI learns
+   from you" copy
+
+Six load-bearing words in the one-line frame:
 
 | Word | Why it's in the sentence |
 |---|---|
