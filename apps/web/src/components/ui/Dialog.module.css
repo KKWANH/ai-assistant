@@ -6,7 +6,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  /* Phone safe-area-aware padding so the panel doesn't get clipped by
+     the iOS home indicator (bottom) or landscape notch (right). */
+  padding: max(1rem, env(safe-area-inset-top, 0px))
+           max(1rem, env(safe-area-inset-right, 0px))
+           max(1rem, env(safe-area-inset-bottom, 0px))
+           max(1rem, env(safe-area-inset-left, 0px));
 }
 
 .backdrop {
@@ -20,6 +25,11 @@
   position: relative;
   z-index: 10;
   width: 100%;
+  /* Phone-safe height — body content scrolls instead of pushing off
+     screen when the dialog is taller than the viewport. */
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius-2xl);
   border: 1px solid rgb(var(--border));
   background-color: rgb(var(--card));
@@ -56,4 +66,8 @@
 /* ── Body ── */
 .body {
   padding: 1rem 1.25rem;
+  /* Scroll inside the body when content overflows the panel's max
+     height — header (and the close button up there) stay pinned. */
+  overflow-y: auto;
+  min-height: 0;
 }
