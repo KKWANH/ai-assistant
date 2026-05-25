@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Ariadne — local-first AI workspace for traceable, repeatable work.",
+  "license": "MIT",
+  "author": "Kwanho Kim",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KKWANH/ai-assistant.git"
+  },
   "type": "module",
   "workspaces": [
     "packages/*",
