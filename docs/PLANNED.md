@@ -95,7 +95,27 @@ coding work.
 
 ---
 
-## 3. Other deferred items (from earlier conversations)
+## 3. Desktop app (Tauri sidecar)
+
+> "웹 뿐 아니라 코드그대로 재사용해서 프로그램으로 만들어서 앱으로 만드는
+> 기획은 어때?"
+
+Wrap the existing Node server + React SPA in a Tauri shell so users
+double-click an icon instead of `git clone`. Architecture, phasing, native
+dep handling, signing/notarization, and open decisions are written up in
+full at [`docs/DESKTOP_APP_PLAN.md`](DESKTOP_APP_PLAN.md).
+
+**TL;DR:** sidecar pattern (Tauri Rust shell hosts WKWebView + spawns the
+unchanged Node server). One small code change required up-front
+(`ARIADNE_PORT` env var in `apps/server/src/index.ts`). Phase 0 spike: 1–2
+days. macOS-first MVP: 1 week. Win + Linux: another week.
+
+**Effort estimate:** 2–3 batches for v1 (macOS only). Multi-platform CI is
+another batch.
+
+---
+
+## 4. Other deferred items (from earlier conversations)
 
 - **Embedding-based retrieval** to replace the current keyword ranker
   in `apps/server/src/services/retrieval.ts`. Interface is already
