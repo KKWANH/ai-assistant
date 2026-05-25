@@ -152,15 +152,21 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     status: "pending" as const,
   }));
 
-  // Explicit-on web search must always reach the answer. If the planner
-  // returned an empty plan but the user explicitly toggled web search
-  // on, prepend a single web_search step so the standard execution
-  // loop runs the search + feeds the results into the synthesis. Without
-  // this, the planner silently overrules the user (the bug the dev-
-  // persona audit V3 caught: "TensorFlow is MIT" hallucination on a
-  // license-comparison prompt with web search explicitly on).
-  if (steps.length === 0 && webSearchMode === "on" && userMessage.trim()) {
-    steps.push({
+  // Explicit-on web search must always reach the answer. If the user
+  // toggled web search on but the plan doesn't already include a
+  // web_search step (empty plan OR a 1-step reason/think plan), prepend
+  // one so the execution loop runs the search and feeds the results
+  // into synthesis. Without this, the planner silently overrules the
+  // user — the bug the dev-persona audit V3 caught ("TensorFlow is MIT"
+  // hallucination on a license-comparison prompt with web search on),
+  // and the V2.1 residual gap where a 1-step `[{tool:"reason"}]` plan
+  // bypassed the original `steps.length === 0` guard.
+  if (
+    webSearchMode === "on"
+    && userMessage.trim()
+    && !steps.some((s) => s.tool === "web_search")
+  ) {
+    steps.unshift({
       id: crypto.randomUUID(),
       description: userMessage.trim().slice(0, 240),
       tool: "web_search",
