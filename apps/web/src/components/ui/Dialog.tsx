@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode, useRef } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton";
+import { useT } from "../../lib/i18n";
 import styles from "./Dialog.module.css";
 
 export interface DialogProps {
@@ -28,6 +29,7 @@ export function Dialog({
   className = "",
   size = "md",
 }: DialogProps) {
+  const { t } = useT();
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,7 +85,7 @@ export function Dialog({
                 <p className={styles["description"]!}>{description}</p>
               )}
             </div>
-            <IconButton label="Close dialog" size="sm" onClick={onClose}>
+            <IconButton label={t("common.close")} size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </IconButton>
           </div>

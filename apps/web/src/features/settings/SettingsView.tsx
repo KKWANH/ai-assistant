@@ -521,11 +521,11 @@ function SkillRow({
         <div className="text-xs font-medium text-foreground flex items-center gap-1.5">
           /{skill.name}
           {skill.builtin && (
-            <span className="text-2xs text-muted-foreground font-normal">· built-in</span>
+            <span className="text-2xs text-muted-foreground font-normal">· {t("runs.template.builtIn")}</span>
           )}
           {(skill.variables?.length ?? 0) > 0 && (
             <span className="text-2xs text-accent font-normal">
-              · {(skill.variables?.length ?? 0).toString()} input{(skill.variables?.length ?? 0) > 1 ? "s" : ""}
+              · {t("skills.inputCount", { n: skill.variables?.length ?? 0 })}
             </span>
           )}
         </div>

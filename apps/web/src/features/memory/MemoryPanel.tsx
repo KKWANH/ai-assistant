@@ -24,6 +24,7 @@ import { Card } from "../../components/ui/Card";
 import { Textarea } from "../../components/ui/Textarea";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
+import { useMe } from "../../lib/queries";
 
 const MAX_LEN = 500;
 
@@ -67,6 +68,8 @@ export function MemoryPanel({ workspaceId }: { workspaceId: string }) {
   const { t } = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: me } = useMe();
+  const isSimple = me?.account.mode === "simple";
   const { data, isLoading } = useQuery({
     queryKey: memoryKey(workspaceId),
     queryFn: () => listWorkspaceMemory(workspaceId),
@@ -124,7 +127,7 @@ export function MemoryPanel({ workspaceId }: { workspaceId: string }) {
           <BrainCircuit className="h-4 w-4 text-accent" />
           <h2 className="text-base font-medium text-foreground">{t("memory.panel.title")}</h2>
         </div>
-        <p className="text-xs text-muted-foreground">{t("memory.panel.subtitle")}</p>
+        <p className="text-xs text-muted-foreground">{t(isSimple ? "memory.panel.subtitle.simple" : "memory.panel.subtitle")}</p>
       </div>
 
       <Card className="p-3 flex flex-col gap-2">

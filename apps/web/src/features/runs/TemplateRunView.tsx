@@ -247,7 +247,8 @@ export function TemplateRunView() {
               </span>
             )}
           </span>
-          <Badge variant="estimated">Estimated</Badge>
+          {/* Badge looks up its own label from variant → badge.status.estimated */}
+          <Badge variant="estimated" />
         </Card>
 
         {!workspaceId && (

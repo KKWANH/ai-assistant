@@ -811,7 +811,7 @@ export function WorkspaceOverview() {
                         <span>·</span>
                         <span className="flex items-center gap-1 text-success">
                           <CheckCircle2 className="h-3 w-3" />
-                          {run.evidenceCount} claims
+                          {t("runs.detail.claims", { n: run.evidenceCount })}
                         </span>
                       </>
                     )}

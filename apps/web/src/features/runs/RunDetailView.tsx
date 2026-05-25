@@ -18,6 +18,7 @@ import {
   useWorkspace,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
+import type { TranslationKey } from "../../lib/i18n/en";
 import { Badge } from "../../components/ui/Badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { TraceTimeline } from "../../components/ui/TraceTimeline";
@@ -43,25 +44,30 @@ const PHASES = [
   "artifacts",
 ];
 
-const PHASE_LABELS: Record<string, string> = {
-  scan: "Scanning",
-  manifest: "Manifest",
-  candidate_select: "Selecting context",
-  context_approved: "Context approved",
-  focused_read: "Reading files",
-  brief: "Generating brief",
-  claims: "Extracting claims",
-  evidence: "Mapping evidence",
-  unsupported: "Unsupported claims",
-  diff: "Computing diff",
-  artifacts: "Writing artifacts",
+// Phase id → i18n key. The keys already exist in ko.ts / en.ts as
+// trace.phase.* — earlier this map was hardcoded English, bypassing
+// i18n. Now Korean users see "스캔 중", "브리핑 생성됨" etc.
+const PHASE_KEYS: Record<string, TranslationKey> = {
+  scan: "trace.phase.scan",
+  manifest: "trace.phase.manifest",
+  candidate_select: "trace.phase.candidateSelect",
+  context_approved: "trace.phase.contextApproved",
+  focused_read: "trace.phase.focusedRead",
+  brief: "trace.phase.brief",
+  claims: "trace.phase.claims",
+  evidence: "trace.phase.evidence",
+  unsupported: "trace.phase.unsupported",
+  diff: "trace.phase.diff",
+  artifacts: "trace.phase.artifacts",
 };
 
 function PhaseProgress({ trace }: { trace: TraceEvent[] }) {
+  const { t } = useT();
   const lastEvent = trace.at(-1);
   const currentPhase = lastEvent?.phase ?? "";
   const currentIdx = PHASES.indexOf(currentPhase);
-  const label = PHASE_LABELS[currentPhase] ?? currentPhase;
+  const phaseKey = PHASE_KEYS[currentPhase];
+  const label = phaseKey ? t(phaseKey) : currentPhase;
 
   return (
     <div className="flex flex-col gap-1.5">

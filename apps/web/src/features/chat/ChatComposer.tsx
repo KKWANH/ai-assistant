@@ -273,12 +273,12 @@ function SkillsDropdown({
                       )}
                       {s.builtin && (
                         <span className="text-2xs text-muted-foreground font-normal">
-                          built-in
+                          {t("runs.template.builtIn")}
                         </span>
                       )}
                       {hasVars && (
                         <span className="ml-auto text-2xs text-accent font-normal">
-                          {(s.variables?.length ?? 0).toString()} input{(s.variables?.length ?? 0) > 1 ? "s" : ""}
+                          {t("skills.inputCount", { n: s.variables?.length ?? 0 })}
                         </span>
                       )}
                     </span>
@@ -761,7 +761,7 @@ export function ChatComposer({
               Instant + Agent toggles. Visible in BOTH simple and standard
               modes so non-developers also discover that "Agent" is an
               option, not a hidden feature. */}
-          <Tooltip content={t("chat.composer.replyModeTip")} rich className="shrink-0">
+          <Tooltip content={t(isSimple ? "chat.composer.replyModeTip.simple" : "chat.composer.replyModeTip")} rich className="shrink-0">
             <span>
               <SegmentedControl<ReplyMode>
                 ariaLabel={t("chat.composer.replyModeLabel")}

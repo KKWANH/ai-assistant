@@ -208,8 +208,10 @@ const ko: Record<TranslationKey, string> = {
   "workspace.search.noStrategy": "매칭 없음",
   "workspace.search.score": "점수",
   "workspace.search.error": "검색 실패",
-  "workspace.search.emptyState": "위에 쿼리를 입력해서 이 워크스페이스 파일들을 검색하세요. 채팅이 쓰는 같은 retrieval 엔진을 사용 — 임베딩 인덱스가 있으면 코사인 유사도, 없으면 키워드 랭커.",
-  "workspace.search.noResults": "매칭이 없어요. 다른 키워드를 시도하거나, 아직 스캔 안 했으면 먼저 스캔하세요.",
+  // translator-qa §3: "쿼리·retrieval·임베딩·코사인 유사도·키워드
+  // 랭커" 모두 jargon. 평이한 한국어로.
+  "workspace.search.emptyState": "위에 검색어를 입력해 보세요. 채팅이 쓰는 것과 같은 검색 엔진으로 이 자료 폴더의 파일들을 찾아 줍니다.",
+  "workspace.search.noResults": "검색 결과가 없어요. 다른 단어로 다시 해 보거나, 아직 폴더를 읽지 않았다면 '파일 스캔'을 먼저 눌러 주세요.",
   "workspace.fileEditor.stage": "변경 스테이지",
   "workspace.fileEditor.staged": "리뷰용으로 스테이지됨",
   "workspace.fileEditor.stageFailed": "스테이지 실패",
@@ -268,14 +270,14 @@ const ko: Record<TranslationKey, string> = {
   "workspace.data.unsaved": "저장하지 않은 변경",
   "workspace.data.stage": "스테이지",
   "workspace.data.staged": "리뷰용으로 스테이지됨",
-  "workspace.data.stagedDetail": "+{added} / −{removed} 줄. Review를 눌러 diff 확인 후 적용하세요.",
+  "workspace.data.stagedDetail": "+{added} / −{removed} 줄. '검토 & 적용'을 눌러 변경 내용을 확인한 뒤 적용하세요.",
   "workspace.data.stagedShort": "+{added} / −{removed} 줄 스테이지됨.",
   "workspace.data.review": "검토 & 적용",
   "workspace.data.stageDismiss": "닫기",
 
   // Create workspace dialog
   "workspace.dialog.title": "새 워크스페이스",
-  "workspace.dialog.description": "로컬 폴더를 연결해 추적 가능한 워크스페이스를 시작하세요.",
+  "workspace.dialog.description": "내 컴퓨터의 폴더를 연결해 자료 폴더(워크스페이스)로 만들어 보세요.",
   "workspace.dialog.nameLabel": "워크스페이스 이름",
   "workspace.dialog.namePlaceholder": "내 연구 폴더",
   "workspace.dialog.nameRequired": "이름을 입력해 주세요.",
@@ -291,7 +293,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.starterBudgetDesc": "수입·지출 대시보드 — 현금 흐름과 저축률 차트 포함.",
   "workspace.dialog.starterReading": "독서 라이브러리",
   "workspace.dialog.starterReadingDesc": "책과 자료를 상태·평점·독서 속도 차트로 추적합니다.",
-  "workspace.dialog.starterChefbook": "Chefbook",
+  "workspace.dialog.starterChefbook": "냉장고 레시피북",
   "workspace.dialog.starterChefbookDesc": "냉장고 재료·도구·레시피를 한 곳에 — 만료 임박 알림과 칼로리 태그 포함.",
   "workspace.dialog.starterCode": "코드 프로젝트",
   "workspace.dialog.starterCodeDesc": "작은 TypeScript 프로젝트 + edit_file 데모 액션 — staged-diff 워크플로우 연습용 안전한 샌드박스.",
@@ -305,7 +307,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.excludeLabel": "제외할 파일",
   "workspace.dialog.excludeHelp": "위 목록에 맞더라도 제외할 패턴 — 한 줄에 하나씩.",
   "workspace.dialog.createBtn": "워크스페이스 만들기",
-  "workspace.dialog.created": "워크스페이스가 만들어졌습니다",
+  "workspace.dialog.created": "새 자료 폴더가 준비됐어요",
   "workspace.dialog.failed": "워크스페이스를 만들 수 없습니다",
 
   // FolderPicker
@@ -559,6 +561,19 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.getStarted": "시작하기",
   "tutorial.page.progress": "{current} / {total}",
   "tutorial.page.exampleBadge": "예시",
+  // 좌측 사이드 레일용 짧은 라벨 (X2 / translator-qa §6)
+  "tutorial.page.welcome.shortTitle": "환영합니다",
+  "tutorial.page.chat.shortTitle": "대화부터 시작",
+  "tutorial.page.attach.shortTitle": "파일 가져오기",
+  "tutorial.page.workspaces.shortTitle": "자료 폴더",
+  "tutorial.page.templates.shortTitle": "템플릿",
+  "tutorial.page.evidence.shortTitle": "출처",
+  "tutorial.page.actions.shortTitle": "액션",
+  "tutorial.page.intent.shortTitle": "자동 매칭",
+  "tutorial.page.agent.shortTitle": "에이전트",
+  "tutorial.page.reports.shortTitle": "피드백",
+  "tutorial.page.mcp.shortTitle": "MCP",
+  "tutorial.page.ready.shortTitle": "준비됐어요",
   "tutorial.page.welcome.title": "Ariadne에 오신 것을 환영합니다",
   "tutorial.page.welcome.p1": "Ariadne는 내 컴퓨터에서 돌아가는 AI 도우미예요. 답을 줄 때마다 어디서 가져온 정보인지 함께 알려줘서, 그대로 믿어도 되는지 바로 확인할 수 있어요.",
   "tutorial.page.welcome.p2": "이 가이드는 몇 분이면 됩니다. 페이지마다 그림과 함께 하나씩 설명해요 — 컴퓨터 잘 몰라도 괜찮아요. 이전·다음 버튼이나 왼쪽 목록으로 원하는 곳으로 바로 갈 수 있어요.",
@@ -589,13 +604,13 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.evidence.claim3": "이 추세는 내년에도 이어질 것",
   "tutorial.page.actions.title": "재사용 가능한 액션 만들기",
   "tutorial.page.actions.p1": "액션은 몇 개의 블록 — 파일 읽기, AI에게 질문, 인터넷 분석, 스크립트 실행 — 을 엮어 결과를 만듭니다. 한 번 만들고 '만들기 및 실행' 탭에서 언제든 실행하세요.",
-  "tutorial.page.actions.p2": "각 블록의 출력이 다음 블록으로 흘러갑니다 — \"holdings.csv 읽기\" → \"세 줄로 요약\"이면 언제든 돌릴 수 있는 포트폴리오 브리핑이 됩니다.",
+  "tutorial.page.actions.p2": "각 블록의 출력이 다음 블록으로 이어집니다. 예를 들어 \"holdings.csv 읽기\" → \"세 줄로 요약\"이면 언제든 돌릴 수 있는 포트폴리오 요약 리포트가 됩니다.",
   "tutorial.page.actions.nodeRead": "파일 읽기",
   "tutorial.page.actions.nodeAsk": "AI에게 질문",
   "tutorial.page.actions.nodeRun": "실행",
   "tutorial.page.intent.title": "대화에서 들어오는 제안",
   "tutorial.page.intent.p1": "워크스페이스 안에서 대화하다가 메시지가 액션과 맞아떨어지면, Ariadne가 입력창 위에 한 번 클릭으로 실행할 수 있는 칩으로 조용히 제안합니다.",
-  "tutorial.page.intent.p2": "Run을 누르면 그 액션이 바로 시작되고, 닫기를 누르면 사라집니다. 잘못 매칭하지 않도록 보수적으로 동작하고, 답변을 막지 않습니다.",
+  "tutorial.page.intent.p2": "'실행'을 누르면 그 액션이 바로 시작되고, '닫기'를 누르면 사라집니다. 잘못 매칭하지 않도록 보수적으로 동작하고, 답변을 막지 않습니다.",
   "tutorial.page.intent.nodeChat": "의도 표현",
   "tutorial.page.intent.nodeDetect": "AI 매칭",
   "tutorial.page.intent.nodeSuggest": "액션 칩",
@@ -606,7 +621,7 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.agent.nodePlan": "계획",
   "tutorial.page.agent.nodeRun": "단계 실행",
   "tutorial.page.agent.nodeAnswer": "답변",
-  "tutorial.page.reports.title": "메인테이너에게 피드백 보내기",
+  "tutorial.page.reports.title": "팀에 피드백 보내기",
   "tutorial.page.reports.p1": "여기의 리포트는 사용자 피드백이지 액션 실행 기록이 아닙니다. 누구나 제출할 수 있고, 관리자가 검토해서 진짜 버그면 미리 채워진 링크로 GitHub 이슈를 엽니다.",
   "tutorial.page.reports.p2": "앱 어디서든 이상한 점이 보이나요? 신고 버튼이 곧바로 팀에 전달합니다. 스크린샷도 첨부 가능.",
   "tutorial.page.reports.statLabel": "이번 달",
@@ -617,7 +632,7 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.mcp.p3": "에이전트가 MCP 도구가 필요하다고 판단하면 'mcp_call'이라는 도구를 골라요 — 실행 트레이스에서 확인할 수 있어요. MCP 서버 등록은 보안상 로컬(내 컴퓨터)에서만 가능합니다.",
   "tutorial.page.ready.title": "준비됐어요",
   "tutorial.page.ready.p1": "투어는 여기까지입니다. 가장 좋은 다음 단계는 직접 해 보는 것 — '튜토리얼 워크스페이스'를 열거나 채팅에 질문을 입력해 보세요.",
-  "tutorial.page.ready.p2": "이 튜토리얼은 언제든 다시 열 수 있어요 — 빈 채팅 화면의 \"처음이신가요? 튜토리얼 보기 →\" 링크나, Standard 모드일 때 상단의 도움말(?) 버튼에서 볼 수 있습니다.",
+  "tutorial.page.ready.p2": "이 튜토리얼은 언제든 다시 열 수 있어요 — 빈 채팅 화면의 \"처음이신가요? 튜토리얼 보기 →\" 링크나, 표준 모드일 때 상단의 도움말(?) 버튼에서 볼 수 있습니다.",
 
   // ── Inspector ───────────────────────────────────────────────────────────────
   "inspector.title": "인스펙터",
@@ -793,7 +808,7 @@ const ko: Record<TranslationKey, string> = {
   "schedules.failed": "스케줄을 저장하지 못했습니다",
   "workspace.history.title": "실행 기록",
   "workspace.history.filesChanged": "{n}개 파일",
-  "workspace.history.rewind": "이 적용 되돌리기",
+  "workspace.history.rewind": "이 변경 되돌리기",
   "workspace.history.rewindConfirm": "이 apply 직전 상태로 워크스페이스를 복원할까요? 'rewind' 커밋이 기록에 새로 추가됩니다.",
   "workspace.history.rewindSuccess": "{n}개 파일을 복원했습니다",
   "workspace.history.rewindFailed": "되돌릴 수 없습니다",
@@ -834,6 +849,19 @@ const ko: Record<TranslationKey, string> = {
   "badge.status.generating": "생성 중",
   "badge.status.completed": "완료",
   "badge.status.failed": "실패",
+  // X1: missing badge labels that previously hardcoded English. Used by
+  // Badge.tsx + EvidenceBadge.tsx via variant → key lookup.
+  "badge.status.supported": "근거 있음",
+  "badge.status.partial": "부분 근거",
+  "badge.status.inferred": "추론",
+  "badge.status.unsupported": "근거 없음",
+  "badge.status.sensitive": "민감",
+  "badge.status.largeFile": "대용량 파일",
+  "badge.status.estimated": "예상치",
+  "skills.inputCount": "입력값 {n}개",
+  "commandMenu.hint.navigate": "이동",
+  "commandMenu.hint.select": "선택",
+  "commandMenu.hint.close": "닫기",
 
   // ── Trace timeline ───────────────────────────────────────────────────────────
   "trace.noEvents": "아직 추적 이벤트가 없습니다.",
@@ -965,12 +993,14 @@ const ko: Record<TranslationKey, string> = {
   "memory.deleteFailed": "메모리 삭제 실패",
   "memory.panel.title": "워크스페이스 메모리",
   "memory.panel.subtitle": "이 워크스페이스에 대해 확인된 사실들. 매번 답하기 전 시스템 프롬프트에 포함됩니다.",
+  // Easy 모드 전용 — translator-qa §7: "시스템 프롬프트"는 jargon.
+  "memory.panel.subtitle.simple": "이 자료 폴더에 대해 기억해 둔 내용. AI가 답하기 전 자동으로 함께 읽어요.",
   "memory.panel.addLabel": "메모리를 직접 추가",
   "memory.panel.addHint": "이 워크스페이스에서 채팅할 때 AI가 다음번에도 기억해야 할 내용.",
   "memory.panel.addPlaceholder": "이 워크스페이스의 CSV는 세미콜론 구분자를 씁니다.",
   "memory.panel.addButton": "추가",
   "memory.panel.delete": "메모리 제거",
-  "memory.panel.empty": "아직 메모리가 없어요. 채팅 답변에 핀하거나 위에서 직접 추가하세요.",
+  "memory.panel.empty": "아직 메모리가 없어요. 채팅 답변에 📌 표시를 누르거나, 위에서 직접 추가하세요.",
   "memory.source.chat": "채팅에서",
   "memory.source.manual": "직접 추가",
 
@@ -1037,6 +1067,9 @@ const ko: Record<TranslationKey, string> = {
   // ── 답변 모드 (T1 — Instant + Agent를 하나의 선택지로 통합) ─────────────
   "chat.composer.replyModeLabel": "답변 모드",
   "chat.composer.replyModeTip": "즉답 = 바로 답, 가장 빠름. 자동 = 표준 흐름(자료 폴더 + 메모리 참조, 에이전트 필요 여부는 자동 판단). Agent = 항상 다단계 계획 실행. 평소엔 '자동'이면 충분해요.",
+  // Easy 모드 전용 — translator-qa §4: "에이전트·다단계 계획" 단어가
+  // Easy 사용자에게 무거움. ChatComposer가 isSimple일 때 이 키를 씁니다.
+  "chat.composer.replyModeTip.simple": "즉답: 바로 답. 자동: 알아서 처리. Agent: 시간이 걸려도 꼼꼼히 처리.",
   "chat.composer.replyMode.instant": "즉답",
   "chat.composer.replyMode.auto": "자동",
   "chat.composer.replyMode.agent": "Agent",
@@ -1046,10 +1079,12 @@ const ko: Record<TranslationKey, string> = {
 
   // ── 빌트인 템플릿 이름/설명 (W2.1) — 서버는 한국어 원문을 보내고, 웹이
   // 사용자 로케일에 맞춰 여기 키로 매핑합니다.
-  "template.research-brief.name": "리서치 브리프",
-  "template.research-brief.description": "로컬 폴더의 메모·논문·자료를 근거로, 출처가 연결된 리서치 브리프를 생성합니다.",
-  "template.lecture-brief.name": "강의 브리프",
-  "template.lecture-brief.description": "강의 노트와 자료를 근거로, 출처가 연결된 강의 준비 브리프를 생성합니다.",
+  // "브리프" → "브리핑" 통일 — translator-qa §2 (runs.detail.brief 등
+  // 다른 모든 곳이 "브리핑"인데 템플릿 이름만 "브리프"였음)
+  "template.research-brief.name": "리서치 브리핑",
+  "template.research-brief.description": "내 자료 폴더의 메모·논문·파일을 근거로, 출처가 연결된 리서치 브리핑을 만들어요.",
+  "template.lecture-brief.name": "강의 브리핑",
+  "template.lecture-brief.description": "강의 노트와 자료를 근거로, 출처가 연결된 강의 준비 브리핑을 만들어요.",
   "template.investment-decision-memo.name": "투자 결정 메모",
   "template.investment-decision-memo.description": "리서치 노트·재무 자료·시장 데이터를 근거로, 구조화된 투자 결정 메모를 생성합니다.",
   "template.job-search-review.name": "구직 활동 점검",

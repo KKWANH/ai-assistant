@@ -160,9 +160,9 @@ export function CommandMenu({ items }: CommandMenuProps) {
 
         {/* Footer hint */}
         <div className="border-t border-border px-3 py-1.5 flex gap-3 text-xs text-muted-foreground">
-          <span><kbd className="font-mono">↑↓</kbd> navigate</span>
-          <span><kbd className="font-mono">↵</kbd> select</span>
-          <span><kbd className="font-mono">Esc</kbd> close</span>
+          <span><kbd className="font-mono">↑↓</kbd> {t("commandMenu.hint.navigate")}</span>
+          <span><kbd className="font-mono">↵</kbd> {t("commandMenu.hint.select")}</span>
+          <span><kbd className="font-mono">Esc</kbd> {t("commandMenu.hint.close")}</span>
         </div>
       </div>
     </div>

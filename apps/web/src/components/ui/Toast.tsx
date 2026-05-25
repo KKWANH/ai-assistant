@@ -7,6 +7,7 @@ import {
 } from "react";
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 import { IconButton } from "./IconButton";
+import { useT } from "../../lib/i18n";
 import styles from "./Toast.module.css";
 
 export type ToastVariant = "default" | "success" | "error" | "warning" | "info";
@@ -37,18 +38,19 @@ const icons: Record<ToastVariant, ReactNode> = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const { t } = useT();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const toast = useCallback((item: Omit<ToastItem, "id">) => {
     const id = Math.random().toString(36).slice(2);
     setToasts((prev) => [...prev, { ...item, id }]);
     setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
+      setToasts((prev) => prev.filter((row) => row.id !== id));
     }, 4000);
   }, []);
 
   const dismiss = (id: string) =>
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => prev.filter((row) => row.id !== id));
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -57,20 +59,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-live="polite"
         className={styles["container"]!}
       >
-        {toasts.map((t) => (
+        {toasts.map((item) => (
           <div
-            key={t.id}
+            key={item.id}
             className={styles["toast"]!}
             role="alert"
           >
-            {icons[t.variant ?? "default"]}
+            {icons[item.variant ?? "default"]}
             <div className={styles["content"]!}>
-              <p className={styles["toastTitle"]!}>{t.title}</p>
-              {t.description && (
-                <p className={styles["toastDescription"]!}>{t.description}</p>
+              <p className={styles["toastTitle"]!}>{item.title}</p>
+              {item.description && (
+                <p className={styles["toastDescription"]!}>{item.description}</p>
               )}
             </div>
-            <IconButton label="Dismiss" size="xs" onClick={() => dismiss(t.id)}>
+            <IconButton label={t("common.close")} size="xs" onClick={() => dismiss(item.id)}>
               <X className="h-3.5 w-3.5" />
             </IconButton>
           </div>

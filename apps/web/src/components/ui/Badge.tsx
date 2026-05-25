@@ -1,6 +1,8 @@
 import type { HTMLAttributes } from "react";
 import type { ClaimStatus, RunStatus } from "@ariadne/shared";
 import styles from "./Badge.module.css";
+import { useT } from "../../lib/i18n";
+import type { TranslationKey } from "../../lib/i18n/en";
 
 export type BadgeVariant =
   | ClaimStatus
@@ -28,20 +30,23 @@ const variantClass: Record<BadgeVariant, string> = {
   default:             styles["default"]!,
 };
 
-const variantLabels: Partial<Record<BadgeVariant, string>> = {
-  supported: "Supported",
-  partially_supported: "Partial",
-  inferred: "Inferred",
-  unsupported: "Unsupported",
-  created: "Created",
-  scanning: "Scanning",
-  context_pick: "Context Pick",
-  generating: "Generating",
-  completed: "Completed",
-  failed: "Failed",
-  sensitive: "Sensitive",
-  "large-file": "Large File",
-  estimated: "Estimated",
+// variant → i18n key. The values must exist in en.ts (and ko.ts).
+// "default" intentionally omitted — callers using default variant
+// always pass their own `children` text.
+const variantKey: Partial<Record<BadgeVariant, TranslationKey>> = {
+  supported:           "badge.status.supported",
+  partially_supported: "badge.status.partial",
+  inferred:            "badge.status.inferred",
+  unsupported:         "badge.status.unsupported",
+  created:             "badge.status.created",
+  scanning:            "badge.status.scanning",
+  context_pick:        "badge.status.contextPick",
+  generating:          "badge.status.generating",
+  completed:           "badge.status.completed",
+  failed:              "badge.status.failed",
+  sensitive:           "badge.status.sensitive",
+  "large-file":        "badge.status.largeFile",
+  estimated:           "badge.status.estimated",
 };
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
@@ -56,7 +61,9 @@ export function Badge({
   children,
   ...props
 }: BadgeProps) {
-  const label = children ?? variantLabels[variant] ?? variant;
+  const { t } = useT();
+  const key = variantKey[variant];
+  const label = children ?? (key ? t(key) : variant);
   return (
     <span
       className={[

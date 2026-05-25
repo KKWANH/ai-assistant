@@ -79,7 +79,7 @@ export function TutorialPage() {
                   >
                     {done ? <Check className="h-3 w-3" /> : i + 1}
                   </span>
-                  <span className="truncate">{s.title}</span>
+                  <span className="truncate">{s.shortTitle}</span>
                 </button>
               );
             })}
