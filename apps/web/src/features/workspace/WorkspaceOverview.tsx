@@ -41,6 +41,7 @@ import {
   Trash2,
   GitCommit,
   Undo2,
+  BrainCircuit,
 } from "lucide-react";
 
 import {
@@ -74,6 +75,7 @@ import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
+import { MemoryPanel } from "../memory/MemoryPanel";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
 // The CodeMirror-backed editors are heavy; load them only when their tab opens.
@@ -992,6 +994,12 @@ export function WorkspaceOverview() {
                 {t("workspace.actions.tab")}
               </span>
             </TabsTrigger>
+            <TabsTrigger value="memory">
+              <span className="flex items-center gap-1.5">
+                <BrainCircuit className="h-3.5 w-3.5" />
+                {t("memory.tab")}
+              </span>
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -1056,6 +1064,14 @@ export function WorkspaceOverview() {
             <Suspense fallback={<EditorFallback />}>
               <ActionsEditor workspaceId={ws.id} />
             </Suspense>
+          </WorkspacePanel>
+        </TabsContent>
+
+        {/* Workspace memory — promotion-gated facts the AI uses as
+            context on every chat against this workspace. */}
+        <TabsContent value="memory" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>
+            <MemoryPanel workspaceId={ws.id} />
           </WorkspacePanel>
         </TabsContent>
       </Tabs>

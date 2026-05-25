@@ -951,6 +951,29 @@ const en = {
   "eval.promote.save": "Save case",
   "eval.promote.saved": "Saved as eval case",
   "eval.promote.failed": "Couldn't save eval case",
+
+  // ── Workspace memory (.ariadne/memory.yaml) ─────────────────────────────────
+  "memory.tab": "Memory",
+  "memory.save.openLabel": "Save to memory",
+  "memory.save.openHint": "Pin this as a fact about the workspace. It rides in the system prompt on every chat against this workspace.",
+  "memory.save.title": "Save to workspace memory",
+  "memory.save.subtitle": "Edit the text to a single useful sentence. It becomes part of every future chat's context — keep it crisp.",
+  "memory.save.textLabel": "Memory text",
+  "memory.save.textHint": "One fact, one sentence. The AI sees this verbatim.",
+  "memory.save.button": "Save memory",
+  "memory.saved": "Saved to workspace memory",
+  "memory.saveFailed": "Couldn't save to memory",
+  "memory.deleteFailed": "Couldn't remove memory",
+  "memory.panel.title": "Workspace memory",
+  "memory.panel.subtitle": "Confirmed facts about this workspace. Injected into the chat system prompt before every reply.",
+  "memory.panel.addLabel": "Add a memory by hand",
+  "memory.panel.addHint": "Anything you'd want the AI to remember the next time you chat against this workspace.",
+  "memory.panel.addPlaceholder": "All CSV files in this workspace use semicolon separators.",
+  "memory.panel.addButton": "Add",
+  "memory.panel.delete": "Remove memory",
+  "memory.panel.empty": "No memories yet. Pin a chat reply, or add one by hand above.",
+  "memory.source.chat": "From chat",
+  "memory.source.manual": "Added by hand",
 } as const;
 
 export type TranslationKey = keyof typeof en;

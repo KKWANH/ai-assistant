@@ -212,6 +212,25 @@ export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>;
  * At least one of mustHitPath / shouldNotHitPath / note must be set —
  * a query with no positive or negative expectation isn't a useful case.
  */
+/**
+ * POST /api/workspaces/:id/memory — add a new memory entry. The user has
+ * already approved the text in the modal; this just persists it to
+ * <workspaceRoot>/.ariadne/memory.yaml. No update endpoint in v1: edit
+ * via delete + add. Auto-derive is intentionally not exposed; every
+ * write goes through this gated path.
+ */
+export const AddMemorySchema = z.object({
+  text: z.string().min(1).max(500),
+  /** Optional traceability: a chat message that surfaced this fact. */
+  source: z
+    .object({
+      kind: z.enum(["chat", "manual"]),
+      ref: z.string().max(500).optional(),
+    })
+    .optional(),
+});
+export type AddMemoryInput = z.infer<typeof AddMemorySchema>;
+
 export const PromoteEvalCaseSchema = z
   .object({
     workspaceId: z.string().min(1),

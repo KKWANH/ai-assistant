@@ -132,3 +132,28 @@ export function writeActionsYaml(workspaceRoot: string, source: string): void {
   assertInsideAriadne(workspaceRoot, dest);
   fs.writeFileSync(dest, source, "utf-8");
 }
+
+// ---------------------------------------------------------------------------
+// Workspace memory (.ariadne/memory.yaml)
+// ---------------------------------------------------------------------------
+
+const MEMORY_YAML = ".ariadne/memory.yaml";
+
+export function memoryYamlPath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, MEMORY_YAML);
+}
+
+/** Read raw .ariadne/memory.yaml; null if the file does not exist. */
+export function readMemoryYaml(workspaceRoot: string): string | null {
+  const dest = path.resolve(path.join(workspaceRoot, MEMORY_YAML));
+  assertInsideAriadne(workspaceRoot, dest);
+  if (!fs.existsSync(dest)) return null;
+  return fs.readFileSync(dest, "utf-8");
+}
+
+/** Write raw .ariadne/memory.yaml. */
+export function writeMemoryYaml(workspaceRoot: string, source: string): void {
+  const dest = path.resolve(path.join(workspaceRoot, MEMORY_YAML));
+  assertInsideAriadne(workspaceRoot, dest);
+  fs.writeFileSync(dest, source, "utf-8");
+}

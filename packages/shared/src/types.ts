@@ -745,6 +745,31 @@ export interface SurfaceState {
 }
 
 /* ------------------------------------------------------------------ *
+ * Workspace memory — facts the AI has learned about a workspace, each
+ * one approved by the user before write. Persisted to
+ * `<workspaceRoot>/.ariadne/memory.yaml`. Injected into the chat system
+ * prompt so subsequent answers reflect what's already been confirmed.
+ *
+ * The promotion gate is the UI: AI proposes (or the user pins) → modal
+ * shows the text for editing → user saves. There is no auto-write path.
+ * ------------------------------------------------------------------ */
+
+export interface WorkspaceMemory {
+  /** Stable id — used by the delete route and as a yaml field. */
+  id: string;
+  /** Single-sentence fact / preference. ≤ 500 chars. */
+  text: string;
+  /** ISO timestamp of when the user approved this memory. */
+  addedAt: string;
+  /** Display name of the account that approved it. */
+  addedBy: string | null;
+  /** Optional: where the AI first surfaced it, for traceability.
+   *  source.kind="chat" + source.ref=<messageId>, etc. Mirrors the
+   *  shape used by user-promoted eval cases. */
+  source?: { kind: "chat" | "manual"; ref?: string };
+}
+
+/* ------------------------------------------------------------------ *
  * Generic API envelope
  * ------------------------------------------------------------------ */
 

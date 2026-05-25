@@ -944,6 +944,29 @@ const ko: Record<TranslationKey, string> = {
   "eval.promote.save": "케이스 저장",
   "eval.promote.saved": "평가 케이스로 저장됨",
   "eval.promote.failed": "평가 케이스 저장 실패",
+
+  // ── 워크스페이스 메모리 (.ariadne/memory.yaml) ─────────────────────────
+  "memory.tab": "메모리",
+  "memory.save.openLabel": "메모리로 저장",
+  "memory.save.openHint": "이 워크스페이스에 대한 사실로 핀 — 이후 모든 채팅의 시스템 프롬프트에 포함됩니다.",
+  "memory.save.title": "워크스페이스 메모리로 저장",
+  "memory.save.subtitle": "쓸모 있는 한 문장으로 다듬으세요. 앞으로 모든 채팅 컨텍스트에 그대로 들어갑니다 — 간결하게.",
+  "memory.save.textLabel": "메모리 내용",
+  "memory.save.textHint": "한 사실, 한 문장. AI가 그대로 봅니다.",
+  "memory.save.button": "메모리 저장",
+  "memory.saved": "워크스페이스 메모리에 저장됨",
+  "memory.saveFailed": "메모리 저장 실패",
+  "memory.deleteFailed": "메모리 삭제 실패",
+  "memory.panel.title": "워크스페이스 메모리",
+  "memory.panel.subtitle": "이 워크스페이스에 대해 확인된 사실들. 매번 답하기 전 시스템 프롬프트에 포함됩니다.",
+  "memory.panel.addLabel": "메모리를 직접 추가",
+  "memory.panel.addHint": "이 워크스페이스에서 채팅할 때 AI가 다음번에도 기억해야 할 내용.",
+  "memory.panel.addPlaceholder": "이 워크스페이스의 CSV는 세미콜론 구분자를 씁니다.",
+  "memory.panel.addButton": "추가",
+  "memory.panel.delete": "메모리 제거",
+  "memory.panel.empty": "아직 메모리가 없어요. 채팅 답변에 핀하거나 위에서 직접 추가하세요.",
+  "memory.source.chat": "채팅에서",
+  "memory.source.manual": "직접 추가",
 };
 
 export default ko;

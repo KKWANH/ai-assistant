@@ -25,6 +25,7 @@ import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
 import { performSearch } from "./search.js";
 import { readUpload } from "./uploads.js";
 import { retrieveRelevantChunks, formatChunksForPrompt } from "./retrieval.js";
+import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 
 // ---------------------------------------------------------------------------
 // Public return type
@@ -80,6 +81,7 @@ export async function buildChatContext(
   const images: ProviderImage[] = [];
   let attachmentBlock: string | undefined;
   let webBlock: string | undefined;
+  let memoryBlock: string | undefined;
   let workspaceBlock: string | undefined;
   let historyBlock: string | undefined;
   let searchResults: SearchResult[] | null = null;
@@ -128,6 +130,13 @@ export async function buildChatContext(
 
   // 3. Workspace context — file index + inline content of key files
   if (chat.workspaceId) {
+    // Memory comes BEFORE retrieval chunks so the model sees the user's
+    // confirmed facts and preferences first. Empty workspace → null →
+    // no block, no padding.
+    const ws = dbGetWorkspace(chat.workspaceId);
+    if (ws) {
+      memoryBlock = renderMemoryForPrompt(listMemories(ws.rootPath)) ?? undefined;
+    }
     const snapshot = dbGetLatestSnapshot(chat.workspaceId);
     if (snapshot && snapshot.files.length > 0) {
       const manifestLines = snapshot.files.slice(0, 60).map((f: FileMeta) => {
@@ -147,7 +156,6 @@ export async function buildChatContext(
       // files that actually contained the answer). The keyword ranker
       // here works locally with no external API; an embedding-based
       // retriever can be substituted behind the same call later.
-      const ws = dbGetWorkspace(chat.workspaceId);
       let contentPart: string | undefined;
       if (ws && userMessage.content.trim()) {
         const ranked = await retrieveRelevantChunks(
@@ -184,9 +192,11 @@ export async function buildChatContext(
     historyBlock = `--- Conversation history ---\n${historyTurns}`;
   }
 
-  // 5. Current user message — assemble in the canonical section order
-  //    (attachments → web → workspace → history → user).
-  const parts = [attachmentBlock, webBlock, workspaceBlock, historyBlock].filter(
+  // 5. Current user message — assemble in the canonical section order.
+  //    Memory comes BEFORE web/workspace excerpts because confirmed
+  //    facts should anchor everything else; the model should read
+  //    them first and treat them as authoritative.
+  const parts = [memoryBlock, attachmentBlock, webBlock, workspaceBlock, historyBlock].filter(
     (s): s is string => !!s,
   );
   const contextBlock = parts.length > 0 ? parts.join("\n\n") + "\n\n" : "";

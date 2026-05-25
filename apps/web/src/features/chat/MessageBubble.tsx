@@ -34,6 +34,7 @@ import {
   Pencil,
   History,
   ThumbsDown,
+  Pin,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTrace, AgentTool } from "@ariadne/shared";
 import { Badge } from "../../components/ui/Badge";
@@ -43,6 +44,7 @@ import { useEditMessage } from "../../lib/queries";
 import { parseCsv } from "../../lib/tableData";
 import { TableSheet } from "./TableSheet";
 import { PromoteCaseModal } from "../eval/PromoteCaseModal";
+import { SaveToMemoryModal } from "../memory/SaveToMemoryModal";
 
 // ── Markdown renderer (react-markdown + remark-gfm) ──────────────────────────
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
@@ -737,6 +739,7 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
   const isAssistant = message.role === "assistant";
   const { t } = useT();
   const [promoteOpen, setPromoteOpen] = useState(false);
+  const [saveMemOpen, setSaveMemOpen] = useState(false);
 
   // Detect if this is a live streaming placeholder (id starts with __streaming_)
   const isStreaming = message.id.startsWith("__streaming_");
@@ -816,10 +819,22 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
                   · {[message.provider, message.model].filter(Boolean).join(" / ")}
                 </span>
               )}
-              {workspaceId && queryHint && !isStreaming && (
+              {workspaceId && !isStreaming && (
                 <button
                   type="button"
                   className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:bg-surface-3"
+                  onClick={() => setSaveMemOpen(true)}
+                  title={t("memory.save.openHint")}
+                  aria-label={t("memory.save.openLabel")}
+                >
+                  <Pin className="h-3 w-3" />
+                  <span>{t("memory.save.openLabel")}</span>
+                </button>
+              )}
+              {workspaceId && queryHint && !isStreaming && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:bg-surface-3"
                   onClick={() => setPromoteOpen(true)}
                   title={t("eval.promote.openHint")}
                   aria-label={t("eval.promote.openLabel")}
@@ -839,6 +854,15 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
             query={queryHint}
             source="chat"
             sourceRef={message.id}
+          />
+        )}
+        {workspaceId && saveMemOpen && (
+          <SaveToMemoryModal
+            open
+            onClose={() => setSaveMemOpen(false)}
+            workspaceId={workspaceId}
+            initialText={message.content}
+            source={{ kind: "chat", ref: message.id }}
           />
         )}
       </div>

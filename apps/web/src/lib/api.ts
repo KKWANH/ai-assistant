@@ -623,3 +623,21 @@ export interface PromoteEvalCaseResponse {
 
 export const promoteEvalCase = (input: PromoteEvalCaseInput) =>
   request<PromoteEvalCaseResponse>("POST", "/eval-cases/promote", input);
+
+// ── Workspace memory ─────────────────────────────────────────────────────────
+import type { AddMemoryInput, WorkspaceMemory } from "@ariadne/shared";
+
+export const listWorkspaceMemory = (workspaceId: string) =>
+  request<{ memories: WorkspaceMemory[] }>(
+    "GET",
+    `/workspaces/${workspaceId}/memory`,
+  );
+
+export const addWorkspaceMemory = (workspaceId: string, input: AddMemoryInput) =>
+  request<WorkspaceMemory>("POST", `/workspaces/${workspaceId}/memory`, input);
+
+export const deleteWorkspaceMemory = (workspaceId: string, memoryId: string) =>
+  request<{ ok: true }>(
+    "DELETE",
+    `/workspaces/${workspaceId}/memory/${memoryId}`,
+  );
