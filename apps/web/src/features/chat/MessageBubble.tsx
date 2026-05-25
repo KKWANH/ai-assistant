@@ -33,6 +33,7 @@ import {
   AlertCircle,
   Pencil,
   History,
+  ThumbsDown,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTrace, AgentTool } from "@ariadne/shared";
 import { Badge } from "../../components/ui/Badge";
@@ -41,6 +42,7 @@ import * as api from "../../lib/api";
 import { useEditMessage } from "../../lib/queries";
 import { parseCsv } from "../../lib/tableData";
 import { TableSheet } from "./TableSheet";
+import { PromoteCaseModal } from "../eval/PromoteCaseModal";
 
 // ── Markdown renderer (react-markdown + remark-gfm) ──────────────────────────
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
@@ -720,12 +722,21 @@ function RevisionHistoryPopover({
 // ── Main component ─────────────────────────────────────────────────────────────
 export interface MessageBubbleProps {
   message: ChatMessage & { _streamStatus?: string; _streamError?: string };
+  /** When this chat is scoped to a workspace, the 👎 → "Save as eval case"
+   *  affordance shows on assistant messages. Without a workspace, there's
+   *  nowhere to attach the case. */
+  workspaceId?: string | null;
+  /** The user message text that produced this assistant reply, used as
+   *  the query when promoting to an eval case. ChatView computes this
+   *  from the message list and passes it in. */
+  queryHint?: string;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, workspaceId, queryHint }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
   const { t } = useT();
+  const [promoteOpen, setPromoteOpen] = useState(false);
 
   // Detect if this is a live streaming placeholder (id starts with __streaming_)
   const isStreaming = message.id.startsWith("__streaming_");
@@ -805,8 +816,30 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   · {[message.provider, message.model].filter(Boolean).join(" / ")}
                 </span>
               )}
+              {workspaceId && queryHint && !isStreaming && (
+                <button
+                  type="button"
+                  className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:bg-surface-3"
+                  onClick={() => setPromoteOpen(true)}
+                  title={t("eval.promote.openHint")}
+                  aria-label={t("eval.promote.openLabel")}
+                >
+                  <ThumbsDown className="h-3 w-3" />
+                  <span>{t("eval.promote.openLabel")}</span>
+                </button>
+              )}
             </span>
           </div>
+        )}
+        {workspaceId && queryHint && (
+          <PromoteCaseModal
+            open={promoteOpen}
+            onClose={() => setPromoteOpen(false)}
+            workspaceId={workspaceId}
+            query={queryHint}
+            source="chat"
+            sourceMessageId={message.id}
+          />
         )}
       </div>
     );

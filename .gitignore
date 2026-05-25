@@ -50,3 +50,8 @@ id_rsa.*
 !apps/server/src/eval/fixtures/**/.ariadne/**
 !apps/server/src/eval/fixtures/**/credentials*.json
 !apps/server/src/eval/fixtures/**/*.env
+
+# User-promoted eval cases are per-user content (real workspace ids,
+# real account names, real workspace paths). Keep them on the
+# contributor's machine; never ship in the repo.
+apps/server/src/eval/cases/user-promoted/

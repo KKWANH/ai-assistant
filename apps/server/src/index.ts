@@ -28,6 +28,7 @@ import { surfaceRoutes } from "./routes/surface.js";
 import { surfaceHostRoutes } from "./routes/surfaceHost.js";
 import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
+import { evalCaseRoutes } from "./routes/evalCases.js";
 import { marketDataRoutes } from "./routes/marketData.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
@@ -174,6 +175,7 @@ async function bootstrap(): Promise<void> {
       await api.register(surfaceRoutes);
       await api.register(actionRoutes);
       await api.register(reportRoutes);
+      await api.register(evalCaseRoutes);
       await api.register(marketDataRoutes);
       await api.register(skillRoutes);
       await api.register(scheduleRoutes);

@@ -12,7 +12,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search as SearchIcon, ArrowLeft, FileText } from "lucide-react";
+import { Search as SearchIcon, ArrowLeft, FileText, ThumbsDown } from "lucide-react";
 import { useWorkspace } from "../../lib/queries";
 import { searchWorkspace } from "../../lib/api";
 import { useT } from "../../lib/i18n";
@@ -21,6 +21,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { NotFoundRedirect } from "../../components/NotFoundRedirect";
+import { PromoteCaseModal } from "../eval/PromoteCaseModal";
 
 export function WorkspaceSearchView() {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +33,12 @@ export function WorkspaceSearchView() {
   // (what react-query keys off). Hitting Enter promotes the box.
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
+
+  // Open the promote-to-eval modal with the path of the chunk the user
+  // flagged as wrong. The modal lets them name the file that *should*
+  // have come up — that's the more useful eval-case signal than
+  // "exclude this one."
+  const [promoteState, setPromoteState] = useState<{ open: boolean; chunkPath?: string }>({ open: false });
 
   const { data, isLoading: searchLoading, error } = useQuery({
     queryKey: ["workspaceSearch", id, query],
@@ -162,8 +169,19 @@ export function WorkspaceSearchView() {
                   <FileText className="h-3 w-3" />
                   {c.path}
                 </span>
-                <span className="text-2xs text-muted-foreground">
-                  {t("workspace.search.score")}: {c.score.toFixed(2)}
+                <span className="flex items-center gap-2">
+                  <span className="text-2xs text-muted-foreground">
+                    {t("workspace.search.score")}: {c.score.toFixed(2)}
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3"
+                    onClick={() => setPromoteState({ open: true, chunkPath: c.path })}
+                    title={t("eval.promote.openHint")}
+                    aria-label={t("eval.promote.openLabel")}
+                  >
+                    <ThumbsDown className="h-3 w-3" />
+                  </button>
                 </span>
               </div>
               <pre
@@ -176,6 +194,15 @@ export function WorkspaceSearchView() {
           ))}
         </div>
       </div>
+
+      <PromoteCaseModal
+        open={promoteState.open}
+        onClose={() => setPromoteState({ open: false })}
+        workspaceId={ws.id}
+        query={query}
+        source="search"
+        sourceMessageId={promoteState.chunkPath}
+      />
     </div>
   );
 }

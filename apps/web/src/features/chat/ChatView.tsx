@@ -218,9 +218,29 @@ function MessageList({
             {formatStarted(chat.createdAt, locale)}
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
+        {messages.map((msg, i) => {
+          // For an assistant reply, the eval-case promotion modal needs
+          // the *question* that produced it. Walk backwards to find the
+          // most recent user message before this one.
+          let queryHint: string | undefined;
+          if (msg.role === "assistant") {
+            for (let j = i - 1; j >= 0; j--) {
+              const prev = messages[j];
+              if (prev?.role === "user") {
+                queryHint = prev.content;
+                break;
+              }
+            }
+          }
+          return (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              workspaceId={chat?.workspaceId ?? null}
+              queryHint={queryHint}
+            />
+          );
+        })}
         {synthetic && <MessageBubble key={synthetic.id} message={synthetic} />}
         {streaming && messages.length === 0 && <StreamingIndicator statusText="" />}
         <div ref={bottomRef} />

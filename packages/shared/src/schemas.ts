@@ -202,3 +202,35 @@ export const UpdateSkillSchema = z.object({
   variables: z.array(SkillVariableSchema).max(8).nullable().optional(),
 });
 export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>;
+
+/**
+ * POST /api/eval-cases/promote — promote a bad chat answer or bad search
+ * result into a permanent eval case. The case lives under
+ * apps/server/src/eval/cases/user-promoted/<workspaceId>/ and is picked up
+ * by `npm run eval:retrieval:promoted`.
+ *
+ * At least one of mustHitPath / shouldNotHitPath / note must be set —
+ * a query with no positive or negative expectation isn't a useful case.
+ */
+export const PromoteEvalCaseSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    query: z.string().min(1).max(500),
+    source: z.enum(["chat", "search"]),
+    /** Linked message / search call for traceability. */
+    sourceMessageId: z.string().optional(),
+    /** "This file should have been retrieved." */
+    mustHitPath: z.string().max(500).optional(),
+    /** Optional substring on the mustHit file's chunk. */
+    mustHitContains: z.string().max(200).optional(),
+    /** "This file should NOT have been retrieved." */
+    shouldNotHitPath: z.string().max(500).optional(),
+    /** Free-text reason. Stored as YAML comment + annotation. */
+    note: z.string().max(500).optional(),
+  })
+  .refine(
+    (d) =>
+      Boolean(d.mustHitPath) || Boolean(d.shouldNotHitPath) || Boolean(d.note),
+    { message: "Provide at least one of mustHitPath / shouldNotHitPath / note" },
+  );
+export type PromoteEvalCaseInput = z.infer<typeof PromoteEvalCaseSchema>;

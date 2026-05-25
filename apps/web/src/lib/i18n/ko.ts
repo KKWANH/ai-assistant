@@ -929,6 +929,21 @@ const ko: Record<TranslationKey, string> = {
   "model.trait.deriveMid": "표준 규모의 로컬 모델",
   "model.trait.deriveSmall": "작고 빠른 로컬 모델 — 단순한 작업에",
   "model.trait.deriveGeneric": "로컬에서 실행되는 AI 모델",
+
+  // ── Eval-case 승격 (👎 누른 답변/검색 결과를 평가 케이스로) ──────────────
+  "eval.promote.openLabel": "평가 케이스로 저장",
+  "eval.promote.openHint": "이 답이 잘못됐다고 표시 — 이 워크스페이스의 영구 회귀 테스트로 들어갑니다.",
+  "eval.promote.title": "평가 케이스로 저장",
+  "eval.promote.subtitle": "이 질문은 변경이 있을 때마다 자동 실행됩니다. 검색이 다시 잘못된 결과를 내면 harness가 잡아냅니다.",
+  "eval.promote.queryLabel": "질문",
+  "eval.promote.mustHitLabel": "어떤 파일이 나왔어야 하나요? (선택)",
+  "eval.promote.mustHitHint": "워크스페이스 안의 상대 경로. must-hit 조건으로 들어갑니다.",
+  "eval.promote.noteLabel": "메모 (선택)",
+  "eval.promote.noteHint": "뭐가 잘못됐는지 한 줄 — 미래의 나를 위한 짧은 메모.",
+  "eval.promote.notePlaceholder": "잘못된 섹션을 인용했음…",
+  "eval.promote.save": "케이스 저장",
+  "eval.promote.saved": "평가 케이스로 저장됨",
+  "eval.promote.failed": "평가 케이스 저장 실패",
 };
 
 export default ko;

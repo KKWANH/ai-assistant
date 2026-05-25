@@ -936,6 +936,21 @@ const en = {
   "model.trait.deriveMid": "Standard-size local model",
   "model.trait.deriveSmall": "Small, fast local model — for simple tasks",
   "model.trait.deriveGeneric": "A model that runs locally",
+
+  // ── Eval-case promotion (👎 on bad chat/search results) ─────────────────────
+  "eval.promote.openLabel": "Save as eval case",
+  "eval.promote.openHint": "Mark this answer as wrong — it becomes a permanent regression test for this workspace.",
+  "eval.promote.title": "Save as eval case",
+  "eval.promote.subtitle": "This question runs on every change. If retrieval ever stops finding the right file again, the harness flags it.",
+  "eval.promote.queryLabel": "Question",
+  "eval.promote.mustHitLabel": "Which file should have been used? (optional)",
+  "eval.promote.mustHitHint": "Relative path inside the workspace. Used as the must-hit assertion.",
+  "eval.promote.noteLabel": "Note (optional)",
+  "eval.promote.noteHint": "What was wrong? Short reminder for your future self.",
+  "eval.promote.notePlaceholder": "The answer cited the wrong section…",
+  "eval.promote.save": "Save case",
+  "eval.promote.saved": "Saved as eval case",
+  "eval.promote.failed": "Couldn't save eval case",
 } as const;
 
 export type TranslationKey = keyof typeof en;

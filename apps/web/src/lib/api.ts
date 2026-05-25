@@ -611,3 +611,15 @@ export const updateSkill = (id: string, input: UpdateSkillInput) =>
   request<Skill>("PATCH", `/skills/${id}`, input);
 export const deleteSkill = (id: string) =>
   request<{ ok: boolean }>("DELETE", `/skills/${id}`);
+
+// ── Eval-case promotion ──────────────────────────────────────────────────────
+import type { PromoteEvalCaseInput } from "@ariadne/shared";
+
+export interface PromoteEvalCaseResponse {
+  ok: true;
+  caseId: string;
+  savedPath: string;
+}
+
+export const promoteEvalCase = (input: PromoteEvalCaseInput) =>
+  request<PromoteEvalCaseResponse>("POST", "/eval-cases/promote", input);
