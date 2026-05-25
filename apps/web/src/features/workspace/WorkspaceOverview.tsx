@@ -997,12 +997,14 @@ export function WorkspaceOverview() {
                 {t("workspace.surface.editScreen")}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="actions">
-              <span className="flex items-center gap-1.5">
-                <Zap className="h-3.5 w-3.5" />
-                {t("workspace.actions.tab")}
-              </span>
-            </TabsTrigger>
+            {!isSimple && (
+              <TabsTrigger value="actions">
+                <span className="flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5" />
+                  {t("workspace.actions.tab")}
+                </span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="memory">
               <span className="flex items-center gap-1.5">
                 <BrainCircuit className="h-3.5 w-3.5" />
@@ -1075,14 +1077,20 @@ export function WorkspaceOverview() {
           </WorkspacePanel>
         </TabsContent>
 
-        {/* Actions editor — workspace actions.yaml, independent of surface */}
-        <TabsContent value="actions" className="flex-1 overflow-y-auto min-h-0">
-          <WorkspacePanel>
-            <Suspense fallback={<EditorFallback />}>
-              <ActionsEditor workspaceId={ws.id} />
-            </Suspense>
-          </WorkspacePanel>
-        </TabsContent>
+        {/* Actions editor — workspace actions.yaml, independent of
+            surface. Hidden in Simple mode alongside Hooks (matches
+            translator-qa §4: "에이전트" wording in the placeholder is
+            too heavy for non-devs; consistent with how Hooks is
+            handled). Standard users still see it. */}
+        {!isSimple && (
+          <TabsContent value="actions" className="flex-1 overflow-y-auto min-h-0">
+            <WorkspacePanel>
+              <Suspense fallback={<EditorFallback />}>
+                <ActionsEditor workspaceId={ws.id} />
+              </Suspense>
+            </WorkspacePanel>
+          </TabsContent>
+        )}
 
         {/* Workspace memory — promotion-gated facts the AI uses as
             context on every chat against this workspace. */}

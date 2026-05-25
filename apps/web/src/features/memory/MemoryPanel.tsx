@@ -134,7 +134,7 @@ export function MemoryPanel({ workspaceId }: { workspaceId: string }) {
         <Textarea
           label={t("memory.panel.addLabel")}
           hint={t("memory.panel.addHint")}
-          placeholder={t("memory.panel.addPlaceholder")}
+          placeholder={t(isSimple ? "memory.panel.addPlaceholder.simple" : "memory.panel.addPlaceholder")}
           rows={3}
           maxLength={MAX_LEN}
           value={draft}

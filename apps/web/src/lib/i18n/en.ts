@@ -866,6 +866,8 @@ const en = {
   "commandMenu.hint.navigate": "navigate",
   "commandMenu.hint.select": "select",
   "commandMenu.hint.close": "close",
+  "diff.selectAll": "Select all",
+  "diff.selectFile": "Select {path}",
 
   // ── Trace timeline ───────────────────────────────────────────────────────────
   "trace.noEvents": "No trace events yet.",
@@ -1001,6 +1003,7 @@ const en = {
   "memory.panel.addLabel": "Add a memory by hand",
   "memory.panel.addHint": "Anything you'd want the AI to remember the next time you chat against this workspace.",
   "memory.panel.addPlaceholder": "All CSV files in this workspace use semicolon separators.",
+  "memory.panel.addPlaceholder.simple": "This folder has my family's monthly budget files.",
   "memory.panel.addButton": "Add",
   "memory.panel.delete": "Remove memory",
   "memory.panel.empty": "No memories yet. Pin a chat reply, or add one by hand above.",

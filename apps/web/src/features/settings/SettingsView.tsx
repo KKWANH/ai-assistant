@@ -361,20 +361,23 @@ export function SettingsView() {
         )}
       </section>
 
-      {/* Info */}
-      <Card className="px-4 py-3 bg-surface-2">
-        <p className="text-xs text-muted-foreground">
-          {t("settings.info.body", {
-            anthropic: "ANTHROPIC_API_KEY",
-            openai: "OPENAI_API_KEY",
-            mock: "mock",
-          }).split(/(ANTHROPIC_API_KEY|OPENAI_API_KEY|mock)/).map((part, i) =>
-            ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "mock"].includes(part)
-              ? <code key={i} className="font-mono text-foreground">{part}</code>
-              : <span key={i}>{part}</span>
-          )}
-        </p>
-      </Card>
+      {/* Info — Simple/Easy users don't need to know about env vars
+          and provider keys. Hide for them. */}
+      {me?.account.mode !== "simple" && (
+        <Card className="px-4 py-3 bg-surface-2">
+          <p className="text-xs text-muted-foreground">
+            {t("settings.info.body", {
+              anthropic: "ANTHROPIC_API_KEY",
+              openai: "OPENAI_API_KEY",
+              mock: "mock",
+            }).split(/(ANTHROPIC_API_KEY|OPENAI_API_KEY|mock)/).map((part, i) =>
+              ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "mock"].includes(part)
+                ? <code key={i} className="font-mono text-foreground">{part}</code>
+                : <span key={i}>{part}</span>
+            )}
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

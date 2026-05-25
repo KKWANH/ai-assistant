@@ -47,7 +47,7 @@ export function FileRow({
           onChange={onToggle}
           disabled={disabled}
           className="accent-accent h-3.5 w-3.5 shrink-0"
-          aria-label={`Select ${file.path}`}
+          aria-label={t("diff.selectFile", { path: file.path })}
         />
         <button
           type="button"

@@ -162,7 +162,7 @@ export function AttemptDiffView() {
               onChange={toggleAll}
               disabled={isClosed}
               className="accent-accent h-3.5 w-3.5"
-              aria-label="Select all"
+              aria-label={t("diff.selectAll")}
             />
             <span className="text-xs text-muted-foreground">
               {selected.size} / {allPaths.length}
