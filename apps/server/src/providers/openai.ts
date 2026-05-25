@@ -102,15 +102,22 @@ export class OpenAIProvider implements AiProvider {
   }
 }
 
-/** Moonshot / Kimi — OpenAI-compatible, different base URL. */
+/** Moonshot / Kimi — OpenAI-compatible, different base URL.
+ *  Endpoint routing by key prefix:
+ *    - `ak-...` → platform.moonshot.cn (Kimi China platform)
+ *    - `sk-...` → api.moonshot.ai      (Moonshot international)
+ *  Override either with MOONSHOT_BASE_URL. */
 export class MoonshotProvider extends OpenAIProvider {
   override readonly id: ProviderId = "moonshot";
 
   constructor(model: string) {
-    super(model, {
-      apiKey: process.env.MOONSHOT_API_KEY ?? "dummy",
-      baseURL: "https://api.moonshot.ai/v1",
-    });
+    const key = process.env.MOONSHOT_API_KEY ?? "dummy";
+    const baseURL =
+      process.env.MOONSHOT_BASE_URL
+      ?? (key.startsWith("ak-")
+        ? "https://api.moonshot.cn/v1"
+        : "https://api.moonshot.ai/v1");
+    super(model, { apiKey: key, baseURL });
   }
 }
 
