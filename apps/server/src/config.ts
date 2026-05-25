@@ -69,6 +69,7 @@ export function isProviderConfigured(id: ProviderId): boolean {
     case "gemini": return !!process.env.GEMINI_API_KEY;
     case "moonshot": return !!process.env.MOONSHOT_API_KEY;
     case "ollama": return true; // local — always potentially available
+    case "vllm": return !!process.env.VLLM_BASE_URL; // off unless the user pointed at a vLLM server
     case "mock": return true;
     default: return false;
   }

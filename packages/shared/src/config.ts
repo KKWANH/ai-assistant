@@ -7,6 +7,7 @@ export const PROVIDERS = [
   "gemini",
   "moonshot",
   "ollama",
+  "vllm",
   "mock",
 ] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
@@ -18,6 +19,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   gemini: "Google Gemini",
   moonshot: "Moonshot / Kimi",
   ollama: "Ollama (local)",
+  vllm: "vLLM (self-hosted)",
   mock: "Mock (no API key)",
 };
 
@@ -25,6 +27,12 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
  * Default model per provider. The Ollama default is only a hint — the server
  * resolves it to whatever model is actually installed on the machine (see
  * resolveOllamaModel), so a fresh install runs on local models with no setup.
+ *
+ * The vllm default is the model the user is most likely to be serving — Qwen
+ * 2.5 7B Instruct is small enough to fit on a single 24GB GPU and is the
+ * shape vLLM's tutorials use. Override with VLLM_MODEL or by picking another
+ * model id in the UI; vLLM will reject anything that doesn't match the model
+ * it was launched with, so the user has to keep these in sync.
  */
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
   anthropic: "claude-sonnet-4-6",
@@ -32,6 +40,7 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
   gemini: "gemini-3.5-flash",
   moonshot: "kimi-k2.6",
   ollama: "qwen3:8b",
+  vllm: "Qwen/Qwen2.5-7B-Instruct",
   mock: "mock",
 };
 
@@ -42,6 +51,7 @@ export const MODEL_CHOICES: Record<ProviderId, string[]> = {
   gemini: ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
   moonshot: ["kimi-k2.6", "moonshot-v1-128k", "moonshot-v1-32k", "kimi-for-coding"],
   ollama: ["qwen3:8b", "qwen3:4b", "qwen3:0.6b"],
+  vllm: ["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-14B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"],
   mock: ["mock"],
 };
 

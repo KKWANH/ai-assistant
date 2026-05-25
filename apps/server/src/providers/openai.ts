@@ -161,3 +161,34 @@ export class OllamaProvider extends OpenAIProvider {
     });
   }
 }
+
+/** vLLM self-hosted — OpenAI-compatible server (`vllm serve …`).
+ *
+ *  Mac mini caveat: stock vLLM is Linux + CUDA. Apple-Silicon plugins
+ *  (vllm-metal, vllm-mlx) are sub-v1.0 + text-only as of May 2026.
+ *  See docs/VLLM_PLAN.md — this provider exists for users with a
+ *  Linux/GPU box reachable on the LAN. Mac-mini-only users should
+ *  stay on Ollama.
+ *
+ *  Where it wins:
+ *   - Agent loop bursts hit prefix caching → noticeably lower TTFT
+ *     on the planner + synthesis after the first turn
+ *   - Eval harness `--concurrency=N` (AD2) packs concurrent cases
+ *     into the same forward pass via continuous batching
+ *   - Guided decoding (AC4.2) already routes through OpenAIProvider,
+ *     so vLLM's xgrammar enforces the planner schema for free
+ *
+ *  Selection: VLLM_BASE_URL env, defaults to localhost:8000. The
+ *  model id must match what vLLM was launched with (`vllm serve
+ *  <model>`); vLLM does not hot-swap models in one process. */
+export class VllmProvider extends OpenAIProvider {
+  override readonly id: ProviderId = "vllm";
+
+  constructor(model: string) {
+    const base = process.env.VLLM_BASE_URL ?? "http://localhost:8000";
+    super(model, {
+      apiKey: process.env.VLLM_API_KEY ?? "vllm", // vLLM checks only when --api-key was set
+      baseURL: `${base}/v1`,
+    });
+  }
+}

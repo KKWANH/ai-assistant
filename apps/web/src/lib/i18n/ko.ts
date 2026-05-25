@@ -960,6 +960,7 @@ const ko: Record<TranslationKey, string> = {
   "model.trait.geminiFlashLite": "가장 빠르고 가벼운 모델",
   "model.trait.kimi": "긴 문서를 다루는 데 강한 모델",
   "model.trait.kimiCoding": "Kimi 멤버십 코딩 모델 (kimi.com 키)",
+  "model.trait.vllm": "직접 띄운 vLLM 서버에서 실행 — 토큰당 비용 없음",
   "model.trait.qwen8b": "추론·분석에 강한 표준 로컬 모델",
   "model.trait.qwen4b": "조금 더 빠른 가벼운 로컬 모델",
   "model.trait.qwen06b": "가장 빠르지만 단순한 작업용",

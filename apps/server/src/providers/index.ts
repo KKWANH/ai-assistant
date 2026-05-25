@@ -175,6 +175,11 @@ export async function getProvider(settings: Pick<Settings, "provider" | "model">
       instance = new OllamaProvider(model);
       break;
     }
+    case "vllm": {
+      const { VllmProvider } = await import("./openai.js");
+      instance = new VllmProvider(model);
+      break;
+    }
     case "gemini": {
       const { GeminiProvider } = await import("./gemini.js");
       instance = new GeminiProvider(model);

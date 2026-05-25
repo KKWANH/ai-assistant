@@ -125,6 +125,30 @@ The settings UI inside Ariadne (top-right gear icon) lets you switch active
 provider/model per session, but the **keys themselves** must come from env vars —
 this is intentional, see `docs/PRODUCT_PLAN.md` for why.
 
+### Optional: self-hosted vLLM on a Linux/GPU box
+
+If you have a Linux box with a CUDA GPU on the same LAN, you can point Ariadne
+at a `vllm serve …` process and let it do agentic bursts + eval concurrency
+against your own hardware. See [`docs/VLLM_PLAN.md`](VLLM_PLAN.md) for the
+"when this is worth it" analysis — short version: **not on your Mac mini**,
+yes on a Linux box you also own.
+
+```bash
+# On the GPU box (Linux):
+pip install vllm
+vllm serve Qwen/Qwen2.5-7B-Instruct --port 8000
+
+# On the Ariadne box:
+export VLLM_BASE_URL=http://<gpu-box-hostname-or-ip>:8000
+# (optional) only if you launched vllm with --api-key
+export VLLM_API_KEY=…
+./ops/ariadne.sh restart
+```
+
+Then pick "vLLM (self-hosted)" + the matching model id in the chat model
+picker. The model id must match what `vllm serve` was launched with — vLLM
+does not hot-swap models in one process.
+
 ## 6. First sanity check
 
 ```bash

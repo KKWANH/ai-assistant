@@ -48,6 +48,10 @@ const KNOWN: Record<string, ModelInfo> = {
   "qwen3:8b":   { label: "Qwen 3 (8B)",   traitKey: "model.trait.qwen8b",  speed: "normal", costTier: "low" },
   "qwen3:4b":   { label: "Qwen 3 (4B)",   traitKey: "model.trait.qwen4b",  speed: "fast",   costTier: "low" },
   "qwen3:0.6b": { label: "Qwen 3 (0.6B)", traitKey: "model.trait.qwen06b", speed: "fast",   costTier: "low" },
+  // vLLM self-hosted (the user picks one; vLLM serves what it was launched with)
+  "Qwen/Qwen2.5-7B-Instruct":      { label: "Qwen 2.5 7B (vLLM)",   traitKey: "model.trait.vllm",  speed: "fast",   costTier: "low" },
+  "Qwen/Qwen2.5-14B-Instruct":     { label: "Qwen 2.5 14B (vLLM)",  traitKey: "model.trait.vllm",  speed: "normal", costTier: "low" },
+  "meta-llama/Llama-3.1-8B-Instruct": { label: "Llama 3.1 8B (vLLM)", traitKey: "model.trait.vllm", speed: "fast",  costTier: "low" },
   // Mock
   mock: { label: "Mock", traitKey: "model.trait.mock", speed: "fast", costTier: "low" },
 };
@@ -78,6 +82,10 @@ const MODEL_PRICING: Record<string, ModelPrice> = {
   "qwen3:8b":   { inUsd: 0, outUsd: 0 },
   "qwen3:4b":   { inUsd: 0, outUsd: 0 },
   "qwen3:0.6b": { inUsd: 0, outUsd: 0 },
+  // vLLM self-hosted — runs on the user's own hardware, no per-token cost.
+  "Qwen/Qwen2.5-7B-Instruct":         { inUsd: 0, outUsd: 0 },
+  "Qwen/Qwen2.5-14B-Instruct":        { inUsd: 0, outUsd: 0 },
+  "meta-llama/Llama-3.1-8B-Instruct": { inUsd: 0, outUsd: 0 },
   mock:         { inUsd: 0, outUsd: 0 },
 };
 
