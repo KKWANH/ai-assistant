@@ -20,18 +20,60 @@ export default defineConfig({
         // Split stable third-party deps into their own long-cacheable chunks.
         // CodeMirror is only pulled in by the lazy editor chunks, so it stays
         // out of the initial bundle; react-markdown rides with the chat chunk.
-        manualChunks: {
-          "vendor-react": ["react", "react-dom", "react-router-dom"],
-          "vendor-codemirror": [
-            "codemirror",
-            "@codemirror/state",
-            "@codemirror/view",
-            "@codemirror/commands",
-            "@codemirror/lang-javascript",
-            "@codemirror/language",
-            "@lezer/highlight",
-          ],
-          "vendor-markdown": ["react-markdown", "remark-gfm", "remark-cjk-friendly"],
+        // Function form: needed so we can pin react/jsx-runtime (+ scheduler)
+        // into vendor-react. Otherwise Rollup tucks jsx-runtime into
+        // vendor-markdown (its biggest static consumer), which forces every
+        // JSX-using chunk to statically depend on the 168 kB markdown bundle —
+        // defeating the React.lazy(MarkdownContent) split.
+        //
+        // CodeMirror language packs (lang-python/cpp/rust/go) deliberately
+        // stay OUT of the vendor-codemirror chunk so they ride with the
+        // lazy WorkspaceFileEditor route instead of bloating the shared
+        // editor vendor chunk.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/react-router") ||
+            id.includes("/scheduler/")
+          ) {
+            return "vendor-react";
+          }
+          if (
+            id.includes("/codemirror/") ||
+            id.includes("/@codemirror/state/") ||
+            id.includes("/@codemirror/view/") ||
+            id.includes("/@codemirror/commands/") ||
+            id.includes("/@codemirror/lang-javascript/") ||
+            id.includes("/@codemirror/language/") ||
+            id.includes("/@lezer/highlight/")
+          ) {
+            return "vendor-codemirror";
+          }
+          if (
+            id.includes("/react-markdown/") ||
+            id.includes("/remark-") ||
+            id.includes("/micromark") ||
+            id.includes("/mdast-") ||
+            id.includes("/unist-") ||
+            id.includes("/hast-") ||
+            id.includes("/unified/") ||
+            id.includes("/bail/") ||
+            id.includes("/trough/") ||
+            id.includes("/vfile") ||
+            id.includes("/decode-named-character-reference") ||
+            id.includes("/character-entities") ||
+            id.includes("/property-information") ||
+            id.includes("/space-separated-tokens") ||
+            id.includes("/comma-separated-tokens") ||
+            id.includes("/zwitch") ||
+            id.includes("/html-url-attributes") ||
+            id.includes("/devlop")
+          ) {
+            return "vendor-markdown";
+          }
+          return undefined;
         },
       },
     },

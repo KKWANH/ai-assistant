@@ -6,13 +6,8 @@
  * - Agent messages: live step checklist above the final markdown answer.
  * - Streaming state: live status line / token cursor while generating.
  */
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-// Lets `**bold**` / `*italic*` parse when the delimiters touch CJK characters
-// (e.g. `**공**과`) — plain CommonMark flanking rules reject those as emphasis.
-import remarkCjkFriendly from "remark-cjk-friendly";
 import {
   ChevronDown,
   ChevronUp,
@@ -47,111 +42,20 @@ import { PromoteCaseModal } from "../eval/PromoteCaseModal";
 import { SaveToMemoryModal } from "../memory/SaveToMemoryModal";
 
 // ── Markdown renderer (react-markdown + remark-gfm) ──────────────────────────
-const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
-  // Code blocks
-  code({ className, children, ...props }) {
-    const isBlock = className?.startsWith("language-");
-    if (isBlock) {
-      return (
-        <pre className="my-2 rounded-md bg-surface-3 border border-border px-3 py-2 text-xs font-mono overflow-x-auto whitespace-pre-wrap">
-          <code className={className} {...props}>
-            {children}
-          </code>
-        </pre>
-      );
-    }
-    return (
-      <code
-        className="px-1 rounded bg-surface-3 border border-border font-mono text-xs text-foreground"
-        {...props}
-      >
-        {children}
-      </code>
-    );
-  },
-  // Headings
-  h1({ children }) {
-    return <h1 className="text-base font-semibold mt-4 mb-2 text-foreground">{children}</h1>;
-  },
-  h2({ children }) {
-    return <h2 className="text-sm font-semibold mt-3 mb-1 text-foreground">{children}</h2>;
-  },
-  h3({ children }) {
-    return <h3 className="text-sm font-semibold mt-2 mb-1 text-foreground">{children}</h3>;
-  },
-  // Paragraphs
-  p({ children }) {
-    return <p className="mt-1.5 first:mt-0 leading-relaxed">{children}</p>;
-  },
-  // Lists
-  ul({ children }) {
-    return <ul className="my-1.5 ml-4 space-y-0.5 list-disc text-foreground">{children}</ul>;
-  },
-  ol({ children }) {
-    return <ol className="my-1.5 ml-4 space-y-0.5 list-decimal text-foreground">{children}</ol>;
-  },
-  li({ children }) {
-    return <li className="leading-relaxed">{children}</li>;
-  },
-  // Tables
-  table({ children }) {
-    return (
-      <div className="my-2 overflow-x-auto">
-        <table className="w-full text-xs border-collapse border border-border">{children}</table>
-      </div>
-    );
-  },
-  thead({ children }) {
-    return <thead className="bg-surface-3">{children}</thead>;
-  },
-  th({ children }) {
-    return <th className="border border-border px-2 py-1 text-left font-medium text-foreground">{children}</th>;
-  },
-  td({ children }) {
-    return <td className="border border-border px-2 py-1 text-foreground/80">{children}</td>;
-  },
-  // Blockquote
-  blockquote({ children }) {
-    return (
-      <blockquote className="my-2 border-l-2 border-border pl-3 text-muted-foreground italic">
-        {children}
-      </blockquote>
-    );
-  },
-  // HR
-  hr() {
-    return <hr className="border-border my-3" />;
-  },
-  // Links
-  a({ href, children }) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-foreground underline underline-offset-2 decoration-foreground/40 hover:decoration-foreground"
-      >
-        {children}
-      </a>
-    );
-  },
-};
+// Lazy-load: react-markdown + remark-gfm + remark-cjk-friendly is a ~52 kB gz
+// bundle that only assistant messages need. User messages render plain text,
+// and the empty home state has no messages at all — keeping this off the
+// initial ChatView chunk speeds up first paint for cold landings.
+const MarkdownContent = lazy(() => import("./MarkdownContent"));
 
-// memo() because ReactMarkdown reparses + re-renders on every prop
-// change. Without it, each streaming-delta re-renders the parent
-// MessageBubble, which re-runs the full markdown parse on the
-// accumulated text → O(n²) parses by the time a long response is done.
-// Memoizing on `content` means we only reparse when content actually
-// grows — once per delta instead of once per re-render.
-const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
+// Tiny placeholder while the markdown chunk fetches on first assistant reply.
+// Renders the raw content so screen readers / no-JS still see something, and
+// so the layout doesn't jump once the styled version mounts.
+function MarkdownFallback({ content }: { content: string }) {
   return (
-    <div className="text-sm text-foreground leading-relaxed">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={markdownComponents}>
-        {content}
-      </ReactMarkdown>
-    </div>
+    <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{content}</div>
   );
-});
+}
 
 // ── Tool icon ─────────────────────────────────────────────────────────────────
 function ToolIcon({ tool }: { tool: AgentTool }) {
@@ -801,7 +705,9 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
         {/* Assistant content — flowing document, no bubble */}
         {hasContent && (
           <div className="w-full">
-            <MarkdownContent content={message.content} />
+            <Suspense fallback={<MarkdownFallback content={message.content} />}>
+              <MarkdownContent content={message.content} />
+            </Suspense>
 
             {/* Live streaming cursor at end */}
             {isStreaming && (
