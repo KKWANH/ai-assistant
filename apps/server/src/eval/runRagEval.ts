@@ -55,6 +55,11 @@ interface CliArgs {
   outDir: string;
   live: boolean;
   useDb: boolean;
+  /** Generation concurrency. N=1 = serial (default, safe on Ollama).
+   *  N>1 = parallel — only useful against a batched backend (vLLM,
+   *  hosted providers). Ollama serialises internally so N>1 can be
+   *  *slower* there. */
+  concurrency: number;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -63,6 +68,7 @@ function parseArgs(argv: string[]): CliArgs {
   let topK = 6;
   let live = false;
   let useDb = false;
+  let concurrency = 1;
   let outDir = path.join(
     __dirname,
     "..", "..", "..", "..",
@@ -79,13 +85,15 @@ function parseArgs(argv: string[]): CliArgs {
       topK = parseInt(arg.slice("--topK=".length), 10) || topK;
     } else if (arg.startsWith("--out=")) {
       outDir = arg.slice("--out=".length);
+    } else if (arg.startsWith("--concurrency=")) {
+      concurrency = Math.max(1, parseInt(arg.slice("--concurrency=".length), 10) || 1);
     } else if (arg === "--live") {
       live = true;
     } else if (arg === "--use-db") {
       useDb = true;
     }
   }
-  return { workspaces, strategy, topK, outDir, live, useDb };
+  return { workspaces, strategy, topK, outDir, live, useDb, concurrency };
 }
 
 async function scanFixture(fixtureRoot: string): Promise<FileMeta[]> {
@@ -245,30 +253,26 @@ async function main(): Promise<void> {
     fixturesByName.set(ws, { root, files, workspaceId });
   }
 
-  const rows: GenCaseMetrics[] = [];
-  for (const c of filtered) {
+  // Per-case work — retrieval + generation + scoring + log. Pulled out
+  // so the runner can dispatch via either a serial for-of (concurrency=1,
+  // safe against Ollama / unwilling backends) or a Promise.all pool
+  // (concurrency>1, only beneficial against a batched backend like vLLM).
+  async function runCase(c: typeof filtered[number]): Promise<GenCaseMetrics | null> {
     const fix = fixturesByName.get(c.workspace);
-    if (!fix) continue;
-
-    // Retrieve
+    if (!fix) return null;
     const retrieveOpts: RetrieveOptions = {
       topK: args.topK,
       forceStrategy: args.strategy,
       ...(fix.workspaceId ? { workspaceId: fix.workspaceId } : {}),
     };
     const result = await retrieveWithMeta(fix.root, fix.files, c.query, retrieveOpts);
-
-    // Generate
     const t0 = performance.now();
     const answer = args.live
       ? await liveGenerate(c, result.chunks)
       : mockGenerate(c, result.chunks);
     const latency = performance.now() - t0;
-
     const generator = args.live ? "live-provider" : "mock";
     const row = evaluateGenerationCase(c, answer, result.chunks, latency, generator);
-    rows.push(row);
-
     const ok =
       row.faithfulness >= 0.85 &&
       row.forbiddenClaimLeaks.length === 0 &&
@@ -278,6 +282,34 @@ async function main(): Promise<void> {
     console.log(
       `${tag} ${c.id.padEnd(34)} faith=${(row.faithfulness * 100).toFixed(0)}% abst=${row.abstentionCorrect ? "y" : "n"} expCl=${(row.expectedClaimsHit * 100).toFixed(0)}% forbiddenLeak=${row.forbiddenClaimLeaks.length.toString()} ${row.latencyMs.toFixed(0)}ms`,
     );
+    return row;
+  }
+
+  const rows: GenCaseMetrics[] = [];
+  if (args.concurrency <= 1) {
+    for (const c of filtered) {
+      const row = await runCase(c);
+      if (row) rows.push(row);
+    }
+  } else {
+    // Bounded pool — N in-flight cases at any time. Useful against
+    // continuous-batching backends (vLLM continuous batching + prefix
+    // caching collapses N cases that share the system prompt into a
+    // single forward pass). NOT useful against Ollama, which serialises
+    // and shares no KV across requests — N>1 there is no faster, often
+    // slower. Default stays at 1 so a fresh `npm run eval:rag --live`
+    // doesn't surprise an Ollama user with thrash.
+    console.log(`-- generation concurrency: ${args.concurrency.toString()} (requires batched backend; Ollama users should keep =1)`);
+    const queue = [...filtered];
+    const workers = Array.from({ length: args.concurrency }, async () => {
+      while (queue.length > 0) {
+        const c = queue.shift();
+        if (!c) return;
+        const row = await runCase(c);
+        if (row) rows.push(row);
+      }
+    });
+    await Promise.all(workers);
   }
 
   const agg = aggregateGeneration(rows);
