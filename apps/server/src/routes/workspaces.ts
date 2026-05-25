@@ -14,6 +14,7 @@ import {
 } from "../db/repo.js";
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
+import { fireHooksDetached } from "../services/hooks.js";
 import { buildSurface } from "../services/surfaceBuild.js";
 import { retrieveWithMeta } from "../services/retrieval.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
@@ -304,6 +305,12 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       dbUpdateWorkspace(workspace.id, {
         lastScanAt: snapshot.createdAt,
         fileCount: snapshot.fileCount,
+      });
+      // Fire post_scan hooks detached — don't block the response on
+      // whatever the user told us to do after a scan completes.
+      fireHooksDetached("post_scan", workspace.rootPath, {
+        fileCount: snapshot.fileCount,
+        snapshotId: snapshot.id,
       });
       return reply.send(snapshot);
     } catch (err) {

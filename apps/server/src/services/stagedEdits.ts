@@ -23,6 +23,7 @@ import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { computeDiffOps, toUnifiedDiff, diffStats } from "./diff.js";
 import { commitWorkspaceHistory } from "./workspaceGit.js";
 import { dbGetWorkspace, dbGetRun } from "../db/repo.js";
+import { fireHooksDetached } from "./hooks.js";
 import logger from "../logger.js";
 
 function stagedRoot(workspace: Workspace, runId: string): string {
@@ -213,6 +214,17 @@ export async function applyStagedEdits(
   // distinctly and a second click of Apply rejects cleanly.
   manifest.appliedAt = new Date().toISOString();
   writeManifest(ws, manifest);
+
+  // Fire staged_apply hooks — detached so a slow / failing hook can't
+  // wedge the apply response. Only fires when at least one file
+  // actually landed on disk (skip the no-op case).
+  if (result.applied.length > 0) {
+    fireHooksDetached("staged_apply", ws.rootPath, {
+      runId,
+      paths: result.applied,
+      commitSha: result.commitSha,
+    });
+  }
 
   return result;
 }

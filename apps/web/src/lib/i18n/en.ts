@@ -1008,6 +1008,22 @@ const en = {
   "mcp.tools.hide": "Hide tools",
   "mcp.tools.none": "No tools exposed.",
   "mcp.tools.fetchFailed": "Couldn't list tools",
+
+  // ── Hooks (.ariadne/hooks.yaml) ─────────────────────────────────────────────
+  "hooks.tab": "Hooks",
+  "hooks.panel.title": "Workspace hooks",
+  "hooks.panel.subtitle": "Commands that fire on key events — apply a staged edit, finish a scan, add a memory. Editing happens locally; remote sessions can view but not change.",
+  "hooks.panel.empty": "No hooks yet. Add YAML below — see the comment header for the supported events.",
+  "hooks.panel.registered": "{n} hook(s) registered",
+  "hooks.disabled": "disabled",
+  "hooks.editor.title": ".ariadne/hooks.yaml",
+  "hooks.editor.localOnly": "Editing is local-only. Remote sessions get a 403 on save.",
+  "hooks.editor.save": "Save",
+  "hooks.editor.reset": "Reset",
+  "hooks.save.saved": "Hooks saved",
+  "hooks.save.failed": "Couldn't save hooks",
+  "hooks.log.show": "View recent log",
+  "hooks.log.refresh": "Refresh",
 } as const;
 
 export type TranslationKey = keyof typeof en;

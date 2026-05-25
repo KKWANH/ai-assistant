@@ -42,6 +42,7 @@ import {
   GitCommit,
   Undo2,
   BrainCircuit,
+  Workflow,
 } from "lucide-react";
 
 import {
@@ -76,6 +77,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Ta
 import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
 import { MemoryPanel } from "../memory/MemoryPanel";
+import { HooksPanel } from "../hooks/HooksPanel";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
 // The CodeMirror-backed editors are heavy; load them only when their tab opens.
@@ -1000,6 +1002,12 @@ export function WorkspaceOverview() {
                 {t("memory.tab")}
               </span>
             </TabsTrigger>
+            <TabsTrigger value="hooks">
+              <span className="flex items-center gap-1.5">
+                <Workflow className="h-3.5 w-3.5" />
+                {t("hooks.tab")}
+              </span>
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -1072,6 +1080,14 @@ export function WorkspaceOverview() {
         <TabsContent value="memory" className="flex-1 overflow-y-auto min-h-0">
           <WorkspacePanel>
             <MemoryPanel workspaceId={ws.id} />
+          </WorkspacePanel>
+        </TabsContent>
+
+        {/* Hooks — per-workspace commands that fire on key events
+            (staged_apply, post_scan, memory_added). Local-only edit. */}
+        <TabsContent value="hooks" className="flex-1 overflow-y-auto min-h-0">
+          <WorkspacePanel>
+            <HooksPanel workspaceId={ws.id} />
           </WorkspacePanel>
         </TabsContent>
       </Tabs>

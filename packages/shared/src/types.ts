@@ -774,6 +774,47 @@ export interface WorkspaceMemory {
 }
 
 /* ------------------------------------------------------------------ *
+ * Workspace hooks — per-workspace commands that run on key events.
+ * Stored in `<workspaceRoot>/.ariadne/hooks.yaml`, fired by the
+ * server-side hooks service. Editing is local-only; remote sessions
+ * can view but not modify.
+ * ------------------------------------------------------------------ */
+
+export type HookEvent =
+  /** Fired after a staged edit is applied to disk. Payload includes paths. */
+  | "staged_apply"
+  /** Fired after a workspace scan completes. Payload includes file count. */
+  | "post_scan"
+  /** Fired after a new workspace memory is added. Payload includes the memory id. */
+  | "memory_added";
+
+export const HOOK_EVENTS: readonly HookEvent[] = [
+  "staged_apply",
+  "post_scan",
+  "memory_added",
+] as const;
+
+export interface WorkspaceHook {
+  id: string;
+  event: HookEvent;
+  command: string;
+  /** Default 30000 (30s). Hard-capped at 300000 (5m) by the runner. */
+  timeoutMs?: number;
+  enabled: boolean;
+}
+
+export interface HookRunSummary {
+  hookId: string;
+  event: HookEvent;
+  startedAt: string;
+  durationMs: number;
+  exitCode: number | null;
+  /** Tail of stdout/stderr, capped at ~2 KB for the API response. The
+   *  full log lives in `.ariadne/hooks/<id>.log` on disk. */
+  outputTail: string;
+}
+
+/* ------------------------------------------------------------------ *
  * MCP servers — external Model Context Protocol endpoints the user
  * has registered. Each entry describes how to launch (stdio) or reach
  * (http/sse, future) one MCP server. The connection manager owns the

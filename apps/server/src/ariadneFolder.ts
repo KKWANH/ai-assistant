@@ -134,6 +134,62 @@ export function writeActionsYaml(workspaceRoot: string, source: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Workspace hooks (.ariadne/hooks.yaml + .ariadne/hooks/*.log)
+// ---------------------------------------------------------------------------
+
+const HOOKS_YAML = ".ariadne/hooks.yaml";
+const HOOKS_LOG_DIR = ".ariadne/hooks";
+
+export function hooksYamlPath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, HOOKS_YAML);
+}
+
+export function hooksLogDir(workspaceRoot: string): string {
+  return path.join(workspaceRoot, HOOKS_LOG_DIR);
+}
+
+export function readHooksYaml(workspaceRoot: string): string | null {
+  const dest = path.resolve(path.join(workspaceRoot, HOOKS_YAML));
+  assertInsideAriadne(workspaceRoot, dest);
+  if (!fs.existsSync(dest)) return null;
+  return fs.readFileSync(dest, "utf-8");
+}
+
+export function writeHooksYaml(workspaceRoot: string, source: string): void {
+  const dest = path.resolve(path.join(workspaceRoot, HOOKS_YAML));
+  assertInsideAriadne(workspaceRoot, dest);
+  fs.writeFileSync(dest, source, "utf-8");
+}
+
+/** Append one log line to .ariadne/hooks/<hookId>.log. Caller-owned
+ *  format. Used by the hook runner to record each invocation. */
+export function appendHookLog(workspaceRoot: string, hookId: string, line: string): void {
+  const dir = path.resolve(hooksLogDir(workspaceRoot));
+  assertInsideAriadne(workspaceRoot, dir);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${hookId}.log`);
+  fs.appendFileSync(file, line, "utf-8");
+}
+
+/** Read the tail of a hook's log, capped at ~8 KB. Used by the UI
+ *  panel so the user sees recent output without us streaming MBs. */
+export function readHookLogTail(workspaceRoot: string, hookId: string, maxBytes = 8_000): string | null {
+  const file = path.resolve(path.join(hooksLogDir(workspaceRoot), `${hookId}.log`));
+  assertInsideAriadne(workspaceRoot, file);
+  if (!fs.existsSync(file)) return null;
+  const stat = fs.statSync(file);
+  if (stat.size <= maxBytes) return fs.readFileSync(file, "utf-8");
+  const fd = fs.openSync(file, "r");
+  try {
+    const buf = Buffer.alloc(maxBytes);
+    fs.readSync(fd, buf, 0, maxBytes, stat.size - maxBytes);
+    return "...(truncated)\n" + buf.toString("utf-8");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Workspace memory (.ariadne/memory.yaml)
 // ---------------------------------------------------------------------------
 

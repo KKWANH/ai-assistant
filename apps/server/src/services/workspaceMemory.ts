@@ -25,6 +25,7 @@ import crypto from "node:crypto";
 import yaml from "yaml";
 import type { WorkspaceMemory } from "@ariadne/shared";
 import { readMemoryYaml, writeMemoryYaml } from "../ariadneFolder.js";
+import { fireHooksDetached } from "./hooks.js";
 
 interface MemoryFile {
   memories: WorkspaceMemory[];
@@ -79,6 +80,12 @@ export function addMemory(
   };
   const next = [...existing, entry];
   writeMemoryYaml(workspaceRoot, serialise(next));
+  // Notify any "memory_added" hooks — detached so a slow hook doesn't
+  // delay the modal's success toast.
+  fireHooksDetached("memory_added", workspaceRoot, {
+    memoryId: entry.id,
+    addedBy: entry.addedBy,
+  });
   return entry;
 }
 

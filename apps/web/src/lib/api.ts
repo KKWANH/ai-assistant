@@ -642,6 +642,28 @@ export const deleteWorkspaceMemory = (workspaceId: string, memoryId: string) =>
     `/workspaces/${workspaceId}/memory/${memoryId}`,
   );
 
+// ── Workspace hooks ──────────────────────────────────────────────────────────
+import type { WorkspaceHook, PutHooksInput } from "@ariadne/shared";
+
+export const getWorkspaceHooks = (workspaceId: string) =>
+  request<{ hooks: WorkspaceHook[]; source: string }>(
+    "GET",
+    `/workspaces/${workspaceId}/hooks`,
+  );
+
+export const putWorkspaceHooks = (workspaceId: string, input: PutHooksInput) =>
+  request<{ hooks: WorkspaceHook[]; source: string }>(
+    "PUT",
+    `/workspaces/${workspaceId}/hooks`,
+    input,
+  );
+
+export const getHookLog = (workspaceId: string, hookId: string) =>
+  request<{ log: string }>(
+    "GET",
+    `/workspaces/${workspaceId}/hooks/${hookId}/log`,
+  );
+
 // ── MCP servers ──────────────────────────────────────────────────────────────
 import type {
   McpServer,

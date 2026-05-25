@@ -1001,6 +1001,22 @@ const ko: Record<TranslationKey, string> = {
   "mcp.tools.hide": "도구 숨기기",
   "mcp.tools.none": "노출된 도구가 없습니다.",
   "mcp.tools.fetchFailed": "도구 목록을 가져오지 못함",
+
+  // ── 훅 (.ariadne/hooks.yaml) ─────────────────────────────────────────────
+  "hooks.tab": "훅",
+  "hooks.panel.title": "워크스페이스 훅",
+  "hooks.panel.subtitle": "주요 이벤트 발생 시 실행되는 명령어 — staged edit 적용, 스캔 완료, 메모리 추가 등. 편집은 로컬에서만 가능하며 원격 세션은 보기만 됩니다.",
+  "hooks.panel.empty": "아직 훅이 없습니다. 아래 YAML을 편집해 추가하세요 — 지원 이벤트는 상단 주석을 참고.",
+  "hooks.panel.registered": "{n}개 훅 등록됨",
+  "hooks.disabled": "비활성",
+  "hooks.editor.title": ".ariadne/hooks.yaml",
+  "hooks.editor.localOnly": "편집은 로컬에서만 가능. 원격에서는 저장 시 403이 반환됩니다.",
+  "hooks.editor.save": "저장",
+  "hooks.editor.reset": "되돌리기",
+  "hooks.save.saved": "훅 저장됨",
+  "hooks.save.failed": "훅 저장 실패",
+  "hooks.log.show": "최근 로그 보기",
+  "hooks.log.refresh": "새로고침",
 };
 
 export default ko;

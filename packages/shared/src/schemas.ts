@@ -213,6 +213,17 @@ export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>;
  * a query with no positive or negative expectation isn't a useful case.
  */
 /**
+ * PUT /api/workspaces/:id/hooks — replace the whole `.ariadne/hooks.yaml`
+ * source. Local-only. Validated server-side after YAML parse — the
+ * raw schema is intentionally permissive so users can hand-edit
+ * comments/anchors without round-trip corruption.
+ */
+export const PutHooksSchema = z.object({
+  source: z.string().max(50_000),
+});
+export type PutHooksInput = z.infer<typeof PutHooksSchema>;
+
+/**
  * POST /api/mcp-servers — register a new MCP server endpoint. Each
  * entry describes how to launch (stdio) the server; the connection
  * manager spawns lazily on first agent call.
