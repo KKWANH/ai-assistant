@@ -641,3 +641,32 @@ export const deleteWorkspaceMemory = (workspaceId: string, memoryId: string) =>
     "DELETE",
     `/workspaces/${workspaceId}/memory/${memoryId}`,
   );
+
+// ── MCP servers ──────────────────────────────────────────────────────────────
+import type {
+  McpServer,
+  McpTool,
+  McpConnectionStatus,
+  CreateMcpServerInput,
+  UpdateMcpServerInput,
+} from "@ariadne/shared";
+
+export type McpServerWithStatus = McpServer & { connected: boolean };
+
+export const listMcpServers = () =>
+  request<McpServerWithStatus[]>("GET", "/mcp-servers");
+
+export const createMcpServer = (input: CreateMcpServerInput) =>
+  request<McpServerWithStatus>("POST", "/mcp-servers", input);
+
+export const updateMcpServer = (id: string, input: UpdateMcpServerInput) =>
+  request<McpServerWithStatus>("PATCH", `/mcp-servers/${id}`, input);
+
+export const deleteMcpServer = (id: string) =>
+  request<{ ok: true }>("DELETE", `/mcp-servers/${id}`);
+
+export const listMcpTools = (id: string) =>
+  request<{ tools: McpTool[] }>("GET", `/mcp-servers/${id}/tools`);
+
+export const testMcpServer = (id: string) =>
+  request<McpConnectionStatus>("POST", `/mcp-servers/${id}/test`);

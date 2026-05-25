@@ -557,7 +557,11 @@ export type AgentTool =
   /** Run the workspace's test command; output prefixed with ✓/✗ for re-plan. */
   | "run_tests"
   /** Evaluate a math expression via mathjs — fast, in-process, no side effects. */
-  | "calculate";
+  | "calculate"
+  /** Invoke a tool on a registered MCP server. The step description must
+   *  start with `serverName::toolName ` then a JSON-encoded args object —
+   *  the planner is told this format in its system prompt. */
+  | "mcp_call";
 
 export interface AgentStep {
   id: string;
@@ -767,6 +771,46 @@ export interface WorkspaceMemory {
    *  source.kind="chat" + source.ref=<messageId>, etc. Mirrors the
    *  shape used by user-promoted eval cases. */
   source?: { kind: "chat" | "manual"; ref?: string };
+}
+
+/* ------------------------------------------------------------------ *
+ * MCP servers — external Model Context Protocol endpoints the user
+ * has registered. Each entry describes how to launch (stdio) or reach
+ * (http/sse, future) one MCP server. The connection manager owns the
+ * actual live connections.
+ * ------------------------------------------------------------------ */
+
+export type McpTransport = "stdio";
+
+export interface McpServer {
+  id: string;
+  name: string;
+  transport: McpTransport;
+  /** For stdio: the binary to spawn (e.g. "npx" or "/usr/local/bin/foo"). */
+  command: string;
+  /** Args appended to `command` when spawning. */
+  args: string[];
+  /** Env vars merged into the child process. Keep secrets here, not in command. */
+  env: Record<string, string>;
+  enabled: boolean;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface McpTool {
+  /** Tool name as the MCP server returns it. */
+  name: string;
+  description: string;
+  /** Raw input schema (JSON Schema) — passed through to the agent planner
+   *  so it can craft well-formed args. May be null when the server
+   *  doesn't publish one. */
+  inputSchema: Record<string, unknown> | null;
+}
+
+export interface McpConnectionStatus {
+  connected: boolean;
+  lastError?: string;
+  toolCount?: number;
 }
 
 /* ------------------------------------------------------------------ *

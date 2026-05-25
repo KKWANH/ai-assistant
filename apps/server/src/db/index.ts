@@ -273,6 +273,32 @@ function runMigrations(db: DatabaseSync): void {
     );
   `);
 
+  // MCP servers — external Model Context Protocol endpoints the user
+  // has registered. The agent can call any tool exposed by a connected
+  // server via the `mcp_call` tool. Per-account so each user manages
+  // their own credentials; admin can see all via the settings panel.
+  //
+  // v1 transport is "stdio" only — `command` is the binary to spawn
+  // (e.g. `npx`), `args_json` is the JSON-encoded argv tail
+  // (e.g. `["-y", "@modelcontextprotocol/server-filesystem", "/path"]`).
+  // HTTP/SSE transport is on the roadmap; the table already has a
+  // `transport` column so adding it later is non-breaking.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_servers (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      transport   TEXT NOT NULL DEFAULT 'stdio',
+      command     TEXT NOT NULL,
+      args_json   TEXT NOT NULL DEFAULT '[]',
+      env_json    TEXT NOT NULL DEFAULT '{}',
+      enabled     INTEGER NOT NULL DEFAULT 1,
+      created_by  TEXT,
+      created_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mcp_servers_created_by
+      ON mcp_servers(created_by);
+  `);
+
   // Guarded ALTER TABLE blocks. Each `addColumn(...)` is a no-op if the
   // column already exists on the table; SQLite has no IF NOT EXISTS for
   // ADD COLUMN, so we PRAGMA-introspect once per table and reuse the

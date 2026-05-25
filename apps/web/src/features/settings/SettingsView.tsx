@@ -38,6 +38,7 @@ import { Textarea } from "../../components/ui/Textarea";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
+import { McpServersPanel } from "../mcp/McpServersPanel";
 
 /** Compact section heading shared by every block in the settings page. */
 function SectionHeading({
@@ -195,6 +196,15 @@ export function SettingsView() {
             );
           })}
         </div>
+      </section>
+
+      {/* MCP servers — external Model Context Protocol endpoints
+          the agent can call as tools. Local-only management. */}
+      <section>
+        <SectionHeading>
+          {t("mcp.panel.heading")}
+        </SectionHeading>
+        <McpServersPanel />
       </section>
 
       {/* Language / 언어 */}

@@ -1264,6 +1264,120 @@ export function dbListWorkspaceChunks(workspaceId: string): StoredChunk[] {
 }
 
 // ---------------------------------------------------------------------------
+// MCP servers
+// ---------------------------------------------------------------------------
+
+import type { McpServer } from "@ariadne/shared";
+
+function rowToMcpServer(row: Record<string, unknown>): McpServer {
+  // env_json / args_json shape is enforced on insert. Parse defensively
+  // — corrupt rows shouldn't crash the listing endpoint.
+  let args: string[] = [];
+  let env: Record<string, string> = {};
+  try {
+    const parsedArgs = JSON.parse((row["args_json"] as string) ?? "[]") as unknown;
+    if (Array.isArray(parsedArgs)) args = parsedArgs.map((s) => String(s));
+  } catch { /* keep default */ }
+  try {
+    const parsedEnv = JSON.parse((row["env_json"] as string) ?? "{}") as unknown;
+    if (parsedEnv && typeof parsedEnv === "object" && !Array.isArray(parsedEnv)) {
+      env = Object.fromEntries(
+        Object.entries(parsedEnv as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+      );
+    }
+  } catch { /* keep default */ }
+  return {
+    id: row["id"] as string,
+    name: row["name"] as string,
+    transport: (row["transport"] as McpServer["transport"]) ?? "stdio",
+    command: row["command"] as string,
+    args,
+    env,
+    enabled: Number(row["enabled"]) === 1,
+    createdBy: (row["created_by"] as string | null) ?? null,
+    createdAt: row["created_at"] as string,
+  };
+}
+
+export function dbInsertMcpServer(s: McpServer): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO mcp_servers
+       (id, name, transport, command, args_json, env_json, enabled, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    s.id,
+    s.name,
+    s.transport,
+    s.command,
+    JSON.stringify(s.args),
+    JSON.stringify(s.env),
+    s.enabled ? 1 : 0,
+    s.createdBy,
+    s.createdAt,
+  );
+}
+
+export function dbGetMcpServer(id: string): McpServer | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM mcp_servers WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? rowToMcpServer(row) : null;
+}
+
+export function dbListMcpServers(createdBy?: string): McpServer[] {
+  const db = getDb();
+  const rows = createdBy
+    ? (db.prepare("SELECT * FROM mcp_servers WHERE created_by = ? ORDER BY created_at DESC").all(createdBy) as Array<Record<string, unknown>>)
+    : (db.prepare("SELECT * FROM mcp_servers ORDER BY created_at DESC").all() as Array<Record<string, unknown>>);
+  return rows.map(rowToMcpServer);
+}
+
+export function dbListEnabledMcpServers(): McpServer[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM mcp_servers WHERE enabled = 1 ORDER BY created_at DESC")
+    .all() as Array<Record<string, unknown>>;
+  return rows.map(rowToMcpServer);
+}
+
+export function dbUpdateMcpServer(
+  id: string,
+  patch: Partial<Pick<McpServer, "name" | "command" | "args" | "env" | "enabled">>,
+): McpServer | null {
+  const existing = dbGetMcpServer(id);
+  if (!existing) return null;
+  const next: McpServer = {
+    ...existing,
+    name: patch.name ?? existing.name,
+    command: patch.command ?? existing.command,
+    args: patch.args ?? existing.args,
+    env: patch.env ?? existing.env,
+    enabled: patch.enabled ?? existing.enabled,
+  };
+  const db = getDb();
+  db.prepare(
+    `UPDATE mcp_servers
+        SET name = ?, command = ?, args_json = ?, env_json = ?, enabled = ?
+      WHERE id = ?`,
+  ).run(
+    next.name,
+    next.command,
+    JSON.stringify(next.args),
+    JSON.stringify(next.env),
+    next.enabled ? 1 : 0,
+    id,
+  );
+  return next;
+}
+
+export function dbDeleteMcpServer(id: string): void {
+  const db = getDb();
+  db.prepare("DELETE FROM mcp_servers WHERE id = ?").run(id);
+}
+
+// ---------------------------------------------------------------------------
 // FTS index
 // ---------------------------------------------------------------------------
 

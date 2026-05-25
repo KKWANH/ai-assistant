@@ -24,9 +24,10 @@ import { extractJson } from "../providers/index.js";
 import { performSearch } from "./search.js";
 import { appendUserProfile } from "./chatContext.js";
 import { focusedRead } from "../gasp/filter.js";
-import { dbGetLatestSnapshot, dbGetWorkspace } from "../db/repo.js";
+import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { createRun } from "../runs/engine.js";
 import { loadWorkspaceActions } from "./actions.js";
+import { callTool as mcpCallTool } from "./mcpClient.js";
 import { scriptEnv } from "./scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import logger from "../logger.js";
@@ -76,6 +77,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   // workspace-less chats and burned a tool call on "[No workspace attached]".
   let customActions: WorkspaceAction[] = [];
   let workspaceHint: WorkspaceHint = { attached: false, fileCount: 0 };
+  // MCP servers are per-account, not per-workspace — they're visible to
+  // the planner regardless of whether a workspace is attached.
+  const mcpServerNames = dbListMcpServers(chat.createdBy ?? undefined)
+    .filter((s) => s.enabled)
+    .map((s) => s.name);
   if (chat.workspaceId) {
     const ws = dbGetWorkspace(chat.workspaceId);
     if (ws) {
@@ -85,8 +91,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       workspaceHint = {
         attached: true,
         fileCount: snapshot?.files.length ?? 0,
+        mcpServers: mcpServerNames,
       };
+    } else {
+      workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpServerNames };
     }
+  } else {
+    workspaceHint = { attached: false, fileCount: 0, mcpServers: mcpServerNames };
   }
 
   // ── 1. Plan ──────────────────────────────────────────────────────────────
@@ -542,6 +553,50 @@ async function runTool(
       });
     }
 
+    case "mcp_call": {
+      // Description format the planner agreed to in its system prompt:
+      //   "<serverName>::<toolName> <json-args>"
+      // We split on the FIRST whitespace after `::` so server/tool names
+      // with no internal spaces stay intact and the JSON tail starts
+      // where the brace begins.
+      const trimmed = description.trim();
+      const sepIdx = trimmed.indexOf("::");
+      if (sepIdx < 0) {
+        return `[mcp_call: description must be "<serverName>::<toolName> <jsonArgs>", got: ${description.slice(0, 80)}]`;
+      }
+      const serverName = trimmed.slice(0, sepIdx).trim();
+      const afterServer = trimmed.slice(sepIdx + 2);
+      const braceIdx = afterServer.indexOf("{");
+      const toolName = (braceIdx < 0 ? afterServer : afterServer.slice(0, braceIdx)).trim();
+      const argsRaw = braceIdx < 0 ? "{}" : afterServer.slice(braceIdx).trim();
+      if (!serverName || !toolName) {
+        return `[mcp_call: empty server or tool name]`;
+      }
+      let args: Record<string, unknown>;
+      try {
+        const parsed = JSON.parse(argsRaw) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return `[mcp_call: args must be a JSON object, got ${argsRaw.slice(0, 80)}]`;
+        }
+        args = parsed as Record<string, unknown>;
+      } catch (err) {
+        return `[mcp_call: invalid JSON args — ${err instanceof Error ? err.message : String(err)}]`;
+      }
+      // Resolve serverName → serverId. The planner sees names, not ids,
+      // so the agent does the lookup. Account-scoped — admin sees all.
+      const candidate = dbListMcpServers(chat.createdBy ?? undefined)
+        .find((s) => s.enabled && s.name === serverName);
+      if (!candidate) {
+        return `[mcp_call: no enabled MCP server named "${serverName}" — registered: ${dbListMcpServers(chat.createdBy ?? undefined).filter((s) => s.enabled).map((s) => s.name).join(", ") || "(none)"}]`;
+      }
+      try {
+        const result = await mcpCallTool(candidate.id, toolName, args);
+        return result.slice(0, 8_000);
+      } catch (err) {
+        return `[mcp_call failed: ${err instanceof Error ? err.message : String(err)}]`;
+      }
+    }
+
     default: {
       const _exhaustive: never = tool;
       return `[Unknown tool: ${String(_exhaustive)}]`;
@@ -653,17 +708,27 @@ async function executeCustomAction(
 interface WorkspaceHint {
   attached: boolean;
   fileCount: number;
+  /** Names of enabled MCP servers visible to this account — shown to the
+   *  planner so it knows which `mcp_call` targets are valid. Empty list
+   *  ⇒ the planner is told NOT to pick mcp_call. */
+  mcpServers?: string[];
 }
 
 function buildPlannerSystem(
   customActions: WorkspaceAction[] = [],
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
 ): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate";
+  const mcpAvailable = (workspace.mcpServers?.length ?? 0) > 0;
+  const builtinTools =
+    "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate" +
+    (mcpAvailable ? " | mcp_call" : "");
   const customSection = customActions.length > 0
     ? `\n\nThis workspace also has custom actions you may use as tool names:\n${customActions
         .map((a) => `  - "${a.id}": ${a.name} — ${a.description}${a.constraints ? ` [constraints: ${a.constraints}]` : ""}`)
         .join("\n")}`
+    : "";
+  const mcpSection = mcpAvailable
+    ? `\n\nMCP servers available (use the "mcp_call" tool):\n  - ${(workspace.mcpServers ?? []).join("\n  - ")}\nFor mcp_call, the "description" MUST be: <serverName>::<toolName> <json-args>\nExample: { "tool": "mcp_call", "description": "fs::read_text_file {\\"path\\":\\"/tmp/x.txt\\"}", "note": "Read the requested file via the fs MCP server" }`
     : "";
   // A short, structured fact block beats burying these in prose — the
   // planner respects it more reliably and avoids picking `read_file` when
@@ -700,7 +765,7 @@ The replanner will re-run the edit/test pair if tests fail, so emit just
 one edit_file + run_tests pair — don't pre-plan retries.
 
 Return ONLY JSON: { "summary": "<one line describing your approach>", "steps": [ { "description": "...", "tool": "...", "note": "..." } ] }
-This is a plan-and-execute agent. Do not add commentary outside the JSON.`;
+This is a plan-and-execute agent. Do not add commentary outside the JSON.${mcpSection}`;
 }
 
 function buildPlannerPrompt(history: ChatMessage[], userMessage: string): string {
@@ -712,7 +777,7 @@ function buildPlannerPrompt(history: ChatMessage[], userMessage: string): string
 }
 
 function buildReplannerSystem(customActions: WorkspaceAction[] = []): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate";
+  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate | mcp_call";
   const customSection = customActions.length > 0
     ? ` | ${customActions.map((a) => a.id).join(" | ")}`
     : "";
@@ -805,7 +870,7 @@ function parsePlan(raw: string, customActions: WorkspaceAction[] = []): ParsedPl
     if (!Array.isArray(parsed.steps)) return { steps: [], summary };
     const validTools = new Set<string>([
       "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
-      "edit_file", "run_tests", "calculate",
+      "edit_file", "run_tests", "calculate", "mcp_call",
       ...customActions.map((a) => a.id),
     ]);
     const steps = parsed.steps

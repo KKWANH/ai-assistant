@@ -213,6 +213,34 @@ export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>;
  * a query with no positive or negative expectation isn't a useful case.
  */
 /**
+ * POST /api/mcp-servers — register a new MCP server endpoint. Each
+ * entry describes how to launch (stdio) the server; the connection
+ * manager spawns lazily on first agent call.
+ */
+export const CreateMcpServerSchema = z.object({
+  name: z.string().min(1).max(60),
+  transport: z.enum(["stdio"]).optional(),
+  /** Binary to spawn. Validated permissively here — the runtime spawn
+   *  enforces "must exist on PATH or be an absolute path". */
+  command: z.string().min(1).max(500),
+  args: z.array(z.string().max(500)).max(40).optional(),
+  /** Env vars merged into the child process. Common case: secrets/tokens. */
+  env: z.record(z.string().max(2000)).optional(),
+  enabled: z.boolean().optional(),
+});
+export type CreateMcpServerInput = z.infer<typeof CreateMcpServerSchema>;
+
+/** PATCH /api/mcp-servers/:id — every field optional. */
+export const UpdateMcpServerSchema = z.object({
+  name: z.string().min(1).max(60).optional(),
+  command: z.string().min(1).max(500).optional(),
+  args: z.array(z.string().max(500)).max(40).optional(),
+  env: z.record(z.string().max(2000)).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateMcpServerInput = z.infer<typeof UpdateMcpServerSchema>;
+
+/**
  * POST /api/workspaces/:id/memory — add a new memory entry. The user has
  * already approved the text in the modal; this just persists it to
  * <workspaceRoot>/.ariadne/memory.yaml. No update endpoint in v1: edit
