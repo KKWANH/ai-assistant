@@ -6,7 +6,7 @@
 
 <img src="docs/diagrams/hero.svg" alt="Local files become evidence-backed work" width="520">
 
-[Quick start](#quick-start) · [Highlights](#highlights) · [Screenshots](#screenshots) · [How it works](#how-it-runs) · [Deployment](#deployment)
+[Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [API](docs/API.md) · [Architecture](docs/ARCHITECTURE.md) · [RAG harness](docs/RAG_HARNESS.md)
 
 </div>
 
