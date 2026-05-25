@@ -329,7 +329,9 @@ export function ChatComposer({
   const [agentMode, setAgentMode] = useState<AgentMode>("off");
   // Reply mode — sticky across messages within a chat. "instant" skips
   // the multi-stage pipeline (no classifier, no retrieval, no memory)
-  // for fast answers. Default "standard" preserves existing behaviour.
+  // for fast answers. Standard users keep the existing default;
+  // Simple-mode (Easy) users default to instant so mom's "ask question,
+  // get answer fast" expectation is met out of the box.
   const [replyMode, setReplyMode] = useState<ReplyMode>("standard");
   // Skill picker — opens via the Sparkles button OR when the composer
   // starts with "/" (slash-command autocomplete). The state below tracks
@@ -370,6 +372,15 @@ export function ChatComposer({
   const { data: me } = useMe();
   // Easy mode shows friendly model names + a one-line trait instead of raw ids.
   const isSimple = me?.account.mode === "simple";
+
+  // Simple-mode users default to instant — the multi-stage pipeline
+  // wastes seconds on mom-grade queries that just want a quick answer.
+  // Use a one-shot effect keyed on isSimple so toggling Easy mode in
+  // Settings flips this immediately without forcing the user to
+  // re-toggle in every chat.
+  useEffect(() => {
+    if (isSimple) setReplyMode("instant");
+  }, [isSimple]);
 
   const selectedWs = workspaces?.find((w) => w.id === chatComposerWorkspaceId);
 
@@ -775,35 +786,38 @@ export function ChatComposer({
           </Tooltip>
 
           {/* Agent mode toggle — off → auto → on, mirrors the web-search cycle.
-              auto lets the server's classifier decide per message. */}
-          <Tooltip content={t("composer.tip.agent")} rich className="shrink-0">
-            <button
-              type="button"
-              className={[
-                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
-                agentMode === "on"
-                  ? "text-accent bg-accent/10 border border-accent/20"
-                  : agentMode === "auto"
-                    ? "text-foreground hover:bg-surface-3"
-                    : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
-              ].join(" ")}
-              onClick={() =>
-                setAgentMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
-              }
-              disabled={disabled}
-              aria-label={t("chat.composer.agentCycle")}
-              title={t("chat.composer.agentCycle")}
-            >
-              <Bot className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">
-                {agentMode === "on"
-                  ? t("chat.composer.agentOn")
-                  : agentMode === "auto"
-                    ? t("chat.composer.agentAuto")
-                    : t("chat.composer.agent")}
-              </span>
-            </button>
-          </Tooltip>
+              auto lets the server's classifier decide per message. Hidden in
+              Simple mode (Easy users don't need plan-and-execute). */}
+          {!isSimple && (
+            <Tooltip content={t("composer.tip.agent")} rich className="shrink-0">
+              <button
+                type="button"
+                className={[
+                  "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                  agentMode === "on"
+                    ? "text-accent bg-accent/10 border border-accent/20"
+                    : agentMode === "auto"
+                      ? "text-foreground hover:bg-surface-3"
+                      : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
+                ].join(" ")}
+                onClick={() =>
+                  setAgentMode((m) => (m === "off" ? "auto" : m === "auto" ? "on" : "off"))
+                }
+                disabled={disabled}
+                aria-label={t("chat.composer.agentCycle")}
+                title={t("chat.composer.agentCycle")}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  {agentMode === "on"
+                    ? t("chat.composer.agentOn")
+                    : agentMode === "auto"
+                      ? t("chat.composer.agentAuto")
+                      : t("chat.composer.agent")}
+                </span>
+              </button>
+            </Tooltip>
+          )}
 
           {/* Skills picker — account-scoped reusable prompt snippets.
               Opens via this button or via slash-command autocomplete in the

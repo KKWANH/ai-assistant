@@ -62,6 +62,7 @@ import {
   useDeleteSchedule,
   useWorkspaceHistory,
   useRewindWorkspaceCommit,
+  useMe,
 } from "../../lib/queries";
 import type { ScheduleFrequency } from "@ariadne/shared";
 import { useT } from "../../lib/i18n";
@@ -471,6 +472,11 @@ export function WorkspaceOverview() {
   const updateWorkspace = useUpdateWorkspace();
 
   const { data: ws, isLoading: wsLoading } = useWorkspace(id ?? "");
+  const { data: me } = useMe();
+  // Simple/Easy mode users don't see the power-user tabs (hooks runs
+  // arbitrary shell, memory is fine to keep). Memory stays visible
+  // because non-developers benefit from it too.
+  const isSimple = me?.account.mode === "simple";
   const { data: snapshot } = useSnapshot(id ?? "");
   const { data: runs } = useRuns(id ?? undefined);
   const { data: actionDefs } = useActionDefs(id ?? "");
@@ -1002,12 +1008,14 @@ export function WorkspaceOverview() {
                 {t("memory.tab")}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="hooks">
-              <span className="flex items-center gap-1.5">
-                <Workflow className="h-3.5 w-3.5" />
-                {t("hooks.tab")}
-              </span>
-            </TabsTrigger>
+            {!isSimple && (
+              <TabsTrigger value="hooks">
+                <span className="flex items-center gap-1.5">
+                  <Workflow className="h-3.5 w-3.5" />
+                  {t("hooks.tab")}
+                </span>
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -1084,12 +1092,16 @@ export function WorkspaceOverview() {
         </TabsContent>
 
         {/* Hooks — per-workspace commands that fire on key events
-            (staged_apply, post_scan, memory_added). Local-only edit. */}
-        <TabsContent value="hooks" className="flex-1 overflow-y-auto min-h-0">
-          <WorkspacePanel>
-            <HooksPanel workspaceId={ws.id} />
-          </WorkspacePanel>
-        </TabsContent>
+            (staged_apply, post_scan, memory_added). Local-only edit.
+            TabsContent stays mounted but the trigger above is hidden
+            in Simple mode, so it's never reachable by non-power users. */}
+        {!isSimple && (
+          <TabsContent value="hooks" className="flex-1 overflow-y-auto min-h-0">
+            <WorkspacePanel>
+              <HooksPanel workspaceId={ws.id} />
+            </WorkspacePanel>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

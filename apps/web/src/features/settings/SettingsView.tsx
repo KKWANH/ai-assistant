@@ -199,13 +199,17 @@ export function SettingsView() {
       </section>
 
       {/* MCP servers — external Model Context Protocol endpoints
-          the agent can call as tools. Local-only management. */}
-      <section>
-        <SectionHeading>
-          {t("mcp.panel.heading")}
-        </SectionHeading>
-        <McpServersPanel />
-      </section>
+          the agent can call as tools. Local-only management. Hidden
+          in Simple/Easy mode — power-user feature, would confuse
+          non-developers. */}
+      {me?.account.mode !== "simple" && (
+        <section>
+          <SectionHeading>
+            {t("mcp.panel.heading")}
+          </SectionHeading>
+          <McpServersPanel />
+        </section>
+      )}
 
       {/* Language / 언어 */}
       <section>
