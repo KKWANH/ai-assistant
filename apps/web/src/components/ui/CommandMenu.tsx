@@ -77,7 +77,7 @@ export function CommandMenu({ items }: CommandMenuProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center px-3 pt-[clamp(1rem,8vh,15vh)] sm:px-0 sm:pt-[15vh]">
       <div
         className="absolute inset-0 bg-black/60"
         onClick={() => setCommandMenuOpen(false)}

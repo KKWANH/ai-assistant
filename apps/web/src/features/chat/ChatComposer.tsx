@@ -512,13 +512,6 @@ export function ChatComposer({
     // webMode & replyMode stay sticky across messages within a chat.
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!disabled && !pending) handleSend();
-    }
-  };
-
   // Vision guard — if the user attached images but the active model
   // can't see them, surface the warning + block send. Without this
   // the user sends an image, the model cheerfully accepts then replies
@@ -528,6 +521,17 @@ export function ChatComposer({
   const visionBlocked = hasImageAttachment && !modelHasVision(currentModel);
 
   const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending && !visionBlocked;
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      // Honor the same gates the Send button enforces. Earlier this
+      // only checked `!disabled && !pending`, so Enter could send
+      // silently when the visible button was greyed out for
+      // vision-blocked attachments — felt broken.
+      if (canSend) handleSend();
+    }
+  };
   const editingAtt = editingIndex !== null ? attachments[editingIndex] ?? null : null;
 
   // Rich hover tooltip for the model picker — friendly name, what it's good

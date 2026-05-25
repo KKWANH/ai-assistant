@@ -1,13 +1,18 @@
 /* ── Toast container (portal) ── */
 .container {
   position: fixed;
-  bottom: 1.5rem;
+  /* Respect the iOS / notched-device home indicator. On phones with
+     bottom safe-area inset the toast otherwise overlaps the gesture
+     bar; max() falls back to 1.5rem on desktop where the inset is 0. */
+  bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
   right: 1rem;
+  /* On phones the right edge can also need inset (landscape notch). */
+  right: max(1rem, env(safe-area-inset-right, 0px));
   z-index: 100;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  width: 20rem;
+  width: min(20rem, calc(100vw - 2rem));
 }
 
 /* ── Individual toast ── */

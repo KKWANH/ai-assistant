@@ -631,15 +631,22 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
             <div className="px-2 pb-1">
               {globalChats && globalChats.length > 0 ? (
-                globalChats.slice(0, 20).map((chat) => (
-                  <ChatRow
-                    key={chat.id}
-                    chat={chat}
-                    active={activeChatId === chat.id}
-                    workspaces={workspaces}
-                    closeMobileNav={() => setMobileNavOpen(false)}
-                  />
-                ))
+                <>
+                  {globalChats.slice(0, 20).map((chat) => (
+                    <ChatRow
+                      key={chat.id}
+                      chat={chat}
+                      active={activeChatId === chat.id}
+                      workspaces={workspaces}
+                      closeMobileNav={() => setMobileNavOpen(false)}
+                    />
+                  ))}
+                  {globalChats.length > 20 && (
+                    <p className="px-2 py-1.5 text-2xs text-muted-foreground italic">
+                      {t("nav.chatsMore", { n: globalChats.length - 20 })}
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="px-2 py-1.5 text-xs text-muted-foreground">
                   {t("nav.noConversations")}

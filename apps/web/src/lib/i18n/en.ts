@@ -52,6 +52,7 @@ const en = {
   "nav.search.desc": "Or press ⌘K to open from anywhere",
   "nav.settings": "Settings",
   "nav.noConversations": "No conversations yet",
+  "nav.chatsMore": "+{n} more (find them in chat search)",
   "nav.noRunsYet": "No runs yet",
   "nav.addWorkspace": "+ Add workspace",
   "nav.newWorkspace": "New workspace",

@@ -779,9 +779,14 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
           <StreamingIndicator statusText={streamStatus} startedAt={message.createdAt} />
         )}
 
-        {/* Stream error */}
+        {/* Stream error — role=alert + aria-live so screen readers announce
+            the failure the moment it appears, not only when navigated to. */}
         {streamError && (
-          <div className="flex items-center gap-2 text-xs text-destructive">
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex items-center gap-2 text-xs text-destructive"
+          >
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span>{streamError}</span>
           </div>
