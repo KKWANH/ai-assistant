@@ -158,6 +158,18 @@ export const PostMessageSchema = z.object({
    * false→"off".
    */
   agentMode: z.union([z.boolean(), z.enum(["off", "auto", "on"])]).optional(),
+  /**
+   * Reply mode:
+   *   - "standard" (default): full pipeline — workspace retrieval, memory
+   *     injection, optional agent, web-search classifier. What the chat
+   *     has always done.
+   *   - "instant": skip ALL upstream classification, retrieval, and
+   *     memory. Direct provider stream. Speed-first. For chitchat,
+   *     definitions, quick one-liners — anything that doesn't need
+   *     grounding. When the user picks instant, agentMode/webSearch
+   *     fields are ignored by the server.
+   */
+  mode: z.enum(["standard", "instant"]).optional(),
 });
 export type PostMessageInput = z.infer<typeof PostMessageSchema>;
 

@@ -379,6 +379,9 @@ export interface StreamHandlers {
   onAgentStep?: (step: import("@ariadne/shared").AgentStep) => void;
   onIntentSuggestion?: (s: { actionId: string; actionName: string; reason: string }) => void;
   onDone?: (msg: ChatMessage) => void;
+  /** Fired after `done` when an auto-title resolves. Lets the sidebar
+   *  patch the chat row in-place without a refetch. */
+  onChatUpdated?: (chatId: string, title: string) => void;
   onError?: (error: string) => void;
   /** The stream closed before a done/error event — the generation may still
    *  be running on the server (reconnect via GET /chats/:id/active). */
@@ -479,6 +482,9 @@ async function consumeMessageStream(
           case "done":
             receivedTerminal = true;
             handlers.onDone?.(event.message);
+            break;
+          case "chat_updated":
+            handlers.onChatUpdated?.(event.chatId, event.title);
             break;
           case "error":
             receivedTerminal = true;

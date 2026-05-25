@@ -97,20 +97,22 @@ const ko: Record<TranslationKey, string> = {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "무엇을 도와드릴까요?",
-  "chat.empty.subtitle": "출처를 끝까지 추적하는 로컬 AI 워크스페이스",
+  "chat.empty.subtitle": "내 컴퓨터에서 돌아가는 AI — 어디서 가져온 답인지 끝까지 추적해요.",
   "chat.empty.startNew": "새 대화 시작하기",
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
 
-  "chat.example.files.title": "파일 첨부 후 질문하기",
+  "chat.example.files.title": "파일을 올려서 질문하기",
   "chat.example.files.body": "PDF · 문서 · 스프레드시트 · 이미지",
-  "chat.example.workspace.title": "워크스페이스 폴더 연결",
-  "chat.example.workspace.body": "로컬 폴더를 대화에 연결",
-  "chat.example.workspace.action": "새 워크스페이스",
-  "chat.example.template.title": "반복 사용 가능한 템플릿 실행",
+  "chat.example.files.action": "파일 고르기",
+  "chat.example.workspace.title": "내 자료 폴더 연결하기",
+  "chat.example.workspace.body": "내 컴퓨터의 폴더를 대화에 묶기",
+  "chat.example.workspace.action": "새 자료 폴더 만들기",
+  "chat.example.template.title": "정기 작업 실행하기",
   "chat.example.template.body": "파일에서 정리된 결과물 생성",
-  "chat.example.template.action": "워크스페이스로 이동",
-  "chat.example.web.title": "웹 검색",
+  "chat.example.template.action": "자료 폴더 목록으로",
+  "chat.example.web.title": "웹에서 찾아보기",
   "chat.example.web.body": "실시간 검색 결과로 답변",
+  "chat.example.web.action": "웹 검색 켜기",
 
   "chat.failed.send": "메시지 전송에 실패했습니다",
   "chat.failed.create": "대화를 만들 수 없습니다",
@@ -1026,6 +1028,12 @@ const ko: Record<TranslationKey, string> = {
   "diff.hooks.title": "훅 {n}개 실행됨",
   "diff.hooks.allPassed": "훅 {n}개 모두 통과",
   "diff.hooks.someFailed": "훅 {failed}/{total} 실패",
+
+  // ── 즉답 모드 (S2) ──────────────────────────────────────────────────────
+  "chat.composer.instant": "즉답",
+  "chat.composer.instantOn": "즉답",
+  "chat.composer.instantLabel": "즉답 모드 — 파이프라인 생략하고 빠르게 답변",
+  "chat.composer.instantTip": "검색·메모리·에이전트 판단 다 건너뛰고 모델에 바로 물어봅니다. 잡담이나 빠른 한 줄 답이 필요할 때 좋아요. 워크스페이스 자료는 참조하지 않습니다.",
 };
 
 export default ko;

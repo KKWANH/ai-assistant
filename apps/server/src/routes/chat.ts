@@ -111,6 +111,9 @@ interface StreamReplyOptions {
   webSearchMode: "on" | "off" | "auto" | undefined;
   /** boolean for legacy callers; tri-state for explicit auto-classifier opt-in. */
   agentMode: boolean | "off" | "auto" | "on";
+  /** "instant" = skip every classifier/retrieval/memory step, just stream
+   *  the direct provider answer. "standard" = full pipeline. */
+  mode: "standard" | "instant";
   /** Used for locale + saved profile context. */
   accountLocale: string | undefined;
   accountContext: string | undefined;
@@ -125,7 +128,11 @@ interface StreamReplyResult {
   assistantContent: string;
   agentTrace: import("@ariadne/shared").AgentTrace | null;
   searchResults: SearchResult[] | null;
-  generatedTitle: string | null;
+  /** Resolves to the auto-generated title (or "" if disabled / failed).
+   *  Returned UNRESOLVED so the caller can emit `done` immediately and
+   *  apply the title asynchronously — previously this was awaited
+   *  inline and the spinner persisted for the title-call duration. */
+  titlePromise: Promise<string> | null;
   /** Provider/model that produced this response. Null if the answer came
    *  from the no-key notice path (no provider was actually called). */
   provider: string | null;
@@ -140,7 +147,7 @@ interface StreamReplyResult {
 async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamReplyResult> {
   const {
     chat, history, userContent, attachmentRefs, webSearchMode, agentMode: rawAgentMode,
-    accountLocale, accountContext, emit, controller, assistantMsgId,
+    mode, accountLocale, accountContext, emit, controller, assistantMsgId,
     shouldGenerateTitle,
   } = opts;
 
@@ -151,7 +158,6 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   let agentTrace: import("@ariadne/shared").AgentTrace | null = null;
   let agentSearchResults: SearchResult[] | null = null;
   let contextSearchResults: SearchResult[] | null = null;
-  let generatedTitle: string | null = null;
 
   if (!isProviderConfigured(settings.provider)) {
     assistantContent = noProviderKeyMessage(settings.provider, accountLocale);
@@ -160,7 +166,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       assistantContent,
       agentTrace,
       searchResults: null,
-      generatedTitle: null,
+      titlePromise: null,
       provider: null,
       model: null,
     };
@@ -172,6 +178,49 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       : settings.model;
   const rawProvider = await getProvider({ provider: settings.provider, model });
   const provider = meteringProvider(rawProvider, assistantMsgId, model);
+
+  // Instant mode short-circuit. Skip every upstream classifier
+  // (agent, web-search, action-intent), skip workspace retrieval +
+  // memory injection, send the user message straight to the provider.
+  // Title generation still runs in parallel (cheap, valuable). What
+  // mom needs: "ask question, get answer fast" — no warm-up status
+  // lines, no multi-stage spinner.
+  if (mode === "instant" && hasContent) {
+    const chatTitlePromise: Promise<string> | null = shouldGenerateTitle
+      ? generateChatTitle(provider, userContent, controller.signal).catch(() => "")
+      : null;
+    const historyText = history
+      .slice(-10)
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 600)}`)
+      .join("\n");
+    const system =
+      "You are Ariadne's assistant in Instant mode — answer concisely and " +
+      "directly. No preamble. Always reply in the user's language.";
+    const prompt = historyText
+      ? `${historyText}\nUser: ${userContent}`
+      : `User: ${userContent}`;
+    try {
+      await provider.completeStream(
+        { system, prompt, signal: controller.signal },
+        (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+        (status) => { emit({ type: "status", text: status }); },
+      );
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        logger.warn({ chatId: chat.id, err }, "Instant-mode provider error");
+        assistantContent = friendlyProviderError(err, settings.provider, accountLocale);
+        emit({ type: "delta", text: assistantContent });
+      }
+    }
+    return {
+      assistantContent,
+      agentTrace: null,
+      searchResults: null,
+      titlePromise: chatTitlePromise,
+      provider: settings.provider,
+      model,
+    };
+  }
 
   // Resolve agent mode: explicit on/off keeps its value; "auto" runs a
   // cheap classifier and only enters the loop for multi-step prompts.
@@ -298,16 +347,17 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     }
   }
 
-  if (chatTitlePromise && assistantContent.trim()) {
-    const title = await chatTitlePromise;
-    if (title) generatedTitle = title;
-  }
+  // Title generation runs in parallel with the answer (kicked off above).
+  // We DON'T await it here — see StreamReplyResult.titlePromise for the
+  // contract. The caller emits `done` immediately on stream end and
+  // applies the title to the DB asynchronously, eliminating the
+  // post-stream spinner lag.
 
   return {
     assistantContent,
     agentTrace,
     searchResults: agentSearchResults ?? contextSearchResults,
-    generatedTitle,
+    titlePromise: chatTitlePromise,
     provider: settings.provider,
     model,
   };
@@ -408,7 +458,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const { content, attachments: rawAttachments, webSearch, agentMode } = parsed.data;
+      const { content, attachments: rawAttachments, webSearch, agentMode, mode: rawMode } = parsed.data;
+      const mode: "standard" | "instant" = rawMode === "instant" ? "instant" : "standard";
 
       // Reject if both content is empty and no attachments
       const hasContent = content.trim().length > 0;
@@ -529,6 +580,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           attachmentRefs,
           webSearchMode: webSearch,
           agentMode: agentMode ?? false,
+          mode,
           accountLocale: req.account?.locale,
           accountContext: req.account?.context,
           emit,
@@ -539,7 +591,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         let assistantContent = replyResult.assistantContent;
         const agentTrace = replyResult.agentTrace;
         const searchResults = replyResult.searchResults;
-        const generatedTitle = replyResult.generatedTitle;
+        const titlePromise = replyResult.titlePromise;
         const replyProvider = replyResult.provider;
         const replyModel = replyResult.model;
 
@@ -573,13 +625,37 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         // profile — background, throttled, best-effort (never blocks the chat).
         setImmediate(() => void extractAccountContextInBackground(req.account.id, chat.id));
 
-        // --- Bump chat updated_at (and apply the generated title, if any) ---
-        dbUpdateChat(chat.id, {
-          updatedAt: now(),
-          ...(generatedTitle ? { title: generatedTitle } : {}),
-        });
+        // Bump chat updated_at NOW (before done) so the sidebar reorders
+        // the chat to the top immediately. Title is applied separately
+        // — see below — so we don't block done on title generation.
+        dbUpdateChat(chat.id, { updatedAt: now() });
 
         sseEmit({ type: "done", message: assistantMsg });
+
+        // Resolve the auto-title AFTER `done` — the spinner has already
+        // cleared on the client. We hold the SSE stream open up to 2s
+        // longer to deliver the title via chat_updated; if the title
+        // model is slower than that we fall through to a background DB
+        // write and the title shows up on the sidebar's next refetch.
+        if (titlePromise) {
+          const racedTitle = await Promise.race([
+            titlePromise,
+            new Promise<string>((resolve) => setTimeout(() => resolve(""), 2_000)),
+          ]).catch(() => "");
+          if (racedTitle) {
+            dbUpdateChat(chat.id, { title: racedTitle, updatedAt: now() });
+            sseEmit({ type: "chat_updated", chatId: chat.id, title: racedTitle });
+          } else {
+            // Title still pending past the SSE-keepalive budget. Let it
+            // resolve in the background; the next sidebar refetch picks
+            // it up.
+            void titlePromise
+              .then((t) => { if (t) dbUpdateChat(chat.id, { title: t, updatedAt: now() }); })
+              .catch((err: unknown) => {
+                logger.warn({ err, chatId: chat.id }, "Async title generation failed");
+              });
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error({ chatId: chat.id, err }, "Unexpected error in chat SSE handler");
@@ -691,6 +767,10 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           attachmentRefs: [],   // attachments are tied to the original send
           webSearchMode,
           agentMode,
+          // Regenerate doesn't surface a mode picker — re-run with the
+          // standard pipeline. (If we later thread the mode through
+          // regenerate too, change here.)
+          mode: "standard",
           accountLocale: req.account?.locale,
           accountContext: req.account?.context,
           emit,

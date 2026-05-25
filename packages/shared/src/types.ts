@@ -611,6 +611,11 @@ export type ChatStreamEvent =
   | { type: "agent_step"; step: AgentStep }
   | { type: "intent_suggestion"; actionId: string; actionName: string; reason: string }
   | { type: "done"; message: ChatMessage }
+  /** Emitted AFTER `done` when the post-stream title generation lands.
+   *  The sidebar listens for this and patches the chat row in-place
+   *  without a refetch. Eliminates the post-stream spinner because
+   *  `done` no longer blocks on the title model call. */
+  | { type: "chat_updated"; chatId: string; title: string }
   | { type: "error"; error: string };
 
 export interface Chat {

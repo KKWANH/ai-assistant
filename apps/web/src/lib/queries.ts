@@ -772,8 +772,27 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
           });
           // Clean finish — clear the reconnect poll so its view never flashes.
           qc.setQueryData(["chat-active", chatId], { active: null });
-          // Invalidate the chat list so the sidebar title updates
-          void qc.invalidateQueries({ queryKey: ["chats"] });
+          // Don't invalidate the chat list here — the title isn't on the
+          // chat row yet (it comes via the follow-up chat_updated event).
+          // Invalidating now would refetch and replace the optimistic
+          // title with the stale untitled one. We patch the cache when
+          // chat_updated arrives instead.
+        },
+
+        onChatUpdated: (chatIdEv, title) => {
+          // Patch the chat list cache so the sidebar shows the new title
+          // without a network round-trip. Also patch the chat object on
+          // the chat detail cache.
+          qc.setQueryData<Chat[] | undefined>(["chats"], (old) => {
+            if (!old) return old;
+            return old.map((c) =>
+              c.id === chatIdEv ? { ...c, title } : c,
+            );
+          });
+          setCachedChat(qc, chatIdEv, (old) => {
+            if (!old) return old;
+            return { ...old, title };
+          });
         },
 
         onError: (error) => {

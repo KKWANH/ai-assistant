@@ -104,12 +104,13 @@ const en = {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "What would you like to do?",
-  "chat.empty.subtitle": "A local AI workspace with traceable sources.",
+  "chat.empty.subtitle": "An AI that runs on your computer — every answer points back at the source.",
   "chat.empty.startNew": "Or start a new conversation",
   "chat.empty.sendToStart": "Send a message to start the conversation.",
 
   "chat.example.files.title": "Attach files and ask questions",
   "chat.example.files.body": "PDF · doc · spreadsheet · image",
+  "chat.example.files.action": "Pick a file",
   "chat.example.workspace.title": "Connect a workspace folder",
   "chat.example.workspace.body": "Ground the chat in a local folder",
   "chat.example.workspace.action": "New workspace",
@@ -118,6 +119,7 @@ const en = {
   "chat.example.template.action": "Go to workspaces",
   "chat.example.web.title": "Search the web",
   "chat.example.web.body": "Answer from live search results",
+  "chat.example.web.action": "Turn on web search",
 
   "chat.failed.send": "Failed to send message",
   "chat.failed.create": "Failed to create chat",
@@ -1033,6 +1035,12 @@ const en = {
   "diff.hooks.title": "{n} hook(s) ran",
   "diff.hooks.allPassed": "All {n} hook(s) passed",
   "diff.hooks.someFailed": "{failed} of {total} hook(s) failed",
+
+  // ── Instant chat mode (S2) ──────────────────────────────────────────────────
+  "chat.composer.instant": "Instant",
+  "chat.composer.instantOn": "Instant",
+  "chat.composer.instantLabel": "Instant mode — skip the pipeline for a fast reply",
+  "chat.composer.instantTip": "Skip retrieval, memory, and the agent classifier. Direct answer, no grounding. For chitchat or quick lookups when speed matters more than depth.",
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -65,6 +65,19 @@ export interface UIStore {
   tutorialOpen: boolean;
   setTutorialOpen: (open: boolean) => void;
 
+  /** Composer pulse — monotonically increments to ask the composer to
+   *  perform a one-shot UI action (open file picker, toggle web mode).
+   *  Used by the empty-state chips to drive the composer that lives in
+   *  a sibling route component. The composer reads the pulse on an
+   *  effect and triggers the action, then resets nothing — the next
+   *  pulse just increments the counter.
+   *
+   *  This pattern beats a flat boolean because two clicks in a row
+   *  should fire twice; useEffect dep on a counter handles that
+   *  cleanly. */
+  composerPulse: { kind: "open_file_picker" | "toggle_web_search"; n: number } | null;
+  pulseComposer: (kind: "open_file_picker" | "toggle_web_search") => void;
+
   // Chat: composer workspace selector
   chatComposerWorkspaceId: string | null;
   setChatComposerWorkspaceId: (id: string | null) => void;
@@ -128,6 +141,12 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   tutorialOpen: false,
   setTutorialOpen: (open) => set({ tutorialOpen: open }),
+
+  composerPulse: null,
+  pulseComposer: (kind) =>
+    set((state) => ({
+      composerPulse: { kind, n: (state.composerPulse?.n ?? 0) + 1 },
+    })),
 
   chatComposerWorkspaceId: null,
   setChatComposerWorkspaceId: (id) => set({ chatComposerWorkspaceId: id }),

@@ -51,15 +51,21 @@ function formatStarted(iso: string, locale: string): string {
 // ── Empty state (new chat / no chat selected) ─────────────────────────────────
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   const navigate = useNavigate();
-  const { setCreateWorkspaceOpen } = useUIStore();
+  const { setCreateWorkspaceOpen, pulseComposer } = useUIStore();
   const { t } = useT();
 
+  // EVERY chip is actionable. Mom's real-world test showed dashed
+  // informational tips read as "broken buttons" — clicking them did
+  // nothing and she gave up. The file + web chips now drive the
+  // composer via the composerPulse store action (works across the
+  // sibling-component boundary).
   const examples = [
     {
       icon: <FileText className="h-4 w-4 text-muted-foreground" />,
       title: t("chat.example.files.title"),
       body: t("chat.example.files.body"),
-      action: undefined,
+      action: () => pulseComposer("open_file_picker"),
+      actionLabel: t("chat.example.files.action"),
     },
     {
       icon: <FolderOpen className="h-4 w-4 text-muted-foreground" />,
@@ -79,7 +85,8 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       icon: <Globe className="h-4 w-4 text-muted-foreground" />,
       title: t("chat.example.web.title"),
       body: t("chat.example.web.body"),
-      action: undefined,
+      action: () => pulseComposer("toggle_web_search"),
+      actionLabel: t("chat.example.web.action"),
     },
   ];
 
@@ -348,6 +355,7 @@ function ThreadView({ chatId }: { chatId: string }) {
     webSearch: WebSearchMode;
     workspaceId: string | null;
     agentMode: import("./ChatComposer").AgentMode;
+    mode: import("./ChatComposer").ReplyMode;
   }) => {
     setSuggestion(null); // clear any stale chip from the previous turn
     setStreaming(true);
@@ -361,6 +369,8 @@ function ThreadView({ chatId }: { chatId: string }) {
           // Forward the tri-state directly; backend accepts "off"|"auto"|"on"
           // and legacy booleans. Skip the field for "off" to keep payloads slim.
           agentMode: opts.agentMode === "off" ? undefined : opts.agentMode,
+          // Skip "standard" to keep the default payload unchanged.
+          mode: opts.mode === "instant" ? "instant" : undefined,
         },
       });
     } catch (err) {
@@ -475,6 +485,7 @@ export function ChatView() {
     webSearch: WebSearchMode;
     workspaceId: string | null;
     agentMode: import("./ChatComposer").AgentMode;
+    mode: import("./ChatComposer").ReplyMode;
   }) => {
     setPending(true);
     try {
@@ -497,6 +508,7 @@ export function ChatView() {
           attachments: opts.attachments,
           webSearch: opts.webSearch,
           agentMode: opts.agentMode === "off" ? undefined : opts.agentMode,
+          mode: opts.mode === "instant" ? "instant" : undefined,
         },
       });
     } catch (err) {

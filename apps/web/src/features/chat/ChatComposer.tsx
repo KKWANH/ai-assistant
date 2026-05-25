@@ -3,7 +3,7 @@
  * Enter sends, Shift+Enter inserts newline.
  * Files are read to base64 before sending.
  */
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import {
   Paperclip,
   Globe,
@@ -21,6 +21,7 @@ import {
   Zap,
   Play,
   Sparkles,
+  Rabbit,
 } from "lucide-react";
 import type { PostAttachmentInput } from "@ariadne/shared";
 import {
@@ -58,6 +59,10 @@ export interface PendingAttachment {
 /** Web-search mode: off (never), auto (the server decides), on (always). */
 export type WebSearchMode = "off" | "auto" | "on";
 export type AgentMode = "off" | "auto" | "on";
+/** "standard" runs the full pipeline (retrieval, memory, optional agent).
+ *  "instant" skips everything for a direct provider stream — fastest
+ *  reply, no workspace grounding. */
+export type ReplyMode = "standard" | "instant";
 
 export interface ChatComposerProps {
   onSend: (opts: {
@@ -66,6 +71,7 @@ export interface ChatComposerProps {
     webSearch: WebSearchMode;
     workspaceId: string | null;
     agentMode: AgentMode;
+    mode: ReplyMode;
   }) => void;
   disabled?: boolean;
   pending?: boolean;
@@ -321,6 +327,10 @@ export function ChatComposer({
   // (the server decides per message). Both stay sticky across messages.
   const [webMode, setWebMode] = useState<WebSearchMode>("auto");
   const [agentMode, setAgentMode] = useState<AgentMode>("off");
+  // Reply mode — sticky across messages within a chat. "instant" skips
+  // the multi-stage pipeline (no classifier, no retrieval, no memory)
+  // for fast answers. Default "standard" preserves existing behaviour.
+  const [replyMode, setReplyMode] = useState<ReplyMode>("standard");
   // Skill picker — opens via the Sparkles button OR when the composer
   // starts with "/" (slash-command autocomplete). The state below tracks
   // which trigger opened it so the filter logic stays separate.
@@ -332,6 +342,21 @@ export function ChatComposer({
   const [tablePaste, setTablePaste] = useState<string | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Empty-state chips drive the composer via a store pulse — see
+  // store.ts composerPulse. We use the pulse counter as the effect
+  // dep so repeat clicks fire repeat actions.
+  const composerPulse = useUIStore((s) => s.composerPulse);
+  useEffect(() => {
+    if (!composerPulse) return;
+    if (composerPulse.kind === "open_file_picker") {
+      fileInputRef.current?.click();
+    } else if (composerPulse.kind === "toggle_web_search") {
+      // Cycle off→auto→on to "on" directly when the empty-state chip
+      // is clicked — mom expected web search to be turned on, not just
+      // "considered."
+      setWebMode("on");
+    }
+  }, [composerPulse]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const { t } = useT();
@@ -460,6 +485,7 @@ export function ChatComposer({
         dataBase64: a.dataBase64,
       })),
       webSearch: webMode,
+      mode: replyMode,
       workspaceId: chatComposerWorkspaceId,
       agentMode,
     });
@@ -691,6 +717,34 @@ export function ChatComposer({
               e.target.value = "";
             }}
           />
+
+          {/* Instant-mode toggle. When on, the server skips every
+              classifier / retrieval / memory step and streams the
+              direct provider reply — speed-first, no workspace
+              grounding. Off = standard pipeline (the default). */}
+          <Tooltip content={t("chat.composer.instantTip")} className="shrink-0">
+            <button
+              type="button"
+              aria-label={t("chat.composer.instantLabel")}
+              className={[
+                "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors",
+                replyMode === "instant"
+                  ? "text-accent bg-accent/10 border border-accent/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-surface-3",
+              ].join(" ")}
+              onClick={() =>
+                setReplyMode((m) => (m === "instant" ? "standard" : "instant"))
+              }
+              disabled={disabled}
+            >
+              <Rabbit className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {replyMode === "instant"
+                  ? t("chat.composer.instantOn")
+                  : t("chat.composer.instant")}
+              </span>
+            </button>
+          </Tooltip>
 
           {/* Web search toggle — cycles Off → Auto → On.
               Mobile (<sm): icon only with tooltip. ≥sm: icon + label. */}
