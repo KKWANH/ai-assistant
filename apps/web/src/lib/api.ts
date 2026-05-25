@@ -209,6 +209,13 @@ export const stageWorkspaceFile = (workspaceId: string, path: string, content: s
 export const login = (input: LoginInput) =>
   request<AuthInfo>("POST", "/auth/login", input);
 
+/** Server-side cookie reset — clears `ariadne_session` (signed or
+ *  malformed), deletes the session row if the cookie WAS valid. Safe
+ *  to call without auth. Used by the "stuck on a 401 loop" recovery
+ *  link on the login screen. */
+export const resetSession = () =>
+  request<{ ok: boolean; cleared: boolean }>("POST", "/auth/reset");
+
 export const logout = () =>
   request<{ ok: boolean }>("POST", "/auth/logout");
 

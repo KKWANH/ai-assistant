@@ -111,13 +111,15 @@ async function bootstrap(): Promise<void> {
   // --- API routes ---
   await app.register(
     async (api) => {
-      // Auth hook: protect all /api/* except login and logout
+      // Auth hook: protect all /api/* except login / logout / reset.
+      // `/auth/reset` is the self-heal path users hit when their cookie
+      // is broken — it MUST be reachable without a valid cookie.
       api.addHook("onRequest", async (req, reply) => {
         const url = req.url;
-        const isLoginOrLogout =
-          url === "/api/auth/login" || url === "/api/auth/logout" ||
-          url.endsWith("/auth/login") || url.endsWith("/auth/logout");
-        if (isLoginOrLogout) return;
+        const isAuthOpen =
+          url === "/api/auth/login" || url === "/api/auth/logout" || url === "/api/auth/reset" ||
+          url.endsWith("/auth/login") || url.endsWith("/auth/logout") || url.endsWith("/auth/reset");
+        if (isAuthOpen) return;
 
         const ctx = accessContext(req);
         req.accessContext = ctx;
@@ -132,15 +134,25 @@ async function bootstrap(): Promise<void> {
           return;
         }
 
-        // Remote: require a valid session cookie
+        // Remote: require a valid session cookie. If the cookie is
+        // present but bad (signature fail, missing session row), clear
+        // it on the way out — otherwise the browser keeps presenting
+        // the same broken cookie forever and the user is stuck in a
+        // 401 loop. The recovery path on the FE only needs one good
+        // 401-without-stuck-cookie response to render LoginView cleanly.
         const rawCookie = req.cookies[COOKIE_NAME] ?? "";
+        if (!rawCookie) {
+          return reply.status(401).send({ error: "Authentication required" });
+        }
         const unsigned = req.unsignCookie(rawCookie);
         if (!unsigned.valid || !unsigned.value) {
+          void reply.clearCookie(COOKIE_NAME, { path: "/" });
           return reply.status(401).send({ error: "Authentication required" });
         }
 
         const account = validateSession(unsigned.value);
         if (!account) {
+          void reply.clearCookie(COOKIE_NAME, { path: "/" });
           return reply.status(401).send({ error: "Authentication required" });
         }
 

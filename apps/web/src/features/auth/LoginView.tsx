@@ -4,12 +4,15 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { useLogin } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
+import { resetSession } from "../../lib/api";
 import type { LoginInput } from "@ariadne/shared";
 
 export function LoginView() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
   const login = useLogin();
   const { t } = useT();
 
@@ -25,6 +28,26 @@ export function LoginView() {
       await login.mutateAsync(input);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.failed"));
+    }
+  };
+
+  /**
+   * "Stuck on the login screen even with the right password?" path.
+   * Calls the server's reset endpoint to drop the malformed cookie, then
+   * full-reloads so localStorage state + react-query cache also drop.
+   */
+  const handleReset = async () => {
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      await resetSession();
+      setResetMsg(t("auth.resetDone"));
+      // Hard reload to clear localStorage + react-query cache too.
+      setTimeout(() => { window.location.replace("/"); }, 600);
+    } catch {
+      setResetMsg(t("auth.resetFailed"));
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -79,6 +102,24 @@ export function LoginView() {
               {t("auth.signIn")}
             </Button>
           </form>
+
+          {/* Recovery affordance — "I keep getting errors / 401 loop /
+              works in incognito" → drop the malformed cookie and reload.
+              Mounted as a small subdued link so it doesn't compete with
+              the form, but is one click away when the user needs it. */}
+          <div className="mt-4 pt-3 border-t border-border text-center">
+            <button
+              type="button"
+              onClick={() => void handleReset()}
+              disabled={resetting}
+              className="text-2xs text-muted-foreground hover:text-foreground underline underline-offset-2 disabled:opacity-50"
+            >
+              {resetting ? t("auth.resetting") : t("auth.resetLink")}
+            </button>
+            {resetMsg && (
+              <p className="text-2xs text-muted-foreground mt-1.5">{resetMsg}</p>
+            )}
+          </div>
         </Card>
       </div>
     </div>

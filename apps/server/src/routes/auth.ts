@@ -48,6 +48,37 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
+  // POST /api/auth/reset — recovery path for a stuck session cookie.
+  //
+  // Symptom we're solving: a user has a cookie signed by a previous
+  // server install (different `cookie_secret`) or a cookie pointing to
+  // a deleted session row. Every /api/* request comes back 401, the
+  // SPA keeps trying to refresh, the browser caches the stuck state.
+  // The auth middleware doesn't clear the bad cookie itself (it just
+  // 401s), so the cookie stays around forever from the browser's POV.
+  //
+  // This endpoint always clears `ariadne_session` (signed or not),
+  // best-effort deletes the session row if the cookie WAS valid, and
+  // returns 200 — safe to call repeatedly, no auth required.
+  app.post("/auth/reset", async (req, reply) => {
+    // Try to delete the session row if the cookie was valid; ignore
+    // failures (invalid signature, no row, etc.) — the point is to
+    // clear the BROWSER's cookie so the next request is clean.
+    const rawCookie = req.cookies[COOKIE_NAME];
+    if (rawCookie) {
+      try {
+        const token = req.unsignCookie(rawCookie);
+        if (token.valid && token.value) {
+          deleteSession(token.value);
+        }
+      } catch {
+        // Cookie was malformed — nothing to delete server-side.
+      }
+    }
+    void reply.clearCookie(COOKIE_NAME, { path: "/" });
+    return reply.send({ ok: true, cleared: true });
+  });
+
   // GET /api/auth/me
   app.get("/auth/me", async (req, reply) => {
     // The onRequest hook has already attached req.account and req.accessContext

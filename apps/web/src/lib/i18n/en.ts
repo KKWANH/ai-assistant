@@ -97,6 +97,10 @@ const en = {
   "auth.password": "Password",
   "auth.required": "Username and password are required.",
   "auth.failed": "Login failed",
+  "auth.resetLink": "Stuck on this screen or seeing 401/403? Reset your session.",
+  "auth.resetting": "Resetting session…",
+  "auth.resetDone": "Session cleared. Reloading…",
+  "auth.resetFailed": "Couldn't clear the session. Try clearing cookies for this site manually.",
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "What would you like to do?",

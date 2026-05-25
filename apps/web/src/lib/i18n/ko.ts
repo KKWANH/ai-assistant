@@ -90,6 +90,10 @@ const ko: Record<TranslationKey, string> = {
   "auth.password": "비밀번호",
   "auth.required": "사용자 이름과 비밀번호를 입력해 주세요.",
   "auth.failed": "로그인에 실패했습니다",
+  "auth.resetLink": "이 화면에서 안 벗어나거나 401/403이 계속 뜨면 세션 초기화",
+  "auth.resetting": "세션 초기화 중…",
+  "auth.resetDone": "세션을 지웠어요. 새로고침합니다…",
+  "auth.resetFailed": "초기화에 실패했어요. 이 사이트의 쿠키를 직접 지워 주세요.",
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "무엇을 도와드릴까요?",
