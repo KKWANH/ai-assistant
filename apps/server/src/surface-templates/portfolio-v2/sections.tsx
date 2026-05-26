@@ -227,24 +227,54 @@ export function NetWorthCard({ accounts, positions, derived, base, onRefresh }: 
   );
 }
 
-// ─ 3 ─ Allocation grid ───────────────────────────────────────────────────
+// ─ 3 ─ Allocation grid (AQ: compact restoration) ─────────────────────────
+// Lost in the AM redesign. Self-review flagged this as a daily-driver PM
+// view — "where is the money concentrated?". 4 mini-pies / mini-bar in a
+// single row, smaller than before so they don't dominate the page.
 export function AllocationGrid({ derived }: { derived: Derived }) {
+  // Risk metrics from history.csv (if present) — surfaced here next to
+  // allocation since both are "shape of my book" KPIs.
+  const r = derived.risk;
   return (
-    <Section title="자산 배분" icon="🥧">
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 12 }}>
+    <Section title="자산 배분 + 리스크" icon="🥧">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
         <Chart title="자산군">
-          <PieChart data={derived.byAssetClass} title="" width={340} height={220} />
+          <PieChart data={derived.byAssetClass} title="" width={220} height={160} />
         </Chart>
-        <Chart title="통화 노출">
-          <PieChart data={derived.byCurrency} title="" width={340} height={220} />
+        <Chart title="통화">
+          <PieChart data={derived.byCurrency} title="" width={220} height={160} />
         </Chart>
-        <Chart title={`섹터 (top ${derived.bySector.length})`}>
-          <BarChart data={derived.bySector} title="" width={340} height={220} />
+        <Chart title={`섹터 top ${Math.min(derived.bySector.length, 8)}`}>
+          <BarChart data={derived.bySector.slice(0, 8)} title="" width={220} height={160} />
         </Chart>
         <Chart title="지역">
-          <PieChart data={derived.byRegion} title="" width={340} height={220} />
+          <PieChart data={derived.byRegion} title="" width={220} height={160} />
         </Chart>
       </div>
+      {r && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginTop: 10 }}>
+          <KpiCard
+            label="변동성 (연환산)"
+            value={`${r.volPctAnnual.toFixed(1)}%`}
+            muted={`${r.monthsUsed}개월 기반`}
+          />
+          <KpiCard
+            label="Sharpe (rf=0)"
+            value={r.sharpe.toFixed(2)}
+            muted={r.sharpe >= 1 ? "양호" : r.sharpe >= 0 ? "낮음" : "음수"}
+          />
+          <KpiCard
+            label="최대 낙폭 (MDD)"
+            value={`-${r.maxDrawdownPct.toFixed(1)}%`}
+            muted={r.maxDrawdownPct > 20 ? "★ 큼" : "관리 범위"}
+          />
+          <KpiCard
+            label="섹터 HHI"
+            value={r.sectorHHI.toFixed(3)}
+            muted={r.sectorHHI > 0.25 ? "★ 집중" : r.sectorHHI > 0.15 ? "보통" : "분산"}
+          />
+        </div>
+      )}
     </Section>
   );
 }
@@ -385,21 +415,21 @@ export function PositionsTable(p: PositionsTableProps) {
         </span>
       </div>
       <div style={{ overflowX: "auto" }}>
-        {/* AO — name-first display: stock NAME is the primary identifier,
-            ticker code lives as a small subtitle under it. Removed the
-            separate '이름' column since name is now in the first cell. */}
+        {/* AO — name-first display. AQ — added P&L (base) column and
+            collapsed target/stop into one cell with risk:reward visible. */}
         <Table headers={[
           <SortHead key="symbol" label="종목" onClick={() => p.flipSort("symbol")} active={p.sortKey === "symbol"} dir={p.sortDir} />,
           <SortHead key="account" label="계좌" onClick={() => p.flipSort("account_id")} active={p.sortKey === "account_id"} dir={p.sortDir} />,
-          "자산군", "통화", "수량", "매수가", "현재가",
+          "자산군", "수량", "매수가", "현재가",
           <SortHead key="mkt" label="평가금액" onClick={() => p.flipSort("market_value")} active={p.sortKey === "market_value"} dir={p.sortDir} />,
           "비중",
           <SortHead key="ret" label="수익률" onClick={() => p.flipSort("return_pct")} active={p.sortKey === "return_pct"} dir={p.sortDir} />,
-          "목표가", "thesis", "review",
+          `손익 (${p.base})`,
+          "목표 / 손절", "thesis", "review",
         ]}>
           {p.visiblePositions.length === 0 ? (
             <tr>
-              <td colSpan={12} style={{ ...tdLeft, textAlign: "center", padding: 16, color: "rgb(var(--muted-foreground))" }}>
+              <td colSpan={13} style={{ ...tdLeft, textAlign: "center", padding: 16, color: "rgb(var(--muted-foreground))" }}>
                 필터 결과가 없음. 칩 해제하거나 검색어 비우기.
               </td>
             </tr>
@@ -415,6 +445,10 @@ export function PositionsTable(p: PositionsTableProps) {
             const weightPct = totalInvested > 0 ? (baseValue / totalInvested) * 100 : 0;
             const overCap = weightPct > 10;
             const ret = Number.isFinite(pos.return_pct) ? pos.return_pct : 0;
+            // AQ — absolute P&L in base currency. Tells the PM "how much
+            // did this position make me in real money" rather than just %.
+            const bookValueBase = toBase(pos.book_value, pos.currency, p.fxMap);
+            const pl = Number.isFinite(baseValue) && Number.isFinite(bookValueBase) ? baseValue - bookValueBase : NaN;
             return (
               <tr
                 key={`${pos.account_id}-${pos.symbol}`}
@@ -428,7 +462,7 @@ export function PositionsTable(p: PositionsTableProps) {
                   <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
                     <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pos.name || pos.symbol || "—"}</strong>
                     <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>
-                      {pos.symbol || "—"}
+                      {pos.symbol || "—"}{pos.currency ? ` · ${pos.currency}` : ""}
                       {quoteFail && (
                         <span title={`quote failed: ${quoteFail.reason}`} style={{ marginLeft: 4 }}>
                           <Badge tone="warning">no quote</Badge>
@@ -439,16 +473,35 @@ export function PositionsTable(p: PositionsTableProps) {
                 </td>
                 <td style={tdLeft}>{accountLabel(pos.account_id)}</td>
                 <td style={tdLeft}>{pos.asset_class || "—"}</td>
-                <td style={tdLeft}>{pos.currency || "—"}</td>
                 <td style={tdRight}>{fmtNum(pos.shares)}</td>
-                <td style={tdRight}>{fmtNum(pos.buy_price)}</td>
-                <td style={tdRight}>{fmtNum(pos.current_price)}</td>
+                <td style={tdRight}>{fmtMoney(pos.buy_price, pos.currency)}</td>
+                <td style={tdRight}>{fmtMoney(pos.current_price, pos.currency)}</td>
                 <td style={tdRight}><strong>{fmtMoney(pos.market_value, pos.currency)}</strong></td>
                 <td style={{ ...tdRight, color: overCap ? "rgb(var(--destructive))" : "rgb(var(--foreground))", fontWeight: overCap ? 600 : 400 }}>
                   {weightPct.toFixed(1)}%{overCap ? " ★" : ""}
                 </td>
                 <td style={{ ...tdRight, color: ret >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>{fmtPct(ret)}</td>
-                <td style={tdRight}>{pos.target_price != null ? fmtNum(pos.target_price) : <span style={mutedDot}>—</span>}</td>
+                <td style={{ ...tdRight, color: pl >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+                  {Number.isFinite(pl) ? fmtMoney(pl, p.base) : <span style={mutedDot}>—</span>}
+                </td>
+                <td style={tdRight}>
+                  {pos.target_price != null || pos.stop_loss != null ? (
+                    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25, alignItems: "flex-end" }}>
+                      {pos.target_price != null && (
+                        <span style={{ color: "rgb(var(--success))", fontSize: 11 }}>
+                          ↑ {fmtNum(pos.target_price)}
+                          {pos.current_price > 0 && ` (${((pos.target_price - pos.current_price) / pos.current_price * 100).toFixed(0)}%)`}
+                        </span>
+                      )}
+                      {pos.stop_loss != null && (
+                        <span style={{ color: "rgb(var(--destructive))", fontSize: 11 }}>
+                          ↓ {fmtNum(pos.stop_loss)}
+                          {pos.current_price > 0 && ` (${((pos.stop_loss - pos.current_price) / pos.current_price * 100).toFixed(0)}%)`}
+                        </span>
+                      )}
+                    </div>
+                  ) : <span style={mutedDot}>—</span>}
+                </td>
                 <td style={tdLeft}>{noThesis ? <Badge tone="muted">미작성</Badge> : <code style={{ fontSize: 10 }}>{pos.thesis_id}</code>}</td>
                 <td style={tdLeft}>{pos.last_reviewed ? (stale ? <Badge tone="warning">{pos.last_reviewed}</Badge> : <span style={{ color: "rgb(var(--muted-foreground))" }}>{pos.last_reviewed}</span>) : <Badge tone="muted">—</Badge>}</td>
               </tr>
@@ -531,38 +584,111 @@ export function RecentAnalysis({ files }: { files: { macro: string[]; meso: stri
 // the v2 rewrite — user explicitly missed it ('그래프가 더 불편하게
 // 바뀜'). Render as LineChart at the top of the page so the long-view
 // is the first thing users see.
-export function ValueTrendChart({ history, base, showFx, setShowFx }: { history: HistPoint[]; base: string; showFx: boolean; setShowFx: (v: boolean) => void }) {
+export function ValueTrendChart({
+  history, base, showFx, setShowFx, benchmark,
+}: {
+  history: HistPoint[];
+  base: string;
+  showFx: boolean;
+  setShowFx: (v: boolean) => void;
+  /** AQ — Yahoo benchmark series for relative-performance overlay.
+   *  Both series get normalized to 100 at the first portfolio point so
+   *  the visual comparison is scale-agnostic. */
+  benchmark?: { bench: { symbol: string; label: string }; points: Array<{ date: string; close: number }> } | null;
+}) {
+  const [showBench, setShowBench] = useState(true);
   if (history.length === 0) return null;
+
+  // AQ — Normalize both series to base=100 at the first portfolio point
+  // for the benchmark overlay mode. If we just plotted KOSPI in ₩-thousands
+  // vs portfolio in ₩-millions the visual would be useless.
   const series = history.map((h) => ({ label: h.label, value: h.value }));
   const fxSeries = showFx
     ? history.map((h) => ({ label: h.label, value: h.value - h.fxEffect }))
     : undefined;
+
+  // Try to align benchmark closes to the same monthly labels by date.
+  let benchSeries: Array<{ label: string; value: number }> | undefined;
+  let alpha: number | null = null;
+  if (benchmark && benchmark.points.length > 0 && history.length > 0) {
+    const firstHist = history[0]!.value;
+    const lastHist = history[history.length - 1]!.value;
+    // Align: find benchmark close on/before each portfolio label.
+    const benchAligned: number[] = [];
+    for (const h of history) {
+      const matching = benchmark.points.filter((p) => p.date.slice(0, 7) <= h.label.slice(0, 7));
+      const last = matching[matching.length - 1];
+      benchAligned.push(last ? last.close : NaN);
+    }
+    const firstBench = benchAligned.find((v) => Number.isFinite(v));
+    if (firstBench && firstBench > 0) {
+      benchSeries = history.map((h, i) => ({
+        label: h.label,
+        value: Number.isFinite(benchAligned[i]!) ? (benchAligned[i]! / firstBench) * firstHist : firstHist,
+      }));
+      // alpha = portfolio TR - benchmark TR over the same window
+      const portTR = firstHist > 0 ? ((lastHist - firstHist) / firstHist) * 100 : 0;
+      const lastBench = benchAligned[benchAligned.length - 1];
+      const benchTR = (lastBench && firstBench > 0) ? ((lastBench - firstBench) / firstBench) * 100 : 0;
+      alpha = portTR - benchTR;
+    }
+  }
+
+  const useBench = showBench && benchSeries != null;
+  const useFx = !useBench && showFx && fxSeries != null;
+
   return (
     <Section title={`가치 추이 (${base})`} icon="📈">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
         <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
           {history.length}개월 · history.csv
+          {alpha != null && (
+            <span style={{ marginLeft: 8, color: alpha >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+              · α vs {benchmark!.bench.label}: {alpha >= 0 ? "+" : ""}{alpha.toFixed(1)}pp
+            </span>
+          )}
         </span>
-        <button
-          type="button"
-          onClick={() => setShowFx(!showFx)}
-          style={{
-            fontSize: 11,
-            padding: "2px 8px",
-            borderRadius: 4,
-            background: showFx ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
-            color: showFx ? "rgb(var(--accent-foreground))" : "rgb(var(--muted-foreground))",
-            border: "1px solid rgb(var(--border))",
-            cursor: "pointer",
-          }}
-        >
-          {showFx ? "FX overlay 끄기" : "FX 영향 분리"}
-        </button>
+        <div style={{ display: "flex", gap: 4 }}>
+          {benchSeries && (
+            <button
+              type="button"
+              onClick={() => setShowBench(!showBench)}
+              style={{
+                fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                background: showBench ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+                color: showBench ? "rgb(var(--accent-foreground))" : "rgb(var(--muted-foreground))",
+                border: "1px solid rgb(var(--border))", cursor: "pointer",
+              }}
+            >
+              {showBench ? "벤치마크 끄기" : `vs ${benchmark!.bench.label}`}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowFx(!showFx)}
+            style={{
+              fontSize: 11, padding: "2px 8px", borderRadius: 4,
+              background: showFx && !useBench ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+              color: showFx && !useBench ? "rgb(var(--accent-foreground))" : "rgb(var(--muted-foreground))",
+              border: "1px solid rgb(var(--border))", cursor: "pointer",
+            }}
+          >
+            {showFx ? "FX overlay 끄기" : "FX 영향 분리"}
+          </button>
+        </div>
       </div>
-      {showFx && fxSeries ? (
+      {useBench ? (
         <LineChart
           data={series}
-          compare={fxSeries}
+          compare={benchSeries!}
+          seriesLabels={["내 포트폴리오", benchmark!.bench.label]}
+          width={1100}
+          height={240}
+        />
+      ) : useFx ? (
+        <LineChart
+          data={series}
+          compare={fxSeries!}
           seriesLabels={["실제 가치", "FX-중립 baseline"]}
           width={1100}
           height={240}
@@ -863,35 +989,155 @@ export function PositionDetailPage({
   );
 }
 
+// ─ AQ — Realized P&L section ─────────────────────────────────────────────
+// FIFO-based realized PnL fed from transactions/*.csv. Shows headline KPI
+// (YTD + all-time) + per-symbol breakdown. Without this, a PM can't
+// answer "how much did I actually make this year?" or do tax filing.
+export function RealizedPnLSection({
+  derived, base, fxMap, transactions,
+}: {
+  derived: Derived;
+  base: string;
+  fxMap: Record<string, number>;
+  transactions: Array<{ date: string; action: string; symbol: string; notes?: string }>;
+}) {
+  if (derived.realized.length === 0 && transactions.length === 0) return null;
+  const recent = transactions.slice(-8).reverse();
+  return (
+    <Section title="실현 손익 + 거래 내역" icon="💰">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 12 }}>
+        <KpiCard
+          label={`YTD 실현 (${base})`}
+          value={fmtMoney(derived.realizedYTDBase, base)}
+          muted={derived.realizedYTDBase >= 0 ? "수익" : "손실"}
+        />
+        <KpiCard
+          label={`전체 실현 (${base})`}
+          value={fmtMoney(derived.realizedTotalBase, base)}
+          muted={`${derived.realized.length}개 종목 거래`}
+        />
+        <KpiCard
+          label="거래 건수"
+          value={String(transactions.length)}
+          muted={transactions.length > 0 ? `${transactions[0]!.date.slice(0, 7)} 이후` : "—"}
+        />
+      </div>
+
+      {derived.realized.length > 0 && (
+        <>
+          <h4 style={subHead}>종목별 실현 손익 (FIFO)</h4>
+          <Table headers={["종목", "통화", "실현 손익", "매도 금액", "원가", "수수료", "배당", "매도 건수"]}>
+            {derived.realized.map((r) => (
+              <tr key={r.symbol} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+                <td style={tdLeft}>
+                  <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                    <strong>{r.name}</strong>
+                    <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, monospace" }}>{r.symbol}</span>
+                  </div>
+                </td>
+                <td style={tdLeft}>{r.currency}</td>
+                <td style={{ ...tdRight, color: r.realized >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))", fontWeight: 600 }}>
+                  {fmtMoney(r.realized, r.currency)}
+                </td>
+                <td style={tdRight}>{fmtMoney(r.proceeds, r.currency)}</td>
+                <td style={tdRight}>{fmtMoney(r.costSold, r.currency)}</td>
+                <td style={tdRight}>{r.fees > 0 ? fmtMoney(r.fees, r.currency) : <span style={mutedDot}>—</span>}</td>
+                <td style={tdRight}>{r.dividends > 0 ? fmtMoney(r.dividends, r.currency) : <span style={mutedDot}>—</span>}</td>
+                <td style={tdRight}>{r.sellCount}</td>
+              </tr>
+            ))}
+          </Table>
+        </>
+      )}
+
+      {recent.length > 0 && (
+        <>
+          <h4 style={subHead}>최근 거래</h4>
+          <Table headers={["날짜", "구분", "종목", "메모"]}>
+            {recent.map((t, i) => {
+              const tone: "success" | "destructive" | "info" | "muted" =
+                t.action === "buy" ? "info"
+                  : t.action === "sell" ? "success"
+                  : t.action === "dividend" ? "muted"
+                  : "muted";
+              return (
+                <tr key={`${t.date}-${t.symbol}-${i}`} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+                  <td style={{ ...tdLeft, fontFamily: "ui-monospace, monospace", fontSize: 11 }}>{t.date}</td>
+                  <td style={tdLeft}><Badge tone={tone}>{t.action}</Badge></td>
+                  <td style={tdLeft}><code style={{ fontSize: 11 }}>{t.symbol}</code></td>
+                  <td style={{ ...tdLeft, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>{t.notes ?? ""}</td>
+                </tr>
+              );
+            })}
+          </Table>
+        </>
+      )}
+    </Section>
+  );
+}
+
 // ─ AM — Watchlist table ──────────────────────────────────────────────────
 // Renders positions/watchlist.csv. Separate section so watchlist entries
 // don't blend in with held positions (different decision frame: 'when
 // should I open?' vs 'when should I adjust?').
+// AQ — when trigger_price set and live quote available, highlight the row
+// when current is at-or-below trigger ("buy zone"). This was the whole
+// point of having a trigger column — actual alerting.
 export function WatchlistTable({
   rows,
+  liveQuotes,
   onRowClick,
 }: {
   rows: Array<{ symbol: string; name: string; asset_class: string; sector: string; currency: string; trigger_price?: number; thesis_id?: string; notes?: string; quote_symbol?: string }>;
+  liveQuotes?: Record<string, LiveQuote>;
   onRowClick?: (symbol: string) => void;
 }) {
   if (rows.length === 0) return null;
+  const triggered = rows.filter((r) => {
+    if (!r.trigger_price || !liveQuotes) return false;
+    const key = String(r.quote_symbol || r.symbol || "").toUpperCase();
+    const q = liveQuotes[key];
+    return q && q.price > 0 && q.price <= r.trigger_price;
+  });
   return (
-    <Section title={`Watchlist (${rows.length})`} icon="👀">
-      <Table headers={["종목", "이름", "자산군", "통화", "trigger price", "메모"]}>
-        {rows.map((r) => (
-          <tr
-            key={r.symbol}
-            style={{ borderBottom: "1px solid rgb(var(--border))", cursor: onRowClick ? "pointer" : "default" }}
-            onClick={onRowClick ? () => onRowClick(r.symbol) : undefined}
-          >
-            <td style={tdLeft}><strong>{r.symbol}</strong></td>
-            <td style={tdLeft}>{r.name}</td>
-            <td style={tdLeft}>{r.asset_class}</td>
-            <td style={tdLeft}>{r.currency}</td>
-            <td style={tdRight}>{r.trigger_price != null ? fmtNum(r.trigger_price) : <span style={mutedDot}>—</span>}</td>
-            <td style={{ ...tdLeft, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>{r.notes ?? ""}</td>
-          </tr>
-        ))}
+    <Section title={`Watchlist (${rows.length})${triggered.length > 0 ? ` · 🔔 ${triggered.length}개 트리거` : ""}`} icon="👀">
+      <Table headers={["종목", "자산군", "통화", "현재가", "trigger", "위치", "메모"]}>
+        {rows.map((r) => {
+          const key = String(r.quote_symbol || r.symbol || "").toUpperCase();
+          const q = liveQuotes?.[key];
+          const cur = q?.price;
+          const trig = r.trigger_price;
+          const hit = trig != null && cur != null && cur > 0 && cur <= trig;
+          const diffPct = (trig != null && cur != null && trig > 0)
+            ? ((cur - trig) / trig) * 100
+            : null;
+          return (
+            <tr
+              key={r.symbol}
+              style={{
+                borderBottom: "1px solid rgb(var(--border))",
+                cursor: onRowClick ? "pointer" : "default",
+                background: hit ? "rgba(34, 197, 94, 0.06)" : "transparent",
+              }}
+              onClick={onRowClick ? () => onRowClick(r.symbol) : undefined}
+            >
+              <td style={tdLeft}>
+                <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                  <strong>{r.name}{hit && <span style={{ marginLeft: 4 }}><Badge tone="success">트리거 도달</Badge></span>}</strong>
+                  <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, monospace" }}>{r.symbol}</span>
+                </div>
+              </td>
+              <td style={tdLeft}>{r.asset_class}</td>
+              <td style={tdLeft}>{r.currency}</td>
+              <td style={tdRight}>{cur != null ? fmtNum(cur) : <span style={mutedDot}>—</span>}</td>
+              <td style={tdRight}>{trig != null ? fmtNum(trig) : <span style={mutedDot}>—</span>}</td>
+              <td style={{ ...tdRight, color: hit ? "rgb(var(--success))" : diffPct != null && diffPct < 5 ? "rgb(var(--warning, var(--muted-foreground)))" : "rgb(var(--muted-foreground))" }}>
+                {diffPct != null ? `${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%` : "—"}
+              </td>
+              <td style={{ ...tdLeft, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>{r.notes ?? ""}</td>
+            </tr>
+          );
+        })}
       </Table>
     </Section>
   );

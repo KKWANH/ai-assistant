@@ -119,6 +119,10 @@ export interface AriadneSDK {
   getQuotesDetailed(symbols: string[]): Promise<{ quotes: Quote[]; errors: QuoteError[] }>;
   /** Live FX rates relative to `base` — units of base per 1 unit of each currency. */
   getFxRates(base: string, currencies: string[]): Promise<Record<string, number>>;
+  /** AQ — Historical close prices for a single symbol. Used for benchmark
+   *  overlay (^KS200, ^GSPC) and per-position charts beyond the static
+   *  CSV history. range: '1mo'|'3mo'|'6mo'|'1y'|'2y'|'5y'|'10y'|'ytd'|'max'. */
+  getQuoteHistory(symbol: string, range?: string, interval?: string): Promise<Array<{ date: string; close: number }>>;
   /** Returns the current theme mode. Colours come from CSS custom properties. */
   theme: AriadneTheme;
 }
@@ -188,6 +192,8 @@ export function useAriadne(): AriadneSDK {
       callHost<{ quotes: Quote[]; errors: QuoteError[] }>("getQuotesDetailed", [symbols]),
     getFxRates: (base: string, currencies: string[]) =>
       callHost<Record<string, number>>("getFxRates", [base, currencies]),
+    getQuoteHistory: (symbol: string, range?: string, interval?: string) =>
+      callHost<Array<{ date: string; close: number }>>("getQuoteHistory", [symbol, range ?? "1y", interval ?? "1d"]),
     theme: detectTheme(),
   });
   return sdk.current;

@@ -357,6 +357,14 @@ export const getFxRates = (base: string, currencies: string[]) =>
     `/market/fx?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(currencies.join(","))}`,
   );
 
+// AQ — Historical close prices for a single symbol. Used by the
+// portfolio surface for benchmark overlay (^KS200, ^GSPC).
+export const getQuoteHistory = (symbol: string, range = "1y", interval = "1d") =>
+  request<{ symbol: string; resolved: string; points: Array<{ date: string; close: number }>; error?: string }>(
+    "GET",
+    `/market/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`,
+  );
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 export const getReports = (status?: string) =>
   request<Report[]>("GET", `/reports${status ? `?status=${status}` : ""}`);

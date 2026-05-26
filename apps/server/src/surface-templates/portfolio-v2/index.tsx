@@ -25,15 +25,16 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, Transaction, Benchmark } from "./types";
 import { parseYaml } from "./yaml";
-import { toBase, regionOf, daysBetween } from "./utils";
+import { toBase, regionOf, daysBetween, computeRealized, computeRiskMetrics, detectMajorityCurrency, loadBaseFromStorage, saveBaseToStorage } from "./utils";
 import {
   ActionStrip, NetWorthCard, AccountsTable,
   PositionsTable, CashAndManualAssets, RecentAnalysis,
   TriggerGauge,
   ValueTrendChart, ReturnsBarChart, PositionDetailPage,
   WatchlistTable, BaseCurrencySelector,
+  AllocationGrid, RealizedPnLSection,
 } from "./sections";
 
 // AM — key used to look up price history + news files.
@@ -70,9 +71,14 @@ export default function App() {
   const [activeThesis, setActiveThesis] = useState<string | null>(null);
   const [activePriceHistory, setActivePriceHistory] = useState<PricePoint[]>([]);
   const [activeNews, setActiveNews] = useState<string | null>(null);
-  // AM — reporting currency is user-selectable; KRW default for the
-  // Korea-resident reference workspace, switchable to USD / EUR / JPY.
-  const [base, setBase] = useState<string>("KRW");
+  // AM/AQ — reporting currency. AQ: initial value is loaded from
+  // localStorage (so user's last choice persists); falls back to the
+  // majority data-currency once data loads (effect below); final fallback
+  // is KRW for the Korea-resident reference workspace.
+  const [base, setBase] = useState<string>(() => loadBaseFromStorage() ?? "KRW");
+  // AQ — transactions log + benchmark history (Yahoo).
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [benchHistory, setBenchHistory] = useState<{ bench: Benchmark; points: Array<{ date: string; close: number }> } | null>(null);
   // AM — watchlist (positions/watchlist.csv).
   const [watchlist, setWatchlist] = useState<Array<{
     symbol: string; name: string; asset_class: string; sector: string;
@@ -196,6 +202,40 @@ export default function App() {
           })).filter((h: HistPoint) => h.label && Number.isFinite(h.value));
         } catch (_e) { /* file absent — chart silently hidden */ }
 
+        // AQ — transactions/*.csv. Load all yearly files, concatenate,
+        // sort by date. Used for realized-P&L + decision history.
+        let txList: Transaction[] = [];
+        try {
+          const allFiles = await ariadne.listFiles();
+          const txFiles = (allFiles as Array<{ path: string } | string>)
+            .map((f) => (typeof f === "string" ? f : f.path))
+            .filter((p) => p.startsWith("transactions/") && p.endsWith(".csv"))
+            .sort();
+          for (const path of txFiles) {
+            try {
+              const { rows } = await ariadne.readCsv(path);
+              for (const r of rows as any[]) {
+                if (!r.date || !r.symbol || !r.action) continue;
+                txList.push({
+                  date: r.date,
+                  action: r.action,
+                  account_id: r.account_id ?? "",
+                  symbol: r.symbol,
+                  name: r.name || undefined,
+                  shares: Number(r.shares),
+                  price: Number(r.price),
+                  currency: r.currency || "KRW",
+                  fee: r.fee ? Number(r.fee) : undefined,
+                  fee_currency: r.fee_currency || undefined,
+                  thesis_id: r.thesis_id || undefined,
+                  notes: r.notes || undefined,
+                });
+              }
+            } catch (_e) { /* skip malformed file */ }
+          }
+          txList.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+        } catch (_e) { /* transactions folder absent — log section silently empty */ }
+
         // AM — positions/watchlist.csv (tracked-but-not-held).
         let wlList: typeof watchlist = [];
         try {
@@ -233,6 +273,7 @@ export default function App() {
         setTriggers(trigList);
         setHistory(histList);
         setWatchlist(wlList);
+        setTransactions(txList);
         setAnalysisFiles(af);
 
         // AO — Live quotes. Detailed call returns the full Quote (with
@@ -316,6 +357,58 @@ export default function App() {
   }, [ariadne, base, dataCurrencies, refreshTick]);
 
   const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
+
+  // AQ — Auto-base: first time data lands and the user has no saved
+  // preference, switch to the majority data currency. Then persist
+  // whatever they end up with for next visit.
+  const initialBaseApplied = useState(loadBaseFromStorage() != null)[0];
+  useEffect(() => {
+    if (initialBaseApplied) return;
+    if (positions.length === 0 && cash.length === 0) return;
+    const majority = detectMajorityCurrency([
+      ...positions.map((p) => ({ market_value: p.market_value, currency: p.currency })),
+      ...cash.map((c) => ({ market_value: c.amount, currency: c.currency })),
+      ...metals.map((m) => ({ market_value: m.market_value, currency: m.currency })),
+      ...funds.map((f) => ({ market_value: f.market_value, currency: f.currency })),
+    ]);
+    if (majority && majority !== base) setBase(majority);
+    // intentionally not adding initialBaseApplied to deps — fires once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positions, cash, metals, funds]);
+
+  useEffect(() => { saveBaseToStorage(base); }, [base]);
+
+  // AQ — benchmark overlay. Picks Yahoo index symbol matching the base
+  // currency (KRW → ^KS200, USD → ^GSPC, EUR → ^STOXX50E, JPY → ^N225).
+  // Fetches 1y daily closes; overlay is normalized to a base of 100 in
+  // ValueTrendChart so visual comparison is scale-agnostic.
+  const benchSymbol = useMemo<Benchmark | null>(() => {
+    // ^KS200 has spotty monthly data on Yahoo (1y returns ~1 point);
+    // ^KS11 (KOSPI composite) is reliably served. Other regions stay on
+    // their canonical indices.
+    if (base === "KRW") return { symbol: "^KS11", label: "KOSPI" };
+    if (base === "USD") return { symbol: "^GSPC", label: "S&P 500" };
+    if (base === "EUR") return { symbol: "^STOXX50E", label: "EURO STOXX 50" };
+    if (base === "JPY") return { symbol: "^N225", label: "Nikkei 225" };
+    return null;
+  }, [base]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!benchSymbol || typeof ariadne.getQuoteHistory !== "function") {
+      setBenchHistory(null);
+      return;
+    }
+    (async () => {
+      try {
+        const points = await ariadne.getQuoteHistory(benchSymbol.symbol, "1y", "1mo");
+        if (!cancelled) setBenchHistory({ bench: benchSymbol, points });
+      } catch (_e) {
+        if (!cancelled) setBenchHistory(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ariadne, benchSymbol, refreshTick]);
 
   // ── Derive aggregates ──────────────────────────────────────────────────
   const derived: Derived = useMemo(() => {
@@ -401,13 +494,32 @@ export default function App() {
       .filter((x) => totalInvested > 0 && (x.base / totalInvested) * 100 > 10)
       .map((x) => x.p);
 
+    // AQ — realized P&L from the transaction log. Sum in base currency
+    // for the headline KPI; YTD subset uses calendar-year cutoff.
+    const realized = computeRealized(transactions);
+    const ytdCutoff = `${new Date().getFullYear()}-01-01`;
+    const realizedYTD = computeRealized(transactions.filter((t) => t.date >= ytdCutoff));
+    const realizedTotalBase = realized.reduce(
+      (s, r) => s + toBase(r.realized, r.currency, fxMap),
+      0,
+    );
+    const realizedYTDBase = realizedYTD.reduce(
+      (s, r) => s + toBase(r.realized, r.currency, fxMap),
+      0,
+    );
+
+    // AQ — risk metrics from monthly history.csv + sector HHI from
+    // bySector weights. Returns null when history insufficient.
+    const risk = computeRiskMetrics(history, bySector);
+
     return {
       totalNetWorthBase, totalInvestedBase, totalCashBase, totalIdleBase,
       byAssetClass, byCurrency, bySector, byRegion,
       accountRollup, closingAccounts, taxAccounts, staleTheses, missingTheses,
       concentration, gainers, losers, capViolators,
+      realized, realizedTotalBase, realizedYTDBase, risk,
     };
-  }, [positions, cash, metals, funds, accounts, fxMap]);
+  }, [positions, cash, metals, funds, accounts, fxMap, transactions, history]);
 
   // ── Filter + sort positions ────────────────────────────────────────────
   const visiblePositions = useMemo(() => {
@@ -537,9 +649,16 @@ export default function App() {
 
       <ActionStrip accounts={accounts} derived={derived} buckets={buckets} base={base} />
       <NetWorthCard accounts={accounts} positions={positions} derived={derived} base={base} onRefresh={refreshQuotes} />
-      <ValueTrendChart history={history} base={base} showFx={showFx} setShowFx={setShowFx} />
-      {/* AM — '자산 배분' (AllocationGrid + BucketGapTable) removed per user
-          request. TriggerGauge stays — it's about trade timing, not allocation. */}
+      <ValueTrendChart
+        history={history}
+        base={base}
+        showFx={showFx}
+        setShowFx={setShowFx}
+        benchmark={benchHistory}
+      />
+      {/* AQ — compact allocation strip restored (4 mini-pies). Drives
+          fund-manager intuition for "where is the money concentrated?". */}
+      <AllocationGrid derived={derived} />
       <TriggerGauge triggers={triggers} />
       <AccountsTable accounts={accounts} derived={derived} base={base} />
       <PositionsTable
@@ -563,7 +682,8 @@ export default function App() {
         flipSort={flipSort}
         onRowClick={openPosition}
       />
-      <WatchlistTable rows={watchlist} />
+      <WatchlistTable rows={watchlist} liveQuotes={liveQuotes} />
+      <RealizedPnLSection derived={derived} base={base} fxMap={fxMap} transactions={transactions} />
       <CashAndManualAssets accounts={accounts} cash={cash} metals={metals} funds={funds} />
       <RecentAnalysis files={analysisFiles} />
     </div>

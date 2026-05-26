@@ -10,7 +10,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol } from "../services/marketData.js";
+import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory } from "../services/marketData.js";
 
 const MAX_SYMBOLS = 60;
 
@@ -46,6 +46,22 @@ export async function marketDataRoutes(app: FastifyInstance): Promise<void> {
     const raw = (req.query.symbol ?? "").trim();
     if (!raw) return reply.status(400).send({ error: "symbol query param is required" });
     return reply.send({ input: raw.toUpperCase(), resolved: normalizeSymbol(raw) });
+  });
+
+  // AQ — historical close prices for a single symbol. Used by the
+  // surface's benchmark overlay (^KS200, ^GSPC, etc.) on the value-trend
+  // chart. Returns { symbol, points: [{date, close}, ...] }.
+  app.get<{ Querystring: { symbol?: string; range?: string; interval?: string } }>("/market/history", async (req, reply) => {
+    const raw = (req.query.symbol ?? "").trim();
+    if (!raw) return reply.status(400).send({ error: "symbol query param is required" });
+    const range = (req.query.range ?? "1y").trim();
+    const interval = (req.query.interval ?? "1d").trim();
+    try {
+      const points = await getQuoteHistory(raw, range, interval);
+      return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points });
+    } catch (e) {
+      return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points: [], error: String((e as Error)?.message ?? e) });
+    }
   });
 
   app.get<{ Querystring: { base?: string; symbols?: string } }>("/market/fx", async (req, reply) => {

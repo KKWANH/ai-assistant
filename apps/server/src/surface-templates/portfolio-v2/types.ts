@@ -164,6 +164,69 @@ export interface HistPoint {
   fxEffect: number;
 }
 
+/** AQ — Transaction record. Read from transactions/*.csv. Positions are
+ *  still maintained in positions/current.csv as a snapshot; this log is
+ *  additive and used for realized-P&L, lot tracking, decision history. */
+export interface Transaction {
+  date: string;
+  action: "buy" | "sell" | "dividend" | "fee" | "split" | string;
+  account_id: string;
+  symbol: string;
+  name?: string;
+  shares: number;
+  price: number;
+  currency: string;
+  fee?: number;
+  fee_currency?: string;
+  thesis_id?: string;
+  notes?: string;
+}
+
+/** AQ — Per-symbol realized P&L summary computed via FIFO lot matching.
+ *  Stored keyed by symbol so the table view can sort/filter. */
+export interface RealizedPnL {
+  symbol: string;
+  name: string;
+  currency: string;
+  /** Sum of (sell_price - lot_buy_price) × shares_sold, in native currency. */
+  realized: number;
+  /** Aggregate sell proceeds in native currency. */
+  proceeds: number;
+  /** Aggregate cost basis of sold lots in native currency. */
+  costSold: number;
+  /** Total fees paid for sells of this symbol, native currency. */
+  fees: number;
+  /** Net dividend income (native currency). */
+  dividends: number;
+  /** First and last transaction date for this symbol. */
+  firstDate: string;
+  lastDate: string;
+  /** Total sells (count of separate sell transactions). */
+  sellCount: number;
+}
+
+/** AQ — Benchmark configuration. Read from targets/benchmarks.yaml or
+ *  derived heuristically (KRW base → ^KS200, USD → ^GSPC, etc.). */
+export interface Benchmark {
+  symbol: string;       // Yahoo ticker (^KS200, ^GSPC, …)
+  label: string;        // display name
+  color?: string;       // CSS-var token like 'rgb(var(--accent))'
+}
+
+/** AQ — Risk metrics computed from history.csv. */
+export interface RiskMetrics {
+  /** Annualised vol of monthly returns, %. */
+  volPctAnnual: number;
+  /** Sharpe-like (mean / stdev) — risk-free assumed 0 for simplicity. */
+  sharpe: number;
+  /** Max peak-to-trough drawdown over the history, %. */
+  maxDrawdownPct: number;
+  /** Sector Herfindahl index (0-1, 1 = perfectly concentrated). */
+  sectorHHI: number;
+  /** Data-point count actually used. */
+  monthsUsed: number;
+}
+
 /** Per-position price history point (AM — read from positions/history/<key>.csv). */
 export interface PricePoint {
   label: string;    // ISO date
@@ -196,4 +259,11 @@ export interface Derived {
   losers: RawPosition[];   // return_pct < 0
   gainers: RawPosition[];  // return_pct > 0
   capViolators: RawPosition[];  // single-stock > 10%
+  /** AQ — Aggregate realized P&L (FIFO) keyed by symbol, plus the running
+   *  totals in base currency for the year-to-date headline KPI. */
+  realized: RealizedPnL[];
+  realizedTotalBase: number;
+  realizedYTDBase: number;
+  /** AQ — Risk model from history.csv. Null when no history.csv data. */
+  risk: RiskMetrics | null;
 }

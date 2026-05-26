@@ -161,6 +161,12 @@ async function handleBridgeRequest(
       return res.rates;
     }
 
+    case "getQuoteHistory": {
+      const [symbol, range, interval] = args as [string, string?, string?];
+      const res = await api.getQuoteHistory(symbol, range, interval);
+      return res.points;
+    }
+
     default:
       throw new Error(`Unknown method: ${method}`);
   }

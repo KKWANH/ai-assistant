@@ -232,6 +232,73 @@ export async function getQuotesDetailed(
   return { quotes, errors };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// AQ — Historical price series for benchmark overlay & technical analysis.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface PricePoint { date: string; close: number; }
+
+const HISTORY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min — historical data changes slowly
+interface HistoryCacheEntry { points: PricePoint[]; expires: number; }
+const historyCache = new Map<string, HistoryCacheEntry>();
+
+const VALID_RANGES = new Set(["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]);
+
+async function fetchYahooHistoryFrom(host: string, symbol: string, range: string, interval: string): Promise<PricePoint[]> {
+  const url = `${host}${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`${host} ${symbol}: HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    chart?: { result?: Array<{
+      timestamp?: number[];
+      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+    }> };
+  };
+  const r = data.chart?.result?.[0];
+  const ts = r?.timestamp ?? [];
+  const closes = r?.indicators?.quote?.[0]?.close ?? [];
+  const points: PricePoint[] = [];
+  for (let i = 0; i < ts.length; i++) {
+    const t = ts[i];
+    const c = closes[i];
+    if (typeof t === "number" && typeof c === "number" && isFinite(c) && c > 0) {
+      points.push({ date: new Date(t * 1000).toISOString().slice(0, 10), close: c });
+    }
+  }
+  if (points.length === 0) throw new Error(`${host} ${symbol}: no history`);
+  return points;
+}
+
+/** Historical close prices for a symbol over a Yahoo-supported range.
+ *  Cached for 30 min. Per-request defaults: 1y daily. */
+export async function getQuoteHistory(
+  symbol: string,
+  range: string = "1y",
+  interval: string = "1d",
+): Promise<PricePoint[]> {
+  const resolved = normalizeSymbol(symbol);
+  const safeRange = VALID_RANGES.has(range) ? range : "1y";
+  const key = `H:${resolved}:${safeRange}:${interval}`;
+  const now = Date.now();
+  const hit = historyCache.get(key);
+  if (hit && hit.expires > now) return hit.points;
+
+  let lastErr: unknown = new Error(`no Yahoo hosts configured for ${resolved}`);
+  for (const host of YAHOO_CHART_HOSTS) {
+    try {
+      const points = await fetchYahooHistoryFrom(host, resolved, safeRange, interval);
+      historyCache.set(key, { points, expires: now + HISTORY_CACHE_TTL_MS });
+      return points;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 /**
  * USD value of 1 unit of `cur` (USD itself → 1). Cached.
  *
