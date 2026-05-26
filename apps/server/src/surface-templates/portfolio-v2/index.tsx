@@ -112,6 +112,33 @@ export default function App() {
   // AN — bumping refreshTick re-runs the load() effect, re-fetching FX + quotes.
   const [refreshTick, setRefreshTick] = useState(0);
 
+  // AT — live-price overlay. The CSV's current_price / market_value /
+  // return_pct are ignored when we have a fresh Yahoo quote; stored
+  // prices go stale instantly so the canonical source is the API.
+  // Falls back to CSV values only when the quote is missing (rare).
+  // Declared HERE (before any effect/memo that reads `positions`) to
+  // avoid the TDZ error that surfaced when this memo lived further down.
+  const positions = useMemo<RawPosition[]>(() => {
+    return rawPositions.map((p) => {
+      const key = String(p.quote_symbol || p.symbol || "").toUpperCase();
+      const q = liveQuotes[key];
+      if (!q || !Number.isFinite(q.price) || q.price <= 0) return p;
+      const liveCurrent = q.price;
+      const liveMarket = Number.isFinite(p.shares) ? p.shares * liveCurrent : p.market_value;
+      const liveReturn = Number.isFinite(p.buy_price) && p.buy_price > 0
+        ? ((liveCurrent - p.buy_price) / p.buy_price) * 100
+        : p.return_pct;
+      return {
+        ...p,
+        current_price: liveCurrent,
+        market_value: liveMarket,
+        return_pct: liveReturn,
+        book_value: Number.isFinite(p.shares) && Number.isFinite(p.buy_price) ? p.shares * p.buy_price : p.book_value,
+        has_live_quote: true,
+      };
+    });
+  }, [rawPositions, liveQuotes]);
+
   // ── Load all v2 data ────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -387,31 +414,6 @@ export default function App() {
   }, [ariadne, base, dataCurrencies, refreshTick]);
 
   const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
-
-  // AT — live-price overlay. The CSV's current_price / market_value /
-  // return_pct are ignored when we have a fresh Yahoo quote; stored
-  // prices go stale instantly so the canonical source is the API.
-  // Falls back to CSV values only when the quote is missing (rare).
-  const positions = useMemo<RawPosition[]>(() => {
-    return rawPositions.map((p) => {
-      const key = String(p.quote_symbol || p.symbol || "").toUpperCase();
-      const q = liveQuotes[key];
-      if (!q || !Number.isFinite(q.price) || q.price <= 0) return p;
-      const liveCurrent = q.price;
-      const liveMarket = Number.isFinite(p.shares) ? p.shares * liveCurrent : p.market_value;
-      const liveReturn = Number.isFinite(p.buy_price) && p.buy_price > 0
-        ? ((liveCurrent - p.buy_price) / p.buy_price) * 100
-        : p.return_pct;
-      return {
-        ...p,
-        current_price: liveCurrent,
-        market_value: liveMarket,
-        return_pct: liveReturn,
-        book_value: Number.isFinite(p.shares) && Number.isFinite(p.buy_price) ? p.shares * p.buy_price : p.book_value,
-        has_live_quote: true,
-      };
-    });
-  }, [rawPositions, liveQuotes]);
 
   // AR — responsive: track viewport width. <720px = mobile (single-column
   // KPI grids, narrower charts, condensed padding). Re-runs on resize.
