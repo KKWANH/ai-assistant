@@ -5,17 +5,19 @@
  * Remote users see read-only view (403 on save → auto read-only).
  * Uses CodeMirror 6 with JavaScript/TypeScript highlighting.
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Save, Hammer, AlertCircle, CheckCircle, Lock } from "lucide-react";
+import { Save, Hammer, AlertCircle, CheckCircle, Lock, FileCode } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { useSurface, useSaveSurface, useBuildSurface } from "../../lib/queries";
+import * as api from "../../lib/api";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 
@@ -73,10 +75,38 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
   const [buildOk, setBuildOk] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  const initialSource = surfaceData?.source ?? "";
+  // AK — multi-file folder support. When .ariadne/surface/ exists, the
+  // editor switches into 'folder mode': a small tab strip across the
+  // top, click-to-swap between files. Saving routes to the new
+  // PUT /surface/folder/file endpoint with the active file's path.
+  const { data: folderData } = useQuery({
+    queryKey: ["surface-folder", workspaceId],
+    queryFn: () => api.getSurfaceFolder(workspaceId),
+    enabled: !!workspaceId,
+  });
+  const folderFiles = useMemo(() => folderData?.files ?? [], [folderData]);
+  const folderMode = !!folderData?.folderExists && folderFiles.length > 0;
+  // Active file path within the folder (relative). Single-file mode uses null.
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  // Per-file dirty tracking so switching tabs doesn't silently drop changes.
+  const [dirtyFiles, setDirtyFiles] = useState<Record<string, string>>({});
+
+  // Default the active file to index.tsx when folder mode kicks in.
+  useEffect(() => {
+    if (folderMode && activeFile === null) {
+      setActiveFile(folderFiles[0]?.path ?? null);
+    }
+  }, [folderMode, activeFile, folderFiles]);
+
+  const initialSource = folderMode && activeFile
+    ? (dirtyFiles[activeFile] ?? folderFiles.find((f) => f.path === activeFile)?.content ?? "")
+    : (surfaceData?.source ?? "");
   const state = surfaceData?.state;
 
-  // Initialise / recreate CodeMirror when source loads
+  // Initialise / recreate CodeMirror when source loads — also re-runs
+  // when activeFile changes (folder mode tab switch), so the editor
+  // surfaces the newly-selected file's content. Per-file dirty state
+  // is preserved in dirtyFiles so an unsaved file isn't silently lost.
   useEffect(() => {
     if (!editorRef.current || isLoading) return;
 
@@ -92,7 +122,17 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
         javascript({ typescript: true, jsx: true }),
         EditorState.readOnly.of(readOnly),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) setDirty(true);
+          if (update.docChanged) {
+            setDirty(true);
+            // In folder mode, also persist the in-memory edit per-file
+            // so the user can tab-hop without losing changes.
+            if (folderMode && activeFile) {
+              setDirtyFiles((prev) => ({
+                ...prev,
+                [activeFile]: update.state.doc.toString(),
+              }));
+            }
+          }
         }),
       ],
     });
@@ -110,9 +150,11 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
       viewRef.current?.destroy();
       viewRef.current = null;
     };
-    // Re-init only when the workspace changes or loading completes
+    // Re-init when workspace, loading, OR the active file changes
+    // (folder mode tab switch). initialSource is derived above, so we
+    // depend on its inputs explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, isLoading]);
+  }, [workspaceId, isLoading, activeFile, folderMode]);
 
   const getSource = useCallback(() => {
     return viewRef.current?.state.doc.toString() ?? "";
@@ -121,7 +163,17 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
   const handleSave = async () => {
     const source = getSource();
     try {
-      await saveSurface.mutateAsync(source);
+      if (folderMode && activeFile) {
+        // AK — save active file via the folder-file endpoint.
+        await api.saveSurfaceFolderFile(workspaceId, activeFile, source);
+        setDirtyFiles((prev) => {
+          const next = { ...prev };
+          delete next[activeFile];
+          return next;
+        });
+      } else {
+        await saveSurface.mutateAsync(source);
+      }
       setDirty(false);
       setBuildError(null);
       toast({ title: t("surface.saved"), variant: "success" });
@@ -255,6 +307,37 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
           <CheckCircle className="h-4 w-4 text-success shrink-0" />
           <p className="text-xs text-success">{t("surface.buildSucceededNote")}</p>
         </Card>
+      )}
+
+      {/* AK — File tab strip (folder mode only). Shows all files in
+          .ariadne/surface/. Active file's content is in the editor. Tabs
+          with unsaved edits get a dot indicator. */}
+      {folderMode && folderFiles.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap text-xs border-b border-border pb-1">
+          <span className="text-muted-foreground mr-2 shrink-0 flex items-center gap-1">
+            <FileCode className="h-3.5 w-3.5" />
+            {t("surface.folderFiles")}
+          </span>
+          {folderFiles.map((f) => {
+            const isActive = activeFile === f.path;
+            const isDirty = dirtyFiles[f.path] !== undefined;
+            return (
+              <button
+                key={f.path}
+                type="button"
+                onClick={() => setActiveFile(f.path)}
+                className={[
+                  "px-2 py-1 rounded-md font-mono",
+                  isActive ? "bg-accent text-accent-foreground" : "bg-surface-2 hover:bg-surface-3 text-foreground",
+                ].join(" ")}
+                title={`${f.path} (${Math.ceil(f.size / 1024)} kB)`}
+              >
+                {f.path}
+                {isDirty && <span className="ml-1 text-warning">●</span>}
+              </button>
+            );
+          })}
+        </div>
       )}
 
       {/* CodeMirror mount point */}

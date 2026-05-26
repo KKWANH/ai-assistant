@@ -1,10 +1,12 @@
 /**
  * Surface routes — registered INSIDE the /api prefix (authenticated).
  *
- * GET  /api/workspaces/:id/surface          → { state: SurfaceState, source: string }
- * PUT  /api/workspaces/:id/surface          → save source (LOCAL only)
- * POST /api/workspaces/:id/surface/build    → build bundle, return { ok, error }
- * GET  /api/workspaces/:id/file?path=<rel>  → { content: string } of a text file in workspace root
+ * GET  /api/workspaces/:id/surface              → { state: SurfaceState, source: string }
+ * PUT  /api/workspaces/:id/surface              → save source (LOCAL only)
+ * POST /api/workspaces/:id/surface/build        → build bundle, return { ok, error }
+ * GET  /api/workspaces/:id/surface/folder       → list files in .ariadne/surface/ (AK)
+ * PUT  /api/workspaces/:id/surface/folder/file  → save a single file in .ariadne/surface/ (AK)
+ * GET  /api/workspaces/:id/file?path=<rel>      → { content: string } of a text file in workspace root
  */
 
 import fs from "node:fs";
@@ -108,6 +110,110 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.send(result);
   });
+
+  // ── AK — multi-file surface folder editor support ─────────────────────
+
+  // GET /api/workspaces/:id/surface/folder
+  // Lists files in .ariadne/surface/ (the v2 folder-form layout) so the
+  // editor can show a multi-file view. Returns [] when the folder doesn't
+  // exist yet (single-file layout). Path is relative to the surface folder.
+  app.get<{ Params: { id: string } }>(
+    "/workspaces/:id/surface/folder",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+      if (!workspace) return;
+
+      const surfaceDir = path.join(workspace.rootPath, ".ariadne", "surface");
+      if (!fs.existsSync(surfaceDir) || !fs.statSync(surfaceDir).isDirectory()) {
+        return reply.send({ files: [], folderExists: false });
+      }
+
+      // Walk the folder recursively (1 level deep is enough for our shape
+      // but recursive is cheap and future-proof). Only return text files
+      // we'd actually want to edit — .tsx / .ts / .js / .jsx / .css /
+      // .json / .md / .yaml are the cover-set; anything else is skipped.
+      const allowedExt = /\.(tsx|ts|jsx|js|css|json|md|ya?ml)$/i;
+      const out: Array<{ path: string; size: number; updatedAt: string; content: string }> = [];
+      function walk(dir: string, prefix: string) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.name.startsWith(".")) continue;          // hide dotfiles
+          const abs = path.join(dir, entry.name);
+          const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            // Skip surface-dist (build output) — never editable.
+            if (entry.name === "surface-dist") continue;
+            walk(abs, rel);
+            continue;
+          }
+          if (!allowedExt.test(entry.name)) continue;
+          const stat = fs.statSync(abs);
+          let content = "";
+          try { content = fs.readFileSync(abs, "utf-8"); } catch { /* skip */ }
+          out.push({
+            path: rel,
+            size: stat.size,
+            updatedAt: stat.mtime.toISOString(),
+            content,
+          });
+        }
+      }
+      walk(surfaceDir, "");
+      // Sort: index.tsx first (entry point), then alphabetical.
+      out.sort((a, b) => {
+        if (a.path === "index.tsx") return -1;
+        if (b.path === "index.tsx") return 1;
+        return a.path.localeCompare(b.path);
+      });
+      return reply.send({ files: out, folderExists: true });
+    },
+  );
+
+  // PUT /api/workspaces/:id/surface/folder/file — save a single file
+  // inside .ariadne/surface/. LOCAL access only, same gating as the
+  // single-file PUT /surface route.
+  app.put<{ Params: { id: string }; Body: { path?: string; content?: string } }>(
+    "/workspaces/:id/surface/folder/file",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Editing the surface folder is not permitted from remote access. Connect locally.",
+          req,
+          reply,
+        )
+      )
+        return;
+
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const relPath = (req.body?.path ?? "").trim();
+      const content = req.body?.content;
+      if (!relPath || typeof content !== "string") {
+        return reply.status(400).send({ error: "path and content are required" });
+      }
+      if (!/^[a-zA-Z0-9_\-./]+\.(tsx|ts|jsx|js|css|json|md|ya?ml)$/i.test(relPath)) {
+        return reply.status(400).send({ error: "Bad file path or extension" });
+      }
+      if (relPath.includes("..")) {
+        return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+
+      const surfaceDir = path.resolve(workspace.rootPath, ".ariadne", "surface");
+      const dest = path.resolve(surfaceDir, relPath);
+      if (!dest.startsWith(surfaceDir + path.sep) && dest !== surfaceDir) {
+        return reply.status(403).send({ error: "Resolved path escapes the surface folder" });
+      }
+
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      try {
+        fs.writeFileSync(dest, content, "utf-8");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: "Failed to write file", detail: msg });
+      }
+      return reply.send({ ok: true, path: relPath });
+    },
+  );
 
   // GET /api/workspaces/:id/file?path=<rel>
   app.get<{ Params: { id: string }; Querystring: { path?: string } }>(

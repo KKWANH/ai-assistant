@@ -11,6 +11,7 @@ import {
   Square,
   X,
   FolderOpen,
+  FolderTree,
   ChevronDown,
   File,
   FileSpreadsheet,
@@ -47,6 +48,8 @@ import {
   base64ToText,
 } from "../../lib/tableData";
 import { TableEditorModal } from "./TableSheet";
+import { WorkspaceFilePicker } from "./WorkspaceFilePicker";
+import * as api from "../../lib/api";
 
 export interface PendingAttachment {
   name: string;
@@ -331,6 +334,11 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  // AK: workspace file picker modal state. Opens via the folder-tree button
+  // in the toolbar (visible only when a workspace is attached) so the user
+  // can attach known workspace files without going through the OS picker.
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
+  const [filePickerLoading, setFilePickerLoading] = useState(false);
   // Plain chat is the default: web search is "auto" (server decides
   // per message), reply mode is "auto" (server's classifier picks
   // between standard chat and the agent loop per message). Both stay
@@ -646,6 +654,79 @@ export function ChatComposer({
         </div>
       )}
 
+      {/* Workspace hint strip — AK. Makes workspace-attached chats
+          visually distinct from plain chats so the user knows files
+          are at hand. Tells them the FolderTree button does the picking. */}
+      {chatComposerWorkspaceId && selectedWs && (
+        <div className="flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md bg-accent/8 border border-accent/30 text-xs text-foreground">
+          <FolderTree className="h-3.5 w-3.5 text-accent shrink-0" />
+          <span className="flex-1 truncate">
+            <strong>{selectedWs.name}</strong>
+            <span className="text-muted-foreground"> · {t("chat.composer.workspaceHintBody")}</span>
+          </span>
+          <button
+            type="button"
+            className="text-accent hover:underline shrink-0"
+            onClick={() => setFilePickerOpen(true)}
+          >
+            {t("chat.composer.workspaceHintCta")}
+          </button>
+        </div>
+      )}
+
+      {/* Workspace file picker modal */}
+      {chatComposerWorkspaceId && (
+        <WorkspaceFilePicker
+          workspaceId={chatComposerWorkspaceId}
+          open={filePickerOpen}
+          onClose={() => setFilePickerOpen(false)}
+          onConfirm={async (paths) => {
+            // Fetch each picked file via the existing workspace-file API
+            // and convert to attachments. Server-side chat-context
+            // builder already handles attachments by file-type with
+            // budgeting — workspace files inherit that for free.
+            if (paths.length === 0) return;
+            setFilePickerLoading(true);
+            try {
+              const results = await Promise.allSettled(
+                paths.map((p) => api.getWorkspaceFile(chatComposerWorkspaceId, p)),
+              );
+              const newAtts: PendingAttachment[] = [];
+              results.forEach((r, i) => {
+                if (r.status === "fulfilled") {
+                  const p = paths[i]!;
+                  const name = p.split("/").pop() ?? p;
+                  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+                  // Conservative MIME guess — server-side context builder
+                  // re-detects by extension anyway.
+                  const mediaType =
+                    ext === "md" ? "text/markdown"
+                    : ext === "csv" ? "text/csv"
+                    : ext === "json" ? "application/json"
+                    : ext === "yaml" || ext === "yml" ? "application/x-yaml"
+                    : "text/plain";
+                  newAtts.push({
+                    name,
+                    mediaType,
+                    dataBase64: textToBase64(r.value.content ?? ""),
+                    kind: "file",
+                  });
+                } else {
+                  toast({
+                    title: t("chat.composer.pickWorkspaceFileError"),
+                    description: paths[i],
+                    variant: "error",
+                  });
+                }
+              });
+              if (newAtts.length > 0) setAttachments((prev) => [...prev, ...newAtts]);
+            } finally {
+              setFilePickerLoading(false);
+            }
+          }}
+        />
+      )}
+
       {/* Attachment previews */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-1">
@@ -737,7 +818,7 @@ export function ChatComposer({
         <div className="flex items-end gap-1.5">
           {/* Controls — wrap to a second row on narrow screens */}
           <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
-          {/* Attach */}
+          {/* Attach (from OS picker) */}
           <Tooltip content={t("chat.composer.attachFiles")} className="shrink-0">
             <button
               type="button"
@@ -749,6 +830,21 @@ export function ChatComposer({
               <span className="sr-only">{t("chat.composer.attachFiles")}</span>
             </button>
           </Tooltip>
+
+          {/* Workspace files (only when a workspace is attached) — AK */}
+          {chatComposerWorkspaceId && (
+            <Tooltip content={t("chat.composer.pickWorkspaceFile")} className="shrink-0">
+              <button
+                type="button"
+                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs text-accent hover:bg-surface-3 transition-colors disabled:opacity-50"
+                onClick={() => setFilePickerOpen(true)}
+                disabled={disabled || filePickerLoading}
+              >
+                <FolderTree className="h-3.5 w-3.5" />
+                <span>{filePickerLoading ? t("chat.composer.loading") : t("chat.composer.pickWorkspaceFileShort")}</span>
+              </button>
+            </Tooltip>
+          )}
           <input
             ref={fileInputRef}
             type="file"

@@ -51,11 +51,11 @@ export function useWorkspace(id: string) {
   });
 }
 
-export function useSnapshot(workspaceId: string) {
+export function useSnapshot(workspaceId: string, enabled = true) {
   return useQuery({
     queryKey: qk.snapshot(workspaceId),
     queryFn: () => api.getSnapshot(workspaceId),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && enabled,
   });
 }
 

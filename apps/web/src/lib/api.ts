@@ -188,6 +188,25 @@ export const getWorkspaceFile = (workspaceId: string, path: string) =>
 export const saveWorkspaceFile = (workspaceId: string, path: string, content: string) =>
   request<{ ok: boolean }>("PUT", `/workspaces/${workspaceId}/file`, { path, content });
 
+// AK — multi-file surface editor support.
+export interface SurfaceFolderFile {
+  path: string;          // relative to .ariadne/surface/
+  size: number;
+  updatedAt: string;
+  content: string;
+}
+export const getSurfaceFolder = (workspaceId: string) =>
+  request<{ files: SurfaceFolderFile[]; folderExists: boolean }>(
+    "GET",
+    `/workspaces/${workspaceId}/surface/folder`,
+  );
+export const saveSurfaceFolderFile = (workspaceId: string, path: string, content: string) =>
+  request<{ ok: boolean; path: string }>(
+    "PUT",
+    `/workspaces/${workspaceId}/surface/folder/file`,
+    { path, content },
+  );
+
 export interface StageWorkspaceFileResult {
   runId: string;
   added: number;
