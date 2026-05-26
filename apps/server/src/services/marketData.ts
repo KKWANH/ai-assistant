@@ -233,6 +233,165 @@ export async function getQuotesDetailed(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// AR — Calendar events (earnings dates, ex-dividend) from Yahoo's v10
+//      quoteSummary endpoint. Hits a different host shape than v8 chart
+//      so the failover list is also different.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface QuoteCalendar {
+  symbol: string;
+  resolvedSymbol: string;
+  /** Next confirmed earnings date (YYYY-MM-DD) — null when unknown. */
+  earningsDate?: string;
+  /** Earnings date confidence: "actual" | "estimate". */
+  earningsType?: "actual" | "estimate";
+  /** Ex-dividend date for the most recent dividend (YYYY-MM-DD) — null
+   *  when the security doesn't pay dividends. */
+  exDividendDate?: string;
+  /** Dividend amount per share. */
+  dividendRate?: number;
+  /** Trailing 12-mo dividend yield, decimal (0.024 = 2.4%). */
+  dividendYield?: number;
+}
+
+const CALENDAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — calendar events change slowly
+interface CalCacheEntry { value: QuoteCalendar; expires: number; }
+const calendarCache = new Map<string, CalCacheEntry>();
+
+const YAHOO_SUMMARY_HOSTS = [
+  "https://query1.finance.yahoo.com/v10/finance/quoteSummary/",
+  "https://query2.finance.yahoo.com/v10/finance/quoteSummary/",
+];
+
+// Yahoo's v10 quoteSummary requires a session cookie + crumb pair. We
+// fetch fc.yahoo.com once to seed cookies, then /v1/test/getcrumb with
+// the cookies, then attach `crumb=` to subsequent requests. Cache the
+// pair for ~1h; on 401 we re-seed.
+const CRUMB_TTL_MS = 60 * 60 * 1000;
+const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+let crumbCache: { cookie: string; crumb: string; expires: number } | null = null;
+let crumbInflight: Promise<{ cookie: string; crumb: string }> | null = null;
+
+async function fetchCrumb(): Promise<{ cookie: string; crumb: string }> {
+  const now = Date.now();
+  if (crumbCache && crumbCache.expires > now) return { cookie: crumbCache.cookie, crumb: crumbCache.crumb };
+  if (crumbInflight) return crumbInflight;
+  crumbInflight = (async () => {
+    try {
+      // 1. Seed session cookies from fc.yahoo.com.
+      const seed = await fetch("https://fc.yahoo.com/", {
+        headers: { "User-Agent": BROWSER_UA, Accept: "text/html,application/xhtml+xml" },
+        signal: AbortSignal.timeout(8000),
+        redirect: "manual",
+      });
+      const setCookies = seed.headers.getSetCookie?.() ?? [];
+      // Distill to "name=value" pairs joined by "; " for the Cookie header.
+      const cookie = setCookies.map((c) => c.split(";")[0]!).filter(Boolean).join("; ");
+      if (!cookie) throw new Error("no cookies returned from fc.yahoo.com");
+      // 2. Trade those cookies for a crumb.
+      const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+        headers: { "User-Agent": BROWSER_UA, Cookie: cookie },
+        signal: AbortSignal.timeout(8000),
+      });
+      const crumb = (await crumbRes.text()).trim();
+      if (!crumb || crumb.length > 64) throw new Error(`bad crumb response: ${crumb.slice(0, 50)}`);
+      crumbCache = { cookie, crumb, expires: Date.now() + CRUMB_TTL_MS };
+      return { cookie, crumb };
+    } finally {
+      crumbInflight = null;
+    }
+  })();
+  return crumbInflight;
+}
+
+async function fetchYahooCalendarFrom(host: string, symbol: string): Promise<QuoteCalendar> {
+  const { cookie, crumb } = await fetchCrumb();
+  const url = `${host}${encodeURIComponent(symbol)}?modules=calendarEvents,summaryDetail&crumb=${encodeURIComponent(crumb)}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": BROWSER_UA, Accept: "application/json", Cookie: cookie },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (res.status === 401) {
+    // Crumb expired — drop and retry once.
+    crumbCache = null;
+    const { cookie: c2, crumb: r2 } = await fetchCrumb();
+    const retry = await fetch(`${host}${encodeURIComponent(symbol)}?modules=calendarEvents,summaryDetail&crumb=${encodeURIComponent(r2)}`, {
+      headers: { "User-Agent": BROWSER_UA, Accept: "application/json", Cookie: c2 },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!retry.ok) throw new Error(`${host} ${symbol}: HTTP ${retry.status} after crumb refresh`);
+    return parseCalendarResponse(symbol, await retry.json());
+  }
+  if (!res.ok) throw new Error(`${host} ${symbol}: HTTP ${res.status}`);
+  return parseCalendarResponse(symbol, await res.json());
+}
+
+interface QuoteSummaryRaw { raw?: number; fmt?: string; }
+interface QuoteSummaryResult {
+  quoteSummary?: { result?: Array<{
+    calendarEvents?: {
+      earnings?: { earningsDate?: QuoteSummaryRaw[]; isEarningsDateEstimate?: boolean };
+      exDividendDate?: QuoteSummaryRaw;
+      dividendDate?: QuoteSummaryRaw;
+    };
+    summaryDetail?: {
+      dividendRate?: QuoteSummaryRaw;
+      dividendYield?: QuoteSummaryRaw;
+      exDividendDate?: QuoteSummaryRaw;
+    };
+  }> };
+}
+function parseCalendarResponse(symbol: string, data: unknown): QuoteCalendar {
+  const d = data as QuoteSummaryResult;
+  const r = d.quoteSummary?.result?.[0];
+  const cal = r?.calendarEvents;
+  const sum = r?.summaryDetail;
+  const toIso = (raw?: QuoteSummaryRaw): string | undefined => {
+    if (!raw) return undefined;
+    if (raw.fmt) return raw.fmt;
+    if (typeof raw.raw === "number") return new Date(raw.raw * 1000).toISOString().slice(0, 10);
+    return undefined;
+  };
+  const earningsDates = cal?.earnings?.earningsDate ?? [];
+  const earnings = earningsDates[0];
+  return {
+    symbol, resolvedSymbol: symbol,
+    earningsDate: toIso(earnings),
+    earningsType: cal?.earnings?.isEarningsDateEstimate ? "estimate" : (earnings ? "actual" : undefined),
+    exDividendDate: toIso(cal?.exDividendDate ?? sum?.exDividendDate),
+    dividendRate: typeof sum?.dividendRate?.raw === "number" ? sum.dividendRate.raw : undefined,
+    dividendYield: typeof sum?.dividendYield?.raw === "number" ? sum.dividendYield.raw : undefined,
+  };
+}
+
+/** Calendar events for a single symbol. Cached for 6h. Failures throw —
+ *  callers wrap in Promise.allSettled() for multi-symbol calls. */
+export async function getQuoteCalendar(symbol: string): Promise<QuoteCalendar> {
+  const resolved = normalizeSymbol(symbol);
+  const key = `CAL:${resolved}`;
+  const now = Date.now();
+  const hit = calendarCache.get(key);
+  if (hit && hit.expires > now) return hit.value;
+  let lastErr: unknown = new Error(`no Yahoo hosts configured for ${resolved}`);
+  for (const host of YAHOO_SUMMARY_HOSTS) {
+    try {
+      const cal = await fetchYahooCalendarFrom(host, resolved);
+      calendarCache.set(key, { value: cal, expires: now + CALENDAR_CACHE_TTL_MS });
+      return cal;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/** Batch convenience — never throws, per-symbol failures are dropped. */
+export async function getQuoteCalendars(symbols: string[]): Promise<QuoteCalendar[]> {
+  const settled = await Promise.allSettled(symbols.map((s) => getQuoteCalendar(s)));
+  return settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // AQ — Historical price series for benchmark overlay & technical analysis.
 // ─────────────────────────────────────────────────────────────────────────
 

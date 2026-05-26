@@ -24,10 +24,10 @@
  * All colours via CSS custom-property tokens — `rgb(var(--…))`.
  */
 
-import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, Transaction, Benchmark } from "./types";
+import { React, useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, Transaction, Benchmark, QuoteCalendar } from "./types";
 import { parseYaml } from "./yaml";
-import { toBase, regionOf, daysBetween, computeRealized, computeRiskMetrics, detectMajorityCurrency, loadBaseFromStorage, saveBaseToStorage } from "./utils";
+import { toBase, regionOf, daysBetween, computeRealized, computeRiskMetrics, computeContributions, computeTaxBuckets, detectMajorityCurrency, loadBaseFromStorage, saveBaseToStorage } from "./utils";
 import {
   ActionStrip, NetWorthCard, AccountsTable,
   PositionsTable, CashAndManualAssets, RecentAnalysis,
@@ -35,6 +35,7 @@ import {
   ValueTrendChart, ReturnsBarChart, PositionDetailPage,
   WatchlistTable, BaseCurrencySelector,
   AllocationGrid, RealizedPnLSection,
+  AttributionSection, TaxYTDSection, EventCalendar, RebalanceSimulator,
 } from "./sections";
 
 // AM — key used to look up price history + news files.
@@ -79,6 +80,8 @@ export default function App() {
   // AQ — transactions log + benchmark history (Yahoo).
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [benchHistory, setBenchHistory] = useState<{ bench: Benchmark; points: Array<{ date: string; close: number }> } | null>(null);
+  // AR — Yahoo calendar events (earnings + ex-div), keyed by uppercased symbol.
+  const [calendars, setCalendars] = useState<Record<string, QuoteCalendar>>({});
   // AM — watchlist (positions/watchlist.csv).
   const [watchlist, setWatchlist] = useState<Array<{
     symbol: string; name: string; asset_class: string; sector: string;
@@ -309,6 +312,22 @@ export default function App() {
           }
         }
 
+        // AR — Calendar events (earnings + ex-div) for the same set of
+        // Yahoo-quotable symbols. Independent fetch — failures silent.
+        if (yahooSyms.length > 0 && typeof ariadne.getQuoteCalendars === "function") {
+          try {
+            const cals = await ariadne.getQuoteCalendars(yahooSyms);
+            if (!cancelled) {
+              const cm: Record<string, QuoteCalendar> = {};
+              for (const c of cals) {
+                if (c.symbol) cm[c.symbol.toUpperCase()] = c;
+                if (c.resolvedSymbol) cm[c.resolvedSymbol.toUpperCase()] = c;
+              }
+              setCalendars(cm);
+            }
+          } catch (_e) { /* */ }
+        }
+
         setLoading(false);
       } catch (e: any) {
         if (!cancelled) {
@@ -357,6 +376,15 @@ export default function App() {
   }, [ariadne, base, dataCurrencies, refreshTick]);
 
   const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
+
+  // AR — responsive: track viewport width. <720px = mobile (single-column
+  // KPI grids, narrower charts, condensed padding). Re-runs on resize.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 720);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 720);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // AQ — Auto-base: first time data lands and the user has no saved
   // preference, switch to the majority data currency. Then persist
@@ -512,12 +540,17 @@ export default function App() {
     // bySector weights. Returns null when history insufficient.
     const risk = computeRiskMetrics(history, bySector);
 
+    // AR — performance attribution + tax buckets.
+    const { contributions, bySector: contributionsBySector } = computeContributions(positions, fxMap);
+    const taxBuckets = computeTaxBuckets(transactions, positions);
+
     return {
       totalNetWorthBase, totalInvestedBase, totalCashBase, totalIdleBase,
       byAssetClass, byCurrency, bySector, byRegion,
       accountRollup, closingAccounts, taxAccounts, staleTheses, missingTheses,
       concentration, gainers, losers, capViolators,
       realized, realizedTotalBase, realizedYTDBase, risk,
+      contributions, contributionsBySector, taxBuckets,
     };
   }, [positions, cash, metals, funds, accounts, fxMap, transactions, history]);
 
@@ -618,13 +651,24 @@ export default function App() {
     return <div style={{ padding: 24, color: "rgb(var(--destructive))" }}>Failed to load: {loadError}</div>;
   }
 
+  // AR — responsive root: mobile drops the maxWidth + reduces padding.
+  // Uses a viewport listener; chart primitives still take fixed widths,
+  // so we pass `isMobile` down where it matters.
+  const rootStyle: React.CSSProperties = {
+    padding: isMobile ? "12px 12px" : "16px 20px",
+    maxWidth: isMobile ? "100%" : 1280,
+    margin: "0 auto",
+    fontSize: 13,
+    color: "rgb(var(--foreground))",
+  };
+
   // AO — route swap: position detail takes over the entire surface
   // viewport when activePosition is set. No more modal overlay — the
   // back arrow drops back to the dashboard.
   if (activePosition) {
     const liveKey = String(activePosition.quote_symbol ?? activePosition.symbol ?? "").toUpperCase();
     return (
-      <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
+      <div style={rootStyle}>
         <PositionDetailPage
           position={activePosition}
           account={accounts.find((a) => a.id === activePosition.account_id)}
@@ -632,15 +676,17 @@ export default function App() {
           priceHistory={activePriceHistory}
           newsBody={activeNews}
           liveQuote={liveQuotes[liveKey]}
+          calendar={calendars[liveKey]}
           onBack={() => setActivePosition(null)}
           onRefreshQuote={refreshQuotes}
+          isMobile={isMobile}
         />
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
+    <div style={rootStyle}>
       {/* AM — base currency selector pinned to the top right. AO: list
           is limited to currencies actually present in the data. */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
@@ -655,10 +701,17 @@ export default function App() {
         showFx={showFx}
         setShowFx={setShowFx}
         benchmark={benchHistory}
+        isMobile={isMobile}
       />
+      {/* AR — earnings + ex-div timeline. Shows positions sorted by
+          nearest upcoming event date. Useful before market open. */}
+      <EventCalendar positions={positions} calendars={calendars} />
       {/* AQ — compact allocation strip restored (4 mini-pies). Drives
           fund-manager intuition for "where is the money concentrated?". */}
-      <AllocationGrid derived={derived} />
+      <AllocationGrid derived={derived} isMobile={isMobile} />
+      {/* AR — performance attribution: which positions/sectors built or
+          destroyed alpha. */}
+      <AttributionSection derived={derived} isMobile={isMobile} />
       <TriggerGauge triggers={triggers} />
       <AccountsTable accounts={accounts} derived={derived} base={base} />
       <PositionsTable
@@ -683,7 +736,19 @@ export default function App() {
         onRowClick={openPosition}
       />
       <WatchlistTable rows={watchlist} liveQuotes={liveQuotes} />
+      {/* AR — rebalance simulator: target weight per position → required
+          trade calculation. Lets the PM preview "비중을 8%로 줄이면..." */}
+      <RebalanceSimulator
+        positions={positions}
+        fxMap={fxMap}
+        base={base}
+        derived={derived}
+        buckets={buckets}
+      />
       <RealizedPnLSection derived={derived} base={base} fxMap={fxMap} transactions={transactions} />
+      {/* AR — Tax YTD by regime. Shows realized YTD vs annual exemption
+          + applicable rate. */}
+      <TaxYTDSection derived={derived} />
       <CashAndManualAssets accounts={accounts} cash={cash} metals={metals} funds={funds} />
       <RecentAnalysis files={analysisFiles} />
     </div>

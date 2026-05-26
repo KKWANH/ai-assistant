@@ -123,6 +123,14 @@ export interface AriadneSDK {
    *  overlay (^KS200, ^GSPC) and per-position charts beyond the static
    *  CSV history. range: '1mo'|'3mo'|'6mo'|'1y'|'2y'|'5y'|'10y'|'ytd'|'max'. */
   getQuoteHistory(symbol: string, range?: string, interval?: string): Promise<Array<{ date: string; close: number }>>;
+  /** AR — Calendar events (earnings date + ex-dividend date + dividend
+   *  rate/yield) for the given symbols. Per-symbol failures are dropped. */
+  getQuoteCalendars(symbols: string[]): Promise<Array<{
+    symbol: string; resolvedSymbol: string;
+    earningsDate?: string; earningsType?: "actual" | "estimate";
+    exDividendDate?: string;
+    dividendRate?: number; dividendYield?: number;
+  }>>;
   /** Returns the current theme mode. Colours come from CSS custom properties. */
   theme: AriadneTheme;
 }
@@ -194,6 +202,8 @@ export function useAriadne(): AriadneSDK {
       callHost<Record<string, number>>("getFxRates", [base, currencies]),
     getQuoteHistory: (symbol: string, range?: string, interval?: string) =>
       callHost<Array<{ date: string; close: number }>>("getQuoteHistory", [symbol, range ?? "1y", interval ?? "1d"]),
+    getQuoteCalendars: (symbols: string[]) =>
+      callHost<Array<{ symbol: string; resolvedSymbol: string; earningsDate?: string; earningsType?: "actual" | "estimate"; exDividendDate?: string; dividendRate?: number; dividendYield?: number }>>("getQuoteCalendars", [symbols]),
     theme: detectTheme(),
   });
   return sdk.current;

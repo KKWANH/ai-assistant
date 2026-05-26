@@ -213,6 +213,44 @@ export interface Benchmark {
   color?: string;       // CSS-var token like 'rgb(var(--accent))'
 }
 
+/** AR — Calendar event (earnings + ex-div) for a single symbol. Stored
+ *  keyed by symbol in the surface so the dashboard can render a "다가올
+ *  이벤트" timeline. */
+export interface QuoteCalendar {
+  symbol: string;
+  resolvedSymbol: string;
+  earningsDate?: string;
+  earningsType?: "actual" | "estimate";
+  exDividendDate?: string;
+  dividendRate?: number;
+  dividendYield?: number;
+}
+
+/** AR — Per-position contribution to total return. weight × return / 100
+ *  → contribution in percentage points of total portfolio return. */
+export interface Contribution {
+  symbol: string;
+  name: string;
+  sector: string;
+  weightPct: number;
+  returnPct: number;
+  contributionPp: number;
+}
+
+/** AR — Per-tax-regime YTD realized summary. */
+export interface TaxBucket {
+  regime: string;
+  label: string;
+  realizedYTD: number;
+  realizedCurrency: string;
+  exemption?: number;      // annual exemption amount in `realizedCurrency`
+  taxRate?: number;        // rate above exemption (decimal, e.g. 0.22)
+  dividendsYTD: number;
+  /** Distinct positions covered by this regime. */
+  positions: number;
+  notes?: string;
+}
+
 /** AQ — Risk metrics computed from history.csv. */
 export interface RiskMetrics {
   /** Annualised vol of monthly returns, %. */
@@ -266,4 +304,10 @@ export interface Derived {
   realizedYTDBase: number;
   /** AQ — Risk model from history.csv. Null when no history.csv data. */
   risk: RiskMetrics | null;
+  /** AR — Performance attribution: per-position contribution to total
+   *  return + per-sector aggregation. Sorted by absolute contribution desc. */
+  contributions: Contribution[];
+  contributionsBySector: Array<{ sector: string; contributionPp: number; weightPct: number }>;
+  /** AR — Tax-regime YTD realized summary. Keyed by regime label. */
+  taxBuckets: TaxBucket[];
 }

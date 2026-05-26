@@ -10,7 +10,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory } from "../services/marketData.js";
+import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory, getQuoteCalendars } from "../services/marketData.js";
 
 const MAX_SYMBOLS = 60;
 
@@ -62,6 +62,14 @@ export async function marketDataRoutes(app: FastifyInstance): Promise<void> {
     } catch (e) {
       return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points: [], error: String((e as Error)?.message ?? e) });
     }
+  });
+
+  // AR — Calendar events (earnings + ex-div) for one or more symbols.
+  app.get<{ Querystring: { symbols?: string } }>("/market/calendar", async (req, reply) => {
+    const symbols = parseList(req.query.symbols);
+    if (symbols.length === 0) return reply.status(400).send({ error: "symbols query param is required" });
+    const calendars = await getQuoteCalendars(symbols).catch(() => []);
+    return reply.send({ calendars });
   });
 
   app.get<{ Querystring: { base?: string; symbols?: string } }>("/market/fx", async (req, reply) => {

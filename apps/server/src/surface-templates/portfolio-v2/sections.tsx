@@ -8,8 +8,8 @@
  *   PositionsTable → CashAndManualAssets → RecentAnalysis
  */
 
-import { BarChart, PieChart, LineChart, useState } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
+import { BarChart, PieChart, LineChart, useState, useMemo } from "@ariadne/surface";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, QuoteCalendar } from "./types";
 import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase } from "./utils";
 import { Markdown } from "./markdown";
 import {
@@ -227,28 +227,29 @@ export function NetWorthCard({ accounts, positions, derived, base, onRefresh }: 
   );
 }
 
-// ─ 3 ─ Allocation grid (AQ: compact restoration) ─────────────────────────
+// ─ 3 ─ Allocation grid (AQ: compact restoration / AR: responsive) ───────
 // Lost in the AM redesign. Self-review flagged this as a daily-driver PM
 // view — "where is the money concentrated?". 4 mini-pies / mini-bar in a
 // single row, smaller than before so they don't dominate the page.
-export function AllocationGrid({ derived }: { derived: Derived }) {
+export function AllocationGrid({ derived, isMobile }: { derived: Derived; isMobile?: boolean }) {
   // Risk metrics from history.csv (if present) — surfaced here next to
   // allocation since both are "shape of my book" KPIs.
   const r = derived.risk;
+  const chartW = isMobile ? 280 : 220;
   return (
     <Section title="자산 배분 + 리스크" icon="🥧">
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${chartW}px, 1fr))`, gap: 10 }}>
         <Chart title="자산군">
-          <PieChart data={derived.byAssetClass} title="" width={220} height={160} />
+          <PieChart data={derived.byAssetClass} title="" width={chartW} height={160} />
         </Chart>
         <Chart title="통화">
-          <PieChart data={derived.byCurrency} title="" width={220} height={160} />
+          <PieChart data={derived.byCurrency} title="" width={chartW} height={160} />
         </Chart>
         <Chart title={`섹터 top ${Math.min(derived.bySector.length, 8)}`}>
-          <BarChart data={derived.bySector.slice(0, 8)} title="" width={220} height={160} />
+          <BarChart data={derived.bySector.slice(0, 8)} title="" width={chartW} height={160} />
         </Chart>
         <Chart title="지역">
-          <PieChart data={derived.byRegion} title="" width={220} height={160} />
+          <PieChart data={derived.byRegion} title="" width={chartW} height={160} />
         </Chart>
       </div>
       {r && (
@@ -585,7 +586,7 @@ export function RecentAnalysis({ files }: { files: { macro: string[]; meso: stri
 // 바뀜'). Render as LineChart at the top of the page so the long-view
 // is the first thing users see.
 export function ValueTrendChart({
-  history, base, showFx, setShowFx, benchmark,
+  history, base, showFx, setShowFx, benchmark, isMobile,
 }: {
   history: HistPoint[];
   base: string;
@@ -595,9 +596,11 @@ export function ValueTrendChart({
    *  Both series get normalized to 100 at the first portfolio point so
    *  the visual comparison is scale-agnostic. */
   benchmark?: { bench: { symbol: string; label: string }; points: Array<{ date: string; close: number }> } | null;
+  isMobile?: boolean;
 }) {
   const [showBench, setShowBench] = useState(true);
   if (history.length === 0) return null;
+  const chartW = isMobile ? Math.min(window.innerWidth - 48, 600) : 1100;
 
   // AQ — Normalize both series to base=100 at the first portfolio point
   // for the benchmark overlay mode. If we just plotted KOSPI in ₩-thousands
@@ -682,7 +685,7 @@ export function ValueTrendChart({
           data={series}
           compare={benchSeries!}
           seriesLabels={["내 포트폴리오", benchmark!.bench.label]}
-          width={1100}
+          width={chartW}
           height={240}
         />
       ) : useFx ? (
@@ -690,7 +693,7 @@ export function ValueTrendChart({
           data={series}
           compare={fxSeries!}
           seriesLabels={["실제 가치", "FX-중립 baseline"]}
-          width={1100}
+          width={chartW}
           height={240}
         />
       ) : (
@@ -747,8 +750,10 @@ export function PositionDetailPage({
   priceHistory,
   newsBody,
   liveQuote,
+  calendar,
   onBack,
   onRefreshQuote,
+  isMobile,
 }: {
   position: RawPosition;
   account?: Account;
@@ -761,8 +766,11 @@ export function PositionDetailPage({
    *  fallback when thesis/news files are absent so the page never shows
    *  an ugly "파일 없음" pane. */
   liveQuote?: LiveQuote;
+  /** AR — earnings + ex-div for this symbol. */
+  calendar?: QuoteCalendar;
   onBack: () => void;
   onRefreshQuote?: () => void;
+  isMobile?: boolean;
 }) {
   const p = position;
   const [range, setRange] = useState<RangeKey>("1Y");
@@ -862,7 +870,11 @@ export function PositionDetailPage({
           )}
         </div>
         {priceHistory.length > 0 ? (
-          <LineChart data={sliced.map((h) => ({ label: h.label, value: h.value }))} width={1100} height={260} />
+          <LineChart
+            data={sliced.map((h) => ({ label: h.label, value: h.value }))}
+            width={isMobile ? Math.min(window.innerWidth - 48, 600) : 1100}
+            height={260}
+          />
         ) : (
           <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", padding: "24px 0", textAlign: "center" }}>
             가격 히스토리 없음 · positions/history/{p.kr_listing_code || p.quote_symbol || p.symbol}.csv 추가하면 차트 표시
@@ -879,6 +891,36 @@ export function PositionDetailPage({
         <KpiCard label="목표가" value={fmtNum(p.target_price)} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
         <KpiCard label="손절" value={fmtNum(p.stop_loss)} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
       </div>
+
+      {/* AR — calendar strip (earnings / ex-div from Yahoo v10). */}
+      {calendar && (calendar.earningsDate || calendar.exDividendDate) && (
+        <div style={{
+          marginBottom: 12, padding: "8px 12px",
+          background: "rgb(var(--surface-2))", borderRadius: 6,
+          fontSize: 11, display: "flex", gap: 16, flexWrap: "wrap",
+        }}>
+          {calendar.earningsDate && (() => {
+            const d = daysUntil(calendar.earningsDate);
+            const tone = d <= 7 ? "rgb(var(--destructive))" : d <= 30 ? "rgb(var(--warning, var(--accent)))" : "rgb(var(--muted-foreground))";
+            return (
+              <span>
+                📅 다음 실적 <strong style={{ color: tone }}>{calendar.earningsDate}</strong> (D{d >= 0 ? "-" : "+"}{Math.abs(d)})
+                {calendar.earningsType === "estimate" && <span style={{ marginLeft: 4, color: "rgb(var(--muted-foreground))" }}>est.</span>}
+              </span>
+            );
+          })()}
+          {calendar.exDividendDate && (() => {
+            const d = daysUntil(calendar.exDividendDate);
+            const tone = d >= 0 && d <= 14 ? "rgb(var(--accent))" : "rgb(var(--muted-foreground))";
+            return (
+              <span>
+                💵 ex-div <strong style={{ color: tone }}>{calendar.exDividendDate}</strong> (D{d >= 0 ? "-" : "+"}{Math.abs(d)})
+                {calendar.dividendRate != null && <span style={{ marginLeft: 4, color: "rgb(var(--muted-foreground))" }}>· {fmtNum(calendar.dividendRate)} / {calendar.dividendYield != null ? `${(calendar.dividendYield * 100).toFixed(2)}%` : "—"}</span>}
+              </span>
+            );
+          })()}
+        </div>
+      )}
 
       {/* AO — Live snapshot from Yahoo. Always rendered when we have a
           live quote: 52w high/low + day range + volume + prev close.
@@ -1198,5 +1240,321 @@ export function BaseCurrencySelector({
         </button>
       )}
     </div>
+  );
+}
+
+// ─ AR — Attribution section ──────────────────────────────────────────────
+// Per-position + per-sector contribution to total return (in pp).
+// "Which positions built or destroyed alpha this year." Self-review:
+// without this a PM can't answer "왜 이번 분기 outperform 했나".
+export function AttributionSection({ derived, isMobile }: { derived: Derived; isMobile?: boolean }) {
+  const top = derived.contributions.slice(0, 10);
+  if (top.length === 0) return null;
+  const totalReturnPp = derived.contributions.reduce((s, c) => s + c.contributionPp, 0);
+  // Chart: contribution per position (top 10 abs).
+  const chartData = top.map((c) => ({ label: c.symbol, value: Number(c.contributionPp.toFixed(2)) }));
+  const sectorChartData = derived.contributionsBySector.slice(0, 8).map((s) => ({
+    label: s.sector,
+    value: Number(s.contributionPp.toFixed(2)),
+  }));
+  const chartW = isMobile ? Math.min(window.innerWidth - 48, 600) : 540;
+  return (
+    <Section title="수익 기여도 (alpha 분해)" icon="🎯">
+      <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 8 }}>
+        총합 가중 수익 <strong style={{ color: totalReturnPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>{totalReturnPp >= 0 ? "+" : ""}{totalReturnPp.toFixed(2)}pp</strong>
+        {" · "} 종목별 기여도 = 비중 × 수익률
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${chartW}px, 1fr))`, gap: 12, marginBottom: 12 }}>
+        <Chart title="종목별 기여 (top 10, pp)">
+          <BarChart data={chartData} title="" width={chartW} height={200} />
+        </Chart>
+        <Chart title="섹터별 기여 (pp)">
+          <BarChart data={sectorChartData} title="" width={chartW} height={200} />
+        </Chart>
+      </div>
+      <Table headers={["종목", "섹터", "비중", "수익률", "기여 (pp)"]}>
+        {top.map((c) => (
+          <tr key={c.symbol} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+            <td style={tdLeft}>
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                <strong>{c.name}</strong>
+                <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, monospace" }}>{c.symbol}</span>
+              </div>
+            </td>
+            <td style={tdLeft}>{c.sector}</td>
+            <td style={tdRight}>{c.weightPct.toFixed(1)}%</td>
+            <td style={{ ...tdRight, color: c.returnPct >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+              {fmtPct(c.returnPct)}
+            </td>
+            <td style={{ ...tdRight, color: c.contributionPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))", fontWeight: 600 }}>
+              {c.contributionPp >= 0 ? "+" : ""}{c.contributionPp.toFixed(2)}pp
+            </td>
+          </tr>
+        ))}
+      </Table>
+    </Section>
+  );
+}
+
+// ─ AR — Tax YTD section ──────────────────────────────────────────────────
+// Per-tax-regime accumulated realized YTD with annual exemption + rate.
+// BE €10k cap, KR ₩2.5M cap, Reynders 30% are the live cases for the
+// multi-jurisdictional reference workspace.
+export function TaxYTDSection({ derived }: { derived: Derived }) {
+  if (derived.taxBuckets.length === 0) return null;
+  return (
+    <Section title="세금 YTD (양도세 · 배당)" icon="🏛️">
+      <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 10 }}>
+        ⚠️ 추정치. tax_regime 컬럼 기반. 회계사 확인 권장.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+        {derived.taxBuckets.map((t) => {
+          const overExemption = t.exemption != null ? Math.max(0, t.realizedYTD - t.exemption) : 0;
+          const taxOwed = (t.taxRate != null) ? overExemption * t.taxRate : 0;
+          const usagePct = t.exemption != null && t.exemption > 0
+            ? Math.min(100, (t.realizedYTD / t.exemption) * 100)
+            : 0;
+          const remaining = t.exemption != null ? Math.max(0, t.exemption - t.realizedYTD) : 0;
+          return (
+            <div key={t.regime} style={{ border: "1px solid rgb(var(--border))", borderRadius: 8, padding: 10, background: "rgb(var(--card))" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <strong style={{ fontSize: 12 }}>{t.label}</strong>
+                <code style={{ fontSize: 10, color: "rgb(var(--muted-foreground))" }}>{t.regime}</code>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                {fmtMoney(t.realizedYTD, t.realizedCurrency)}
+                <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", fontWeight: 400, marginLeft: 6 }}>실현 YTD</span>
+              </div>
+              {t.dividendsYTD > 0 && (
+                <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 4 }}>
+                  배당 YTD: {fmtMoney(t.dividendsYTD, t.realizedCurrency)}
+                </div>
+              )}
+              {t.exemption != null && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ height: 6, background: "rgb(var(--surface-2))", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
+                    <div style={{
+                      width: `${usagePct}%`, height: "100%",
+                      background: usagePct >= 100 ? "rgb(var(--destructive))" : usagePct > 80 ? "rgb(var(--warning, var(--accent)))" : "rgb(var(--success))",
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
+                    공제 {fmtMoney(t.exemption, t.realizedCurrency)} · 잔여 {fmtMoney(remaining, t.realizedCurrency)}
+                    {t.taxRate != null && taxOwed > 0 && (
+                      <span style={{ color: "rgb(var(--destructive))", fontWeight: 500 }}>
+                        {" · "} 예상 세액 {fmtMoney(taxOwed, t.realizedCurrency)} ({(t.taxRate * 100).toFixed(0)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {t.taxRate != null && t.exemption == null && t.realizedYTD > 0 && (
+                <div style={{ fontSize: 11, color: "rgb(var(--destructive))", marginTop: 4 }}>
+                  예상 세액 {fmtMoney(t.realizedYTD * t.taxRate, t.realizedCurrency)} ({(t.taxRate * 100).toFixed(0)}%)
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", marginTop: 6 }}>
+                {t.positions}개 종목 · {t.notes ?? ""}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+// ─ AR — Event calendar ───────────────────────────────────────────────────
+// Earnings + ex-div timeline. Sorted by nearest upcoming event date.
+// PM checks this every morning before market open.
+export function EventCalendar({
+  positions, calendars,
+}: {
+  positions: RawPosition[];
+  calendars: Record<string, QuoteCalendar>;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  // Build event list: per position, the earlier of earnings vs ex-div if both
+  // exist and are upcoming. Group by date for the timeline view.
+  const events: Array<{ date: string; type: "earnings" | "ex-div"; symbol: string; name: string; calendar: QuoteCalendar }> = [];
+  for (const p of positions) {
+    const key = String(p.quote_symbol || p.symbol || "").toUpperCase();
+    const cal = calendars[key];
+    if (!cal) continue;
+    if (cal.earningsDate && cal.earningsDate >= today) {
+      events.push({ date: cal.earningsDate, type: "earnings", symbol: p.symbol, name: p.name || p.symbol, calendar: cal });
+    }
+    if (cal.exDividendDate && cal.exDividendDate >= today) {
+      events.push({ date: cal.exDividendDate, type: "ex-div", symbol: p.symbol, name: p.name || p.symbol, calendar: cal });
+    }
+  }
+  events.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const upcoming = events.filter((e) => daysUntil(e.date) <= 60).slice(0, 12);
+  if (upcoming.length === 0) return null;
+  return (
+    <Section title={`다가올 이벤트 (60일 이내, ${upcoming.length}건)`} icon="📅">
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {upcoming.map((e, i) => {
+          const d = daysUntil(e.date);
+          const tone = d <= 3 ? "destructive" : d <= 7 ? "warning" : d <= 21 ? "info" : "muted";
+          const cur = e.calendar.dividendRate != null && e.calendar.dividendYield != null
+            ? ` · ${fmtNum(e.calendar.dividendRate)} / ${(e.calendar.dividendYield * 100).toFixed(2)}%`
+            : "";
+          return (
+            <div key={`${e.symbol}-${e.type}-${e.date}-${i}`} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "6px 10px",
+              borderLeft: `3px solid ${tone === "destructive" ? "rgb(var(--destructive))" : tone === "warning" ? "rgb(var(--accent))" : "rgb(var(--border))"}`,
+              background: d <= 7 ? "rgba(var(--accent-rgb, 99 102 241), 0.04)" : "transparent",
+            }}>
+              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "rgb(var(--muted-foreground))", minWidth: 78 }}>
+                {e.date}
+              </span>
+              <Badge tone={tone as "destructive" | "warning" | "info" | "muted"}>D-{d}</Badge>
+              <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", minWidth: 60 }}>
+                {e.type === "earnings" ? "📊 실적" : "💵 ex-div"}
+              </span>
+              <strong style={{ fontSize: 12 }}>{e.name}</strong>
+              <code style={{ fontSize: 10, color: "rgb(var(--muted-foreground))" }}>{e.symbol}</code>
+              {e.type === "ex-div" && <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))" }}>{cur}</span>}
+              {e.type === "earnings" && e.calendar.earningsType === "estimate" && <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))" }}>est.</span>}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+// ─ AR — Rebalance simulator ──────────────────────────────────────────────
+// User sets target weight % per position; we compute the required trade
+// in shares + base-currency. Realized P&L estimate from FIFO would need
+// the full transaction log per position — current scope just shows the
+// delta. PM checks "if I trim SOXX 12% → 8%, what's the trade?".
+export function RebalanceSimulator({
+  positions, fxMap, base, derived, buckets,
+}: {
+  positions: RawPosition[];
+  fxMap: Record<string, number>;
+  base: string;
+  derived: Derived;
+  buckets: BucketTarget[];
+}) {
+  const [open, setOpen] = useState(false);
+  // targetMap keyed by symbol → user-input target weight %. Default: current.
+  const [targetMap, setTargetMap] = useState<Record<string, number>>({});
+
+  const totalInvested = positions.reduce((s, p) => s + toBase(p.market_value, p.currency, fxMap), 0);
+  if (totalInvested <= 0) return null;
+
+  // Top 10 positions by base-value — keep the simulator focused.
+  const top = useMemo(() => positions
+    .map((p) => {
+      const baseValue = toBase(p.market_value, p.currency, fxMap);
+      return { p, baseValue, currentWeight: (baseValue / totalInvested) * 100 };
+    })
+    .filter((x) => x.baseValue > 0)
+    .sort((a, b) => b.baseValue - a.baseValue)
+    .slice(0, 10), [positions, fxMap, totalInvested]);
+
+  return (
+    <Section title="리밸런스 모의" icon="⚖️">
+      <div style={{ marginBottom: 8 }}>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          style={{
+            fontSize: 12, padding: "4px 12px", borderRadius: 6,
+            background: open ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+            color: open ? "rgb(var(--accent-foreground))" : "rgb(var(--foreground))",
+            border: "1px solid rgb(var(--border))", cursor: "pointer",
+          }}
+        >
+          {open ? "닫기" : "열기 — top 10 종목의 목표 비중 입력"}
+        </button>
+      </div>
+      {open && (
+        <>
+          <Table headers={["종목", "현재 비중", "목표 비중 (%)", "비중 변화", `필요 거래 (${base})`, "방향"]}>
+            {top.map(({ p, currentWeight }) => {
+              const sym = p.symbol;
+              const target = targetMap[sym] ?? currentWeight;
+              const diff = target - currentWeight;
+              const tradeBase = (diff / 100) * totalInvested;
+              const action = tradeBase > 0 ? "매수" : tradeBase < 0 ? "매도" : "유지";
+              const tone = action === "매수" ? "info" : action === "매도" ? "destructive" : "muted";
+              return (
+                <tr key={sym} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+                  <td style={tdLeft}>
+                    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                      <strong>{p.name || p.symbol}</strong>
+                      <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, monospace" }}>{p.symbol}</span>
+                    </div>
+                  </td>
+                  <td style={tdRight}>{currentWeight.toFixed(1)}%</td>
+                  <td style={tdRight}>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={target.toFixed(1)}
+                      onChange={(e) => setTargetMap({ ...targetMap, [sym]: parseFloat(e.target.value) || 0 })}
+                      style={{
+                        width: 60, padding: "2px 4px", fontSize: 11,
+                        textAlign: "right",
+                        background: "rgb(var(--background))", color: "rgb(var(--foreground))",
+                        border: "1px solid rgb(var(--border))", borderRadius: 4,
+                      }}
+                    />
+                  </td>
+                  <td style={{ ...tdRight, color: diff > 0 ? "rgb(var(--success))" : diff < 0 ? "rgb(var(--destructive))" : "rgb(var(--muted-foreground))" }}>
+                    {diff >= 0 ? "+" : ""}{diff.toFixed(1)}pp
+                  </td>
+                  <td style={tdRight}>
+                    {Math.abs(tradeBase) > 0 ? fmtMoney(Math.abs(tradeBase), base) : <span style={mutedDot}>—</span>}
+                  </td>
+                  <td style={tdLeft}><Badge tone={tone as "info" | "destructive" | "muted"}>{action}</Badge></td>
+                </tr>
+              );
+            })}
+          </Table>
+          {(() => {
+            const totals = top.reduce((s, { p, currentWeight }) => {
+              const target = targetMap[p.symbol] ?? currentWeight;
+              const tradeBase = ((target - currentWeight) / 100) * totalInvested;
+              if (tradeBase > 0) s.buy += tradeBase;
+              else s.sell += -tradeBase;
+              return s;
+            }, { buy: 0, sell: 0 });
+            const net = totals.sell - totals.buy;
+            if (totals.buy + totals.sell === 0) return null;
+            return (
+              <div style={{ marginTop: 10, padding: 10, background: "rgb(var(--surface-2))", borderRadius: 6, fontSize: 12, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <span>총 매수: <strong style={{ color: "rgb(var(--success))" }}>{fmtMoney(totals.buy, base)}</strong></span>
+                <span>총 매도: <strong style={{ color: "rgb(var(--destructive))" }}>{fmtMoney(totals.sell, base)}</strong></span>
+                <span>순 현금 변동: <strong style={{ color: net >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>{net >= 0 ? "+" : ""}{fmtMoney(net, base)}</strong></span>
+                <button
+                  type="button"
+                  onClick={() => setTargetMap({})}
+                  style={{
+                    fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                    background: "transparent", color: "rgb(var(--muted-foreground))",
+                    border: "1px solid rgb(var(--border))", cursor: "pointer",
+                  }}
+                >
+                  초기화
+                </button>
+              </div>
+            );
+          })()}
+          {buckets.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
+              💡 5-bucket 목표는 targets/buckets-2026.yaml 에서. 종목별 상세는 위 표.
+            </div>
+          )}
+        </>
+      )}
+    </Section>
   );
 }

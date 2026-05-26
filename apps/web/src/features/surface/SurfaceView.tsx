@@ -167,6 +167,12 @@ async function handleBridgeRequest(
       return res.points;
     }
 
+    case "getQuoteCalendars": {
+      const [symbols] = args as [string[]];
+      const res = await api.getQuoteCalendars(symbols ?? []);
+      return res.calendars;
+    }
+
     default:
       throw new Error(`Unknown method: ${method}`);
   }

@@ -68,7 +68,7 @@ export function regionOf(symbol: string, currency: string): string {
 }
 
 // ─ AQ — FIFO realized P&L from transaction log ───────────────────────────
-import type { Transaction, RealizedPnL, RiskMetrics, HistPoint } from "./types";
+import type { Transaction, RealizedPnL, RiskMetrics, HistPoint, Contribution, TaxBucket, RawPosition } from "./types";
 
 interface Lot { date: string; shares: number; price: number; fee: number; }
 
@@ -227,4 +227,115 @@ export function loadBaseFromStorage(): string | null {
 }
 export function saveBaseToStorage(base: string): void {
   try { localStorage.setItem(LS_KEY, base); } catch { /* */ }
+}
+
+// ─ AR — Performance attribution ──────────────────────────────────────────
+// contribution_pp = (position_weight × position_return) / 100
+// Aggregated per-sector for the "어느 섹터가 alpha 만들었나" view.
+export function computeContributions(
+  positions: RawPosition[],
+  fxMap: Record<string, number>,
+): { contributions: Contribution[]; bySector: Array<{ sector: string; contributionPp: number; weightPct: number }> } {
+  const totalInvested = positions.reduce((s, p) => s + toBase(p.market_value, p.currency, fxMap), 0);
+  if (totalInvested <= 0) return { contributions: [], bySector: [] };
+  const contributions: Contribution[] = positions
+    .filter((p) => Number.isFinite(p.return_pct))
+    .map((p) => {
+      const baseValue = toBase(p.market_value, p.currency, fxMap);
+      const weightPct = (baseValue / totalInvested) * 100;
+      const returnPct = Number.isFinite(p.return_pct) ? p.return_pct : 0;
+      const contributionPp = (weightPct * returnPct) / 100;
+      return {
+        symbol: p.symbol,
+        name: p.name || p.symbol,
+        sector: p.sector || "기타",
+        weightPct,
+        returnPct,
+        contributionPp,
+      };
+    })
+    .sort((a, b) => Math.abs(b.contributionPp) - Math.abs(a.contributionPp));
+
+  // Sector aggregation. Sum contributions; weight is the cohort weight.
+  const sectorMap = new Map<string, { contributionPp: number; weightPct: number }>();
+  for (const c of contributions) {
+    const cur = sectorMap.get(c.sector) ?? { contributionPp: 0, weightPct: 0 };
+    cur.contributionPp += c.contributionPp;
+    cur.weightPct += c.weightPct;
+    sectorMap.set(c.sector, cur);
+  }
+  const bySector = Array.from(sectorMap.entries())
+    .map(([sector, v]) => ({ sector, ...v }))
+    .sort((a, b) => Math.abs(b.contributionPp) - Math.abs(a.contributionPp));
+  return { contributions, bySector };
+}
+
+// ─ AR — Tax-regime YTD realized P&L ──────────────────────────────────────
+// Group realized P&L by tax_regime (taken from positions/current.csv).
+// Known regimes with default exemption + rate; other regimes recorded
+// with no threshold (raw realized only).
+//
+// KR resident defaults (2026):
+//   KR-haewae   해외주식 양도세 — ₩2.5M 공제, 22% (basic 20% + local 2%)
+//   KR-국내주식 대주주 외 양도세 면제, 배당 15.4% (held position info only)
+//   KR-ISA      ISA 비과세, 한도 별도 tracking
+// BE resident:
+//   BE-cgt      Capital gains — €10,000 exemption, 33% above
+//   BE-Reynders Bond fund 30% on capital gains (no exemption)
+//   BE-roerend  배당/이자 30% (RV)
+const TAX_REGIMES: Record<string, { label: string; exemption?: number; taxRate?: number; currency: string; notes?: string }> = {
+  // KR resident regimes
+  "KR-haewae":  { label: "KR 해외주식 양도세",     exemption: 2_500_000, taxRate: 0.22,  currency: "KRW", notes: "연 ₩2.5M 공제, 초과분 22%" },
+  "KR-std":     { label: "KR 국내주식 양도세",     exemption: undefined,  taxRate: undefined, currency: "KRW", notes: "대주주 외 비과세 (배당 15.4%)" },
+  "KR-국내":     { label: "KR 국내주식 양도세",     exemption: undefined,  taxRate: undefined, currency: "KRW", notes: "대주주 외 비과세 (배당 15.4%)" },
+  "KR-ISA":     { label: "KR ISA 비과세 (한도내)", exemption: undefined,  taxRate: 0,     currency: "KRW", notes: "₩200~400만 비과세 + 9.9% 분리과세 (한도 별도)" },
+  // BE resident regimes
+  "BE-cgt":             { label: "BE 양도세",            exemption: 10_000,     taxRate: 0.33,  currency: "EUR", notes: "연 €1만 공제, 초과분 33%" },
+  "BE-foreign-broker":  { label: "BE 외국 브로커 양도세", exemption: 10_000,     taxRate: 0.33,  currency: "EUR", notes: "Revolut/BUX 등 — €1만 공제, 초과분 33% + TOB" },
+  "BE-Reynders":        { label: "BE Reynders세",        exemption: undefined,  taxRate: 0.30,  currency: "EUR", notes: "채권 펀드 자본이득 30%, 공제 없음" },
+  "BE-roerend":         { label: "BE 동산세 (배당·이자)", exemption: undefined,  taxRate: 0.30,  currency: "EUR", notes: "배당 / 이자 30%" },
+};
+
+export function computeTaxBuckets(
+  transactions: Transaction[],
+  positions: RawPosition[],
+): TaxBucket[] {
+  const ytdCutoff = `${new Date().getFullYear()}-01-01`;
+  const ytdTx = transactions.filter((t) => t.date >= ytdCutoff);
+  // Build lookup: symbol → tax_regime + currency from positions.
+  const regimeBySymbol = new Map<string, { regime: string; currency: string }>();
+  for (const p of positions) {
+    if (p.symbol) regimeBySymbol.set(p.symbol, { regime: p.tax_regime || "기타", currency: p.currency || "KRW" });
+  }
+
+  // Compute realized via FIFO per symbol, but only count YTD sells.
+  const symRealized = computeRealized(ytdTx);
+  const byRegime = new Map<string, { realized: number; dividends: number; positions: Set<string>; currency: string }>();
+  for (const r of symRealized) {
+    const meta = regimeBySymbol.get(r.symbol) ?? { regime: "기타", currency: r.currency };
+    const cur = byRegime.get(meta.regime) ?? { realized: 0, dividends: 0, positions: new Set(), currency: meta.currency };
+    cur.realized += r.realized;
+    cur.dividends += r.dividends;
+    cur.positions.add(r.symbol);
+    byRegime.set(meta.regime, cur);
+  }
+
+  const out: TaxBucket[] = [];
+  for (const [regime, v] of byRegime) {
+    const meta = TAX_REGIMES[regime];
+    out.push({
+      regime,
+      label: meta?.label ?? regime,
+      realizedYTD: v.realized,
+      realizedCurrency: meta?.currency ?? v.currency,
+      exemption: meta?.exemption,
+      taxRate: meta?.taxRate,
+      dividendsYTD: v.dividends,
+      positions: v.positions.size,
+      notes: meta?.notes,
+    });
+  }
+  // Sort: regimes with realized > 0 first, then by absolute realized desc.
+  out.sort((a, b) => Math.abs(b.realizedYTD) - Math.abs(a.realizedYTD));
+  return out;
 }

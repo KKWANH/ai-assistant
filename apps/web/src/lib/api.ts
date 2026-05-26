@@ -365,6 +365,22 @@ export const getQuoteHistory = (symbol: string, range = "1y", interval = "1d") =
     `/market/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`,
   );
 
+// AR — Calendar events (earnings + ex-div + dividend) for a batch of symbols.
+export interface QuoteCalendar {
+  symbol: string;
+  resolvedSymbol: string;
+  earningsDate?: string;
+  earningsType?: "actual" | "estimate";
+  exDividendDate?: string;
+  dividendRate?: number;
+  dividendYield?: number;
+}
+export const getQuoteCalendars = (symbols: string[]) =>
+  request<{ calendars: QuoteCalendar[] }>(
+    "GET",
+    `/market/calendar?symbols=${encodeURIComponent(symbols.join(","))}`,
+  );
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 export const getReports = (status?: string) =>
   request<Report[]>("GET", `/reports${status ? `?status=${status}` : ""}`);
