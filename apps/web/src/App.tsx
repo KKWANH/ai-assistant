@@ -7,6 +7,7 @@ import { TutorialOverlay } from "./components/tutorial/TutorialOverlay";
 import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
+import { ToastList } from "./components/ui/Toast";
 
 // Route screens are code-split: each becomes its own chunk, loaded on demand.
 
@@ -191,6 +192,7 @@ function AuthGate() {
     return (
       <I18nProvider>
         <LoginView />
+        <ToastList />
       </I18nProvider>
     );
   }
@@ -198,6 +200,10 @@ function AuthGate() {
   return (
     <I18nProvider initialLocale={data.account.locale}>
       <AppContent />
+      {/* ToastList must render INSIDE I18nProvider — its close-button
+          aria-label calls useT(). ToastProvider lives above us in main.tsx
+          but the list UI is mounted here. */}
+      <ToastList />
     </I18nProvider>
   );
 }
