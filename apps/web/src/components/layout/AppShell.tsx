@@ -65,6 +65,7 @@ import { IconButton } from "../ui/IconButton";
 import { Badge } from "../ui/Badge";
 import { CommandMenu } from "../ui/CommandMenu";
 import type { CommandItem } from "../ui/CommandMenu";
+import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
 import { isBuiltinWorkspace } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";

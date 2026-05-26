@@ -486,6 +486,19 @@ export function WorkspaceOverview() {
   const createChat = useCreateChat();
   const runAction = useRunAction();
 
+  // AT — controlled tab state. Declared ABOVE the early returns so the
+  // hooks order stays stable across renders (React error #310 otherwise).
+  // Auto-switches to "surface" once the surface query resolves with
+  // exists=true, unless the user has already picked a tab themselves.
+  const surfaceExists = surfaceData?.state?.exists ?? false;
+  const [activeTab, setActiveTab] = useState<string>("chats");
+  const [userPickedTab, setUserPickedTab] = useState(false);
+  useEffect(() => {
+    if (userPickedTab) return;
+    if (surfaceData === undefined) return;
+    if (surfaceExists && activeTab !== "surface") setActiveTab("surface");
+  }, [surfaceData, surfaceExists, userPickedTab, activeTab]);
+
   if (wsLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -552,19 +565,7 @@ export function WorkspaceOverview() {
   const templates = actionDefs?.templates ?? [];
   const customActions = actionDefs?.actions ?? [];
   const hasCreatables = templates.length > 0 || customActions.length > 0;
-  const hasSurface = surfaceData?.state?.exists ?? false;
-
-  // AT — controlled tab state. Initial value "chats" (safe default while
-  // the surface query is loading). When the query resolves and the
-  // workspace has a surface, auto-switch to "surface" — UNLESS the user
-  // has already picked a tab themselves (so we don't yank them away).
-  const [activeTab, setActiveTab] = useState<string>("chats");
-  const [userPickedTab, setUserPickedTab] = useState(false);
-  useEffect(() => {
-    if (userPickedTab) return;
-    if (surfaceData === undefined) return;
-    if (hasSurface && activeTab !== "surface") setActiveTab("surface");
-  }, [surfaceData, hasSurface, userPickedTab, activeTab]);
+  const hasSurface = surfaceExists;
 
   // ── Chats block — workspace-scoped conversations + "new chat" CTA.
   //    Z1: promoted out of StandardView into its own first tab so chat
