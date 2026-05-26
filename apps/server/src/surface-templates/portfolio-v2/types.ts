@@ -137,6 +137,26 @@ export interface QuoteFailure {
   reason: string;
 }
 
+/** AO — Successful live quote with Yahoo's meta extras. Stored keyed by
+ *  resolved symbol so the detail page can render a "live snapshot" panel
+ *  without re-fetching. Mirrors the SDK's Quote interface — kept local to
+ *  avoid tight-coupling to the @ariadne/surface module shape. */
+export interface LiveQuote {
+  symbol: string;
+  inputSymbol?: string;
+  resolvedSymbol?: string;
+  price: number;
+  currency: string;
+  market?: string;
+  source?: string;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  regularMarketVolume?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  previousClose?: number;
+}
+
 /** Historical value point — read from history.csv. */
 export interface HistPoint {
   label: string;

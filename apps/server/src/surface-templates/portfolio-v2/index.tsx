@@ -25,14 +25,14 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
 import { parseYaml } from "./yaml";
 import { toBase, regionOf, daysBetween } from "./utils";
 import {
   ActionStrip, NetWorthCard, AccountsTable,
   PositionsTable, CashAndManualAssets, RecentAnalysis,
   TriggerGauge,
-  ValueTrendChart, ReturnsBarChart, PositionDetail,
+  ValueTrendChart, ReturnsBarChart, PositionDetailPage,
   WatchlistTable, BaseCurrencySelector,
 } from "./sections";
 
@@ -54,12 +54,18 @@ export default function App() {
 
   const [fxMap, setFxMap] = useState<Record<string, number>>({ KRW: 1 });
   const [quoteFailures, setQuoteFailures] = useState<Record<string, QuoteFailure>>({});
+  // AO — store full live quotes (price + 52w high/low + volume) keyed by
+  // resolved symbol. Lets the detail page render a live-snapshot panel
+  // even when no news/thesis file exists.
+  const [liveQuotes, setLiveQuotes] = useState<Record<string, LiveQuote>>({});
   const [buckets, setBuckets] = useState<BucketTarget[]>([]);
   const [triggers, setTriggers] = useState<IndexTrigger[]>([]);
   const [history, setHistory] = useState<HistPoint[]>([]);
   const [showFx, setShowFx] = useState(false);
-  // AL1 — drill-down modal state: clicked-position + its loaded thesis body.
-  // AM adds: priceHistory + newsBody for the active position.
+  // AL1 / AM / AO — clicked-position + its loaded thesis / price history /
+  // news body. AO changes this from a modal overlay to a route-switched
+  // "page": when activePosition is set, the main list is hidden and a
+  // full-page detail view renders in its place.
   const [activePosition, setActivePosition] = useState<RawPosition | null>(null);
   const [activeThesis, setActiveThesis] = useState<string | null>(null);
   const [activePriceHistory, setActivePriceHistory] = useState<PricePoint[]>([]);
@@ -229,40 +235,33 @@ export default function App() {
         setWatchlist(wlList);
         setAnalysisFiles(af);
 
-        // FX — base currency can change at runtime (AM selector); the
-        // separate effect below re-fetches when base changes without
-        // re-walking the whole load() pipeline.
-        const currencies = Array.from(new Set([
-          ...posList.map((p) => p.currency),
-          ...cashList.map((c) => c.currency),
-          ...metalList.map((m) => m.currency),
-          ...fundList.map((f) => f.currency),
-        ])).filter((c) => c && c !== base && c !== "MIXED");
-        try {
-          const rates = await ariadne.getFxRates(base, currencies);
-          const m: Record<string, number> = { [base]: 1 };
-          for (const c of currencies) m[c] = rates[c] ?? 0;
-          if (!cancelled) setFxMap(m);
-        } catch (_e) {
-          if (!cancelled) setFxMap({ [base]: 1 });
-        }
-
-        // Live quotes — only for positions explicitly marked as Yahoo-quotable.
-        // The detailed call returns errors per-symbol so we can render an
-        // "unquotable" badge on positions whose ticker Yahoo couldn't price.
-        // Paper metals / robo funds (quote_source: manual) are skipped here;
-        // they keep their CSV-provided market_value.
+        // AO — Live quotes. Detailed call returns the full Quote (with
+        // Yahoo's meta extras: 52w high/low, day high/low, volume,
+        // previous close) so the detail page can show a live snapshot
+        // even when news/thesis files are missing. Errors keyed for the
+        // 'no quote' badge in the table.
         const yahooSyms = posList
           .filter((p) => (p.quote_source ?? "yahoo") === "yahoo")
           .map((p) => p.quote_symbol ?? p.symbol)
           .filter((s): s is string => !!s);
         if (yahooSyms.length > 0 && typeof ariadne.getQuotesDetailed === "function") {
           try {
-            const { errors } = await ariadne.getQuotesDetailed(yahooSyms);
-            if (!cancelled && errors.length > 0) {
-              const m: Record<string, QuoteFailure> = {};
-              for (const e of errors) m[e.inputSymbol] = e;
-              setQuoteFailures(m);
+            const { quotes, errors } = await ariadne.getQuotesDetailed(yahooSyms);
+            if (!cancelled) {
+              if (errors.length > 0) {
+                const m: Record<string, QuoteFailure> = {};
+                for (const e of errors) m[e.inputSymbol] = e;
+                setQuoteFailures(m);
+              } else {
+                setQuoteFailures({});
+              }
+              const qm: Record<string, LiveQuote> = {};
+              for (const q of quotes) {
+                if (q.inputSymbol) qm[q.inputSymbol.toUpperCase()] = q as LiveQuote;
+                if (q.resolvedSymbol) qm[q.resolvedSymbol.toUpperCase()] = q as LiveQuote;
+                if (q.symbol) qm[q.symbol.toUpperCase()] = q as LiveQuote;
+              }
+              setLiveQuotes(qm);
             }
           } catch (_e) {
             /* quote failures are non-fatal — surface keeps CSV values */
@@ -279,7 +278,42 @@ export default function App() {
     }
     load();
     return () => { cancelled = true; };
-  }, [ariadne, base, refreshTick]);
+  }, [ariadne, refreshTick]);
+
+  // AO — dedicated FX effect. Refetches when base currency or the set
+  // of held currencies changes — without re-walking the whole CSV/YAML
+  // load pipeline. Bumping refreshTick also re-runs it (manual refresh
+  // path). Falls back to identity (base only) on network error.
+  const dataCurrencies = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of positions) if (p.currency) seen.add(p.currency);
+    for (const c of cash) if (c.currency) seen.add(c.currency);
+    for (const m of metals) if (m.currency) seen.add(m.currency);
+    for (const f of funds) if (f.currency) seen.add(f.currency);
+    seen.delete("MIXED");
+    return Array.from(seen).sort();
+  }, [positions, cash, metals, funds]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const need = dataCurrencies.filter((c) => c !== base);
+    if (need.length === 0) {
+      setFxMap({ [base]: 1 });
+      return;
+    }
+    (async () => {
+      try {
+        const rates = await ariadne.getFxRates(base, need);
+        if (cancelled) return;
+        const m: Record<string, number> = { [base]: 1 };
+        for (const c of need) m[c] = rates[c] ?? 0;
+        setFxMap(m);
+      } catch (_e) {
+        if (!cancelled) setFxMap({ [base]: 1 });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ariadne, base, dataCurrencies, refreshTick]);
 
   const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
 
@@ -472,11 +506,33 @@ export default function App() {
     return <div style={{ padding: 24, color: "rgb(var(--destructive))" }}>Failed to load: {loadError}</div>;
   }
 
+  // AO — route swap: position detail takes over the entire surface
+  // viewport when activePosition is set. No more modal overlay — the
+  // back arrow drops back to the dashboard.
+  if (activePosition) {
+    const liveKey = String(activePosition.quote_symbol ?? activePosition.symbol ?? "").toUpperCase();
+    return (
+      <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
+        <PositionDetailPage
+          position={activePosition}
+          account={accounts.find((a) => a.id === activePosition.account_id)}
+          thesisBody={activeThesis}
+          priceHistory={activePriceHistory}
+          newsBody={activeNews}
+          liveQuote={liveQuotes[liveKey]}
+          onBack={() => setActivePosition(null)}
+          onRefreshQuote={refreshQuotes}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
-      {/* AM — base currency selector pinned to the top right. */}
+      {/* AM — base currency selector pinned to the top right. AO: list
+          is limited to currencies actually present in the data. */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <BaseCurrencySelector base={base} onChange={setBase} />
+        <BaseCurrencySelector base={base} onChange={setBase} options={dataCurrencies} onRefresh={refreshQuotes} />
       </div>
 
       <ActionStrip accounts={accounts} derived={derived} buckets={buckets} base={base} />
@@ -510,19 +566,6 @@ export default function App() {
       <WatchlistTable rows={watchlist} />
       <CashAndManualAssets accounts={accounts} cash={cash} metals={metals} funds={funds} />
       <RecentAnalysis files={analysisFiles} />
-
-      {/* AL1 + AM — drill-down modal with price history + news. */}
-      {activePosition && (
-        <PositionDetail
-          position={activePosition}
-          account={accounts.find((a) => a.id === activePosition.account_id)}
-          thesisBody={activeThesis}
-          priceHistory={activePriceHistory}
-          newsBody={activeNews}
-          onClose={() => setActivePosition(null)}
-          onRefreshQuote={refreshQuotes}
-        />
-      )}
     </div>
   );
 }

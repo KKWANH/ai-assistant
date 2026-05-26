@@ -45,6 +45,16 @@ export interface Quote {
    *  provider would set its own name and `getQuotesDetailed()` returns it
    *  alongside the value. */
   source?: string;
+  /** AO — Yahoo v8 chart's meta block ships these for free when the
+   *  underlying instrument has them. Cheap to surface (no extra HTTP) and
+   *  lets the detail page render a "live snapshot" panel when the user
+   *  hasn't written a thesis or news file yet. */
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  regularMarketVolume?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  previousClose?: number;
 }
 
 /** Per-symbol error returned by `getQuotesDetailed()` so surfaces can show
@@ -110,13 +120,22 @@ async function fetchYahooQuoteFrom(host: string, symbol: string): Promise<Quote>
   if (!res.ok) throw new Error(`${host} ${symbol}: HTTP ${res.status}`);
 
   const data = (await res.json()) as {
-    chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; currency?: string; fullExchangeName?: string; exchangeName?: string } }> };
+    chart?: { result?: Array<{ meta?: {
+      regularMarketPrice?: number; currency?: string;
+      fullExchangeName?: string; exchangeName?: string;
+      fiftyTwoWeekHigh?: number; fiftyTwoWeekLow?: number;
+      regularMarketVolume?: number;
+      regularMarketDayHigh?: number; regularMarketDayLow?: number;
+      previousClose?: number; chartPreviousClose?: number;
+    } }> };
   };
   const meta = data.chart?.result?.[0]?.meta;
   const price = meta?.regularMarketPrice;
   if (typeof price !== "number" || !isFinite(price) || price <= 0) {
     throw new Error(`${host} ${symbol}: no usable price`);
   }
+  const num = (v: unknown): number | undefined =>
+    typeof v === "number" && isFinite(v) && v > 0 ? v : undefined;
   return {
     symbol,
     resolvedSymbol: symbol,
@@ -124,6 +143,12 @@ async function fetchYahooQuoteFrom(host: string, symbol: string): Promise<Quote>
     currency: (meta?.currency ?? "").toUpperCase(),
     market: meta?.fullExchangeName ?? meta?.exchangeName ?? undefined,
     source: "yahoo",
+    fiftyTwoWeekHigh: num(meta?.fiftyTwoWeekHigh),
+    fiftyTwoWeekLow: num(meta?.fiftyTwoWeekLow),
+    regularMarketVolume: num(meta?.regularMarketVolume),
+    regularMarketDayHigh: num(meta?.regularMarketDayHigh),
+    regularMarketDayLow: num(meta?.regularMarketDayLow),
+    previousClose: num(meta?.previousClose ?? meta?.chartPreviousClose),
   };
 }
 

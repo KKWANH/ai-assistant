@@ -324,6 +324,13 @@ export interface Quote {
   currency: string;
   market?: string;
   source?: string;
+  // AO — richer Yahoo meta passed through to surfaces. Optional.
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  regularMarketVolume?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  previousClose?: number;
 }
 
 export interface QuoteError {

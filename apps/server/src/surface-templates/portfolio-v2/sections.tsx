@@ -8,8 +8,8 @@
  *   PositionsTable → CashAndManualAssets → RecentAnalysis
  */
 
-import { BarChart, PieChart, LineChart } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
+import { BarChart, PieChart, LineChart, useState } from "@ariadne/surface";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
 import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase } from "./utils";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
@@ -384,9 +384,11 @@ export function PositionsTable(p: PositionsTableProps) {
         </span>
       </div>
       <div style={{ overflowX: "auto" }}>
+        {/* AO — name-first display: stock NAME is the primary identifier,
+            ticker code lives as a small subtitle under it. Removed the
+            separate '이름' column since name is now in the first cell. */}
         <Table headers={[
           <SortHead key="symbol" label="종목" onClick={() => p.flipSort("symbol")} active={p.sortKey === "symbol"} dir={p.sortDir} />,
-          "이름",
           <SortHead key="account" label="계좌" onClick={() => p.flipSort("account_id")} active={p.sortKey === "account_id"} dir={p.sortDir} />,
           "자산군", "통화", "수량", "매수가", "현재가",
           <SortHead key="mkt" label="평가금액" onClick={() => p.flipSort("market_value")} active={p.sortKey === "market_value"} dir={p.sortDir} />,
@@ -396,7 +398,7 @@ export function PositionsTable(p: PositionsTableProps) {
         ]}>
           {p.visiblePositions.length === 0 ? (
             <tr>
-              <td colSpan={13} style={{ ...tdLeft, textAlign: "center", padding: 16, color: "rgb(var(--muted-foreground))" }}>
+              <td colSpan={12} style={{ ...tdLeft, textAlign: "center", padding: 16, color: "rgb(var(--muted-foreground))" }}>
                 필터 결과가 없음. 칩 해제하거나 검색어 비우기.
               </td>
             </tr>
@@ -421,15 +423,19 @@ export function PositionsTable(p: PositionsTableProps) {
                 }}
                 onClick={handleClick}
               >
-                <td style={tdLeft}>
-                  <strong>{pos.symbol || "—"}</strong>
-                  {quoteFail && (
-                    <span title={`quote failed: ${quoteFail.reason}`} style={{ marginLeft: 4 }}>
-                      <Badge tone="warning">no quote</Badge>
+                <td style={{ ...tdLeft, maxWidth: 240, overflow: "hidden" }} title={`${pos.name || ""} (${pos.symbol || "—"})`}>
+                  <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pos.name || pos.symbol || "—"}</strong>
+                    <span style={{ fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>
+                      {pos.symbol || "—"}
+                      {quoteFail && (
+                        <span title={`quote failed: ${quoteFail.reason}`} style={{ marginLeft: 4 }}>
+                          <Badge tone="warning">no quote</Badge>
+                        </span>
+                      )}
                     </span>
-                  )}
+                  </div>
                 </td>
-                <td style={{ ...tdLeft, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pos.name}>{pos.name || "—"}</td>
                 <td style={tdLeft}>{accountLabel(pos.account_id)}</td>
                 <td style={tdLeft}>{pos.asset_class || "—"}</td>
                 <td style={tdLeft}>{pos.currency || "—"}</td>
@@ -587,16 +593,34 @@ export function ReturnsBarChart({ positions }: { positions: RawPosition[] }) {
   );
 }
 
-// ─ AL1 — Position detail modal ───────────────────────────────────────────
-// Click a position row → see the thesis + buy/current/target/stop +
-// proposed action + horizon. Restores the v1 'asset page' feature.
-export function PositionDetail({
+// ─ AO — Position detail PAGE (replaces the AL1 modal) ────────────────────
+// Click a position row → full-page route-swap (not a popup overlay). Big
+// price chart with range selector at the top, KPIs, then thesis / news.
+// When news/thesis files are missing, the live Yahoo snapshot (52w high/
+// low, day range, volume, previous close) takes their place — no more
+// ugly "파일 없음" placeholders for positions without docs.
+type RangeKey = "1M" | "3M" | "6M" | "1Y" | "ALL";
+
+function sliceHistoryByRange(points: PricePoint[], range: RangeKey): PricePoint[] {
+  if (range === "ALL" || points.length === 0) return points;
+  const months = range === "1M" ? 1 : range === "3M" ? 3 : range === "6M" ? 6 : 12;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  const filtered = points.filter((p) => {
+    const d = new Date(p.label);
+    return Number.isFinite(d.getTime()) && d >= cutoff;
+  });
+  return filtered.length > 0 ? filtered : points;
+}
+
+export function PositionDetailPage({
   position,
   account,
   thesisBody,
   priceHistory,
   newsBody,
-  onClose,
+  liveQuote,
+  onBack,
   onRefreshQuote,
 }: {
   position: RawPosition;
@@ -606,10 +630,16 @@ export function PositionDetail({
   priceHistory: PricePoint[];
   /** Markdown body of analysis/news/<key>.md (analyst targets + headlines). */
   newsBody: string | null;
-  onClose: () => void;
+  /** AO — Yahoo's live snapshot (52w high/low, vol, etc.) — used as a
+   *  fallback when thesis/news files are absent so the page never shows
+   *  an ugly "파일 없음" pane. */
+  liveQuote?: LiveQuote;
+  onBack: () => void;
   onRefreshQuote?: () => void;
 }) {
   const p = position;
+  const [range, setRange] = useState<RangeKey>("1Y");
+
   const pl = Number.isFinite(p.current_price) && Number.isFinite(p.buy_price)
     ? p.current_price - p.buy_price
     : NaN;
@@ -619,117 +649,225 @@ export function PositionDetail({
   const stopPct = p.stop_loss && p.current_price > 0
     ? ((p.current_price - p.stop_loss) / p.current_price) * 100
     : null;
+
+  const sliced = sliceHistoryByRange(priceHistory, range);
+
+  // External Yahoo Finance link. Useful when the local thesis/news file is
+  // empty — user can click out to live news / analyst pages directly.
+  const yahooSym = (p.quote_symbol || p.symbol || "").trim();
+  const yahooUrl = yahooSym ? `https://finance.yahoo.com/quote/${encodeURIComponent(yahooSym)}` : null;
+
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "rgb(var(--card))", borderRadius: 12, padding: "16px 20px",
-          maxWidth: 720, width: "92%", maxHeight: "85vh", overflowY: "auto",
-          border: "1px solid rgb(var(--border))",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>{p.symbol}</div>
-            <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))" }}>{p.name} · {p.asset_class} / {p.sector}</div>
-            <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginTop: 2 }}>
-              {account?.label ?? p.account_id} · {p.currency} · {p.listing_market ?? "—"}
-              {p.isin && <span> · ISIN {p.isin}</span>}
+    <div>
+      {/* AO — page header. Back arrow + name as primary identifier +
+          symbol/exchange/account as the muted subtitle row. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer", flexShrink: 0 }}
+          >
+            ← 목록
+          </button>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>{p.name || p.symbol || "—"}</div>
+            <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <code style={{ fontSize: 11 }}>{p.symbol}</code>
+              <span>· {p.asset_class} / {p.sector}</span>
+              <span>· {account?.label ?? p.account_id}</span>
+              <span>· {p.listing_market ?? p.currency}</span>
+              {p.isin && <span>· ISIN {p.isin}</span>}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {onRefreshQuote && (
-              <button
-                type="button"
-                onClick={onRefreshQuote}
-                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer" }}
-              >
-                시세 갱신
-              </button>
-            )}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {onRefreshQuote && (
             <button
               type="button"
-              onClick={onClose}
-              style={{ fontSize: 14, padding: "2px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer" }}
+              onClick={onRefreshQuote}
+              style={{ fontSize: 11, padding: "4px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer" }}
             >
-              ✕
+              🔄 시세 갱신
             </button>
+          )}
+          {yahooUrl && (
+            <a
+              href={yahooUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 11, padding: "4px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", textDecoration: "none" }}
+            >
+              Yahoo ↗
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* AO — Big price chart with range selector. Same shape as a
+          brokerage app's stock detail page. */}
+      <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--card))", border: "1px solid rgb(var(--border))", borderRadius: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))" }}>
+            가격 추이 ({p.currency}){priceHistory.length > 0 ? ` · ${sliced.length} / ${priceHistory.length} points` : ""}
           </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
-          <KpiCard label="평가금액" value={fmtMoney(p.market_value, p.currency)} muted={`${fmtNum(p.shares)}주`} />
-          <KpiCard label="매수가" value={fmtNum(p.buy_price)} muted={p.currency} />
-          <KpiCard label="현재가" value={fmtNum(p.current_price)} muted={Number.isFinite(pl) ? `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}` : "—"} />
-          <KpiCard label="수익률" value={fmtPct(Number.isFinite(p.return_pct) ? p.return_pct : 0)} muted={p.confidence ?? "—"} />
-          <KpiCard label="목표가" value={fmtNum(p.target_price)} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
-          <KpiCard label="손절" value={fmtNum(p.stop_loss)} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
-        </div>
-
-        {(p.proposed_action || p.notes) && (
-          <div style={{ marginBottom: 12, padding: 10, background: "rgb(var(--surface-2))", borderRadius: 6, fontSize: 12 }}>
-            {p.proposed_action && <div><strong>제안:</strong> {p.proposed_action}</div>}
-            {p.notes && <div style={{ marginTop: 4, color: "rgb(var(--muted-foreground))" }}>{p.notes}</div>}
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 8, fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 12, flexWrap: "wrap" }}>
-          <span>thesis: <code>{p.thesis_id ?? "—"}</code></span>
-          {p.horizon_months != null && <span>horizon: {p.horizon_months}개월</span>}
-          {p.last_reviewed && <span>last review: {p.last_reviewed}</span>}
-          {p.tax_regime && <span>tax: {p.tax_regime}</span>}
-        </div>
-
-        {/* AM — price history chart (if data file present) */}
-        {priceHistory.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
-              가격 추이 ({p.currency}) · {priceHistory.length} points
+          {priceHistory.length > 0 && (
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["1M", "3M", "6M", "1Y", "ALL"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    border: `1px solid ${range === r ? "rgb(var(--accent))" : "rgb(var(--border))"}`,
+                    background: range === r ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+                    color: range === r ? "rgb(var(--accent-foreground))" : "rgb(var(--foreground))",
+                    cursor: "pointer",
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
             </div>
-            <LineChart data={priceHistory.map((h) => ({ label: h.label, value: h.value }))} width={680} height={180} />
+          )}
+        </div>
+        {priceHistory.length > 0 ? (
+          <LineChart data={sliced.map((h) => ({ label: h.label, value: h.value }))} width={1100} height={260} />
+        ) : (
+          <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", padding: "24px 0", textAlign: "center" }}>
+            가격 히스토리 없음 · positions/history/{p.kr_listing_code || p.quote_symbol || p.symbol}.csv 추가하면 차트 표시
           </div>
         )}
+      </div>
 
-        {/* AM — news + analyst targets (if file present) */}
-        <div style={{ marginBottom: 12 }}>
+      {/* AO — KPI grid. Same as before but now full-width across the page. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 16 }}>
+        <KpiCard label="평가금액" value={fmtMoney(p.market_value, p.currency)} muted={`${fmtNum(p.shares)}주`} />
+        <KpiCard label="매수가" value={fmtNum(p.buy_price)} muted={p.currency} />
+        <KpiCard label="현재가" value={fmtNum(p.current_price)} muted={Number.isFinite(pl) ? `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}` : "—"} />
+        <KpiCard label="수익률" value={fmtPct(Number.isFinite(p.return_pct) ? p.return_pct : 0)} muted={p.confidence ?? "—"} />
+        <KpiCard label="목표가" value={fmtNum(p.target_price)} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
+        <KpiCard label="손절" value={fmtNum(p.stop_loss)} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
+      </div>
+
+      {/* AO — Live snapshot from Yahoo. Always rendered when we have a
+          live quote: 52w high/low + day range + volume + prev close.
+          Replaces what used to be the "no news file" placeholder. */}
+      {liveQuote && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, color: "rgb(var(--muted-foreground))" }}>
+            Live 스냅샷 · {liveQuote.market ?? "Yahoo"} ({liveQuote.resolvedSymbol ?? liveQuote.symbol})
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+            {liveQuote.fiftyTwoWeekLow != null && liveQuote.fiftyTwoWeekHigh != null && (
+              <KpiCard
+                label="52주 범위"
+                value={`${fmtNum(liveQuote.fiftyTwoWeekLow)} – ${fmtNum(liveQuote.fiftyTwoWeekHigh)}`}
+                muted={(() => {
+                  const lo = liveQuote.fiftyTwoWeekLow, hi = liveQuote.fiftyTwoWeekHigh, cur = liveQuote.price;
+                  if (lo != null && hi != null && hi > lo && Number.isFinite(cur)) {
+                    const pct = ((cur - lo) / (hi - lo)) * 100;
+                    return `현재 ${pct.toFixed(0)}% 위치`;
+                  }
+                  return liveQuote.currency;
+                })()}
+              />
+            )}
+            {liveQuote.regularMarketDayLow != null && liveQuote.regularMarketDayHigh != null && (
+              <KpiCard
+                label="당일 범위"
+                value={`${fmtNum(liveQuote.regularMarketDayLow)} – ${fmtNum(liveQuote.regularMarketDayHigh)}`}
+                muted={liveQuote.currency}
+              />
+            )}
+            {liveQuote.previousClose != null && (
+              <KpiCard
+                label="전일 종가"
+                value={fmtNum(liveQuote.previousClose)}
+                muted={(() => {
+                  const prev = liveQuote.previousClose;
+                  if (prev != null && prev > 0 && Number.isFinite(liveQuote.price)) {
+                    const ch = ((liveQuote.price - prev) / prev) * 100;
+                    return `${ch >= 0 ? "+" : ""}${ch.toFixed(2)}%`;
+                  }
+                  return liveQuote.currency;
+                })()}
+              />
+            )}
+            {liveQuote.regularMarketVolume != null && (
+              <KpiCard
+                label="거래량"
+                value={fmtNum(liveQuote.regularMarketVolume)}
+                muted="주"
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {(p.proposed_action || p.notes) && (
+        <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6, fontSize: 12 }}>
+          {p.proposed_action && <div><strong>제안:</strong> {p.proposed_action}</div>}
+          {p.notes && <div style={{ marginTop: 4, color: "rgb(var(--muted-foreground))" }}>{p.notes}</div>}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 16, flexWrap: "wrap" }}>
+        <span>thesis: <code>{p.thesis_id ?? "—"}</code></span>
+        {p.horizon_months != null && <span>horizon: {p.horizon_months}개월</span>}
+        {p.last_reviewed && <span>last review: {p.last_reviewed}</span>}
+        {p.tax_regime && <span>tax: {p.tax_regime}</span>}
+      </div>
+
+      {/* AO — News / thesis panes only render when content exists. No
+          more "(파일 없음 — ... 작성 권장)" placeholders cluttering the
+          page. The live snapshot above carries the weight when files
+          are missing. */}
+      {newsBody && (
+        <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>뉴스 · 증권사 의견</div>
           <pre style={{
             fontSize: 11,
             background: "rgb(var(--surface-2))",
-            padding: 10,
+            padding: 12,
             borderRadius: 6,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
             margin: 0,
-            color: newsBody ? "rgb(var(--foreground))" : "rgb(var(--muted-foreground))",
-          }}>
-            {newsBody ?? "(news 파일 없음 — analysis/news/" + (p.kr_listing_code || p.symbol) + ".md 작성 권장. 증권사 목표가 + 헤드라인 + 사용자 메모.)"}
-          </pre>
+          }}>{newsBody}</pre>
         </div>
+      )}
 
+      {thesisBody && (
         <div>
           <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>analysis/micro/{p.thesis_id ?? "?"}.md</div>
           <pre style={{
             fontSize: 11,
             background: "rgb(var(--surface-2))",
-            padding: 10,
+            padding: 12,
             borderRadius: 6,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
             margin: 0,
-            color: thesisBody ? "rgb(var(--foreground))" : "rgb(var(--muted-foreground))",
-          }}>
-            {thesisBody ?? "(thesis 파일 없음 — analysis/micro/" + (p.thesis_id ?? "?") + ".md 작성 권장)"}
-          </pre>
+          }}>{thesisBody}</pre>
         </div>
-      </div>
+      )}
+
+      {/* AO — Inline action prompt when both files are missing. Replaces
+          the old "파일 없음" placeholder with something the user can
+          actually act on (or ignore). */}
+      {!newsBody && !thesisBody && (
+        <div style={{ marginTop: 16, padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
+          이 종목에 대한 상세 분석은 위 Live 스냅샷 + 가격 추이로 갈음됩니다. 직접 메모하려면
+          <code style={{ margin: "0 4px" }}>analysis/news/{p.kr_listing_code || p.quote_symbol || p.symbol}.md</code>
+          또는
+          <code style={{ margin: "0 4px" }}>analysis/micro/{p.thesis_id || (p.symbol + "-thesis")}.md</code>
+          를 만드세요.
+        </div>
+      )}
     </div>
   );
 }
@@ -768,11 +906,25 @@ export function WatchlistTable({
   );
 }
 
-// ─ AM — Base currency selector ────────────────────────────────────────────
-// Lets the user pick KRW / USD / EUR / JPY as the reporting unit on the
-// fly. fxMap re-resolves and every fmtMoney() call re-renders accordingly.
-const SUPPORTED_BASES = ["KRW", "USD", "EUR", "JPY"] as const;
-export function BaseCurrencySelector({ base, onChange }: { base: string; onChange: (cur: string) => void }) {
+// ─ AM/AO — Base currency selector ─────────────────────────────────────────
+// Lets the user pick the reporting unit on the fly. AO: options come from
+// the currencies actually present in the data (positions/cash/assets) —
+// no point offering JPY if there's nothing JPY-denominated. fxMap
+// re-resolves on change and every fmtMoney() call re-renders accordingly.
+export function BaseCurrencySelector({
+  base, onChange, options, onRefresh,
+}: {
+  base: string;
+  onChange: (cur: string) => void;
+  /** Currencies present in the user's data — drives the dropdown.
+   *  Empty / undefined → falls back to [base] only. */
+  options?: string[];
+  /** AO — refresh button next to the dropdown re-fetches live FX. */
+  onRefresh?: () => void;
+}) {
+  // Always include the current base, dedup, sort. If nothing else is in
+  // data, the dropdown is single-entry (still useful as a label).
+  const list = Array.from(new Set([base, ...(options ?? [])])).filter(Boolean).sort();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
       <span style={{ color: "rgb(var(--muted-foreground))" }}>기준 통화</span>
@@ -788,8 +940,26 @@ export function BaseCurrencySelector({ base, onChange }: { base: string; onChang
           borderRadius: 4,
         }}
       >
-        {SUPPORTED_BASES.map((c) => (<option key={c} value={c}>{c}</option>))}
+        {list.map((c) => (<option key={c} value={c}>{c}</option>))}
       </select>
+      {onRefresh && (
+        <button
+          type="button"
+          onClick={onRefresh}
+          title="실시간 환율 + 시세 재조회"
+          style={{
+            fontSize: 11,
+            padding: "2px 8px",
+            borderRadius: 4,
+            border: "1px solid rgb(var(--border))",
+            background: "rgb(var(--surface-2))",
+            color: "rgb(var(--foreground))",
+            cursor: "pointer",
+          }}
+        >
+          🔄 FX
+        </button>
+      )}
     </div>
   );
 }

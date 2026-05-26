@@ -66,6 +66,15 @@ export interface Quote {
   /** Which provider resolved this — 'yahoo' today; future fallbacks
    *  ('alpha-vantage', 'finnhub', …) set their own name. */
   source?: string;
+  /** AO — Yahoo v8 chart meta extras. Optional, populated when the
+   *  underlying instrument provides them. Lets the surface render a
+   *  "live snapshot" panel as a fallback for missing thesis/news files. */
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  regularMarketVolume?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  previousClose?: number;
 }
 
 /** Per-symbol error returned by getQuotesDetailed so surfaces can show

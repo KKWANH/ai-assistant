@@ -973,11 +973,17 @@ export function WorkspaceOverview() {
           depending on whether .ariadne/surface.tsx exists. The other four
           tabs are independent of the surface and always functional. */}
       <Tabs
-        // Z1: Chats is the top-level surface — land here by default.
-        // Power users with a custom surface still see the Surface tab
-        // first in the list, but landing-tab priority is:
-        //   chats (always)  >  surface (if exists)  >  standard
-        defaultValue="chats"
+        // AO: When a workspace HAS a built custom surface, prefer it as
+        // the landing tab — a brokerage-app-style dashboard is more
+        // useful than the chat history as a starting view. Workspaces
+        // without a surface still land on chats.
+        //
+        // `key` forces a remount once the surface query resolves so the
+        // correct `defaultValue` actually takes effect (defaultValue is
+        // read on mount only). The "?" key while loading prevents an
+        // initial render with the wrong default.
+        key={surfaceData === undefined ? "tabs-loading" : (hasSurface ? "tabs-surface" : "tabs-chats")}
+        defaultValue={hasSurface ? "surface" : "chats"}
         className="flex flex-col flex-1 min-h-0"
       >
         {/* Tab bar — pinned, scrollable on narrow screens */}
