@@ -129,7 +129,20 @@ export function BucketGapTable({ buckets, base }: { buckets: BucketTarget[]; bas
   );
 }
 
-// ─ 4.6 ─ Trigger gauge (AJ4) ─────────────────────────────────────────────
+// ─ 4.6 ─ Trigger gauge (AJ4 / AK fix) ───────────────────────────────────
+//
+// AK: every level access is null-guarded. Earlier YAML parser bug
+// produced rows whose `level` was undefined (the inline `{key: val}`
+// flow form parsed as `{"{ key": val}` — see yaml.ts comment). Even
+// with triggers.yaml now using indented form, the surface stays
+// defensive: a future YAML edit shouldn't crash the dashboard.
+function levelLabel(z: { level?: number | string; drawdown_pct?: number }): string {
+  if (typeof z.level === "string") return z.level;
+  if (typeof z.level === "number") return z.level.toLocaleString();
+  if (typeof z.drawdown_pct === "number") return `${z.drawdown_pct}%`;
+  return "—";
+}
+
 export function TriggerGauge({ triggers }: { triggers: IndexTrigger[] }) {
   if (triggers.length === 0) return null;
   return (
@@ -140,24 +153,25 @@ export function TriggerGauge({ triggers }: { triggers: IndexTrigger[] }) {
           const trimZone = t.zones?.trim_zone ?? [];
           const fxExpand = t.zones?.fx_expand_below ?? [];
           const fxMin = t.zones?.fx_minimize_above ?? [];
+          const cur = typeof t.current_value === "number" ? t.current_value.toLocaleString() : (t.current_value ?? "—");
           return (
             <div key={t.id} style={{ border: "1px solid rgb(var(--border))", borderRadius: 8, padding: 8, background: "rgb(var(--card))" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
                 <strong style={{ fontSize: 12 }}>{t.label}</strong>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{t.current_value.toLocaleString()}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{cur}</span>
               </div>
               <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", display: "flex", flexDirection: "column", gap: 2 }}>
                 {buyZone.map((z, i) => (
-                  <div key={`b-${i}`}><Badge tone="success">매수</Badge> {z.level != null ? z.level.toLocaleString() : `${z.drawdown_pct}%`} — {z.action}</div>
+                  <div key={`b-${i}`}><Badge tone="success">매수</Badge> {levelLabel(z)} — {z.action ?? "—"}</div>
                 ))}
                 {trimZone.map((z, i) => (
-                  <div key={`t-${i}`}><Badge tone="warning">익절</Badge> {typeof z.level === "string" ? z.level : z.level?.toLocaleString()} — {z.action}</div>
+                  <div key={`t-${i}`}><Badge tone="warning">익절</Badge> {levelLabel(z)} — {z.action ?? "—"}</div>
                 ))}
                 {fxExpand.map((z, i) => (
-                  <div key={`fx-${i}`}><Badge tone="info">환전 ↑</Badge> ≤{z.level.toLocaleString()} — {z.action}</div>
+                  <div key={`fx-${i}`}><Badge tone="info">환전 ↑</Badge> ≤{levelLabel(z)} — {z.action ?? "—"}</div>
                 ))}
                 {fxMin.map((z, i) => (
-                  <div key={`fxm-${i}`}><Badge tone="muted">환전 ↓</Badge> ≥{z.level.toLocaleString()} — {z.action}</div>
+                  <div key={`fxm-${i}`}><Badge tone="muted">환전 ↓</Badge> ≥{levelLabel(z)} — {z.action ?? "—"}</div>
                 ))}
               </div>
             </div>

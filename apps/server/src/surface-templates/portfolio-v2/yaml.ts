@@ -35,6 +35,31 @@ export function parseYaml(input: string): YamlValue {
     return i;
   }
 
+  // Split a flow-mapping inner body by commas not inside nested braces,
+  // brackets, or quotes. Used for parsing { key: val, key2: val2 }.
+  function splitFlowEntries(inner: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    let start = 0;
+    for (let i = 0; i < inner.length; i++) {
+      const c = inner[i];
+      if (!inSingle && c === "\"" && inner[i - 1] !== "\\") inDouble = !inDouble;
+      else if (!inDouble && c === "'" && inner[i - 1] !== "\\") inSingle = !inSingle;
+      else if (!inSingle && !inDouble) {
+        if (c === "{" || c === "[") depth++;
+        else if (c === "}" || c === "]") depth--;
+        else if (c === "," && depth === 0) {
+          out.push(inner.slice(start, i));
+          start = i + 1;
+        }
+      }
+    }
+    if (start < inner.length) out.push(inner.slice(start));
+    return out.map((s) => s.trim()).filter(Boolean);
+  }
+
   function coerce(raw: string): YamlValue {
     const t = raw.trim();
     if (t === "") return "";
@@ -48,7 +73,24 @@ export function parseYaml(input: string): YamlValue {
     if (t.startsWith("[") && t.endsWith("]")) {
       const inner = t.slice(1, -1).trim();
       if (inner === "") return [];
-      return inner.split(",").map((x) => coerce(x.trim()));
+      return splitFlowEntries(inner).map((x) => coerce(x));
+    }
+    // AK: inline flow mapping `{ key: val, key2: val2 }`. The pre-AK
+    // parser fed this whole thing into the list-item object branch
+    // with the leading `{` glued to the first key — which produced
+    // `{ "{ key": val, "key2": val2 }`. Downstream code expecting
+    // `obj.key` then saw undefined and crashed (TriggerGauge regression
+    // user reported).
+    if (t.startsWith("{") && t.endsWith("}")) {
+      const inner = t.slice(1, -1).trim();
+      if (inner === "") return {};
+      const obj: { [k: string]: YamlValue } = {};
+      for (const part of splitFlowEntries(inner)) {
+        const colon = part.indexOf(":");
+        if (colon < 0) continue;
+        obj[part.slice(0, colon).trim()] = coerce(part.slice(colon + 1));
+      }
+      return obj;
     }
     return t;
   }
@@ -73,6 +115,13 @@ export function parseYaml(input: string): YamlValue {
         if (!itemBody.startsWith("- ")) break;
         const rest = itemBody.slice(2);
         cursor++;
+        // AK: inline flow object `- { k: v, k2: v2 }` — let coerce()
+        // parse it as a unit instead of treating the leading `{` as
+        // part of the first key (which silently corrupted the row).
+        if (rest.startsWith("{") && rest.trimEnd().endsWith("}")) {
+          list.push(coerce(rest));
+          continue;
+        }
         if (rest.includes(":")) {
           const colon = rest.indexOf(":");
           const firstKey = rest.slice(0, colon).trim();
