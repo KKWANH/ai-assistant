@@ -47,9 +47,52 @@ export interface RawPosition {
   horizon_months?: number;
   confidence?: string;
   last_reviewed?: string;
+  current_bucket?: string;
+  target_bucket?: string;
+  proposed_action?: string;
   quote_symbol?: string;
   quote_source?: "yahoo" | "manual" | "none" | string;
   has_live_quote?: boolean;
+  isin?: string;
+  kr_listing_code?: string;
+  listing_market?: string;
+  tax_regime?: string;
+  code_verification_needed?: boolean;
+  notes?: string;
+}
+
+/** A single 5-bucket entry from targets/buckets-2026.yaml. */
+export interface BucketTarget {
+  id: string;
+  label: string;
+  current_pct: number;
+  target_pct: number;
+  target_amount_krw: number;
+  stance: string;
+  gap_pp: number;
+  current_violations?: Array<{
+    position?: string;
+    sector?: string;
+    current_pct: number;
+    cap_pct: number;
+    excess_pct?: number;
+    excess_krw?: number;
+    action?: string;
+  }>;
+}
+
+/** A single trigger entry from targets/triggers.yaml. */
+export interface IndexTrigger {
+  id: string;
+  label: string;
+  current_value: number;
+  yahoo_symbol?: string;
+  zones?: {
+    buy_zone?: Array<{ level?: number; drawdown_pct?: number; action: string }>;
+    trim_zone?: Array<{ level?: number | string; action: string }>;
+    fx_expand_below?: Array<{ level: number; action: string }>;
+    fx_minimize_above?: Array<{ level: number; action: string }>;
+  };
   notes?: string;
 }
 

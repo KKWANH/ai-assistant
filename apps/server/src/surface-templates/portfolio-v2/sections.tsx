@@ -9,7 +9,7 @@
  */
 
 import { BarChart, PieChart } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger } from "./types";
 import { fmtMoney, fmtPct, daysBetween, daysUntil, toBase } from "./utils";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
@@ -17,7 +17,23 @@ import {
 } from "./primitives";
 
 // ─ 1 ─ Action strip ──────────────────────────────────────────────────────
-export function ActionStrip({ accounts, derived, base }: { accounts: Account[]; derived: Derived; base: string }) {
+export function ActionStrip({ accounts, derived, buckets, base }: { accounts: Account[]; derived: Derived; buckets: BucketTarget[]; base: string }) {
+  // Cap violations from targets/buckets-2026.yaml (AJ4) — surface them as
+  // first-class urgency cards. These are the '리밸런싱 1순위' items.
+  const violations: Array<{ icon: string; title: string; detail: string; accent: "destructive" | "warning" }> = [];
+  for (const b of buckets) {
+    for (const v of b.current_violations ?? []) {
+      const tag = v.position ?? v.sector ?? "violation";
+      const excess = v.excess_pct != null ? ` (+${v.excess_pct.toFixed(1)}pp 초과)` : "";
+      const action = v.action ? ` — ${v.action}` : "";
+      violations.push({
+        icon: "⚠️",
+        title: `cap 위반: ${tag}`,
+        detail: `현재 ${v.current_pct.toFixed(1)}% / cap ${v.cap_pct}%${excess}${action}`,
+        accent: (v.excess_pct ?? 0) > 5 ? "destructive" : "warning",
+      });
+    }
+  }
   return (
     <Section title="시급 / 알림" icon="🚨">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
@@ -73,6 +89,80 @@ export function ActionStrip({ accounts, derived, base }: { accounts: Account[]; 
             accent="muted"
           />
         )}
+        {violations.map((v, i) => (
+          <ActionCard key={`viol-${i}`} icon={v.icon} title={v.title} detail={v.detail} accent={v.accent} />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+// ─ 4.5 ─ Bucket gap table (AJ4) ──────────────────────────────────────────
+export function BucketGapTable({ buckets, base }: { buckets: BucketTarget[]; base: string }) {
+  if (buckets.length === 0) return null;
+  return (
+    <Section title="5-bucket 갭 분석" icon="🎯">
+      <Table headers={["버킷", "현재", "목표", "갭", "스탠스", "목표액", "위반"]}>
+        {buckets.map((b) => {
+          const violationCount = b.current_violations?.length ?? 0;
+          const gapTone = Math.abs(b.gap_pp) > 20 ? "destructive" : Math.abs(b.gap_pp) > 10 ? "warning" : "muted";
+          return (
+            <tr key={b.id} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+              <td style={tdLeft}><strong>{b.label}</strong></td>
+              <td style={tdRight}>{b.current_pct.toFixed(1)}%</td>
+              <td style={tdRight}>{b.target_pct.toFixed(1)}%</td>
+              <td style={{ ...tdRight, color: b.gap_pp > 5 ? "rgb(var(--success))" : b.gap_pp < -5 ? "rgb(var(--destructive))" : "rgb(var(--muted-foreground))" }}>
+                {b.gap_pp >= 0 ? "+" : ""}{b.gap_pp.toFixed(1)}pp
+              </td>
+              <td style={tdLeft}><Badge tone={gapTone}>{b.stance}</Badge></td>
+              <td style={tdRight}>{fmtMoney(b.target_amount_krw, base)}</td>
+              <td style={tdLeft}>
+                {violationCount > 0
+                  ? <Badge tone="destructive">{violationCount}건</Badge>
+                  : <span style={{ color: "rgb(var(--muted-foreground))" }}>—</span>}
+              </td>
+            </tr>
+          );
+        })}
+      </Table>
+    </Section>
+  );
+}
+
+// ─ 4.6 ─ Trigger gauge (AJ4) ─────────────────────────────────────────────
+export function TriggerGauge({ triggers }: { triggers: IndexTrigger[] }) {
+  if (triggers.length === 0) return null;
+  return (
+    <Section title="매매 트리거 (지수·환율)" icon="🎚️">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+        {triggers.map((t) => {
+          const buyZone = t.zones?.buy_zone ?? [];
+          const trimZone = t.zones?.trim_zone ?? [];
+          const fxExpand = t.zones?.fx_expand_below ?? [];
+          const fxMin = t.zones?.fx_minimize_above ?? [];
+          return (
+            <div key={t.id} style={{ border: "1px solid rgb(var(--border))", borderRadius: 8, padding: 8, background: "rgb(var(--card))" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <strong style={{ fontSize: 12 }}>{t.label}</strong>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{t.current_value.toLocaleString()}</span>
+              </div>
+              <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", display: "flex", flexDirection: "column", gap: 2 }}>
+                {buyZone.map((z, i) => (
+                  <div key={`b-${i}`}><Badge tone="success">매수</Badge> {z.level != null ? z.level.toLocaleString() : `${z.drawdown_pct}%`} — {z.action}</div>
+                ))}
+                {trimZone.map((z, i) => (
+                  <div key={`t-${i}`}><Badge tone="warning">익절</Badge> {typeof z.level === "string" ? z.level : z.level?.toLocaleString()} — {z.action}</div>
+                ))}
+                {fxExpand.map((z, i) => (
+                  <div key={`fx-${i}`}><Badge tone="info">환전 ↑</Badge> ≤{z.level.toLocaleString()} — {z.action}</div>
+                ))}
+                {fxMin.map((z, i) => (
+                  <div key={`fxm-${i}`}><Badge tone="muted">환전 ↓</Badge> ≥{z.level.toLocaleString()} — {z.action}</div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Section>
   );

@@ -25,12 +25,13 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger } from "./types";
 import { parseYaml } from "./yaml";
 import { toBase, regionOf, daysBetween } from "./utils";
 import {
   ActionStrip, NetWorthCard, AllocationGrid, AccountsTable,
   PositionsTable, CashAndManualAssets, RecentAnalysis,
+  BucketGapTable, TriggerGauge,
 } from "./sections";
 
 export default function App() {
@@ -45,6 +46,8 @@ export default function App() {
 
   const [fxMap, setFxMap] = useState<Record<string, number>>({ KRW: 1 });
   const [quoteFailures, setQuoteFailures] = useState<Record<string, QuoteFailure>>({});
+  const [buckets, setBuckets] = useState<BucketTarget[]>([]);
+  const [triggers, setTriggers] = useState<IndexTrigger[]>([]);
   const [base] = useState<string>("KRW");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -112,6 +115,21 @@ export default function App() {
           fundList = parsed.holdings ?? [];
         } catch (_e) { /* */ }
 
+        // 5-bucket targets + index triggers (AJ4 — new files).
+        let bucketList: BucketTarget[] = [];
+        try {
+          const txt = await ariadne.readText("targets/buckets-2026.yaml");
+          const parsed = parseYaml(txt) as { buckets?: BucketTarget[] };
+          bucketList = parsed.buckets ?? [];
+        } catch (_e) { /* file absent — surface shows empty bucket panel */ }
+
+        let trigList: IndexTrigger[] = [];
+        try {
+          const txt = await ariadne.readText("targets/triggers.yaml");
+          const parsed = parseYaml(txt) as { triggers?: IndexTrigger[] };
+          trigList = parsed.triggers ?? [];
+        } catch (_e) { /* */ }
+
         const af = { macro: [] as string[], meso: [] as string[], micro: [] as string[] };
         try {
           const all = await ariadne.listFiles("analysis/**/*.md");
@@ -128,6 +146,8 @@ export default function App() {
         setCash(cashList);
         setMetals(metalList);
         setFunds(fundList);
+        setBuckets(bucketList);
+        setTriggers(trigList);
         setAnalysisFiles(af);
 
         // FX
@@ -288,9 +308,11 @@ export default function App() {
 
   return (
     <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
-      <ActionStrip accounts={accounts} derived={derived} base={base} />
+      <ActionStrip accounts={accounts} derived={derived} buckets={buckets} base={base} />
       <NetWorthCard accounts={accounts} positions={positions} derived={derived} base={base} />
       <AllocationGrid derived={derived} />
+      <BucketGapTable buckets={buckets} base={base} />
+      <TriggerGauge triggers={triggers} />
       <AccountsTable accounts={accounts} derived={derived} base={base} />
       <PositionsTable
         accounts={accounts}
