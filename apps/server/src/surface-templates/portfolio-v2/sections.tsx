@@ -8,8 +8,8 @@
  *   PositionsTable → CashAndManualAssets → RecentAnalysis
  */
 
-import { BarChart, PieChart } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger } from "./types";
+import { BarChart, PieChart, LineChart } from "@ariadne/surface";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint } from "./types";
 import { fmtMoney, fmtPct, daysBetween, daysUntil, toBase } from "./utils";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
@@ -272,6 +272,8 @@ export interface PositionsTableProps {
   sortKey: "market_value" | "return_pct" | "symbol" | "account_id";
   sortDir: "asc" | "desc";
   flipSort: (k: PositionsTableProps["sortKey"]) => void;
+  /** AL1 — row click handler. Opens the drill-down modal. */
+  onRowClick?: (p: RawPosition) => void;
 }
 
 export function PositionsTable(p: PositionsTableProps) {
@@ -307,8 +309,16 @@ export function PositionsTable(p: PositionsTableProps) {
             const noThesis = !pos.thesis_id;
             const qs = (pos.quote_symbol ?? pos.symbol).toUpperCase();
             const quoteFail = p.quoteFailures[qs];
+            const handleClick = p.onRowClick ? () => p.onRowClick!(pos) : undefined;
             return (
-              <tr key={`${pos.account_id}-${pos.symbol}`} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+              <tr
+                key={`${pos.account_id}-${pos.symbol}`}
+                style={{
+                  borderBottom: "1px solid rgb(var(--border))",
+                  cursor: handleClick ? "pointer" : "default",
+                }}
+                onClick={handleClick}
+              >
                 <td style={tdLeft}>
                   <strong>{pos.symbol}</strong>
                   {quoteFail && (
@@ -334,6 +344,7 @@ export function PositionsTable(p: PositionsTableProps) {
           })}
         </Table>
       </div>
+      <ReturnsBarChart positions={p.visiblePositions} />
     </Section>
   );
 }
@@ -400,5 +411,181 @@ export function RecentAnalysis({ files }: { files: { macro: string[]; meso: stri
         액션 실행: macro_brief_monthly / sector_review_quarterly / position_check / rebalance_audit / account_closure_planner — Create &amp; Run 탭에서.
       </div>
     </Section>
+  );
+}
+
+// ─ AL1 — Value trend chart ────────────────────────────────────────────────
+// Reads history.csv (label, value, fx_effect). Was a v1 feature lost in
+// the v2 rewrite — user explicitly missed it ('그래프가 더 불편하게
+// 바뀜'). Render as LineChart at the top of the page so the long-view
+// is the first thing users see.
+export function ValueTrendChart({ history, base, showFx, setShowFx }: { history: HistPoint[]; base: string; showFx: boolean; setShowFx: (v: boolean) => void }) {
+  if (history.length === 0) return null;
+  const series = history.map((h) => ({ label: h.label, value: h.value }));
+  const fxSeries = showFx
+    ? history.map((h) => ({ label: h.label, value: h.value - h.fxEffect }))
+    : undefined;
+  return (
+    <Section title={`가치 추이 (${base})`} icon="📈">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
+          {history.length}개월 · history.csv
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowFx(!showFx)}
+          style={{
+            fontSize: 11,
+            padding: "2px 8px",
+            borderRadius: 4,
+            background: showFx ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+            color: showFx ? "rgb(var(--accent-foreground))" : "rgb(var(--muted-foreground))",
+            border: "1px solid rgb(var(--border))",
+            cursor: "pointer",
+          }}
+        >
+          {showFx ? "FX overlay 끄기" : "FX 영향 분리"}
+        </button>
+      </div>
+      {showFx && fxSeries ? (
+        <LineChart
+          data={series}
+          compare={fxSeries}
+          seriesLabels={["실제 가치", "FX-중립 baseline"]}
+          width={1100}
+          height={240}
+        />
+      ) : (
+        <LineChart data={series} width={1100} height={240} />
+      )}
+    </Section>
+  );
+}
+
+// ─ AL1 — Per-position returns bar chart ──────────────────────────────────
+// Compact view of return_pct across all positions. Restored from v1.
+export function ReturnsBarChart({ positions }: { positions: RawPosition[] }) {
+  if (positions.length === 0) return null;
+  // Top 15 by absolute return — keeps the chart readable.
+  const top = positions
+    .slice()
+    .sort((a, b) => Math.abs(b.return_pct) - Math.abs(a.return_pct))
+    .slice(0, 15)
+    .map((p) => ({ label: p.symbol, value: p.return_pct }));
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 4, color: "rgb(var(--muted-foreground))" }}>
+        종목별 수익률 % (상위 15)
+      </div>
+      <BarChart data={top} width={1100} height={200} />
+    </div>
+  );
+}
+
+// ─ AL1 — Position detail modal ───────────────────────────────────────────
+// Click a position row → see the thesis + buy/current/target/stop +
+// proposed action + horizon. Restores the v1 'asset page' feature.
+export function PositionDetail({
+  position,
+  account,
+  thesisBody,
+  onClose,
+  onRefreshQuote,
+}: {
+  position: RawPosition;
+  account?: Account;
+  thesisBody: string | null;
+  onClose: () => void;
+  onRefreshQuote?: () => void;
+}) {
+  const p = position;
+  const pl = p.current_price - p.buy_price;
+  const targetPct = p.target_price ? ((p.target_price - p.current_price) / p.current_price) * 100 : null;
+  const stopPct = p.stop_loss ? ((p.current_price - p.stop_loss) / p.current_price) * 100 : null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "rgb(var(--card))", borderRadius: 12, padding: "16px 20px",
+          maxWidth: 720, width: "92%", maxHeight: "85vh", overflowY: "auto",
+          border: "1px solid rgb(var(--border))",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>{p.symbol}</div>
+            <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))" }}>{p.name} · {p.asset_class} / {p.sector}</div>
+            <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginTop: 2 }}>
+              {account?.label ?? p.account_id} · {p.currency} · {p.listing_market ?? "—"}
+              {p.isin && <span> · ISIN {p.isin}</span>}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {onRefreshQuote && (
+              <button
+                type="button"
+                onClick={onRefreshQuote}
+                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer" }}
+              >
+                시세 갱신
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              style={{ fontSize: 14, padding: "2px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer" }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+          <KpiCard label="평가금액" value={fmtMoney(p.market_value, p.currency)} muted={`${p.shares.toString()}주`} />
+          <KpiCard label="매수가" value={p.buy_price.toLocaleString()} muted={p.currency} />
+          <KpiCard label="현재가" value={p.current_price.toLocaleString()} muted={`${pl >= 0 ? "+" : ""}${pl.toFixed(2)}`} />
+          <KpiCard label="수익률" value={fmtPct(p.return_pct)} muted={p.confidence ?? "—"} />
+          <KpiCard label="목표가" value={p.target_price ? p.target_price.toLocaleString() : "—"} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
+          <KpiCard label="손절" value={p.stop_loss ? p.stop_loss.toLocaleString() : "—"} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
+        </div>
+
+        {(p.proposed_action || p.notes) && (
+          <div style={{ marginBottom: 12, padding: 10, background: "rgb(var(--surface-2))", borderRadius: 6, fontSize: 12 }}>
+            {p.proposed_action && <div><strong>제안:</strong> {p.proposed_action}</div>}
+            {p.notes && <div style={{ marginTop: 4, color: "rgb(var(--muted-foreground))" }}>{p.notes}</div>}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 12, flexWrap: "wrap" }}>
+          <span>thesis: <code>{p.thesis_id ?? "—"}</code></span>
+          {p.horizon_months != null && <span>horizon: {p.horizon_months}개월</span>}
+          {p.last_reviewed && <span>last review: {p.last_reviewed}</span>}
+          {p.tax_regime && <span>tax: {p.tax_regime}</span>}
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>analysis/micro/{p.thesis_id ?? "?"}.md</div>
+          <pre style={{
+            fontSize: 11,
+            background: "rgb(var(--surface-2))",
+            padding: 10,
+            borderRadius: 6,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            margin: 0,
+            color: thesisBody ? "rgb(var(--foreground))" : "rgb(var(--muted-foreground))",
+          }}>
+            {thesisBody ?? "(thesis 파일 없음 — analysis/micro/" + (p.thesis_id ?? "?") + ".md 작성 권장)"}
+          </pre>
+        </div>
+      </div>
+    </div>
   );
 }

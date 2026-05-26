@@ -6,6 +6,8 @@
  * POST /api/workspaces/:id/surface/build        → build bundle, return { ok, error }
  * GET  /api/workspaces/:id/surface/folder       → list files in .ariadne/surface/ (AK)
  * PUT  /api/workspaces/:id/surface/folder/file  → save a single file in .ariadne/surface/ (AK)
+ * POST /api/workspaces/:id/surface/folder/file  → create a new file in .ariadne/surface/ (AL3)
+ * DELETE /api/workspaces/:id/surface/folder/file → delete a file in .ariadne/surface/ (AL3)
  * GET  /api/workspaces/:id/file?path=<rel>      → { content: string } of a text file in workspace root
  */
 
@@ -212,6 +214,100 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(500).send({ error: "Failed to write file", detail: msg });
       }
       return reply.send({ ok: true, path: relPath });
+    },
+  );
+
+  // POST /api/workspaces/:id/surface/folder/file — create a NEW file (AL3).
+  // Distinct from PUT (which assumes the file may exist + overwrites).
+  // Refuses to overwrite — the user calls PUT for that.
+  app.post<{ Params: { id: string }; Body: { path?: string; content?: string } }>(
+    "/workspaces/:id/surface/folder/file",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Adding surface files is not permitted from remote access.",
+          req,
+          reply,
+        )
+      )
+        return;
+
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const relPath = (req.body?.path ?? "").trim();
+      const content = req.body?.content ?? "";
+      if (!relPath || typeof content !== "string") {
+        return reply.status(400).send({ error: "path is required" });
+      }
+      if (!/^[a-zA-Z0-9_\-./]+\.(tsx|ts|jsx|js|css|json|md|ya?ml)$/i.test(relPath)) {
+        return reply.status(400).send({ error: "Bad file path or extension" });
+      }
+      if (relPath.includes("..")) {
+        return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+
+      const surfaceDir = path.resolve(workspace.rootPath, ".ariadne", "surface");
+      const dest = path.resolve(surfaceDir, relPath);
+      if (!dest.startsWith(surfaceDir + path.sep) && dest !== surfaceDir) {
+        return reply.status(403).send({ error: "Resolved path escapes the surface folder" });
+      }
+      if (fs.existsSync(dest)) {
+        return reply.status(409).send({ error: "File already exists — use PUT to overwrite" });
+      }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      try {
+        fs.writeFileSync(dest, content, "utf-8");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: "Failed to create file", detail: msg });
+      }
+      return reply.send({ ok: true, path: relPath });
+    },
+  );
+
+  // DELETE /api/workspaces/:id/surface/folder/file?path=<rel> — delete a
+  // file in .ariadne/surface/ (AL3). LOCAL only. Refuses to delete
+  // index.tsx — that's the entry point.
+  app.delete<{ Params: { id: string }; Querystring: { path?: string } }>(
+    "/workspaces/:id/surface/folder/file",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Deleting surface files is not permitted from remote access.",
+          req,
+          reply,
+        )
+      )
+        return;
+
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const relPath = (req.query.path ?? "").trim();
+      if (!relPath) return reply.status(400).send({ error: "path query param required" });
+      if (relPath === "index.tsx") {
+        return reply.status(400).send({ error: "index.tsx is the entry point and cannot be deleted" });
+      }
+      if (relPath.includes("..")) {
+        return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+
+      const surfaceDir = path.resolve(workspace.rootPath, ".ariadne", "surface");
+      const dest = path.resolve(surfaceDir, relPath);
+      if (!dest.startsWith(surfaceDir + path.sep)) {
+        return reply.status(403).send({ error: "Resolved path escapes the surface folder" });
+      }
+      if (!fs.existsSync(dest)) {
+        return reply.status(404).send({ error: "File not found" });
+      }
+      try {
+        fs.unlinkSync(dest);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: "Failed to delete file", detail: msg });
+      }
+      return reply.send({ ok: true });
     },
   );
 

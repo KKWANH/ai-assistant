@@ -13,7 +13,8 @@ import { javascript } from "@codemirror/lang-javascript";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Save, Hammer, AlertCircle, CheckCircle, Lock, FileCode } from "lucide-react";
+import { Save, Hammer, AlertCircle, CheckCircle, Lock, FileCode, Plus, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { useSurface, useSaveSurface, useBuildSurface } from "../../lib/queries";
@@ -79,6 +80,7 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
   // editor switches into 'folder mode': a small tab strip across the
   // top, click-to-swap between files. Saving routes to the new
   // PUT /surface/folder/file endpoint with the active file's path.
+  const qc = useQueryClient();
   const { data: folderData } = useQuery({
     queryKey: ["surface-folder", workspaceId],
     queryFn: () => api.getSurfaceFolder(workspaceId),
@@ -309,9 +311,7 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
         </Card>
       )}
 
-      {/* AK — File tab strip (folder mode only). Shows all files in
-          .ariadne/surface/. Active file's content is in the editor. Tabs
-          with unsaved edits get a dot indicator. */}
+      {/* AK + AL3 — File tab strip (folder mode only) with new/delete. */}
       {folderMode && folderFiles.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap text-xs border-b border-border pb-1">
           <span className="text-muted-foreground mr-2 shrink-0 flex items-center gap-1">
@@ -322,21 +322,81 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
             const isActive = activeFile === f.path;
             const isDirty = dirtyFiles[f.path] !== undefined;
             return (
-              <button
+              <div
                 key={f.path}
-                type="button"
-                onClick={() => setActiveFile(f.path)}
                 className={[
-                  "px-2 py-1 rounded-md font-mono",
+                  "flex items-center rounded-md font-mono overflow-hidden",
                   isActive ? "bg-accent text-accent-foreground" : "bg-surface-2 hover:bg-surface-3 text-foreground",
                 ].join(" ")}
-                title={`${f.path} (${Math.ceil(f.size / 1024)} kB)`}
               >
-                {f.path}
-                {isDirty && <span className="ml-1 text-warning">●</span>}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFile(f.path)}
+                  className="px-2 py-1"
+                  title={`${f.path} (${Math.ceil(f.size / 1024)} kB)`}
+                >
+                  {f.path}
+                  {isDirty && <span className="ml-1 text-warning">●</span>}
+                </button>
+                {f.path !== "index.tsx" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (readOnly) return;
+                      const ok = window.confirm(t("surface.deleteFileConfirm", { path: f.path }));
+                      if (!ok) return;
+                      try {
+                        await api.deleteSurfaceFolderFile(workspaceId, f.path);
+                        await qc.invalidateQueries({ queryKey: ["surface-folder", workspaceId] });
+                        if (activeFile === f.path) {
+                          // Switch to index.tsx if we just deleted the active file.
+                          setActiveFile("index.tsx");
+                        }
+                        setDirtyFiles((prev) => {
+                          const next = { ...prev };
+                          delete next[f.path];
+                          return next;
+                        });
+                        toast({ title: t("surface.fileDeleted", { path: f.path }), variant: "success" });
+                      } catch (err) {
+                        toast({ title: t("surface.fileDeleteFailed"), description: (err as Error).message, variant: "error" });
+                      }
+                    }}
+                    disabled={readOnly}
+                    className="px-1.5 py-1 hover:bg-destructive/20 text-current opacity-60 hover:opacity-100"
+                    title={t("surface.deleteFile")}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             );
           })}
+          {/* + New file */}
+          <button
+            type="button"
+            onClick={async () => {
+              if (readOnly) return;
+              const raw = window.prompt(t("surface.newFilePrompt"));
+              if (!raw) return;
+              const rel = raw.trim();
+              if (!rel) return;
+              try {
+                await api.createSurfaceFolderFile(workspaceId, rel, "");
+                await qc.invalidateQueries({ queryKey: ["surface-folder", workspaceId] });
+                setActiveFile(rel);
+                toast({ title: t("surface.fileCreated", { path: rel }), variant: "success" });
+              } catch (err) {
+                toast({ title: t("surface.fileCreateFailed"), description: (err as Error).message, variant: "error" });
+              }
+            }}
+            disabled={readOnly}
+            className="px-2 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-3 flex items-center gap-1"
+            title={t("surface.newFile")}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{t("surface.newFile")}</span>
+          </button>
         </div>
       )}
 

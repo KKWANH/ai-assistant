@@ -25,13 +25,14 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint } from "./types";
 import { parseYaml } from "./yaml";
 import { toBase, regionOf, daysBetween } from "./utils";
 import {
   ActionStrip, NetWorthCard, AllocationGrid, AccountsTable,
   PositionsTable, CashAndManualAssets, RecentAnalysis,
   BucketGapTable, TriggerGauge,
+  ValueTrendChart, ReturnsBarChart, PositionDetail,
 } from "./sections";
 
 export default function App() {
@@ -48,6 +49,11 @@ export default function App() {
   const [quoteFailures, setQuoteFailures] = useState<Record<string, QuoteFailure>>({});
   const [buckets, setBuckets] = useState<BucketTarget[]>([]);
   const [triggers, setTriggers] = useState<IndexTrigger[]>([]);
+  const [history, setHistory] = useState<HistPoint[]>([]);
+  const [showFx, setShowFx] = useState(false);
+  // AL1 — drill-down modal state: clicked-position + its loaded thesis body.
+  const [activePosition, setActivePosition] = useState<RawPosition | null>(null);
+  const [activeThesis, setActiveThesis] = useState<string | null>(null);
   const [base] = useState<string>("KRW");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -130,6 +136,18 @@ export default function App() {
           trigList = parsed.triggers ?? [];
         } catch (_e) { /* */ }
 
+        // history.csv — kept from v1 demo seed; renders the value-trend
+        // line chart restored in AL1.
+        let histList: HistPoint[] = [];
+        try {
+          const rows = await ariadne.readCsv("history.csv");
+          histList = rows.map((r: any) => ({
+            label: String(r.date ?? ""),
+            value: Number(r.value ?? 0),
+            fxEffect: Number(r.fx_effect ?? 0),
+          })).filter((h: HistPoint) => h.label && Number.isFinite(h.value));
+        } catch (_e) { /* file absent — chart silently hidden */ }
+
         const af = { macro: [] as string[], meso: [] as string[], micro: [] as string[] };
         try {
           const all = await ariadne.listFiles("analysis/**/*.md");
@@ -148,6 +166,7 @@ export default function App() {
         setFunds(fundList);
         setBuckets(bucketList);
         setTriggers(trigList);
+        setHistory(histList);
         setAnalysisFiles(af);
 
         // FX
@@ -299,6 +318,18 @@ export default function App() {
     else { setSortKey(k); setSortDir(k === "symbol" || k === "account_id" ? "asc" : "desc"); }
   }, [sortKey]);
 
+  // AL1 — open the drill-down modal. Best-effort load of the thesis
+  // markdown so the modal can render the user's stated position view.
+  const openPosition = useCallback(async (p: RawPosition) => {
+    setActivePosition(p);
+    setActiveThesis(null);
+    if (!p.thesis_id) return;
+    try {
+      const body = await ariadne.readText(`analysis/micro/${p.thesis_id}.md`);
+      setActiveThesis(body);
+    } catch (_e) { /* file absent — modal shows the missing-file note */ }
+  }, [ariadne]);
+
   if (loading) {
     return <div style={{ padding: 24, color: "rgb(var(--muted-foreground))" }}>Loading workspace…</div>;
   }
@@ -310,6 +341,7 @@ export default function App() {
     <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
       <ActionStrip accounts={accounts} derived={derived} buckets={buckets} base={base} />
       <NetWorthCard accounts={accounts} positions={positions} derived={derived} base={base} />
+      <ValueTrendChart history={history} base={base} showFx={showFx} setShowFx={setShowFx} />
       <AllocationGrid derived={derived} />
       <BucketGapTable buckets={buckets} base={base} />
       <TriggerGauge triggers={triggers} />
@@ -329,9 +361,20 @@ export default function App() {
         sortKey={sortKey}
         sortDir={sortDir}
         flipSort={flipSort}
+        onRowClick={openPosition}
       />
       <CashAndManualAssets accounts={accounts} cash={cash} metals={metals} funds={funds} />
       <RecentAnalysis files={analysisFiles} />
+
+      {/* AL1 — drill-down modal */}
+      {activePosition && (
+        <PositionDetail
+          position={activePosition}
+          account={accounts.find((a) => a.id === activePosition.account_id)}
+          thesisBody={activeThesis}
+          onClose={() => setActivePosition(null)}
+        />
+      )}
     </div>
   );
 }

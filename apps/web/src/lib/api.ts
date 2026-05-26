@@ -206,6 +206,18 @@ export const saveSurfaceFolderFile = (workspaceId: string, path: string, content
     `/workspaces/${workspaceId}/surface/folder/file`,
     { path, content },
   );
+// AL3 — create / delete files in the surface folder.
+export const createSurfaceFolderFile = (workspaceId: string, path: string, content = "") =>
+  request<{ ok: boolean; path: string }>(
+    "POST",
+    `/workspaces/${workspaceId}/surface/folder/file`,
+    { path, content },
+  );
+export const deleteSurfaceFolderFile = (workspaceId: string, path: string) =>
+  request<{ ok: boolean }>(
+    "DELETE",
+    `/workspaces/${workspaceId}/surface/folder/file?path=${encodeURIComponent(path)}`,
+  );
 
 export interface StageWorkspaceFileResult {
   runId: string;

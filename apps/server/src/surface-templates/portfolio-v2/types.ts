@@ -137,6 +137,13 @@ export interface QuoteFailure {
   reason: string;
 }
 
+/** Historical value point — read from history.csv. */
+export interface HistPoint {
+  label: string;
+  value: number;
+  fxEffect: number;
+}
+
 /** Aggregates derived from raw data — computed in index.tsx, consumed by sections. */
 export interface Derived {
   totalNetWorthBase: number;
