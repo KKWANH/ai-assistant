@@ -10,7 +10,7 @@
 
 import { BarChart, PieChart, LineChart } from "@ariadne/surface";
 import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
-import { fmtMoney, fmtPct, daysBetween, daysUntil, toBase } from "./utils";
+import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase } from "./utils";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
   tdLeft, tdRight, inputStyle, subHead, mutedDot,
@@ -183,15 +183,44 @@ export function TriggerGauge({ triggers }: { triggers: IndexTrigger[] }) {
 }
 
 // ─ 2 ─ Net worth card ────────────────────────────────────────────────────
-export function NetWorthCard({ accounts, positions, derived, base }: { accounts: Account[]; positions: RawPosition[]; derived: Derived; base: string }) {
+// AN — adds concentration KPIs (top1, top5) + refresh button. The five
+// original cards stay; pro-trader strip below adds risk visibility.
+export function NetWorthCard({ accounts, positions, derived, base, onRefresh }: { accounts: Account[]; positions: RawPosition[]; derived: Derived; base: string; onRefresh?: () => void }) {
+  const investedPct = derived.totalNetWorthBase > 0 ? (derived.totalInvestedBase / derived.totalNetWorthBase * 100) : 0;
+  const cashPct = derived.totalNetWorthBase > 0 ? (derived.totalCashBase / derived.totalNetWorthBase * 100) : 0;
+  const idleOfCash = derived.totalCashBase > 0 ? (derived.totalIdleBase / derived.totalCashBase * 100) : 0;
   return (
     <Section title="순자산" icon="📊">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
+          {positions.length} 포지션 · {accounts.length} 계좌
+        </span>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            style={{ fontSize: 11, padding: "3px 10px", borderRadius: 4, border: "1px solid rgb(var(--border))", background: "rgb(var(--surface-2))", color: "rgb(var(--foreground))", cursor: "pointer" }}
+            title="getQuotes() 재호출"
+          >
+            🔄 시세 갱신
+          </button>
+        )}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
         <KpiCard label="총 순자산" value={fmtMoney(derived.totalNetWorthBase, base)} muted={base} />
-        <KpiCard label="투자 자산" value={fmtMoney(derived.totalInvestedBase, base)} muted={`${(derived.totalInvestedBase / derived.totalNetWorthBase * 100).toFixed(1)}%`} />
-        <KpiCard label="현금 합계" value={fmtMoney(derived.totalCashBase, base)} muted={`${(derived.totalCashBase / derived.totalNetWorthBase * 100).toFixed(1)}%`} />
-        <KpiCard label="유휴 자금" value={fmtMoney(derived.totalIdleBase, base)} muted={`${derived.totalIdleBase > 0 ? (derived.totalIdleBase / derived.totalCashBase * 100).toFixed(0) : 0}% / cash`} />
-        <KpiCard label="계좌 수" value={String(accounts.length)} muted={`${positions.length} 포지션`} />
+        <KpiCard label="투자 자산" value={fmtMoney(derived.totalInvestedBase, base)} muted={`${investedPct.toFixed(1)}%`} />
+        <KpiCard label="현금 합계" value={fmtMoney(derived.totalCashBase, base)} muted={`${cashPct.toFixed(1)}%`} />
+        <KpiCard label="유휴 자금" value={fmtMoney(derived.totalIdleBase, base)} muted={`${idleOfCash.toFixed(0)}% / cash`} />
+        <KpiCard
+          label={`최대 단일 (${derived.concentration.top1Symbol})`}
+          value={`${derived.concentration.top1Pct.toFixed(1)}%`}
+          muted={derived.concentration.top1Pct > 10 ? "★ cap 위반" : "투자 자산 대비"}
+        />
+        <KpiCard
+          label="Top-5 집중도"
+          value={`${derived.concentration.top5Pct.toFixed(1)}%`}
+          muted={derived.concentration.top5Symbols.slice(0, 3).join(" · ")}
+        />
       </div>
     </Section>
   );
@@ -254,11 +283,21 @@ export function AccountsTable({ accounts, derived, base }: { accounts: Account[]
 }
 
 // ─ 5 ─ Positions table ───────────────────────────────────────────────────
+// AN — pro-trader features:
+//   · quick-filter chip strip (전체 / 수익 / 손실 / stale / cap 위반)
+//   · 비중 column (% of total invested, base currency)
+//   · fmtNum/fmtMoney everywhere (no raw .toLocaleString() — NaN safe)
+//   · empty-state row when filters yield nothing (so user knows it's the
+//     filter, not the data)
+export type QuickFilter = "all" | "gainers" | "losers" | "stale" | "cap";
+
 export interface PositionsTableProps {
   accounts: Account[];
   positions: RawPosition[];
   visiblePositions: RawPosition[];
+  derived: Derived;
   fxMap: Record<string, number>;
+  base: string;
   /** Symbols Yahoo couldn't quote, keyed by inputSymbol — renders an
    *  'unquotable' badge in the symbol column. Best-effort: missing
    *  entries fall back to the CSV-supplied current_price. */
@@ -269,6 +308,8 @@ export interface PositionsTableProps {
   setFilterAccount: (s: string) => void;
   filterAssetClass: string;
   setFilterAssetClass: (s: string) => void;
+  quickFilter: QuickFilter;
+  setQuickFilter: (q: QuickFilter) => void;
   sortKey: "market_value" | "return_pct" | "symbol" | "account_id";
   sortDir: "asc" | "desc";
   flipSort: (k: PositionsTableProps["sortKey"]) => void;
@@ -276,10 +317,58 @@ export interface PositionsTableProps {
   onRowClick?: (p: RawPosition) => void;
 }
 
+function FilterChip({ label, count, active, tone, onClick }: { label: string; count: number; active: boolean; tone: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        fontSize: 11,
+        padding: "3px 10px",
+        borderRadius: 999,
+        border: `1px solid ${active ? "rgb(var(--accent))" : "rgb(var(--border))"}`,
+        background: active ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+        color: active ? "rgb(var(--accent-foreground))" : tone,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label} <span style={{ opacity: 0.7 }}>{count}</span>
+    </button>
+  );
+}
+
 export function PositionsTable(p: PositionsTableProps) {
   const accountLabel = (id: string): string => p.accounts.find((a) => a.id === id)?.label ?? id;
+
+  // Sum of all positions' base-currency market value — denominator for
+  // the 비중 column. Recomputed on each render but cheap (n ≤ ~100).
+  const totalInvested = p.positions.reduce(
+    (s, pos) => s + toBase(pos.market_value, pos.currency, p.fxMap),
+    0,
+  );
+
+  const chip = (id: QuickFilter, label: string, count: number, tone: string) => (
+    <FilterChip
+      key={id}
+      label={label}
+      count={count}
+      tone={tone}
+      active={p.quickFilter === id}
+      onClick={() => p.setQuickFilter(p.quickFilter === id ? "all" : id)}
+    />
+  );
+
   return (
     <Section title="보유 종목" icon="📈">
+      {/* AN — quick-filter chip strip. Clicking again clears back to '전체'. */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+        {chip("all", "전체", p.positions.length, "rgb(var(--muted-foreground))")}
+        {chip("gainers", "수익 +", p.derived.gainers.length, "rgb(var(--success))")}
+        {chip("losers", "손실 −", p.derived.losers.length, "rgb(var(--destructive))")}
+        {chip("stale", "thesis 90d+", p.derived.staleTheses.length, "rgb(var(--warning, var(--muted-foreground)))")}
+        {chip("cap", "cap 위반 (>10%)", p.derived.capViolators.length, "rgb(var(--destructive))")}
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <input value={p.search} onChange={(e) => p.setSearch(e.target.value)} placeholder="symbol or name search…" style={inputStyle} />
         <select value={p.filterAccount} onChange={(e) => p.setFilterAccount(e.target.value)} style={inputStyle}>
@@ -288,7 +377,7 @@ export function PositionsTable(p: PositionsTableProps) {
         </select>
         <select value={p.filterAssetClass} onChange={(e) => p.setFilterAssetClass(e.target.value)} style={inputStyle}>
           <option value="">모든 자산군</option>
-          {Array.from(new Set(p.positions.map((x) => x.asset_class))).map((c) => (<option key={c} value={c}>{c}</option>))}
+          {Array.from(new Set(p.positions.map((x) => x.asset_class).filter(Boolean))).map((c) => (<option key={c} value={c}>{c}</option>))}
         </select>
         <span style={{ alignSelf: "center", color: "rgb(var(--muted-foreground))", fontSize: 12 }}>
           {p.visiblePositions.length} / {p.positions.length}
@@ -301,15 +390,28 @@ export function PositionsTable(p: PositionsTableProps) {
           <SortHead key="account" label="계좌" onClick={() => p.flipSort("account_id")} active={p.sortKey === "account_id"} dir={p.sortDir} />,
           "자산군", "통화", "수량", "매수가", "현재가",
           <SortHead key="mkt" label="평가금액" onClick={() => p.flipSort("market_value")} active={p.sortKey === "market_value"} dir={p.sortDir} />,
+          "비중",
           <SortHead key="ret" label="수익률" onClick={() => p.flipSort("return_pct")} active={p.sortKey === "return_pct"} dir={p.sortDir} />,
           "목표가", "thesis", "review",
         ]}>
-          {p.visiblePositions.map((pos) => {
+          {p.visiblePositions.length === 0 ? (
+            <tr>
+              <td colSpan={13} style={{ ...tdLeft, textAlign: "center", padding: 16, color: "rgb(var(--muted-foreground))" }}>
+                필터 결과가 없음. 칩 해제하거나 검색어 비우기.
+              </td>
+            </tr>
+          ) : p.visiblePositions.map((pos) => {
             const stale = pos.last_reviewed ? daysBetween(pos.last_reviewed) > 90 : false;
             const noThesis = !pos.thesis_id;
-            const qs = (pos.quote_symbol ?? pos.symbol).toUpperCase();
-            const quoteFail = p.quoteFailures[qs];
+            // AN — defensive symbol resolution. Either column can be empty
+            // in a malformed CSV row; avoid .toUpperCase() on undefined.
+            const qs = String(pos.quote_symbol || pos.symbol || "").toUpperCase();
+            const quoteFail = qs ? p.quoteFailures[qs] : undefined;
             const handleClick = p.onRowClick ? () => p.onRowClick!(pos) : undefined;
+            const baseValue = toBase(pos.market_value, pos.currency, p.fxMap);
+            const weightPct = totalInvested > 0 ? (baseValue / totalInvested) * 100 : 0;
+            const overCap = weightPct > 10;
+            const ret = Number.isFinite(pos.return_pct) ? pos.return_pct : 0;
             return (
               <tr
                 key={`${pos.account_id}-${pos.symbol}`}
@@ -320,23 +422,26 @@ export function PositionsTable(p: PositionsTableProps) {
                 onClick={handleClick}
               >
                 <td style={tdLeft}>
-                  <strong>{pos.symbol}</strong>
+                  <strong>{pos.symbol || "—"}</strong>
                   {quoteFail && (
                     <span title={`quote failed: ${quoteFail.reason}`} style={{ marginLeft: 4 }}>
                       <Badge tone="warning">no quote</Badge>
                     </span>
                   )}
                 </td>
-                <td style={{ ...tdLeft, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pos.name}>{pos.name}</td>
+                <td style={{ ...tdLeft, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pos.name}>{pos.name || "—"}</td>
                 <td style={tdLeft}>{accountLabel(pos.account_id)}</td>
-                <td style={tdLeft}>{pos.asset_class}</td>
-                <td style={tdLeft}>{pos.currency}</td>
-                <td style={tdRight}>{pos.shares}</td>
-                <td style={tdRight}>{pos.buy_price.toLocaleString()}</td>
-                <td style={tdRight}>{pos.current_price.toLocaleString()}</td>
+                <td style={tdLeft}>{pos.asset_class || "—"}</td>
+                <td style={tdLeft}>{pos.currency || "—"}</td>
+                <td style={tdRight}>{fmtNum(pos.shares)}</td>
+                <td style={tdRight}>{fmtNum(pos.buy_price)}</td>
+                <td style={tdRight}>{fmtNum(pos.current_price)}</td>
                 <td style={tdRight}><strong>{fmtMoney(pos.market_value, pos.currency)}</strong></td>
-                <td style={{ ...tdRight, color: pos.return_pct >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>{fmtPct(pos.return_pct)}</td>
-                <td style={tdRight}>{pos.target_price ? pos.target_price.toLocaleString() : <span style={mutedDot}>—</span>}</td>
+                <td style={{ ...tdRight, color: overCap ? "rgb(var(--destructive))" : "rgb(var(--foreground))", fontWeight: overCap ? 600 : 400 }}>
+                  {weightPct.toFixed(1)}%{overCap ? " ★" : ""}
+                </td>
+                <td style={{ ...tdRight, color: ret >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>{fmtPct(ret)}</td>
+                <td style={tdRight}>{pos.target_price != null ? fmtNum(pos.target_price) : <span style={mutedDot}>—</span>}</td>
                 <td style={tdLeft}>{noThesis ? <Badge tone="muted">미작성</Badge> : <code style={{ fontSize: 10 }}>{pos.thesis_id}</code>}</td>
                 <td style={tdLeft}>{pos.last_reviewed ? (stale ? <Badge tone="warning">{pos.last_reviewed}</Badge> : <span style={{ color: "rgb(var(--muted-foreground))" }}>{pos.last_reviewed}</span>) : <Badge tone="muted">—</Badge>}</td>
               </tr>
@@ -505,9 +610,15 @@ export function PositionDetail({
   onRefreshQuote?: () => void;
 }) {
   const p = position;
-  const pl = p.current_price - p.buy_price;
-  const targetPct = p.target_price ? ((p.target_price - p.current_price) / p.current_price) * 100 : null;
-  const stopPct = p.stop_loss ? ((p.current_price - p.stop_loss) / p.current_price) * 100 : null;
+  const pl = Number.isFinite(p.current_price) && Number.isFinite(p.buy_price)
+    ? p.current_price - p.buy_price
+    : NaN;
+  const targetPct = p.target_price && p.current_price > 0
+    ? ((p.target_price - p.current_price) / p.current_price) * 100
+    : null;
+  const stopPct = p.stop_loss && p.current_price > 0
+    ? ((p.current_price - p.stop_loss) / p.current_price) * 100
+    : null;
   return (
     <div
       onClick={onClose}
@@ -554,12 +665,12 @@ export function PositionDetail({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
-          <KpiCard label="평가금액" value={fmtMoney(p.market_value, p.currency)} muted={`${p.shares.toString()}주`} />
-          <KpiCard label="매수가" value={p.buy_price.toLocaleString()} muted={p.currency} />
-          <KpiCard label="현재가" value={p.current_price.toLocaleString()} muted={`${pl >= 0 ? "+" : ""}${pl.toFixed(2)}`} />
-          <KpiCard label="수익률" value={fmtPct(p.return_pct)} muted={p.confidence ?? "—"} />
-          <KpiCard label="목표가" value={p.target_price ? p.target_price.toLocaleString() : "—"} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
-          <KpiCard label="손절" value={p.stop_loss ? p.stop_loss.toLocaleString() : "—"} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
+          <KpiCard label="평가금액" value={fmtMoney(p.market_value, p.currency)} muted={`${fmtNum(p.shares)}주`} />
+          <KpiCard label="매수가" value={fmtNum(p.buy_price)} muted={p.currency} />
+          <KpiCard label="현재가" value={fmtNum(p.current_price)} muted={Number.isFinite(pl) ? `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}` : "—"} />
+          <KpiCard label="수익률" value={fmtPct(Number.isFinite(p.return_pct) ? p.return_pct : 0)} muted={p.confidence ?? "—"} />
+          <KpiCard label="목표가" value={fmtNum(p.target_price)} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
+          <KpiCard label="손절" value={fmtNum(p.stop_loss)} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
         </div>
 
         {(p.proposed_action || p.notes) && (
@@ -648,7 +759,7 @@ export function WatchlistTable({
             <td style={tdLeft}>{r.name}</td>
             <td style={tdLeft}>{r.asset_class}</td>
             <td style={tdLeft}>{r.currency}</td>
-            <td style={tdRight}>{r.trigger_price != null ? r.trigger_price.toLocaleString() : <span style={mutedDot}>—</span>}</td>
+            <td style={tdRight}>{r.trigger_price != null ? fmtNum(r.trigger_price) : <span style={mutedDot}>—</span>}</td>
             <td style={{ ...tdLeft, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>{r.notes ?? ""}</td>
           </tr>
         ))}

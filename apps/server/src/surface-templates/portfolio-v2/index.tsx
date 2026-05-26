@@ -81,6 +81,10 @@ export default function App() {
   const [filterAccount, setFilterAccount] = useState<string>("");
   const [filterAssetClass, setFilterAssetClass] = useState<string>("");
   const [search, setSearch] = useState("");
+  // AN — quick-filter chip above the positions table (전체 / 수익 / 손실 / stale / cap 위반).
+  const [quickFilter, setQuickFilter] = useState<"all" | "gainers" | "losers" | "stale" | "cap">("all");
+  // AN — bumping refreshTick re-runs the load() effect, re-fetching FX + quotes.
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // ── Load all v2 data ────────────────────────────────────────────────────
   useEffect(() => {
@@ -96,26 +100,46 @@ export default function App() {
 
         let posList: RawPosition[] = [];
         try {
-          const rows = await ariadne.readCsv("positions/current.csv");
-          posList = rows.map((r: any): RawPosition => ({
-            account_id: r.account_id, symbol: r.symbol, name: r.name,
-            asset_class: r.asset_class, sector: r.sector, currency: r.currency,
-            shares: Number(r.shares),
-            buy_price: Number(r.buy_price), current_price: Number(r.current_price),
-            book_value: Number(r.book_value || r.shares * r.buy_price),
-            market_value: Number(r.market_value || r.shares * r.current_price),
-            return_pct: Number(r.return_pct || 0),
-            target_price: r.target_price ? Number(r.target_price) : undefined,
-            stop_loss: r.stop_loss ? Number(r.stop_loss) : undefined,
-            thesis_id: r.thesis_id || undefined,
-            horizon_months: r.horizon_months ? Number(r.horizon_months) : undefined,
-            confidence: r.confidence || undefined,
-            last_reviewed: r.last_reviewed || undefined,
-            quote_symbol: r.quote_symbol || undefined,
-            quote_source: r.quote_source || "yahoo",
-            has_live_quote: r.has_live_quote === "true" || r.has_live_quote === true,
-            notes: r.notes || undefined,
-          }));
+          // AN — readCsv returns { headers, rows }; the old code treated
+          // the whole object as the array → posList silently stayed empty
+          // → "보유 종목 동작 안함". Destructure + defensive number coercion.
+          const { rows } = await ariadne.readCsv("positions/current.csv");
+          const toNum = (v: any, fallback = 0): number => {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : fallback;
+          };
+          posList = rows
+            .filter((r: any) => r.account_id && r.symbol)
+            .map((r: any): RawPosition => {
+              const shares = toNum(r.shares);
+              const buy_price = toNum(r.buy_price);
+              const current_price = toNum(r.current_price);
+              return {
+                account_id: r.account_id, symbol: r.symbol, name: r.name || r.symbol,
+                asset_class: r.asset_class || "기타", sector: r.sector || "기타",
+                currency: r.currency || "KRW",
+                shares, buy_price, current_price,
+                book_value: r.book_value ? toNum(r.book_value) : shares * buy_price,
+                market_value: r.market_value ? toNum(r.market_value) : shares * current_price,
+                return_pct: r.return_pct != null && r.return_pct !== "" ? toNum(r.return_pct)
+                  : (buy_price > 0 ? ((current_price - buy_price) / buy_price) * 100 : 0),
+                target_price: r.target_price ? toNum(r.target_price) : undefined,
+                stop_loss: r.stop_loss ? toNum(r.stop_loss) : undefined,
+                thesis_id: r.thesis_id || undefined,
+                horizon_months: r.horizon_months ? toNum(r.horizon_months) : undefined,
+                confidence: r.confidence || undefined,
+                last_reviewed: r.last_reviewed || undefined,
+                proposed_action: r.proposed_action || undefined,
+                quote_symbol: r.quote_symbol || undefined,
+                quote_source: r.quote_source || "yahoo",
+                has_live_quote: r.has_live_quote === "true" || r.has_live_quote === true,
+                isin: r.isin || undefined,
+                kr_listing_code: r.kr_listing_code || undefined,
+                listing_market: r.listing_market || undefined,
+                tax_regime: r.tax_regime || undefined,
+                notes: r.notes || undefined,
+              };
+            });
         } catch (_e) { /* */ }
 
         let cashList: CashBucket[] = [];
@@ -158,7 +182,7 @@ export default function App() {
         // line chart restored in AL1.
         let histList: HistPoint[] = [];
         try {
-          const rows = await ariadne.readCsv("history.csv");
+          const { rows } = await ariadne.readCsv("history.csv");
           histList = rows.map((r: any) => ({
             label: String(r.date ?? ""),
             value: Number(r.value ?? 0),
@@ -169,7 +193,7 @@ export default function App() {
         // AM — positions/watchlist.csv (tracked-but-not-held).
         let wlList: typeof watchlist = [];
         try {
-          const rows = await ariadne.readCsv("positions/watchlist.csv");
+          const { rows } = await ariadne.readCsv("positions/watchlist.csv");
           wlList = rows.map((r: any) => ({
             symbol: r.symbol,
             name: r.name,
@@ -255,7 +279,9 @@ export default function App() {
     }
     load();
     return () => { cancelled = true; };
-  }, [ariadne, base]);
+  }, [ariadne, base, refreshTick]);
+
+  const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
 
   // ── Derive aggregates ──────────────────────────────────────────────────
   const derived: Derived = useMemo(() => {
@@ -320,20 +346,56 @@ export default function App() {
     const staleTheses = positions.filter((p) => p.last_reviewed && daysBetween(p.last_reviewed, today) > 90);
     const missingTheses = positions.filter((p) => !p.thesis_id);
 
+    // AN — pro-trader metrics. Concentration over invested capital (not
+    // net worth), since cash is by definition diversified.
+    const ranked = positions
+      .map((p) => ({ p, base: toBase(p.market_value, p.currency, fxMap) }))
+      .filter((x) => Number.isFinite(x.base) && x.base > 0)
+      .sort((a, b) => b.base - a.base);
+    const totalInvested = ranked.reduce((s, x) => s + x.base, 0);
+    const top1 = ranked[0];
+    const top5 = ranked.slice(0, 5);
+    const concentration = {
+      top1Pct: totalInvested > 0 && top1 ? (top1.base / totalInvested) * 100 : 0,
+      top1Symbol: top1?.p.symbol ?? "—",
+      top5Pct: totalInvested > 0 ? (top5.reduce((s, x) => s + x.base, 0) / totalInvested) * 100 : 0,
+      top5Symbols: top5.map((x) => x.p.symbol),
+    };
+    const gainers = positions.filter((p) => Number.isFinite(p.return_pct) && p.return_pct > 0);
+    const losers = positions.filter((p) => Number.isFinite(p.return_pct) && p.return_pct < 0);
+    const capViolators = ranked
+      .filter((x) => totalInvested > 0 && (x.base / totalInvested) * 100 > 10)
+      .map((x) => x.p);
+
     return {
       totalNetWorthBase, totalInvestedBase, totalCashBase, totalIdleBase,
       byAssetClass, byCurrency, bySector, byRegion,
       accountRollup, closingAccounts, taxAccounts, staleTheses, missingTheses,
+      concentration, gainers, losers, capViolators,
     };
   }, [positions, cash, metals, funds, accounts, fxMap]);
 
   // ── Filter + sort positions ────────────────────────────────────────────
   const visiblePositions = useMemo(() => {
     const lower = search.toLowerCase().trim();
+    // AN — quick-filter pre-pass (chip strip): collect symbols matching
+    // the current chip, then intersect with the existing search/select
+    // filters. 'all' is a no-op.
+    let chipSet: Set<string> | null = null;
+    if (quickFilter === "gainers") chipSet = new Set(derived.gainers.map((p) => `${p.account_id}-${p.symbol}`));
+    else if (quickFilter === "losers") chipSet = new Set(derived.losers.map((p) => `${p.account_id}-${p.symbol}`));
+    else if (quickFilter === "stale") chipSet = new Set(derived.staleTheses.map((p) => `${p.account_id}-${p.symbol}`));
+    else if (quickFilter === "cap") chipSet = new Set(derived.capViolators.map((p) => `${p.account_id}-${p.symbol}`));
+
     let list = positions.filter((p) => {
+      if (chipSet && !chipSet.has(`${p.account_id}-${p.symbol}`)) return false;
       if (filterAccount && p.account_id !== filterAccount) return false;
       if (filterAssetClass && p.asset_class !== filterAssetClass) return false;
-      if (lower && !p.symbol.toLowerCase().includes(lower) && !p.name.toLowerCase().includes(lower)) return false;
+      if (lower) {
+        const sym = (p.symbol ?? "").toLowerCase();
+        const nm = (p.name ?? "").toLowerCase();
+        if (!sym.includes(lower) && !nm.includes(lower)) return false;
+      }
       return true;
     });
     list = list.slice().sort((a, b) => {
@@ -349,7 +411,7 @@ export default function App() {
       return 0;
     });
     return list;
-  }, [positions, filterAccount, filterAssetClass, search, sortKey, sortDir, fxMap]);
+  }, [positions, derived, quickFilter, filterAccount, filterAssetClass, search, sortKey, sortDir, fxMap]);
 
   const flipSort = useCallback((k: typeof sortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -382,7 +444,7 @@ export default function App() {
     }
     tasks.push((async () => {
       try {
-        const rows = await ariadne.readCsv(`positions/history/${key}.csv`);
+        const { rows } = await ariadne.readCsv(`positions/history/${key}.csv`);
         const points = rows
           .map((r: any) => ({
             label: String(r.date ?? ""),
@@ -418,7 +480,7 @@ export default function App() {
       </div>
 
       <ActionStrip accounts={accounts} derived={derived} buckets={buckets} base={base} />
-      <NetWorthCard accounts={accounts} positions={positions} derived={derived} base={base} />
+      <NetWorthCard accounts={accounts} positions={positions} derived={derived} base={base} onRefresh={refreshQuotes} />
       <ValueTrendChart history={history} base={base} showFx={showFx} setShowFx={setShowFx} />
       {/* AM — '자산 배분' (AllocationGrid + BucketGapTable) removed per user
           request. TriggerGauge stays — it's about trade timing, not allocation. */}
@@ -428,7 +490,9 @@ export default function App() {
         accounts={accounts}
         positions={positions}
         visiblePositions={visiblePositions}
+        derived={derived}
         fxMap={fxMap}
+        base={base}
         quoteFailures={quoteFailures}
         search={search}
         setSearch={setSearch}
@@ -436,6 +500,8 @@ export default function App() {
         setFilterAccount={setFilterAccount}
         filterAssetClass={filterAssetClass}
         setFilterAssetClass={setFilterAssetClass}
+        quickFilter={quickFilter}
+        setQuickFilter={setQuickFilter}
         sortKey={sortKey}
         sortDir={sortDir}
         flipSort={flipSort}
@@ -454,6 +520,7 @@ export default function App() {
           priceHistory={activePriceHistory}
           newsBody={activeNews}
           onClose={() => setActivePosition(null)}
+          onRefreshQuote={refreshQuotes}
         />
       )}
     </div>

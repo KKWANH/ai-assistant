@@ -3,7 +3,8 @@
  * Pure functions only — no React imports, no SDK calls.
  */
 
-export function fmtMoney(amount: number, currency: string): string {
+export function fmtMoney(amount: number | undefined | null, currency: string): string {
+  if (amount == null || !Number.isFinite(amount)) return "—";
   const abs = Math.abs(amount);
   let s: string;
   if (currency === "KRW") {
@@ -15,6 +16,7 @@ export function fmtMoney(amount: number, currency: string): string {
   }
   if (currency === "USD") return "$" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
   if (currency === "EUR") return "€" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (currency === "JPY") return "¥" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
   return amount.toLocaleString() + " " + currency;
 }
 
@@ -34,10 +36,25 @@ export function daysUntil(iso: string, ref: Date = new Date()): number {
 }
 
 /** FX conversion: amount in `from` → base. fxMap is { USD: 0.00075, EUR: 0.00072, KRW: 1 }
- *  (each entry = how many base-units 1 unit of `from` equals). */
+ *  (each entry = how many base-units 1 unit of `from` equals).
+ *  AM defensive: undefined / NaN amounts → 0. Better than propagating NaN
+ *  through derived totals (the previous behaviour caused the whole
+ *  positions table to render '—' because every fmtMoney(NaN) collapsed). */
 export function toBase(amount: number, from: string, fxMap: Record<string, number>): number {
+  if (!Number.isFinite(amount)) return 0;
   const rate = fxMap[from] ?? (from === "MIXED" ? 1 : 1);
   return amount * rate;
+}
+
+/** Format a possibly-undefined number safely. AN — used everywhere a
+ *  CSV-derived number reaches the DOM, since malformed rows / missing
+ *  columns turn into NaN and crash callers like
+ *  `pos.buy_price.toLocaleString()`. */
+export function fmtNum(n: number | undefined | null, opts?: { decimals?: number }): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return n.toLocaleString(undefined, opts?.decimals != null
+    ? { minimumFractionDigits: opts.decimals, maximumFractionDigits: opts.decimals }
+    : undefined);
 }
 
 /** Region heuristic — uses Yahoo-style symbol suffixes + currency fallback. */

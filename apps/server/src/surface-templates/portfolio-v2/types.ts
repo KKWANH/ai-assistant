@@ -166,4 +166,14 @@ export interface Derived {
   taxAccounts: Account[];
   staleTheses: RawPosition[];
   missingTheses: RawPosition[];
+  /** AN — pro-trader metrics. */
+  concentration: {
+    top1Pct: number;       // single largest position % of net worth
+    top1Symbol: string;
+    top5Pct: number;       // top 5 positions combined %
+    top5Symbols: string[];
+  };
+  losers: RawPosition[];   // return_pct < 0
+  gainers: RawPosition[];  // return_pct > 0
+  capViolators: RawPosition[];  // single-stock > 10%
 }
