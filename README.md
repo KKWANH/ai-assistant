@@ -120,12 +120,19 @@ machine.
   next release has to pass — see [`docs/RAG_HARNESS.md`](docs/RAG_HARNESS.md).
 - **Hooks**: `.ariadne/hooks.yaml` runs commands on staged-edit apply,
   scan complete, memory add, etc. Loopback-edit only.
-- **Custom surfaces**: write a TS dashboard in `.ariadne/surface.tsx`,
-  runs in a sandboxed iframe with a postMessage SDK over your files.
+- **Custom surfaces**: write a TS dashboard in `.ariadne/surface.tsx`
+  (single file) **or** `.ariadne/surface/index.tsx` (folder form with
+  imports — preferred when the dashboard grows past one file). Runs in
+  a sandboxed iframe with a postMessage SDK over your files. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §"Custom surfaces"
+  and [`docs/PORTFOLIO_STARTER_V2.md`](docs/PORTFOLIO_STARTER_V2.md)
+  for a real multi-file dashboard.
 
 Full feature index lives in
 [`docs/PRODUCT_PLAN.md`](docs/PRODUCT_PLAN.md);
-architecture is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+architecture is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
+the speed contract that keeps the app fast as it grows is in
+[`docs/PERFORMANCE_ARCHITECTURE.md`](docs/PERFORMANCE_ARCHITECTURE.md).
 
 ---
 
@@ -196,6 +203,12 @@ What's pending lives in:
   need to land first)
 - [`docs/PRODUCT_STRATEGY.md`](docs/PRODUCT_STRATEGY.md) — licensing,
   IP, monetization, EU AI Act / GDPR / PIPA posture
+- [`docs/PERFORMANCE_ARCHITECTURE.md`](docs/PERFORMANCE_ARCHITECTURE.md) —
+  speed contract (cold-load / TTFT / retrieval / bundle budgets)
+- [`docs/PORTFOLIO_STARTER_V2.md`](docs/PORTFOLIO_STARTER_V2.md) —
+  brokerage-app workspace shape (multi-account + 3-tier analysis)
+- [`docs/STOCK_API_AUDIT.md`](docs/STOCK_API_AUDIT.md) — quote/FX SDK
+  capability + multi-market accuracy
 - [`docs/DESKTOP_APP_PLAN.md`](docs/DESKTOP_APP_PLAN.md) — Tauri
   shell plan
 

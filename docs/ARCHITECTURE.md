@@ -1,8 +1,61 @@
 # Ariadne — Architecture
 
-The current architecture of Ariadne. Pairs with `PRODUCT_PLAN.md` (the vision)
-and `DESIGN_GUIDELINE.md` (the visual language). `README.md` is the user-facing
+The current architecture of Ariadne. Pairs with `PRODUCT_PLAN.md` (the
+vision), `PERFORMANCE_ARCHITECTURE.md` (the speed contract), and
+`DESIGN_GUIDELINE.md` (the visual language). `README.md` is the user-facing
 overview; this is the engineering reference.
+
+## System diagram
+
+```
+                        ┌──────────────────────────────┐
+                        │  Browser  ·  any device      │
+                        └──────────────┬───────────────┘
+                                       │ https
+                  ┌────────────────────▼─────────────────────┐
+                  │   Cloudflare Tunnel                       │
+                  │   ai.kwanho.dev  ·  or *.trycloudflare    │
+                  └────────────────────┬─────────────────────┘
+                                       │ loopback only
+        ┌──────────────────────────────▼───────────────────────────────────┐
+        │  Your machine                                                     │
+        │                                                                   │
+        │  ┌────────────────────────────────────────────────────────────┐  │
+        │  │  Supervisor  (apps/admin)                                  │  │
+        │  │  · log rotation · process watch · admin dashboard (7459)   │  │
+        │  └──────┬─────────────────────────┬───────────────────────────┘  │
+        │         │spawns                  │spawns                          │
+        │  ┌──────▼───────────┐    ┌───────▼───────────────┐                │
+        │  │  cloudflared     │    │  Ariadne server (4319)│                │
+        │  │  (tunnel proc.)  │    │  Fastify · TypeScript  │                │
+        │  └──────────────────┘    └───┬───────────────────┘                │
+        │                              │                                    │
+        │                              ├─ SQLite  data/ariadne.db           │
+        │                              ├─ Local folders  <workspaceRoot>    │
+        │                              │     ├─ .ariadne/  (per-workspace)  │
+        │                              │     │   runs / snapshots / claims  │
+        │                              │     │   evidence / actions.yaml    │
+        │                              │     │   surface.tsx OR             │
+        │                              │     │     surface/ (AH folder form)│
+        │                              │     │   surface-dist/bundle.js     │
+        │                              │     └─ user files (read-only       │
+        │                              │                   except staged    │
+        │                              │                   diff applies)    │
+        │                              ├─ AI providers (your API keys)      │
+        │                              │     · Anthropic · OpenAI · Gemini  │
+        │                              │     · Moonshot/Kimi · Ollama · vLLM│
+        │                              │     · Mock (no key)                │
+        │                              └─ MCP stdio servers (lazy spawn)    │
+        │                                                                   │
+        │  React SPA bundled by Vite, served from server                    │
+        └───────────────────────────────────────────────────────────────────┘
+```
+
+Loopback (`localhost`) and remote (tunnel) requests are split: tunnel
+requests can read + chat + run pre-approved actions, but **cannot edit
+surfaces, scripts, hooks, or MCP servers**. The gate uses the
+`cf-connecting-ip` header the tunnel always adds — spoofed `Host`
+headers can't cross it.
 
 ## Monorepo
 
@@ -97,10 +150,42 @@ streamed answer. Plan + step state stream live to the UI.
 
 ## Custom surfaces
 
-A workspace may carry a user-authored `.ariadne/surface.tsx`. The server bundles
-it with esbuild; the web app renders it in a `sandbox="allow-scripts"` iframe.
-The surface talks to the authenticated parent via a postMessage SDK (read files,
-CSV, run templates, …). The iframe is themed from the shared `THEME_TOKENS`.
+A workspace may carry a user-authored dashboard. Two layouts supported:
+
+| Layout | Entry path | Use when |
+|---|---|---|
+| **Single-file** | `.ariadne/surface.tsx` | Small dashboards, one component |
+| **Folder** (AH.3) | `.ariadne/surface/index.tsx` | Large dashboards; split into types / yaml / utils / primitives / sections / index. Bundled the same way — esbuild follows imports. |
+
+```
+.ariadne/surface/                ← AH.3 folder form (preferred when growing)
+├── index.tsx                    ← entry; default export = the page
+├── types.ts                     ← shared interfaces
+├── yaml.ts                      ← inline parser (if YAML data)
+├── utils.ts                     ← formatters / FX / heuristics
+├── primitives.tsx               ← Section / KpiCard / Table / Badge / …
+├── sections.tsx                 ← page-level sections
+└── …any other files you want imported by index.tsx
+```
+
+Build pipeline (`apps/server/src/services/surfaceBuild.ts`):
+
+1. Esbuild reads `.ariadne/surface/index.tsx` (or `surface.tsx` fallback).
+2. Bundles with `@ariadne/surface` aliased to `apps/server/src/surface/runtime.tsx`
+   — React, hooks (`useState`, `useEffect`, `useMemo`, …), `useAriadne()`
+   SDK, chart primitives (`LineChart`, `BarChart`, `PieChart`).
+3. Outputs single IIFE → `.ariadne/surface-dist/bundle.js`.
+4. Web app renders it in a `sandbox="allow-scripts"` iframe.
+5. Iframe ↔ parent talks via postMessage SDK: `readCsv`, `readText`,
+   `listFiles`, `runTemplate`, `getQuotes`, `getFxRates`. Themed from the
+   shared `THEME_TOKENS`.
+
+Reference implementation: the Portfolio v2 surface at
+`data/portfolio/.ariadne/surface/*` (gitignored; per
+`docs/PORTFOLIO_STARTER_V2.md`). 6 files, bundle ~1.1 MB, brokerage-app
+shape (action strip + net-worth + 4-chart allocation grid + accounts
+table + sortable positions table + cash & manual assets + analysis
+links).
 
 ## Supervisor (apps/admin)
 
