@@ -11,6 +11,7 @@
 import { BarChart, PieChart, LineChart, useState } from "@ariadne/surface";
 import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
 import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase } from "./utils";
+import { Markdown } from "./markdown";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
   tdLeft, tdRight, inputStyle, subHead, mutedDot,
@@ -825,34 +826,24 @@ export function PositionDetailPage({
       {/* AO — News / thesis panes only render when content exists. No
           more "(파일 없음 — ... 작성 권장)" placeholders cluttering the
           page. The live snapshot above carries the weight when files
-          are missing. */}
+          are missing.
+          AP — markdown rendered via the lightweight ./markdown component:
+          tables (analyst-target grids), headings, lists, bold/italic,
+          links. Was <pre> with whitespace-pre-wrap before; analysts'
+          target tables were unreadable. */}
       {newsBody && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>뉴스 · 증권사 의견</div>
-          <pre style={{
-            fontSize: 11,
-            background: "rgb(var(--surface-2))",
-            padding: 12,
-            borderRadius: 6,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            margin: 0,
-          }}>{newsBody}</pre>
+        <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, color: "rgb(var(--muted-foreground))" }}>뉴스 · 증권사 의견</div>
+          <Markdown source={newsBody} />
         </div>
       )}
 
       {thesisBody && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>analysis/micro/{p.thesis_id ?? "?"}.md</div>
-          <pre style={{
-            fontSize: 11,
-            background: "rgb(var(--surface-2))",
-            padding: 12,
-            borderRadius: 6,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            margin: 0,
-          }}>{thesisBody}</pre>
+        <div style={{ padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, color: "rgb(var(--muted-foreground))" }}>
+            analysis/micro/{p.thesis_id ?? "?"}.md
+          </div>
+          <Markdown source={thesisBody} />
         </div>
       )}
 
