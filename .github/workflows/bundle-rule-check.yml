@@ -1,0 +1,63 @@
+name: Bundle rule rationale check
+
+# PR이 scripts/check-bundle-budgets.ts 의 CATEGORY_RULES 또는 EAGER_TOTAL_BUDGET
+# 을 만지면, PR description에 'rationale:' / 'reason:' / 'why:' 한 줄이 있는지
+# 검사. 없으면 fail — '예산을 올리는 PR은 왜 올리는지 명시해야 한다'는
+# PERFORMANCE_ARCHITECTURE §5 hot-rule 5의 코드화.
+#
+# 의도적으로 작음 — 룰 자체는 가벼우니 별도 workflow.
+# PR이 budget 룰을 안 만지면 즉시 skip → no-op cost.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check-bundle-budgets.ts'
+
+jobs:
+  rationale-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Inspect PR diff for budget changes
+        id: diff
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          # Look only at the budget-table-defining lines: CATEGORY_RULES
+          # entries (`{ match:` style), the EAGER_TOTAL_BUDGET constant,
+          # and the SMALL_UNBUDGETED_LIMIT_GZ constant. Anything else
+          # in the file (refactor, type fix, comment) doesn't need a
+          # rationale.
+          touched=$(git diff "$BASE_SHA" "$HEAD_SHA" -- scripts/check-bundle-budgets.ts | \
+            grep -E '^\+.*(\{ *match:|EAGER_TOTAL_BUDGET|SMALL_UNBUDGETED_LIMIT_GZ|budgetGz:)' || true)
+          if [ -n "$touched" ]; then
+            echo "touched_budget=true" >> "$GITHUB_OUTPUT"
+            echo "Changed budget lines:"
+            echo "$touched"
+          else
+            echo "touched_budget=false" >> "$GITHUB_OUTPUT"
+            echo "No budget changes — skip rationale check."
+          fi
+
+      - name: Require rationale in PR body
+        if: steps.diff.outputs.touched_budget == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # The check is intentionally permissive — any of these forms
+          # passes: 'rationale:', 'reason:', 'why:', 'because' (case-
+          # insensitive). The goal is to make budget bumps a deliberate
+          # one-line declaration, not a paper exercise.
+          if echo "$PR_BODY" | grep -iqE '(rationale|reason|why)[:[:space:]]|^\s*because\b'; then
+            echo "✓ PR body contains rationale/reason/why for the budget change."
+            exit 0
+          fi
+          echo "::error::This PR changes a budget rule in scripts/check-bundle-budgets.ts."
+          echo "::error::Per docs/PERFORMANCE_ARCHITECTURE.md §5 hot-rule 5, budget bumps"
+          echo "::error::require a written rationale. Add a 'rationale: …' / 'reason: …' /"
+          echo "::error::'why: …' line to the PR description and re-run."
+          exit 1

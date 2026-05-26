@@ -73,3 +73,57 @@ cases:
     expectedClaims: []
     forbiddenClaims: ["$", "billion", "million"]
     expectedAbstention: true
+
+  # ── AJ — INTELLIGENCE_TUNING.md §1 metrics ──────────────────────────────
+  # These three guard the AI4 prompt changes against silent regression
+  # in a future prompt rewrite.
+
+  # Citation requirement — when sources are present, the answer must
+  # carry at least one [1]-style marker. INTELLIGENCE_TUNING §1.2.
+  - id: gen-citation-required-001
+    workspace: portfolio-small
+    query: "What's my TSLA quantity according to the holdings file?"
+    requiredContext: ["holdings.csv"]
+    expectedClaims: ["12", "[1]"]
+    forbiddenClaims: []
+    expectedAbstention: false
+
+  # Gap acknowledgement — when the supplied context can't answer part of
+  # the question, the answer must say so. INTELLIGENCE_TUNING §1.3.
+  - id: gen-gap-acknowledge-001
+    workspace: portfolio-small
+    query: "What's my TSLA quantity and what's the company's CEO compensation last year?"
+    requiredContext: ["holdings.csv"]
+    expectedClaims: ["12"]
+    forbiddenClaims: []
+    # The answer must contain a phrase signalling the second part is
+    # not covered. Either the explicit phrasing we asked the prompt to
+    # use, or a generic 'context doesn't include' / 'no information'
+    # is acceptable.
+    expectedGapAck: true
+    gapAckPhrases:
+      - "doesn't include"
+      - "don't see anything"
+      - "from general knowledge"
+      - "context doesn't"
+      - "not in the supplied"
+    expectedAbstention: false
+
+  # Anti-padding — first sentence should answer the question (no
+  # 'Great question!' / 'Sure! Here is…' intros). INTELLIGENCE_TUNING §1.4.
+  # The metric: the first 100 chars must contain at least one substring
+  # from expectedClaims. Padding answers fail because they front-load
+  # filler.
+  - id: gen-no-padding-001
+    workspace: portfolio-small
+    query: "What's the USD to KRW exchange rate?"
+    requiredContext: ["fx-rates.csv"]
+    expectedClaims: ["1380"]
+    forbiddenClaims: []
+    leadWithAnswer: true
+    forbidLeadPhrases:
+      - "Great question"
+      - "Sure!"
+      - "I'd be happy to help"
+      - "Let me explain"
+    expectedAbstention: false

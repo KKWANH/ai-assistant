@@ -321,6 +321,16 @@ async function main(): Promise<void> {
   console.log(`Expected claims hit (mean): ${(agg.meanExpectedClaimsHit * 100).toFixed(1)}%`);
   console.log(`Forbidden claim leak rate: ${(agg.forbiddenClaimLeakRate * 100).toFixed(1)}%`);
   console.log(`Context P / R: ${(agg.meanContextPrecision * 100).toFixed(1)}% / ${(agg.meanContextRecall * 100).toFixed(1)}%`);
+  // AI4 intelligence metrics — only printed when the case set opted in.
+  if (agg.citationCases > 0) {
+    console.log(`Citation rate: ${(agg.citationRate * 100).toFixed(1)}% (${agg.citationCases.toString()} cases)`);
+  }
+  if (agg.gapAckCases > 0) {
+    console.log(`Gap-ack rate: ${(agg.gapAckRate * 100).toFixed(1)}% (${agg.gapAckCases.toString()} cases)`);
+  }
+  if (agg.leadWithAnswerCases > 0) {
+    console.log(`Lead-with-answer rate: ${(agg.leadWithAnswerRate * 100).toFixed(1)}% (${agg.leadWithAnswerCases.toString()} cases)`);
+  }
   console.log(`Latency: mean ${agg.meanLatencyMs.toFixed(1)}ms  p95 ${agg.p95LatencyMs.toFixed(1)}ms`);
 
   // Reports

@@ -56,6 +56,11 @@ export interface GenCaseMetrics {
   forbiddenClaimLeaks: string[];
   /** Sentences from the answer that had no supporting chunk. */
   unsupportedSentences: string[];
+  /** AJ — intelligence-tuning metrics (INTELLIGENCE_TUNING §1).
+   *  Each is null when the case didn't opt into it. */
+  citationPresent: boolean | null;
+  gapAckPresent: boolean | null;
+  leadsWithAnswer: boolean | null;
   /** Strategy / provider tag for the report. */
   generator: string;
 }
@@ -70,6 +75,15 @@ export interface GenAggregateMetrics {
   meanContextRecall: number;
   meanExpectedClaimsHit: number;
   forbiddenClaimLeakRate: number;
+  /** Citation rate among cases that opted in. */
+  citationRate: number;
+  citationCases: number;
+  /** Gap-acknowledgement rate among cases that opted in. */
+  gapAckRate: number;
+  gapAckCases: number;
+  /** Lead-with-answer rate among cases that opted in. */
+  leadWithAnswerRate: number;
+  leadWithAnswerCases: number;
   meanLatencyMs: number;
   p50LatencyMs: number;
   p95LatencyMs: number;
@@ -226,6 +240,33 @@ export function evaluateGenerationCase(
     lower.includes(cl.toLowerCase()),
   );
 
+  // ── AJ — intelligence-tuning metrics (INTELLIGENCE_TUNING §1) ───────────
+
+  // Citation presence: at least one [N] marker.
+  const citationPresent: boolean | null =
+    contextChunks.length > 0 && c.expectedClaims.some((cl) => cl.includes("["))
+      ? /\[\d+\]/.test(answer)
+      : null;
+
+  // Gap acknowledgement: answer must contain at least one of the
+  // gapAckPhrases when the case opted in.
+  const gapAckPresent: boolean | null = c.expectedGapAck
+    ? (c.gapAckPhrases ?? []).some((p) => lower.includes(p.toLowerCase()))
+    : null;
+
+  // Lead-with-answer: the first ~100 chars must contain at least one
+  // expectedClaim, AND must not begin with any forbidLeadPhrase. Both
+  // halves must pass when the case opts in.
+  let leadsWithAnswer: boolean | null = null;
+  if (c.leadWithAnswer) {
+    const lead = answer.slice(0, 100).toLowerCase();
+    const leadHasClaim = c.expectedClaims.some((cl) => lead.includes(cl.toLowerCase()));
+    const leadHasPadding = (c.forbidLeadPhrases ?? []).some((p) =>
+      lead.startsWith(p.toLowerCase()),
+    );
+    leadsWithAnswer = leadHasClaim && !leadHasPadding;
+  }
+
   return {
     caseId: c.id,
     workspace: c.workspace,
@@ -241,6 +282,9 @@ export function evaluateGenerationCase(
     expectedClaimsHit,
     forbiddenClaimLeaks,
     unsupportedSentences,
+    citationPresent,
+    gapAckPresent,
+    leadsWithAnswer,
     generator,
   };
 }
@@ -257,6 +301,12 @@ export function aggregateGeneration(rows: GenCaseMetrics[]): GenAggregateMetrics
       meanContextRecall: 0,
       meanExpectedClaimsHit: 0,
       forbiddenClaimLeakRate: 0,
+      citationRate: 0,
+      citationCases: 0,
+      gapAckRate: 0,
+      gapAckCases: 0,
+      leadWithAnswerRate: 0,
+      leadWithAnswerCases: 0,
       meanLatencyMs: 0,
       p50LatencyMs: 0,
       p95LatencyMs: 0,
@@ -267,6 +317,10 @@ export function aggregateGeneration(rows: GenCaseMetrics[]): GenAggregateMetrics
   const abstentionPrecision = abstentionRows.length === 0
     ? 1
     : abstentionRows.filter((r) => r.abstentionCorrect).length / abstentionRows.length;
+  // AJ — only count cases that opted into each AI4 metric (non-null).
+  const citRows = rows.filter((r) => r.citationPresent !== null);
+  const gapRows = rows.filter((r) => r.gapAckPresent !== null);
+  const leadRows = rows.filter((r) => r.leadsWithAnswer !== null);
   const sortedLatency = rows.map((r) => r.latencyMs).sort((a, b) => a - b);
   return {
     cases: n,
@@ -279,6 +333,12 @@ export function aggregateGeneration(rows: GenCaseMetrics[]): GenAggregateMetrics
     meanContextRecall: rows.reduce((s, r) => s + r.contextRecall, 0) / n,
     meanExpectedClaimsHit: rows.reduce((s, r) => s + r.expectedClaimsHit, 0) / n,
     forbiddenClaimLeakRate: rows.filter((r) => r.forbiddenClaimLeaks.length > 0).length / n,
+    citationRate: citRows.length === 0 ? 1 : citRows.filter((r) => r.citationPresent).length / citRows.length,
+    citationCases: citRows.length,
+    gapAckRate: gapRows.length === 0 ? 1 : gapRows.filter((r) => r.gapAckPresent).length / gapRows.length,
+    gapAckCases: gapRows.length,
+    leadWithAnswerRate: leadRows.length === 0 ? 1 : leadRows.filter((r) => r.leadsWithAnswer).length / leadRows.length,
+    leadWithAnswerCases: leadRows.length,
     meanLatencyMs: rows.reduce((s, r) => s + r.latencyMs, 0) / n,
     p50LatencyMs: sortedLatency[Math.floor(sortedLatency.length * 0.5)] ?? 0,
     p95LatencyMs: sortedLatency[Math.floor(sortedLatency.length * 0.95)] ?? 0,

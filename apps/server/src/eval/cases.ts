@@ -166,6 +166,18 @@ export interface GenerationCase {
   /** True when the correct answer is "I don't know" — context is
    *  intentionally absent / off-topic. */
   expectedAbstention: boolean;
+  /** AJ — intelligence eval metrics guarding the AI4 prompt rewrite
+   *  (docs/INTELLIGENCE_TUNING.md §1). All optional; default off. */
+
+  /** Gap-acknowledgement: answer must contain ≥1 of these phrases
+   *  when the supplied context only partially covers the question. */
+  expectedGapAck?: boolean;
+  gapAckPhrases?: string[];
+
+  /** Anti-padding: the first 100 chars must contain ≥1 expectedClaim
+   *  AND must not start with any forbidLeadPhrase. */
+  leadWithAnswer?: boolean;
+  forbidLeadPhrases?: string[];
 }
 
 export function defaultGenerationCasesPath(): string {
@@ -197,6 +209,10 @@ export function loadGenerationCases(
       expectedClaims: c.expectedClaims ?? [],
       forbiddenClaims: c.forbiddenClaims ?? [],
       expectedAbstention: c.expectedAbstention === true,
+      expectedGapAck: c.expectedGapAck === true,
+      gapAckPhrases: c.gapAckPhrases ?? [],
+      leadWithAnswer: c.leadWithAnswer === true,
+      forbidLeadPhrases: c.forbidLeadPhrases ?? [],
     });
   }
   return out;
