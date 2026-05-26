@@ -9,7 +9,7 @@
  */
 
 import { BarChart, PieChart, LineChart } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
 import { fmtMoney, fmtPct, daysBetween, daysUntil, toBase } from "./utils";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
@@ -489,12 +489,18 @@ export function PositionDetail({
   position,
   account,
   thesisBody,
+  priceHistory,
+  newsBody,
   onClose,
   onRefreshQuote,
 }: {
   position: RawPosition;
   account?: Account;
   thesisBody: string | null;
+  /** Per-position price points loaded from positions/history/<key>.csv. */
+  priceHistory: PricePoint[];
+  /** Markdown body of analysis/news/<key>.md (analyst targets + headlines). */
+  newsBody: string | null;
   onClose: () => void;
   onRefreshQuote?: () => void;
 }) {
@@ -570,6 +576,33 @@ export function PositionDetail({
           {p.tax_regime && <span>tax: {p.tax_regime}</span>}
         </div>
 
+        {/* AM — price history chart (if data file present) */}
+        {priceHistory.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
+              가격 추이 ({p.currency}) · {priceHistory.length} points
+            </div>
+            <LineChart data={priceHistory.map((h) => ({ label: h.label, value: h.value }))} width={680} height={180} />
+          </div>
+        )}
+
+        {/* AM — news + analyst targets (if file present) */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>뉴스 · 증권사 의견</div>
+          <pre style={{
+            fontSize: 11,
+            background: "rgb(var(--surface-2))",
+            padding: 10,
+            borderRadius: 6,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            margin: 0,
+            color: newsBody ? "rgb(var(--foreground))" : "rgb(var(--muted-foreground))",
+          }}>
+            {newsBody ?? "(news 파일 없음 — analysis/news/" + (p.kr_listing_code || p.symbol) + ".md 작성 권장. 증권사 목표가 + 헤드라인 + 사용자 메모.)"}
+          </pre>
+        </div>
+
         <div>
           <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>analysis/micro/{p.thesis_id ?? "?"}.md</div>
           <pre style={{
@@ -586,6 +619,66 @@ export function PositionDetail({
           </pre>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─ AM — Watchlist table ──────────────────────────────────────────────────
+// Renders positions/watchlist.csv. Separate section so watchlist entries
+// don't blend in with held positions (different decision frame: 'when
+// should I open?' vs 'when should I adjust?').
+export function WatchlistTable({
+  rows,
+  onRowClick,
+}: {
+  rows: Array<{ symbol: string; name: string; asset_class: string; sector: string; currency: string; trigger_price?: number; thesis_id?: string; notes?: string; quote_symbol?: string }>;
+  onRowClick?: (symbol: string) => void;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <Section title={`Watchlist (${rows.length})`} icon="👀">
+      <Table headers={["종목", "이름", "자산군", "통화", "trigger price", "메모"]}>
+        {rows.map((r) => (
+          <tr
+            key={r.symbol}
+            style={{ borderBottom: "1px solid rgb(var(--border))", cursor: onRowClick ? "pointer" : "default" }}
+            onClick={onRowClick ? () => onRowClick(r.symbol) : undefined}
+          >
+            <td style={tdLeft}><strong>{r.symbol}</strong></td>
+            <td style={tdLeft}>{r.name}</td>
+            <td style={tdLeft}>{r.asset_class}</td>
+            <td style={tdLeft}>{r.currency}</td>
+            <td style={tdRight}>{r.trigger_price != null ? r.trigger_price.toLocaleString() : <span style={mutedDot}>—</span>}</td>
+            <td style={{ ...tdLeft, fontSize: 11, color: "rgb(var(--muted-foreground))" }}>{r.notes ?? ""}</td>
+          </tr>
+        ))}
+      </Table>
+    </Section>
+  );
+}
+
+// ─ AM — Base currency selector ────────────────────────────────────────────
+// Lets the user pick KRW / USD / EUR / JPY as the reporting unit on the
+// fly. fxMap re-resolves and every fmtMoney() call re-renders accordingly.
+const SUPPORTED_BASES = ["KRW", "USD", "EUR", "JPY"] as const;
+export function BaseCurrencySelector({ base, onChange }: { base: string; onChange: (cur: string) => void }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+      <span style={{ color: "rgb(var(--muted-foreground))" }}>기준 통화</span>
+      <select
+        value={base}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          fontSize: 12,
+          padding: "3px 6px",
+          background: "rgb(var(--background))",
+          color: "rgb(var(--foreground))",
+          border: "1px solid rgb(var(--border))",
+          borderRadius: 4,
+        }}
+      >
+        {SUPPORTED_BASES.map((c) => (<option key={c} value={c}>{c}</option>))}
+      </select>
     </div>
   );
 }

@@ -13,7 +13,7 @@ Review every AI edit as a staged diff. Never train on your data.
 [![node ≥22](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](docs/INSTALL.md)
 [![retrieval Hit@6 76.5%](https://img.shields.io/badge/retrieval%20Hit%406-76.5%25-success.svg)](docs/RAG_HARNESS.md)
 
-[Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [Positioning](docs/POSITIONING.md) · [Launch plan](docs/LAUNCH_PLAN.md) · [API](docs/API.md)
+[**How to use →**](docs/HOW_TO_USE.md) · [Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [Positioning](docs/POSITIONING.md) · [Launch plan](docs/LAUNCH_PLAN.md) · [API](docs/API.md)
 
 </div>
 

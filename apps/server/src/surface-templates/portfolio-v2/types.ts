@@ -144,6 +144,13 @@ export interface HistPoint {
   fxEffect: number;
 }
 
+/** Per-position price history point (AM — read from positions/history/<key>.csv). */
+export interface PricePoint {
+  label: string;    // ISO date
+  value: number;    // price in the position's native currency
+  note?: string;
+}
+
 /** Aggregates derived from raw data — computed in index.tsx, consumed by sections. */
 export interface Derived {
   totalNetWorthBase: number;

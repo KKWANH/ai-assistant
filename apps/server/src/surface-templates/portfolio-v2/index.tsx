@@ -25,15 +25,22 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, BucketTarget, IndexTrigger, HistPoint, PricePoint } from "./types";
 import { parseYaml } from "./yaml";
 import { toBase, regionOf, daysBetween } from "./utils";
 import {
-  ActionStrip, NetWorthCard, AllocationGrid, AccountsTable,
+  ActionStrip, NetWorthCard, AccountsTable,
   PositionsTable, CashAndManualAssets, RecentAnalysis,
-  BucketGapTable, TriggerGauge,
+  TriggerGauge,
   ValueTrendChart, ReturnsBarChart, PositionDetail,
+  WatchlistTable, BaseCurrencySelector,
 } from "./sections";
+
+// AM — key used to look up price history + news files.
+// Prefer KR listing code (6-digit), fall back to Yahoo/display symbol.
+function fileKey(p: RawPosition): string {
+  return p.kr_listing_code || p.quote_symbol || p.symbol;
+}
 
 export default function App() {
   const ariadne = useAriadne();
@@ -52,9 +59,20 @@ export default function App() {
   const [history, setHistory] = useState<HistPoint[]>([]);
   const [showFx, setShowFx] = useState(false);
   // AL1 — drill-down modal state: clicked-position + its loaded thesis body.
+  // AM adds: priceHistory + newsBody for the active position.
   const [activePosition, setActivePosition] = useState<RawPosition | null>(null);
   const [activeThesis, setActiveThesis] = useState<string | null>(null);
-  const [base] = useState<string>("KRW");
+  const [activePriceHistory, setActivePriceHistory] = useState<PricePoint[]>([]);
+  const [activeNews, setActiveNews] = useState<string | null>(null);
+  // AM — reporting currency is user-selectable; KRW default for the
+  // Korea-resident reference workspace, switchable to USD / EUR / JPY.
+  const [base, setBase] = useState<string>("KRW");
+  // AM — watchlist (positions/watchlist.csv).
+  const [watchlist, setWatchlist] = useState<Array<{
+    symbol: string; name: string; asset_class: string; sector: string;
+    currency: string; trigger_price?: number; thesis_id?: string;
+    notes?: string; quote_symbol?: string;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -148,6 +166,23 @@ export default function App() {
           })).filter((h: HistPoint) => h.label && Number.isFinite(h.value));
         } catch (_e) { /* file absent — chart silently hidden */ }
 
+        // AM — positions/watchlist.csv (tracked-but-not-held).
+        let wlList: typeof watchlist = [];
+        try {
+          const rows = await ariadne.readCsv("positions/watchlist.csv");
+          wlList = rows.map((r: any) => ({
+            symbol: r.symbol,
+            name: r.name,
+            asset_class: r.asset_class,
+            sector: r.sector,
+            currency: r.currency,
+            trigger_price: r.trigger_price ? Number(r.trigger_price) : undefined,
+            thesis_id: r.thesis_id || undefined,
+            notes: r.notes || undefined,
+            quote_symbol: r.quote_symbol || undefined,
+          })).filter((r: any) => r.symbol);
+        } catch (_e) { /* */ }
+
         const af = { macro: [] as string[], meso: [] as string[], micro: [] as string[] };
         try {
           const all = await ariadne.listFiles("analysis/**/*.md");
@@ -167,9 +202,12 @@ export default function App() {
         setBuckets(bucketList);
         setTriggers(trigList);
         setHistory(histList);
+        setWatchlist(wlList);
         setAnalysisFiles(af);
 
-        // FX
+        // FX — base currency can change at runtime (AM selector); the
+        // separate effect below re-fetches when base changes without
+        // re-walking the whole load() pipeline.
         const currencies = Array.from(new Set([
           ...posList.map((p) => p.currency),
           ...cashList.map((c) => c.currency),
@@ -320,14 +358,49 @@ export default function App() {
 
   // AL1 — open the drill-down modal. Best-effort load of the thesis
   // markdown so the modal can render the user's stated position view.
+  // AM extends: also fetches positions/history/<key>.csv (price history)
+  // and analysis/news/<key>.md (analyst targets + headlines) in parallel
+  // so the modal renders a price chart + news pane.
   const openPosition = useCallback(async (p: RawPosition) => {
     setActivePosition(p);
     setActiveThesis(null);
-    if (!p.thesis_id) return;
-    try {
-      const body = await ariadne.readText(`analysis/micro/${p.thesis_id}.md`);
-      setActiveThesis(body);
-    } catch (_e) { /* file absent — modal shows the missing-file note */ }
+    setActivePriceHistory([]);
+    setActiveNews(null);
+    const key = fileKey(p);
+
+    // Three independent fetches; failure of any is silently ignored
+    // (the modal renders the missing-file fallback message in each pane).
+    const tasks: Promise<unknown>[] = [];
+
+    if (p.thesis_id) {
+      tasks.push((async () => {
+        try {
+          const body = await ariadne.readText(`analysis/micro/${p.thesis_id}.md`);
+          setActiveThesis(body);
+        } catch (_e) { /* */ }
+      })());
+    }
+    tasks.push((async () => {
+      try {
+        const rows = await ariadne.readCsv(`positions/history/${key}.csv`);
+        const points = rows
+          .map((r: any) => ({
+            label: String(r.date ?? ""),
+            value: Number(r.price ?? 0),
+            note: r.note || undefined,
+          }))
+          .filter((pt: PricePoint) => pt.label && Number.isFinite(pt.value) && pt.value > 0);
+        setActivePriceHistory(points);
+      } catch (_e) { /* */ }
+    })());
+    tasks.push((async () => {
+      try {
+        const body = await ariadne.readText(`analysis/news/${key}.md`);
+        setActiveNews(body);
+      } catch (_e) { /* */ }
+    })());
+
+    await Promise.allSettled(tasks);
   }, [ariadne]);
 
   if (loading) {
@@ -339,11 +412,16 @@ export default function App() {
 
   return (
     <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto", fontSize: 13, color: "rgb(var(--foreground))" }}>
+      {/* AM — base currency selector pinned to the top right. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <BaseCurrencySelector base={base} onChange={setBase} />
+      </div>
+
       <ActionStrip accounts={accounts} derived={derived} buckets={buckets} base={base} />
       <NetWorthCard accounts={accounts} positions={positions} derived={derived} base={base} />
       <ValueTrendChart history={history} base={base} showFx={showFx} setShowFx={setShowFx} />
-      <AllocationGrid derived={derived} />
-      <BucketGapTable buckets={buckets} base={base} />
+      {/* AM — '자산 배분' (AllocationGrid + BucketGapTable) removed per user
+          request. TriggerGauge stays — it's about trade timing, not allocation. */}
       <TriggerGauge triggers={triggers} />
       <AccountsTable accounts={accounts} derived={derived} base={base} />
       <PositionsTable
@@ -363,15 +441,18 @@ export default function App() {
         flipSort={flipSort}
         onRowClick={openPosition}
       />
+      <WatchlistTable rows={watchlist} />
       <CashAndManualAssets accounts={accounts} cash={cash} metals={metals} funds={funds} />
       <RecentAnalysis files={analysisFiles} />
 
-      {/* AL1 — drill-down modal */}
+      {/* AL1 + AM — drill-down modal with price history + news. */}
       {activePosition && (
         <PositionDetail
           position={activePosition}
           account={accounts.find((a) => a.id === activePosition.account_id)}
           thesisBody={activeThesis}
+          priceHistory={activePriceHistory}
+          newsBody={activeNews}
           onClose={() => setActivePosition(null)}
         />
       )}
