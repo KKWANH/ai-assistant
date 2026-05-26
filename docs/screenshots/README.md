@@ -13,7 +13,9 @@ Pick whatever is easiest:
   filename in this folder.
 - **Scripted** — Playwright / Puppeteer is welcome if you want them
   reproducible; the dev server is at `http://localhost:5173` and the daemon
-  reads `data/demo-portfolio/` for the demo state.
+  reads `data/portfolio/` for the demo state (was `data/demo-portfolio/`
+  before the AG promotion — older clones may still have files under the
+  old path; the boot seeder migrates the DB rootPath automatically).
 
 Capture in **dark theme** at roughly **1400 × 900** unless noted, and crop to
 exclude the OS chrome.

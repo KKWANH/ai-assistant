@@ -114,6 +114,12 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   if (fields.fileCount !== undefined) { sets.push("file_count = ?"); vals.push(fields.fileCount); }
   if (fields.visibility !== undefined) { sets.push("visibility = ?"); vals.push(fields.visibility); }
   if (fields.category !== undefined) { sets.push("category = ?"); vals.push(fields.category); }
+  // rootPath is intentionally NOT exposed via the public PATCH route
+  // (UpdateWorkspaceSchema doesn't list it) — repointing has snapshot/
+  // index implications and shouldn't be a casual user action. It IS
+  // exposed at the repo layer so internal migrations (demo-portfolio/ →
+  // portfolio/, in AG) can repoint on boot.
+  if (fields.rootPath !== undefined) { sets.push("root_path = ?"); vals.push(fields.rootPath); }
 
   if (sets.length === 0) return dbGetWorkspace(id);
   vals.push(id);

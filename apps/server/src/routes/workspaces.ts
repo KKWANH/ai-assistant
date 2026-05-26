@@ -50,6 +50,8 @@ const STARTERS: Record<
       "positions/current.csv":         portfolioStarter.POSITIONS_CURRENT_CSV,
       "positions/watchlist.csv":       portfolioStarter.POSITIONS_WATCHLIST_CSV,
       "cash/_index.yaml":              portfolioStarter.CASH_INDEX_YAML,
+      "assets/precious_metals.yaml":   portfolioStarter.ASSETS_PRECIOUS_METALS_YAML,
+      "assets/funds.yaml":             portfolioStarter.ASSETS_FUNDS_YAML,
       "analysis/macro/sample.md":      portfolioStarter.ANALYSIS_MACRO_SAMPLE_MD,
       "analysis/meso/sample.md":       portfolioStarter.ANALYSIS_MESO_SAMPLE_MD,
       "analysis/micro/AAPL-2026-01.md": portfolioStarter.ANALYSIS_MICRO_AAPL_MD,

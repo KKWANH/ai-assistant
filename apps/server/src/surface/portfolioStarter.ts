@@ -444,22 +444,90 @@ accounts:
     is_idle: true
 `;
 
-export const POSITIONS_CURRENT_CSV = `account_id,symbol,name,asset_class,sector,currency,shares,buy_price,current_price,target_price,stop_loss,thesis_id,horizon_months,confidence,last_reviewed
-broker_a_isa,SPY,SPDR S&P 500 ETF,ETF,분산투자,USD,10,617.00,686.00,740.00,,SPY-2026-01,60,medium,2026-04-15
-broker_a_std,AAPL,Apple Inc.,주식,기술,USD,40,271.00,309.00,345.00,250.00,AAPL-2026-01,24,medium,2026-04-12
-broker_a_std,MSFT,Microsoft Corp.,주식,기술,USD,25,384.00,419.00,470.00,360.00,MSFT-2026-01,36,medium,2026-04-12
-broker_b,005930,Samsung Electronics,주식,기술,KRW,200,261000,292500,330000,250000,005930-2026-01,12,low,2026-03-21
-broker_b,069500,KODEX 200 ETF,ETF,분산투자,KRW,150,114200,123350,,,069500-2026-01,60,medium,2026-04-01
-foreign_a,NVDA,NVIDIA Corp.,주식,기술,USD,3,176.00,215.00,260.00,180.00,NVDA-2026-01,18,high,2026-04-29
-foreign_a,GOOGL,Alphabet Class A,주식,기술,USD,7,178.00,231.00,,,GOOGL-2026-01,24,medium,2026-02-10
-foreign_a,VUSA,Vanguard S&P 500 ETF,ETF,분산투자,EUR,18,108.00,123.00,,,VUSA-2026-01,60,medium,
-foreign_a,XAU,Gold (paper),원자재,원자재,EUR,0.5,3700.00,3950.00,,,XAU-2026-01,60,low,2026-03-15
+// Extended v2 CSV schema — adds book_value / market_value / return_pct
+// (computed at maintenance time, so the surface reads them instead of
+// recomputing per render), quote_source + has_live_quote (lets the
+// surface filter to Yahoo-quotable symbols before getQuotes(), so a
+// paper-gold or robo-advisor entry doesn't blank the whole dashboard),
+// and a notes column for free-form per-position context.
+//
+// All values anonymized — generic tickers, round numbers.
+export const POSITIONS_CURRENT_CSV = `account_id,symbol,name,asset_class,sector,currency,shares,buy_price,current_price,book_value,market_value,return_pct,target_price,stop_loss,thesis_id,horizon_months,confidence,last_reviewed,quote_symbol,quote_source,has_live_quote,notes
+broker_a_isa,SPY,SPDR S&P 500 ETF,ETF,분산투자_미국,USD,10,617.00,686.00,6170.00,6860.00,11.18,740.00,,SPY-2026-01,60,medium,2026-04-15,SPY,yahoo,true,ISA route — broad index
+broker_a_std,AAPL,Apple Inc.,주식,기술,USD,40,271.00,309.00,10840.00,12360.00,14.02,345.00,250.00,AAPL-2026-01,24,medium,2026-04-12,AAPL,yahoo,true,
+broker_a_std,MSFT,Microsoft Corp.,주식,기술,USD,25,384.00,419.00,9600.00,10475.00,9.11,470.00,360.00,MSFT-2026-01,36,medium,2026-04-12,MSFT,yahoo,true,
+broker_b,005930,Samsung Electronics,주식,반도체,KRW,200,261000,292500,52200000,58500000,12.07,330000,250000,005930-2026-01,12,low,2026-03-21,005930.KS,yahoo,true,
+broker_b,069500,KODEX 200 ETF,ETF,분산투자_한국,KRW,150,114200,123350,17130000,18502500,8.01,,,069500-2026-01,60,medium,2026-04-01,069500.KS,yahoo,true,
+foreign_a,NVDA,NVIDIA Corp.,주식,반도체_AI,USD,3,176.00,215.00,528.00,645.00,22.16,260.00,180.00,NVDA-2026-01,18,high,2026-04-29,NVDA,yahoo,true,
+foreign_a,GOOGL,Alphabet Class A,주식,기술_광고,USD,7,178.00,231.00,1246.00,1617.00,29.78,,,GOOGL-2026-01,24,medium,2026-02-10,GOOGL,yahoo,true,
+foreign_a,VUSA,Vanguard S&P 500 ETF,ETF,분산투자_미국,EUR,18,108.00,123.00,1944.00,2214.00,13.89,,,VUSA-2026-01,60,medium,,VUSA.AS,yahoo,true,EUR-listed
+foreign_a,GLD,SPDR Gold Shares,원자재,원자재_금,USD,5,200.00,220.00,1000.00,1100.00,10.00,,,GLD-2026-01,60,low,2026-03-15,GLD,yahoo,true,Replaced 'paper gold' with a Yahoo-quotable ETF for the demo. Real workspaces can use assets/precious_metals.yaml for non-quotable.
 `;
 
-export const POSITIONS_WATCHLIST_CSV = `symbol,name,asset_class,sector,currency,trigger_price,thesis_id,notes
-AMD,Advanced Micro Devices,주식,기술,USD,120.00,AMD-watch-2026-01,Wait for AI infra capex cycle to confirm
-TSM,Taiwan Semiconductor,주식,기술,USD,170.00,TSM-watch-2026-01,Geopolitical risk premium considered acceptable below 170
-SCHD,Schwab US Dividend Equity,ETF,분산투자,USD,28.00,SCHD-watch-2026-01,Income leg of the long-term allocation
+export const POSITIONS_WATCHLIST_CSV = `symbol,name,asset_class,sector,currency,trigger_price,thesis_id,quote_symbol,quote_source,notes
+AMD,Advanced Micro Devices,주식,반도체_AI,USD,120.00,AMD-watch-2026-01,AMD,yahoo,Wait for AI infra capex cycle to confirm
+TSM,Taiwan Semiconductor,주식,반도체,USD,170.00,TSM-watch-2026-01,TSM,yahoo,Geopolitical risk premium considered acceptable below 170
+SCHD,Schwab US Dividend Equity,ETF,분산투자,USD,28.00,SCHD-watch-2026-01,SCHD,yahoo,Income leg of the long-term allocation
+`;
+
+// Non-quotable assets — paper precious metals (no Yahoo symbol; manual value).
+// The surface renders these as a separate "manual-value" card with a 'reference
+// spot symbol' line for context.
+export const ASSETS_PRECIOUS_METALS_YAML = `# Paper precious metals — not directly Yahoo-quotable.
+# Surface reads market_value verbatim from this file (user maintains it).
+# spot_reference_symbol is for display only — Yahoo futures pricing as context,
+# not for portfolio P&L.
+
+holdings:
+  - id: gold_paper_sample
+    name: "Gold (broker paper)"
+    account_id: broker_b
+    asset_class: 원자재
+    sector: 원자재_금
+    metal: gold
+    unit: oz
+    quantity: 0.5
+    currency: EUR
+    market_value: 2000
+    return_pct: 15.0
+    quote_source: manual
+    has_live_quote: false
+    spot_reference_symbol: GC=F        # Yahoo gold futures, reference only
+
+  - id: silver_paper_sample
+    name: "Silver (broker paper)"
+    account_id: broker_b
+    asset_class: 원자재
+    sector: 원자재_은
+    metal: silver
+    unit: oz
+    quantity: 5
+    currency: EUR
+    market_value: 200
+    return_pct: -2.0
+    quote_source: manual
+    has_live_quote: false
+    spot_reference_symbol: SI=F
+`;
+
+// Robo-advisor / opaque funds — no public ticker.
+export const ASSETS_FUNDS_YAML = `# Robo-advisor / fund holdings — no ticker, NAV not public.
+# market_value maintained from broker app.
+
+holdings:
+  - id: robo_fund_sample
+    name: "Robo-Advisor Fund (Risk 2/5 sample)"
+    account_id: foreign_a
+    asset_class: 펀드
+    sector: 분산투자_로보
+    risk_level: "2/5 (conservative)"
+    currency: EUR
+    market_value: 450
+    return_pct: 4.5
+    quote_source: manual
+    has_live_quote: false
+    fund_provider: BrokerName
+    underlying_strategy: "Multi-asset ETF basket"
 `;
 
 export const CASH_INDEX_YAML = `# Idle / savings / emergency-fund cash buckets.
@@ -653,6 +721,28 @@ export const GOALS_2026_ALLOCATION_MD = `# 2026 — Target allocation + rebalanc
 - (next review: 2026-Q3)
 `;
 
+// ─────────────────────────────────────────────────────────────────────────
+// SURFACE_TSX
+//
+// This is the v1 single-file dashboard reading holdings.csv / fx_rates.csv /
+// history.csv — the surface a brand-new "Investment portfolio" workspace gets
+// at creation time.
+//
+// The v2 brokerage-app-level surface (multi-account / 3-tier analysis / cash
+// + manual-value assets / action strip) lives at
+//   docs/PORTFOLIO_STARTER_V2.md  (architecture)
+// and is dropped at workspace level as
+//   <workspace>/.ariadne/surface.tsx
+// where it reads the v2 file layout (accounts/, positions/, cash/, assets/,
+// analysis/, goals/). The canonical v2 source for a local user workspace
+// is data/portfolio/.ariadne/surface.tsx in this repo's working tree
+// (gitignored — local-only).
+//
+// Porting the v2 surface back into this template string is the Phase-2
+// follow-up. Until then, new workspaces created via the dialog get the v1
+// surface, and the user upgrades to v2 by copying the file from the
+// canonical source.
+// ─────────────────────────────────────────────────────────────────────────
 export const SURFACE_TSX = `/**
  * Portfolio Analysis — custom Ariadne surface (multi-currency analyst dashboard).
  *
