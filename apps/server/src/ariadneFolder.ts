@@ -76,23 +76,49 @@ export function readArtifact(workspaceRoot: string, relPath: string): string {
 
 // ---------------------------------------------------------------------------
 // Surface helpers (.ariadne/surface.tsx + .ariadne/surface-dist/)
+//
+// Two layouts supported (AH):
+//   (a) Single-file        .ariadne/surface.tsx        — original
+//   (b) Folder + index     .ariadne/surface/index.tsx  — for surfaces
+//                                                        that grow past
+//                                                        one file, like
+//                                                        the brokerage-app
+//                                                        portfolio dashboard
+//
+// The folder form is preferred when present (it's the more expressive shape
+// — index.tsx can import sibling files freely). The single-file form stays
+// as the default for new workspaces and for back-compat with workspaces
+// already in the field. Esbuild resolves whichever path exists.
 // ---------------------------------------------------------------------------
 
-const SURFACE_TSX = ".ariadne/surface.tsx";
-const SURFACE_BUNDLE = ".ariadne/surface-dist/bundle.js";
+const SURFACE_TSX_FILE   = ".ariadne/surface.tsx";
+const SURFACE_INDEX_TSX  = ".ariadne/surface/index.tsx";
+const SURFACE_BUNDLE     = ".ariadne/surface-dist/bundle.js";
 
-/** Read the surface source (.ariadne/surface.tsx) if it exists; returns null otherwise. */
-export function readSurface(workspaceRoot: string): string | null {
-  const dest = path.join(workspaceRoot, SURFACE_TSX);
-  const resolved = path.resolve(dest);
-  assertInsideAriadne(workspaceRoot, resolved);
-  if (!fs.existsSync(resolved)) return null;
-  return fs.readFileSync(resolved, "utf-8");
+/** Resolve which surface source to use for this workspace.
+ *  Folder form wins when present. */
+function resolveSurfaceEntry(workspaceRoot: string): string {
+  const folderEntry = path.resolve(path.join(workspaceRoot, SURFACE_INDEX_TSX));
+  const singleFile = path.resolve(path.join(workspaceRoot, SURFACE_TSX_FILE));
+  if (fs.existsSync(folderEntry)) return folderEntry;
+  return singleFile; // may not exist yet — caller checks
 }
 
-/** Write the surface source to .ariadne/surface.tsx. */
+/** Read the surface source if it exists; returns null otherwise.
+ *  For the folder form, returns the index.tsx contents (siblings are
+ *  read lazily by esbuild at build time, not by this helper). */
+export function readSurface(workspaceRoot: string): string | null {
+  const entry = resolveSurfaceEntry(workspaceRoot);
+  assertInsideAriadne(workspaceRoot, entry);
+  if (!fs.existsSync(entry)) return null;
+  return fs.readFileSync(entry, "utf-8");
+}
+
+/** Write the surface source. Targets `.ariadne/surface.tsx` (single-file
+ *  layout) — users who want the folder form create
+ *  `.ariadne/surface/index.tsx` directly on disk; the build picks it up. */
 export function writeSurface(workspaceRoot: string, source: string): void {
-  const dest = path.resolve(path.join(workspaceRoot, SURFACE_TSX));
+  const dest = path.resolve(path.join(workspaceRoot, SURFACE_TSX_FILE));
   assertInsideAriadne(workspaceRoot, dest);
   fs.writeFileSync(dest, source, "utf-8");
 }
@@ -102,9 +128,10 @@ export function surfaceBundlePath(workspaceRoot: string): string {
   return path.join(workspaceRoot, SURFACE_BUNDLE);
 }
 
-/** Returns the absolute path to the surface TSX source. */
+/** Returns the absolute path to the surface entry TSX source —
+ *  `.ariadne/surface/index.tsx` if present, otherwise `.ariadne/surface.tsx`. */
 export function surfaceTsxPath(workspaceRoot: string): string {
-  return path.join(workspaceRoot, SURFACE_TSX);
+  return resolveSurfaceEntry(workspaceRoot);
 }
 
 // ---------------------------------------------------------------------------

@@ -52,7 +52,10 @@ export async function buildSurface(workspaceRoot: string): Promise<BuildResult> 
 
   const srcPath = surfaceTsxPath(workspaceRoot);
   if (!fs.existsSync(srcPath)) {
-    return { ok: false, error: "surface.tsx does not exist — save a surface source first." };
+    return {
+      ok: false,
+      error: "No surface source — save .ariadne/surface.tsx (single-file) or .ariadne/surface/index.tsx (folder form) first.",
+    };
   }
 
   const outFile = surfaceBundlePath(workspaceRoot);
