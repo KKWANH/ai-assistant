@@ -55,6 +55,7 @@ import {
   useLogout,
   useChats,
   useDeleteChat,
+  useDeleteEmptyChats,
   useUpdateChat,
   useDeleteWorkspace,
 } from "../../lib/queries";
@@ -92,6 +93,97 @@ function Logo({ className }: { className?: string }) {
 }
 
 /** A sidebar chat row — opens the chat; a ⋯ menu renames, moves, or deletes it. */
+// AT — bulk-cleanup chats with no messages. Confirm-then-delete.
+function CleanEmptyChatsButton({ chatsCount }: { chatsCount: number }) {
+  const { t } = useT();
+  const { toast } = useToast();
+  const deleteEmpty = useDeleteEmptyChats();
+  const [confirming, setConfirming] = useState(false);
+  if (confirming) {
+    return (
+      <div className="mx-2 mb-2 px-2 py-1.5 rounded border border-destructive/50 bg-destructive/5 text-2xs flex items-center gap-1.5">
+        <span className="text-foreground">{t("nav.cleanEmptyConfirm") ?? "빈 채팅 모두 삭제?"}</span>
+        <button
+          type="button"
+          onClick={() => {
+            void deleteEmpty.mutateAsync().then((r) => {
+              setConfirming(false);
+              toast({
+                title: (t("nav.cleanEmptyDone") ?? "{n}개 삭제됨").replace("{n}", String(r.deleted)),
+                variant: r.deleted > 0 ? "success" : "default",
+              });
+            });
+          }}
+          className="px-2 py-0.5 rounded bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity"
+        >
+          {t("common.delete") ?? "삭제"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="px-2 py-0.5 rounded border border-border hover:bg-surface-3 transition-colors text-muted-foreground"
+        >
+          {t("common.cancel") ?? "취소"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      title={t("nav.cleanEmptyHint") ?? "메시지 없는 채팅 일괄 삭제"}
+      className="mx-2 mb-1 px-2 py-1 rounded text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors flex items-center gap-1 self-start"
+    >
+      <Trash2 className="h-3 w-3 shrink-0" />
+      {(t("nav.cleanEmpty") ?? "빈 채팅 정리").replace("{n}", String(chatsCount))}
+    </button>
+  );
+}
+
+// AT — paginated chat list. Avoids rendering 500 DOM nodes for users with
+// very long histories. First 50 render eagerly; "Show N more" button
+// reveals the rest in 50-chat chunks.
+function ChatListBody({
+  chats,
+  activeChatId,
+  workspaces,
+  closeMobileNav,
+}: {
+  chats: Chat[];
+  activeChatId: string | null;
+  workspaces: Workspace[] | undefined;
+  closeMobileNav: () => void;
+}) {
+  const { t } = useT();
+  const PAGE = 50;
+  const [shown, setShown] = useState(PAGE);
+  const visible = chats.slice(0, shown);
+  const remaining = chats.length - visible.length;
+  return (
+    <>
+      {visible.map((chat) => (
+        <ChatRow
+          key={chat.id}
+          chat={chat}
+          active={activeChatId === chat.id}
+          workspaces={workspaces}
+          closeMobileNav={closeMobileNav}
+        />
+      ))}
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setShown((s) => s + PAGE)}
+          className="w-full mt-1 px-2 py-1.5 text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 rounded transition-colors"
+        >
+          {t("nav.chatsMore", { n: remaining })} ↓
+        </button>
+      )}
+    </>
+  );
+}
+
 function ChatRow({
   chat,
   active,
@@ -627,26 +719,28 @@ export function AppShell({ children }: AppShellProps) {
             </Link>
           </div>
 
-          {/* Chats list — global conversations only; workspace chats live under their workspace */}
+          {/* AT — bulk action: "빈 채팅 정리" — wipes chats with zero
+              messages owned by the current user. Only shows when the
+              user has more than 5 chats so it doesn't clutter small
+              accounts. */}
+          {globalChats && globalChats.length > 5 && (
+            <CleanEmptyChatsButton chatsCount={globalChats.length} />
+          )}
+
+          {/* Chats list — global conversations only; workspace chats live under their workspace.
+              AT: cap removed. List scrolls inside the flex-1 container.
+              First 50 always render; beyond that there's a "+N more" pager
+              button to reveal more — avoids rendering hundreds of DOM
+              nodes for very long histories. */}
           <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
             <div className="px-2 pb-1">
               {globalChats && globalChats.length > 0 ? (
-                <>
-                  {globalChats.slice(0, 20).map((chat) => (
-                    <ChatRow
-                      key={chat.id}
-                      chat={chat}
-                      active={activeChatId === chat.id}
-                      workspaces={workspaces}
-                      closeMobileNav={() => setMobileNavOpen(false)}
-                    />
-                  ))}
-                  {globalChats.length > 20 && (
-                    <p className="px-2 py-1.5 text-2xs text-muted-foreground italic">
-                      {t("nav.chatsMore", { n: globalChats.length - 20 })}
-                    </p>
-                  )}
-                </>
+                <ChatListBody
+                  chats={globalChats}
+                  activeChatId={activeChatId}
+                  workspaces={workspaces}
+                  closeMobileNav={() => setMobileNavOpen(false)}
+                />
               ) : (
                 <p className="px-2 py-1.5 text-xs text-muted-foreground">
                   {t("nav.noConversations")}

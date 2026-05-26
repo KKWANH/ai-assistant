@@ -36,6 +36,7 @@ import {
   WatchlistTable, BaseCurrencySelector,
   AllocationGrid, RealizedPnLSection,
   AttributionSection, TaxYTDSection, EventCalendar, RebalanceSimulator,
+  PositionSizer,
 } from "./sections";
 
 // AM — key used to look up price history + news files.
@@ -48,7 +49,10 @@ export default function App() {
   const ariadne = useAriadne();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [positions, setPositions] = useState<RawPosition[]>([]);
+  // AT — `rawPositions` holds the CSV state as-loaded. `positions` (memo
+  // below) overlays live Yahoo prices so the dashboard always shows the
+  // current market value, never a stale CSV `current_price`.
+  const [rawPositions, setPositions] = useState<RawPosition[]>([]);
   const [cash, setCash] = useState<CashBucket[]>([]);
   const [metals, setMetals] = useState<ManualAsset[]>([]);
   const [funds, setFunds] = useState<ManualAsset[]>([]);
@@ -75,6 +79,10 @@ export default function App() {
   // AS — Yahoo news headlines + dividend history fetched on row click.
   const [activeYahooNews, setActiveYahooNews] = useState<NewsItem[]>([]);
   const [activeDividends, setActiveDividends] = useState<Array<{ date: string; amount: number }>>([]);
+  // AT — track the currently-selected range and the active position's
+  // Yahoo symbol so PositionDetailPage's range selector can re-fetch
+  // history live (no stored history file).
+  const [activeHistoryRange, setActiveHistoryRange] = useState<"1mo" | "3mo" | "6mo" | "1y" | "5y">("1y");
   // AM/AQ — reporting currency. AQ: initial value is loaded from
   // localStorage (so user's last choice persists); falls back to the
   // majority data-currency once data loads (effect below); final fallback
@@ -380,6 +388,31 @@ export default function App() {
 
   const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
 
+  // AT — live-price overlay. The CSV's current_price / market_value /
+  // return_pct are ignored when we have a fresh Yahoo quote; stored
+  // prices go stale instantly so the canonical source is the API.
+  // Falls back to CSV values only when the quote is missing (rare).
+  const positions = useMemo<RawPosition[]>(() => {
+    return rawPositions.map((p) => {
+      const key = String(p.quote_symbol || p.symbol || "").toUpperCase();
+      const q = liveQuotes[key];
+      if (!q || !Number.isFinite(q.price) || q.price <= 0) return p;
+      const liveCurrent = q.price;
+      const liveMarket = Number.isFinite(p.shares) ? p.shares * liveCurrent : p.market_value;
+      const liveReturn = Number.isFinite(p.buy_price) && p.buy_price > 0
+        ? ((liveCurrent - p.buy_price) / p.buy_price) * 100
+        : p.return_pct;
+      return {
+        ...p,
+        current_price: liveCurrent,
+        market_value: liveMarket,
+        return_pct: liveReturn,
+        book_value: Number.isFinite(p.shares) && Number.isFinite(p.buy_price) ? p.shares * p.buy_price : p.book_value,
+        has_live_quote: true,
+      };
+    });
+  }, [rawPositions, liveQuotes]);
+
   // AR — responsive: track viewport width. <720px = mobile (single-column
   // KPI grids, narrower charts, condensed padding). Re-runs on resize.
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 720);
@@ -626,19 +659,11 @@ export default function App() {
         } catch (_e) { /* */ }
       })());
     }
-    tasks.push((async () => {
-      try {
-        const { rows } = await ariadne.readCsv(`positions/history/${key}.csv`);
-        const points = rows
-          .map((r: any) => ({
-            label: String(r.date ?? ""),
-            value: Number(r.price ?? 0),
-            note: r.note || undefined,
-          }))
-          .filter((pt: PricePoint) => pt.label && Number.isFinite(pt.value) && pt.value > 0);
-        setActivePriceHistory(points);
-      } catch (_e) { /* */ }
-    })());
+    // AT — price history comes from the LIVE Yahoo API, not a stored CSV.
+    // (User: "가격 추이는 니가 저장하면 안되지" — don't persist stock
+    // prices because the cache goes stale immediately.)
+    setActiveHistoryRange("1y");
+    // Initial load; subsequent range switches fire from a separate effect.
     tasks.push((async () => {
       try {
         const body = await ariadne.readText(`analysis/news/${key}.md`);
@@ -666,6 +691,31 @@ export default function App() {
 
     await Promise.allSettled(tasks);
   }, [ariadne]);
+
+  // AT — live price history for the currently-open position. Re-fetches
+  // when range changes. Interval picked to match Yahoo expectations:
+  // ≤3mo → daily; 6mo/1y → weekly; 5y → monthly.
+  useEffect(() => {
+    if (!activePosition) return;
+    if (typeof ariadne.getQuoteHistory !== "function") return;
+    const sym = activePosition.quote_symbol || activePosition.symbol;
+    if (!sym) return;
+    const interval = activeHistoryRange === "1mo" || activeHistoryRange === "3mo" ? "1d"
+      : activeHistoryRange === "5y" ? "1mo"
+      : "1wk";
+    let cancelled = false;
+    (async () => {
+      try {
+        const live = await ariadne.getQuoteHistory(sym, activeHistoryRange, interval);
+        if (cancelled) return;
+        const points = (live ?? [])
+          .map((pt) => ({ label: pt.date, value: pt.close }))
+          .filter((pt: PricePoint) => pt.label && Number.isFinite(pt.value) && pt.value > 0);
+        setActivePriceHistory(points);
+      } catch (_e) { /* */ }
+    })();
+    return () => { cancelled = true; };
+  }, [ariadne, activePosition, activeHistoryRange, refreshTick]);
 
   if (loading) {
     return <div style={{ padding: 24, color: "rgb(var(--muted-foreground))" }}>Loading workspace…</div>;
@@ -697,6 +747,8 @@ export default function App() {
           account={accounts.find((a) => a.id === activePosition.account_id)}
           thesisBody={activeThesis}
           priceHistory={activePriceHistory}
+          historyRange={activeHistoryRange}
+          onRangeChange={setActiveHistoryRange}
           newsBody={activeNews}
           yahooNews={activeYahooNews}
           dividends={activeDividends}
@@ -761,6 +813,9 @@ export default function App() {
         onRowClick={openPosition}
       />
       <WatchlistTable rows={watchlist} liveQuotes={liveQuotes} />
+      {/* AT — position sizing: inverse of rebalance. "$5k of NVDA →
+          신 top-1?" Catches cap-violating trades before they happen. */}
+      <PositionSizer positions={positions} fxMap={fxMap} base={base} derived={derived} />
       {/* AR — rebalance simulator: target weight per position → required
           trade calculation. Lets the PM preview "비중을 8%로 줄이면..." */}
       <RebalanceSimulator

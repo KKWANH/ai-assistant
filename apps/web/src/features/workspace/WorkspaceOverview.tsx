@@ -13,7 +13,7 @@
  *  - "Create & runs" and "Edit screen" tabs share a consistent-width panel
  *    (max-w-5xl mx-auto) so they look cohesive.
  */
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   FolderOpen,
@@ -554,6 +554,18 @@ export function WorkspaceOverview() {
   const hasCreatables = templates.length > 0 || customActions.length > 0;
   const hasSurface = surfaceData?.state?.exists ?? false;
 
+  // AT — controlled tab state. Initial value "chats" (safe default while
+  // the surface query is loading). When the query resolves and the
+  // workspace has a surface, auto-switch to "surface" — UNLESS the user
+  // has already picked a tab themselves (so we don't yank them away).
+  const [activeTab, setActiveTab] = useState<string>("chats");
+  const [userPickedTab, setUserPickedTab] = useState(false);
+  useEffect(() => {
+    if (userPickedTab) return;
+    if (surfaceData === undefined) return;
+    if (hasSurface && activeTab !== "surface") setActiveTab("surface");
+  }, [surfaceData, hasSurface, userPickedTab, activeTab]);
+
   // ── Chats block — workspace-scoped conversations + "new chat" CTA.
   //    Z1: promoted out of StandardView into its own first tab so chat
   //    is the workspace's top-level surface, not buried under
@@ -973,17 +985,13 @@ export function WorkspaceOverview() {
           depending on whether .ariadne/surface.tsx exists. The other four
           tabs are independent of the surface and always functional. */}
       <Tabs
-        // AO: When a workspace HAS a built custom surface, prefer it as
-        // the landing tab — a brokerage-app-style dashboard is more
-        // useful than the chat history as a starting view. Workspaces
-        // without a surface still land on chats.
-        //
-        // `key` forces a remount once the surface query resolves so the
-        // correct `defaultValue` actually takes effect (defaultValue is
-        // read on mount only). The "?" key while loading prevents an
-        // initial render with the wrong default.
-        key={surfaceData === undefined ? "tabs-loading" : (hasSurface ? "tabs-surface" : "tabs-chats")}
-        defaultValue={hasSurface ? "surface" : "chats"}
+        // AO/AT: Controlled tab state instead of defaultValue + key remount.
+        // The key trick stopped reliably triggering after Tabs internal
+        // state was already set; switched to fully-controlled `value` +
+        // `onValueChange` + an effect that flips to surface once the
+        // surface query resolves with exists=true.
+        value={activeTab}
+        onValueChange={(v) => { setActiveTab(v); setUserPickedTab(true); }}
         className="flex flex-col flex-1 min-h-0"
       >
         {/* Tab bar — pinned, scrollable on narrow screens */}

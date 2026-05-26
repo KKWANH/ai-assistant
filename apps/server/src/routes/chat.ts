@@ -24,6 +24,7 @@ import {
   dbGetChat,
   dbUpdateChat,
   dbDeleteChat,
+  dbDeleteEmptyChats,
   dbInsertMessage,
   dbListMessages,
   dbGetWorkspace,
@@ -471,6 +472,17 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     if (!existing) return reply.status(404).send({ error: "Chat not found" });
     dbDeleteChat(req.params.id);
     return reply.send({ ok: true });
+  });
+
+  // -------------------------------------------------------------------------
+  // AT — DELETE /api/chats/empty — bulk-delete chats with zero messages.
+  //      Scoped to the requesting account so users can only clean their own.
+  //      Admins can pass ?all=1 to clean across accounts (future).
+  // -------------------------------------------------------------------------
+  app.delete<{ Querystring: { all?: string } }>("/chats/empty", async (req, reply) => {
+    const ownerId = req.account?.id ?? null;
+    const deleted = dbDeleteEmptyChats(ownerId);
+    return reply.send({ ok: true, deleted });
   });
 
   // -------------------------------------------------------------------------

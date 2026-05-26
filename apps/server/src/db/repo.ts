@@ -500,6 +500,28 @@ export function dbDeleteChat(id: string): void {
   db.prepare("DELETE FROM chats WHERE id = ?").run(id);
 }
 
+/** AT — Bulk-delete chats with zero messages, optionally scoped to a
+ *  single owner. Used by the "빈 채팅 정리" sidebar action. Returns the
+ *  number of deleted chats so the UI can toast confirmation. */
+export function dbDeleteEmptyChats(ownerId: string | null): number {
+  const db = getDb();
+  const where = ownerId ? "AND c.created_by = ?" : "";
+  const args = ownerId ? [ownerId] : [];
+  const rows = db.prepare(
+    `SELECT c.id FROM chats c
+     WHERE NOT EXISTS (SELECT 1 FROM chat_messages m WHERE m.chat_id = c.id)
+     ${where}`,
+  ).all(...args) as Array<{ id: string }>;
+  const ids = rows.map((r) => r.id);
+  if (ids.length === 0) return 0;
+  // Single transaction so a long list doesn't half-delete on error.
+  withTransaction(() => {
+    const del = db.prepare("DELETE FROM chats WHERE id = ?");
+    for (const id of ids) del.run(id);
+  });
+  return ids.length;
+}
+
 function rowToChat(row: Record<string, unknown>): Chat {
   return {
     id: row["id"] as string,

@@ -451,6 +451,17 @@ export function useDeleteChat() {
   });
 }
 
+/** AT — bulk-delete the current user's chats with no messages. */
+export function useDeleteEmptyChats() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.deleteEmptyChats(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
+
 /** Polls whether a generation is in progress for a chat — survives reconnects. */
 export function useActiveGeneration(chatId: string) {
   return useQuery({

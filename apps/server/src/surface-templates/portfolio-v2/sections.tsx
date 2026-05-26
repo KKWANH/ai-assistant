@@ -723,24 +723,129 @@ export function ReturnsBarChart({ positions }: { positions: RawPosition[] }) {
   );
 }
 
-// ─ AO — Position detail PAGE (replaces the AL1 modal) ────────────────────
-// Click a position row → full-page route-swap (not a popup overlay). Big
-// price chart with range selector at the top, KPIs, then thesis / news.
-// When news/thesis files are missing, the live Yahoo snapshot (52w high/
-// low, day range, volume, previous close) takes their place — no more
-// ugly "파일 없음" placeholders for positions without docs.
-type RangeKey = "1M" | "3M" | "6M" | "1Y" | "ALL";
+// ─ AO/AT — Position detail PAGE (replaces the AL1 modal) ────────────────
+// Click a position row → full-page route-swap (not a popup overlay).
+// AT: price history comes from the live Yahoo API at the parent level —
+// this component just renders range buttons and emits onRangeChange.
+// The parent's effect re-fetches and pushes the new points back as
+// `priceHistory`. No local slicing — that would re-introduce stale
+// caching of price data.
+export type DetailHistoryRange = "1mo" | "3mo" | "6mo" | "1y" | "5y";
 
-function sliceHistoryByRange(points: PricePoint[], range: RangeKey): PricePoint[] {
-  if (range === "ALL" || points.length === 0) return points;
-  const months = range === "1M" ? 1 : range === "3M" ? 3 : range === "6M" ? 6 : 12;
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - months);
-  const filtered = points.filter((p) => {
-    const d = new Date(p.label);
-    return Number.isFinite(d.getTime()) && d >= cutoff;
-  });
-  return filtered.length > 0 ? filtered : points;
+// AT — Price chart panel with range buttons + SMA overlay toggle.
+// SMA(n): simple moving average over the last n points; rendered as the
+// LineChart's `compare` dashed series so the existing tooltip works for
+// it too. n is picked relative to the data point count (20-pt typical).
+function PriceChartPanel({
+  priceHistory, currency, historyRange, onRangeChange, isMobile,
+}: {
+  priceHistory: PricePoint[];
+  currency: string;
+  historyRange: DetailHistoryRange;
+  onRangeChange: (r: DetailHistoryRange) => void;
+  isMobile?: boolean;
+}) {
+  const [showSma, setShowSma] = useState(false);
+  const [smaN, setSmaN] = useState<number>(20);
+
+  // Auto-scale SMA window to roughly 1/5 of the dataset, capped 5..50.
+  const dataLen = priceHistory.length;
+  const effectiveN = Math.max(5, Math.min(50, smaN));
+  const sma = useMemo(() => {
+    if (!showSma || dataLen < effectiveN) return null;
+    const result: Array<{ label: string; value: number }> = [];
+    for (let i = 0; i < dataLen; i++) {
+      if (i < effectiveN - 1) {
+        // Pre-window points get the first valid SMA so the line stays
+        // continuous (otherwise NaN gaps confuse the LineChart).
+        result.push({ label: priceHistory[i]!.label, value: NaN });
+      } else {
+        let sum = 0;
+        for (let j = i - effectiveN + 1; j <= i; j++) sum += priceHistory[j]!.value;
+        result.push({ label: priceHistory[i]!.label, value: sum / effectiveN });
+      }
+    }
+    // Replace leading NaNs with the first finite value so the dashed
+    // line doesn't drop to zero on the y-axis.
+    const firstFinite = result.find((p) => Number.isFinite(p.value))?.value;
+    if (firstFinite != null) {
+      for (const p of result) if (!Number.isFinite(p.value)) p.value = firstFinite;
+    }
+    return result;
+  }, [showSma, priceHistory, effectiveN, dataLen]);
+
+  const chartWidth = isMobile ? Math.min(window.innerWidth - 48, 600) : 1100;
+  return (
+    <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--card))", border: "1px solid rgb(var(--border))", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))" }}>
+          가격 추이 ({currency}){dataLen > 0 ? ` · ${dataLen} points · live (Yahoo)` : ""}
+        </div>
+        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+          {dataLen >= 10 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowSma(!showSma)}
+                style={{
+                  fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                  background: showSma ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+                  color: showSma ? "rgb(var(--accent-foreground))" : "rgb(var(--muted-foreground))",
+                  border: "1px solid rgb(var(--border))", cursor: "pointer",
+                }}
+              >
+                {showSma ? `SMA${effectiveN} 끄기` : "SMA"}
+              </button>
+              {showSma && (
+                <select
+                  value={smaN}
+                  onChange={(e) => setSmaN(parseInt(e.target.value, 10))}
+                  style={{ fontSize: 11, padding: "2px 4px", borderRadius: 4, background: "rgb(var(--background))", color: "rgb(var(--foreground))", border: "1px solid rgb(var(--border))" }}
+                >
+                  {[5, 10, 20, 50].filter((n) => n < dataLen).map((n) => (
+                    <option key={n} value={n}>SMA{n}</option>
+                  ))}
+                </select>
+              )}
+            </>
+          )}
+          {(["1mo", "3mo", "6mo", "1y", "5y"] as const).map((r) => {
+            const label = r === "1mo" ? "1M" : r === "3mo" ? "3M" : r === "6mo" ? "6M" : r === "1y" ? "1Y" : "5Y";
+            const active = historyRange === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => onRangeChange(r)}
+                style={{
+                  fontSize: 11, padding: "2px 8px", borderRadius: 4,
+                  border: `1px solid ${active ? "rgb(var(--accent))" : "rgb(var(--border))"}`,
+                  background: active ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+                  color: active ? "rgb(var(--accent-foreground))" : "rgb(var(--foreground))",
+                  cursor: "pointer",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {dataLen > 0 ? (
+        <LineChart
+          data={priceHistory.map((h) => ({ label: h.label, value: h.value }))}
+          compare={sma ?? undefined}
+          seriesLabels={sma ? ["Price", `SMA${effectiveN}`] : undefined}
+          width={chartWidth}
+          height={260}
+        />
+      ) : (
+        <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", padding: "24px 0", textAlign: "center" }}>
+          가격 히스토리 로딩 중…
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PositionDetailPage({
@@ -748,6 +853,8 @@ export function PositionDetailPage({
   account,
   thesisBody,
   priceHistory,
+  historyRange,
+  onRangeChange,
   newsBody,
   yahooNews,
   dividends,
@@ -760,8 +867,12 @@ export function PositionDetailPage({
   position: RawPosition;
   account?: Account;
   thesisBody: string | null;
-  /** Per-position price points loaded from positions/history/<key>.csv. */
+  /** AT — live Yahoo price points for the currently selected range.
+   *  Parent owns the fetch + range state; this component only emits
+   *  onRangeChange when the user taps a range button. */
   priceHistory: PricePoint[];
+  historyRange: DetailHistoryRange;
+  onRangeChange: (r: DetailHistoryRange) => void;
   /** Markdown body of analysis/news/<key>.md (analyst targets + headlines). */
   newsBody: string | null;
   /** AS — Yahoo headlines for this symbol (live feed). */
@@ -779,7 +890,6 @@ export function PositionDetailPage({
   isMobile?: boolean;
 }) {
   const p = position;
-  const [range, setRange] = useState<RangeKey>("1Y");
 
   const pl = Number.isFinite(p.current_price) && Number.isFinite(p.buy_price)
     ? p.current_price - p.buy_price
@@ -790,8 +900,6 @@ export function PositionDetailPage({
   const stopPct = p.stop_loss && p.current_price > 0
     ? ((p.current_price - p.stop_loss) / p.current_price) * 100
     : null;
-
-  const sliced = sliceHistoryByRange(priceHistory, range);
 
   // External Yahoo Finance link. Useful when the local thesis/news file is
   // empty — user can click out to live news / analyst pages directly.
@@ -845,48 +953,61 @@ export function PositionDetailPage({
         </div>
       </div>
 
-      {/* AO — Big price chart with range selector. Same shape as a
-          brokerage app's stock detail page. */}
+      {/* AO/AT — Big price chart. Range buttons trigger parent re-fetch
+          via getQuoteHistory (no client-side slicing of cached data).
+          AT: SMA overlay toggle — 20-point simple moving average drawn
+          as a dashed compare series. Useful for trend identification. */}
+      <PriceChartPanel
+        priceHistory={priceHistory}
+        currency={p.currency}
+        historyRange={historyRange}
+        onRangeChange={onRangeChange}
+        isMobile={isMobile}
+      />
+      {false && (
       <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--card))", border: "1px solid rgb(var(--border))", borderRadius: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))" }}>
-            가격 추이 ({p.currency}){priceHistory.length > 0 ? ` · ${sliced.length} / ${priceHistory.length} points` : ""}
+            가격 추이 ({p.currency}){priceHistory.length > 0 ? ` · ${priceHistory.length} points · live` : ""}
           </div>
-          {priceHistory.length > 0 && (
-            <div style={{ display: "flex", gap: 4 }}>
-              {(["1M", "3M", "6M", "1Y", "ALL"] as const).map((r) => (
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["1mo", "3mo", "6mo", "1y", "5y"] as const).map((r) => {
+              const label = r === "1mo" ? "1M" : r === "3mo" ? "3M" : r === "6mo" ? "6M" : r === "1y" ? "1Y" : "5Y";
+              const active = historyRange === r;
+              return (
                 <button
                   key={r}
                   type="button"
-                  onClick={() => setRange(r)}
+                  onClick={() => onRangeChange(r)}
                   style={{
                     fontSize: 11,
                     padding: "2px 8px",
                     borderRadius: 4,
-                    border: `1px solid ${range === r ? "rgb(var(--accent))" : "rgb(var(--border))"}`,
-                    background: range === r ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
-                    color: range === r ? "rgb(var(--accent-foreground))" : "rgb(var(--foreground))",
+                    border: `1px solid ${active ? "rgb(var(--accent))" : "rgb(var(--border))"}`,
+                    background: active ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+                    color: active ? "rgb(var(--accent-foreground))" : "rgb(var(--foreground))",
                     cursor: "pointer",
                   }}
                 >
-                  {r}
+                  {label}
                 </button>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
         {priceHistory.length > 0 ? (
           <LineChart
-            data={sliced.map((h) => ({ label: h.label, value: h.value }))}
+            data={priceHistory.map((h) => ({ label: h.label, value: h.value }))}
             width={isMobile ? Math.min(window.innerWidth - 48, 600) : 1100}
             height={260}
           />
         ) : (
           <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", padding: "24px 0", textAlign: "center" }}>
-            가격 히스토리 없음 · positions/history/{p.kr_listing_code || p.quote_symbol || p.symbol}.csv 추가하면 차트 표시
+            가격 히스토리 로딩 중… (Yahoo {p.quote_symbol || p.symbol})
           </div>
         )}
       </div>
+      )}
 
       {/* AO — KPI grid. AS — adds TR vs PR row: TR = price return +
           dividends received since the position's buy_date / lookback. */}
@@ -1600,6 +1721,183 @@ export function EventCalendar({
 // in shares + base-currency. Realized P&L estimate from FIFO would need
 // the full transaction log per position — current scope just shows the
 // delta. PM checks "if I trim SOXX 12% → 8%, what's the trade?".
+// ─ AT — Position-sizing helper ───────────────────────────────────────────
+// Inverse of RebalanceSimulator: user types "$5k buy of NVDA" and the
+// surface shows: new weight%, new top-1, cap-violation flag, FX-converted
+// base amount. Catches the "this trade pushes me over 10% single-stock"
+// mistake before it happens.
+export function PositionSizer({
+  positions, fxMap, base, derived,
+}: {
+  positions: RawPosition[];
+  fxMap: Record<string, number>;
+  base: string;
+  derived: Derived;
+}) {
+  const [open, setOpen] = useState(false);
+  const [symbol, setSymbol] = useState<string>("");
+  const [tradeAmt, setTradeAmt] = useState<string>("");
+  const [tradeCcy, setTradeCcy] = useState<string>(base);
+
+  if (positions.length === 0) return null;
+  // Sorted by base value desc — defaults the dropdown to the top holding.
+  const sortedByBase = positions
+    .map((p) => ({ p, baseValue: toBase(p.market_value, p.currency, fxMap) }))
+    .filter((x) => x.baseValue > 0)
+    .sort((a, b) => b.baseValue - a.baseValue);
+  const defaultSymbol = symbol || sortedByBase[0]?.p.symbol || "";
+  const target = positions.find((p) => p.symbol === defaultSymbol);
+
+  const totalInvestedBase = sortedByBase.reduce((s, x) => s + x.baseValue, 0);
+  const tradeAmtNum = parseFloat(tradeAmt) || 0;
+  const tradeBaseAmt = toBase(tradeAmtNum, tradeCcy, fxMap);
+  const newTotal = totalInvestedBase + tradeBaseAmt;
+
+  // After-the-trade weight for each position. Target position gains the
+  // full trade amount; everything else stays the same nominal value but
+  // its share of the (now larger) pie shrinks.
+  const newWeights = sortedByBase.map(({ p, baseValue }) => {
+    const newBase = p.symbol === defaultSymbol ? baseValue + tradeBaseAmt : baseValue;
+    const newW = newTotal > 0 ? (newBase / newTotal) * 100 : 0;
+    const oldW = totalInvestedBase > 0 ? (baseValue / totalInvestedBase) * 100 : 0;
+    return { symbol: p.symbol, name: p.name || p.symbol, oldW, newW, delta: newW - oldW };
+  }).sort((a, b) => b.newW - a.newW);
+
+  const top1 = newWeights[0];
+  const top5Sum = newWeights.slice(0, 5).reduce((s, x) => s + x.newW, 0);
+  const capViolated = newWeights.find((w) => w.newW > 10);
+
+  return (
+    <Section title="포지션 사이징" icon="📐">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          fontSize: 12, padding: "4px 12px", borderRadius: 6,
+          background: open ? "rgb(var(--accent))" : "rgb(var(--surface-2))",
+          color: open ? "rgb(var(--accent-foreground))" : "rgb(var(--foreground))",
+          border: "1px solid rgb(var(--border))", cursor: "pointer", marginBottom: 8,
+        }}
+      >
+        {open ? "닫기" : "열기 — 추가 매수 시뮬"}
+      </button>
+      {open && (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>매수할 종목</span>
+            <select
+              value={defaultSymbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              style={{ ...inputStyle, minWidth: 180 }}
+            >
+              {sortedByBase.map(({ p }) => (
+                <option key={p.symbol} value={p.symbol}>
+                  {p.name || p.symbol} ({p.symbol})
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>금액</span>
+            <input
+              type="number"
+              step="100"
+              min="0"
+              value={tradeAmt}
+              onChange={(e) => setTradeAmt(e.target.value)}
+              placeholder="0"
+              style={{ ...inputStyle, width: 110, textAlign: "right" }}
+            />
+            <select
+              value={tradeCcy}
+              onChange={(e) => setTradeCcy(e.target.value)}
+              style={inputStyle}
+            >
+              {Array.from(new Set([base, ...Object.keys(fxMap)])).sort().map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: "rgb(var(--muted-foreground))" }}>
+              = {fmtMoney(tradeBaseAmt, base)}
+            </span>
+          </div>
+
+          {tradeBaseAmt > 0 && target && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 12 }}>
+                {(() => {
+                  const targetRow = newWeights.find((w) => w.symbol === defaultSymbol);
+                  const ret: any[] = [];
+                  ret.push(
+                    <KpiCard
+                      key="new-weight"
+                      label={`${target.name || target.symbol} 신비중`}
+                      value={`${targetRow?.newW.toFixed(1) ?? "—"}%`}
+                      muted={targetRow ? `${targetRow.delta >= 0 ? "+" : ""}${targetRow.delta.toFixed(1)}pp` : "—"}
+                    />
+                  );
+                  ret.push(
+                    <KpiCard
+                      key="new-top1"
+                      label={`신 top-1 (${top1?.symbol ?? "—"})`}
+                      value={`${top1?.newW.toFixed(1) ?? "—"}%`}
+                      muted={(top1?.newW ?? 0) > 10 ? "★ cap 위반" : "10% 이내"}
+                    />
+                  );
+                  ret.push(
+                    <KpiCard
+                      key="new-top5"
+                      label="신 top-5 집중도"
+                      value={`${top5Sum.toFixed(1)}%`}
+                      muted={top5Sum > 50 ? "★ 집중 높음" : "분산 양호"}
+                    />
+                  );
+                  ret.push(
+                    <KpiCard
+                      key="new-shares"
+                      label="환산 수량"
+                      value={target.current_price > 0 ? fmtNum(tradeAmtNum / (tradeCcy === target.currency ? target.current_price : (target.current_price * (fxMap[target.currency] ?? 1)) / (fxMap[tradeCcy] ?? 1)), { decimals: 2 }) : "—"}
+                      muted={`@ ${fmtNum(target.current_price)} ${target.currency}`}
+                    />
+                  );
+                  return ret;
+                })()}
+              </div>
+
+              {capViolated && (
+                <div style={{ padding: 10, background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgb(var(--destructive))", borderRadius: 6, fontSize: 12, marginBottom: 12 }}>
+                  ⚠️ <strong>{capViolated.name}</strong> 신비중 <strong>{capViolated.newW.toFixed(1)}%</strong> — 10% 단일종목 cap 위반.
+                </div>
+              )}
+
+              <h4 style={subHead}>변화가 큰 종목 (top 5)</h4>
+              <Table headers={["종목", "현재 비중", "신비중", "변화"]}>
+                {newWeights
+                  .slice()
+                  .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+                  .slice(0, 5)
+                  .map((w) => (
+                    <tr key={w.symbol} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+                      <td style={tdLeft}>
+                        <strong>{w.name}</strong>
+                        <span style={{ marginLeft: 6, fontSize: 10, color: "rgb(var(--muted-foreground))", fontFamily: "ui-monospace, monospace" }}>{w.symbol}</span>
+                      </td>
+                      <td style={tdRight}>{w.oldW.toFixed(1)}%</td>
+                      <td style={{ ...tdRight, color: w.newW > 10 ? "rgb(var(--destructive))" : "rgb(var(--foreground))", fontWeight: w.newW > 10 ? 600 : 400 }}>
+                        {w.newW.toFixed(1)}%
+                      </td>
+                      <td style={{ ...tdRight, color: w.delta > 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+                        {w.delta >= 0 ? "+" : ""}{w.delta.toFixed(2)}pp
+                      </td>
+                    </tr>
+                  ))}
+              </Table>
+            </>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
 export function RebalanceSimulator({
   positions, fxMap, base, derived, buckets,
 }: {
