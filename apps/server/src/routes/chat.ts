@@ -475,13 +475,14 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // -------------------------------------------------------------------------
-  // AT — DELETE /api/chats/empty — bulk-delete chats with zero messages.
-  //      Scoped to the requesting account so users can only clean their own.
-  //      Admins can pass ?all=1 to clean across accounts (future).
+  // AT/AU — DELETE /api/chats/empty — bulk-delete chats with zero messages.
+  //         Scoped to the requesting account. Optional ?olderHours= filter
+  //         restricts deletion to chats older than N hours (default 0 = all).
   // -------------------------------------------------------------------------
-  app.delete<{ Querystring: { all?: string } }>("/chats/empty", async (req, reply) => {
+  app.delete<{ Querystring: { olderHours?: string } }>("/chats/empty", async (req, reply) => {
     const ownerId = req.account?.id ?? null;
-    const deleted = dbDeleteEmptyChats(ownerId);
+    const olderHours = Number(req.query.olderHours) || 0;
+    const deleted = dbDeleteEmptyChats(ownerId, olderHours);
     return reply.send({ ok: true, deleted });
   });
 

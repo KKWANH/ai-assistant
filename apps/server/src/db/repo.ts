@@ -500,17 +500,31 @@ export function dbDeleteChat(id: string): void {
   db.prepare("DELETE FROM chats WHERE id = ?").run(id);
 }
 
-/** AT — Bulk-delete chats with zero messages, optionally scoped to a
- *  single owner. Used by the "빈 채팅 정리" sidebar action. Returns the
- *  number of deleted chats so the UI can toast confirmation. */
-export function dbDeleteEmptyChats(ownerId: string | null): number {
+/** AT/AU — Bulk-delete chats with zero messages, optionally scoped to a
+ *  single owner and to chats older than N hours. Used by the background
+ *  auto-cleanup that runs on app mount. Returns the number of deleted
+ *  chats so the caller can log it. */
+export function dbDeleteEmptyChats(ownerId: string | null, olderThanHours = 0): number {
   const db = getDb();
-  const where = ownerId ? "AND c.created_by = ?" : "";
-  const args = ownerId ? [ownerId] : [];
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+  if (ownerId) {
+    where.push("c.created_by = ?");
+    args.push(ownerId);
+  }
+  if (olderThanHours > 0) {
+    // SQLite stores timestamps as ISO strings; compare against
+    // (now - olderThanHours) computed in JS so we don't depend on
+    // strftime quirks.
+    const cutoff = new Date(Date.now() - olderThanHours * 3600 * 1000).toISOString();
+    where.push("c.created_at < ?");
+    args.push(cutoff);
+  }
+  const whereSql = where.length > 0 ? "AND " + where.join(" AND ") : "";
   const rows = db.prepare(
     `SELECT c.id FROM chats c
      WHERE NOT EXISTS (SELECT 1 FROM chat_messages m WHERE m.chat_id = c.id)
-     ${where}`,
+     ${whereSql}`,
   ).all(...args) as Array<{ id: string }>;
   const ids = rows.map((r) => r.id);
   if (ids.length === 0) return 0;

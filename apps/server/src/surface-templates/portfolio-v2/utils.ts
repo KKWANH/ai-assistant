@@ -6,13 +6,35 @@
 export function fmtMoney(amount: number | undefined | null, currency: string): string {
   if (amount == null || !Number.isFinite(amount)) return "—";
   const abs = Math.abs(amount);
-  let s: string;
+  // AU — Korean readers parse 억/만, not M/B. ₩232.00M was ambiguous
+  // (2.32억? 232만?). Compose with 조 / 억 / 만 the way Korean papers do.
   if (currency === "KRW") {
-    if (abs >= 1_000_000_000) s = (amount / 1_000_000_000).toFixed(2) + "B";
-    else if (abs >= 1_000_000) s = (amount / 1_000_000).toFixed(2) + "M";
-    else if (abs >= 1_000) s = (amount / 1_000).toFixed(0) + "K";
-    else s = amount.toFixed(0);
-    return "₩" + s;
+    const sign = amount < 0 ? "-" : "";
+    const v = Math.abs(amount);
+    if (v >= 1e12) return `${sign}₩${(v / 1e12).toFixed(2)}조`;
+    if (v >= 1e8) {
+      // Show 억 with optional 만 fraction when small. ₩2억3,208만 reads
+      // better than ₩2.32억 for round-ish amounts; fall back to decimal
+      // 억 when it's not whole. e.g. ₩232,080,000 → ₩2억3,208만
+      const eok = Math.floor(v / 1e8);
+      const remainder = Math.floor((v % 1e8) / 1e4);   // 만 units
+      if (remainder >= 1) {
+        return `${sign}₩${eok.toLocaleString()}억${remainder.toLocaleString()}만`;
+      }
+      // Round 억 — no fractional needed.
+      if (v % 1e8 === 0) return `${sign}₩${eok.toLocaleString()}억`;
+      // Decimal fallback when sub-만 (unlikely for portfolio scale).
+      return `${sign}₩${(v / 1e8).toFixed(2)}억`;
+    }
+    if (v >= 1e4) {
+      const man = Math.floor(v / 1e4);
+      const remainder = Math.floor(v % 1e4);
+      if (remainder >= 100) {
+        return `${sign}₩${man.toLocaleString()}만${remainder.toLocaleString()}`;
+      }
+      return `${sign}₩${man.toLocaleString()}만`;
+    }
+    return `${sign}₩${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   }
   if (currency === "USD") return "$" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
   if (currency === "EUR") return "€" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });

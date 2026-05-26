@@ -451,11 +451,12 @@ export function useDeleteChat() {
   });
 }
 
-/** AT — bulk-delete the current user's chats with no messages. */
+/** AT/AU — bulk-delete the current user's chats with no messages.
+ *  Pass olderHours to restrict to chats created more than N hours ago. */
 export function useDeleteEmptyChats() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.deleteEmptyChats(),
+    mutationFn: (olderHours?: number) => api.deleteEmptyChats(olderHours ?? 0),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["chats"] });
     },

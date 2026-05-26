@@ -94,54 +94,6 @@ function Logo({ className }: { className?: string }) {
 }
 
 /** A sidebar chat row — opens the chat; a ⋯ menu renames, moves, or deletes it. */
-// AT — bulk-cleanup chats with no messages. Confirm-then-delete.
-function CleanEmptyChatsButton({ chatsCount }: { chatsCount: number }) {
-  const { t } = useT();
-  const { toast } = useToast();
-  const deleteEmpty = useDeleteEmptyChats();
-  const [confirming, setConfirming] = useState(false);
-  if (confirming) {
-    return (
-      <div className="mx-2 mb-2 px-2 py-1.5 rounded border border-destructive/50 bg-destructive/5 text-2xs flex items-center gap-1.5">
-        <span className="text-foreground">{t("nav.cleanEmptyConfirm") ?? "빈 채팅 모두 삭제?"}</span>
-        <button
-          type="button"
-          onClick={() => {
-            void deleteEmpty.mutateAsync().then((r) => {
-              setConfirming(false);
-              toast({
-                title: (t("nav.cleanEmptyDone") ?? "{n}개 삭제됨").replace("{n}", String(r.deleted)),
-                variant: r.deleted > 0 ? "success" : "default",
-              });
-            });
-          }}
-          className="px-2 py-0.5 rounded bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity"
-        >
-          {t("common.delete") ?? "삭제"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirming(false)}
-          className="px-2 py-0.5 rounded border border-border hover:bg-surface-3 transition-colors text-muted-foreground"
-        >
-          {t("common.cancel") ?? "취소"}
-        </button>
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => setConfirming(true)}
-      title={t("nav.cleanEmptyHint") ?? "메시지 없는 채팅 일괄 삭제"}
-      className="mx-2 mb-1 px-2 py-1 rounded text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors flex items-center gap-1 self-start"
-    >
-      <Trash2 className="h-3 w-3 shrink-0" />
-      {(t("nav.cleanEmpty") ?? "빈 채팅 정리").replace("{n}", String(chatsCount))}
-    </button>
-  );
-}
-
 // AT — paginated chat list. Avoids rendering 500 DOM nodes for users with
 // very long histories. First 50 render eagerly; "Show N more" button
 // reveals the rest in 50-chat chunks.
@@ -357,9 +309,19 @@ export function AppShell({ children }: AppShellProps) {
   const { data: me } = useMe();
   const logout = useLogout();
   const deleteWorkspace = useDeleteWorkspace();
+  const deleteEmptyChats = useDeleteEmptyChats();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useT();
+
+  // AU — Auto-cleanup empty chats older than 24h on app mount. Silent
+  // (no toast), single fire per page load. Today's empties stay in case
+  // the user comes back to type; only stale leftovers from yesterday+
+  // get pruned.
+  useEffect(() => {
+    deleteEmptyChats.mutate(24);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -720,40 +682,12 @@ export function AppShell({ children }: AppShellProps) {
             </Link>
           </div>
 
-          {/* AT — bulk action: "빈 채팅 정리" — wipes chats with zero
-              messages owned by the current user. Only shows when the
-              user has more than 5 chats so it doesn't clutter small
-              accounts. */}
-          {globalChats && globalChats.length > 5 && (
-            <CleanEmptyChatsButton chatsCount={globalChats.length} />
-          )}
-
-          {/* Chats list — global conversations only; workspace chats live under their workspace.
-              AT: cap removed. List scrolls inside the flex-1 container.
-              First 50 always render; beyond that there's a "+N more" pager
-              button to reveal more — avoids rendering hundreds of DOM
-              nodes for very long histories. */}
-          <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
-            <div className="px-2 pb-1">
-              {globalChats && globalChats.length > 0 ? (
-                <ChatListBody
-                  chats={globalChats}
-                  activeChatId={activeChatId}
-                  workspaces={workspaces}
-                  closeMobileNav={() => setMobileNavOpen(false)}
-                />
-              ) : (
-                <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                  {t("nav.noConversations")}
-                </p>
-              )}
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-sidebar-border mx-2 my-1" />
-
-            {/* Workspaces */}
-            <div className="px-2 pt-1 pb-1" data-tour="workspaces-section">
+          {/* AU — Workspaces section. Now positioned ABOVE chats so the
+              user's workspaces are always visible (chats no longer push
+              them off-screen when the list grows). shrink-0 + a soft
+              max-height with internal scroll if they happen to have 30+
+              workspaces. */}
+          <div className="shrink-0 max-h-[45vh] overflow-y-auto px-2 pt-1 pb-1" data-tour="workspaces-section">
               <div className="flex items-center justify-between mb-1 px-1">
                 <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
                   {t("nav.workspaces")}
@@ -855,42 +789,66 @@ export function AppShell({ children }: AppShellProps) {
               )}
             </div>
 
-            {/* Recent Runs — standard mode only */}
-            {!isSimple && (
-              <>
-                {/* Divider */}
-                <div className="border-t border-sidebar-border mx-2 my-1" />
-                <div className="px-2 pt-1 pb-1">
-                  <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider px-1 block mb-1">
-                    {t("nav.recentRuns")}
-                  </span>
-                  {allRuns && allRuns.length > 0 ? (
-                    allRuns.slice(0, 6).map((run) => (
-                      <Link
-                        key={run.id}
-                        to={`/runs/${run.id}`}
-                        className="w-full flex flex-col px-2 py-1.5 rounded-md text-left text-xs transition-colors duration-100 text-sidebar-foreground hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() => {
-                          setActiveRunId(run.id);
-                          setMobileNavOpen(false);
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="flex-1 truncate">{run.templateName}</span>
-                          <Badge variant={run.status} dot />
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">
-                      {t("nav.noRunsYet")}
-                    </p>
-                  )}
-                </div>
-              </>
+          {/* AU — Divider between Workspaces (above) and Chats (below). */}
+          <div className="border-t border-sidebar-border mx-2 my-1 shrink-0" />
+
+          {/* AU — Chats list. flex-1 + overflow-y-auto so ONLY this region
+              scrolls when the chat list is long. Workspaces above stay
+              pinned. Header row labels the section and shows the count. */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-2 pt-1 pb-1">
+            <div className="flex items-center justify-between mb-1 px-1">
+              <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
+                {t("nav.chats")}
+              </span>
+            </div>
+            {globalChats && globalChats.length > 0 ? (
+              <ChatListBody
+                chats={globalChats}
+                activeChatId={activeChatId}
+                workspaces={workspaces}
+                closeMobileNav={() => setMobileNavOpen(false)}
+              />
+            ) : (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                {t("nav.noConversations")}
+              </p>
             )}
           </div>
+
+          {/* Recent Runs — standard mode only. Pinned below chats. */}
+          {!isSimple && (
+            <div className="shrink-0 border-t border-sidebar-border mx-2 my-1" />
+          )}
+          {!isSimple && (
+            <div className="shrink-0 px-2 pt-1 pb-1">
+              <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider px-1 block mb-1">
+                {t("nav.recentRuns")}
+              </span>
+              {allRuns && allRuns.length > 0 ? (
+                allRuns.slice(0, 6).map((run) => (
+                  <Link
+                    key={run.id}
+                    to={`/runs/${run.id}`}
+                    className="w-full flex flex-col px-2 py-1.5 rounded-md text-left text-xs transition-colors duration-100 text-sidebar-foreground hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => {
+                      setActiveRunId(run.id);
+                      setMobileNavOpen(false);
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="flex-1 truncate">{run.templateName}</span>
+                      <Badge variant={run.status} dot />
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <p className="px-2 py-1 text-xs text-muted-foreground">
+                  {t("nav.noRunsYet")}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Bottom: Reports (admin) + Settings + User */}
           <div className="shrink-0 px-2 pb-2 pt-1 border-t border-sidebar-border">

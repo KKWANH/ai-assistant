@@ -365,9 +365,13 @@ export const getQuoteHistory = (symbol: string, range = "1y", interval = "1d") =
     `/market/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`,
   );
 
-// AT — bulk-delete empty (no messages) chats for the current account.
-export const deleteEmptyChats = () =>
-  request<{ ok: boolean; deleted: number }>("DELETE", "/chats/empty");
+// AT/AU — bulk-delete empty (no messages) chats for the current account.
+// olderHours: only delete chats created more than N hours ago. 0 = all.
+export const deleteEmptyChats = (olderHours = 0) =>
+  request<{ ok: boolean; deleted: number }>(
+    "DELETE",
+    `/chats/empty${olderHours > 0 ? `?olderHours=${olderHours}` : ""}`,
+  );
 
 // AR — Calendar events (earnings + ex-div + dividend) for a batch of symbols.
 export interface QuoteCalendar {
