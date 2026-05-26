@@ -202,12 +202,31 @@ async function bootstrap(): Promise<void> {
       wildcard: false,
     });
 
-    // SPA fallback: non-/api GET requests → index.html
+    // SPA fallback: non-/api GET requests → index.html.
+    //
+    // 404 cases that must NOT fall through to index.html:
+    //   /api/*       — JSON 404 (existing)
+    //   /assets/*    — hashed static. If missing, the client is
+    //                  asking for a stale build. Returning HTML here
+    //                  causes "Failed to load module script: …MIME
+    //                  type of 'text/html'" because the browser tries
+    //                  to parse the SPA shell as a JS module. Return
+    //                  404 so the browser drops cached index.html and
+    //                  refetches.
+    //   *.js/.css/etc — same reasoning as /assets/*.
     app.setNotFoundHandler(async (req, reply) => {
-      if (!req.url.startsWith("/api")) {
-        return reply.sendFile("index.html");
+      const url = req.url;
+      if (url.startsWith("/api")) {
+        return reply.status(404).send({ error: "Not found" });
       }
-      return reply.status(404).send({ error: "Not found" });
+      // Static-asset extension or /assets/ path → 404, don't fall back.
+      if (url.startsWith("/assets/") || /\.(js|css|map|woff2?|ttf|otf|svg|png|jpe?g|gif|webp|ico|json|wasm)(\?|$)/i.test(url)) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      // True SPA route → serve the shell. Mark no-cache so stale
+      // hash-references don't outlive a build.
+      reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      return reply.sendFile("index.html");
     });
   } else {
     // No web build — serve a tiny inline placeholder so the server still starts
