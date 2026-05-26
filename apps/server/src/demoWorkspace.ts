@@ -41,6 +41,7 @@ import {
   ANALYSIS_MICRO_AAPL_MD,
   GOALS_2026_ALLOCATION_MD,
 } from "./surface/portfolioStarter.js";
+import { seedPortfolioV2Surface } from "./surface/portfolioV2Template.js";
 import logger from "./logger.js";
 
 /** Seed the built-in Portfolio workspace at data/portfolio/. */
@@ -93,13 +94,23 @@ export async function ensureDemoWorkspace(): Promise<void> {
       fs.writeFileSync(abs, body, "utf-8");
     }
 
-    // Surface — was previously re-synced from portfolioStarter every boot.
-    // That overwrote user customizations (notably the v2 brokerage-app
-    // surface dropped at `data/portfolio/.ariadne/surface.tsx`). Now we
-    // only write the bundled v1 surface when no surface.tsx exists yet.
+    // Surface — preferred path is the v2 multi-file folder
+    // (.ariadne/surface/index.tsx + 5 sibling files). Seed via the
+    // disk-based helper which copies each file only when missing,
+    // so user edits to any single file survive a restart.
+    //
+    // Fallback for very old installs: if neither folder form nor
+    // single-file exists, also seed the v1 template at
+    // .ariadne/surface.tsx — gives the bundler something to build
+    // even before the v2 folder seed has run on a corrupted disk.
     ensureAriadneFolder(rootPath);
-    const surfacePath = path.join(rootPath, ".ariadne", "surface.tsx");
-    if (!fs.existsSync(surfacePath)) {
+    const { written: v2Written, total: v2Total } = seedPortfolioV2Surface(rootPath);
+    if (v2Written > 0) {
+      logger.info({ rootPath, written: v2Written, total: v2Total }, "Seeded Portfolio v2 surface folder");
+    }
+    const singleSurfacePath = path.join(rootPath, ".ariadne", "surface.tsx");
+    const folderEntry = path.join(rootPath, ".ariadne", "surface", "index.tsx");
+    if (!fs.existsSync(folderEntry) && !fs.existsSync(singleSurfacePath)) {
       writeSurface(rootPath, SURFACE_TSX);
     }
 

@@ -53,6 +53,15 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build:web
+
+      - name: Bundle budget gate (PERFORMANCE_ARCHITECTURE §1)
+        # Reads apps/web/dist/assets/*.js, gzips each, checks against
+        # the categorised budgets in scripts/check-bundle-budgets.ts.
+        # Fails the build on budget violations or surprise unbudgeted
+        # chunks (>50kB gz without an explicit rule). The chunk report
+        # is printed to the job log either way for trend tracking.
+        run: npm run check:bundle
+
       # Upload as an artifact so a reviewer on a PR can grab the bundle
       # without needing a local environment. Cheap; expires in 7 days.
       - uses: actions/upload-artifact@v4

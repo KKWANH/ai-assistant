@@ -18,6 +18,7 @@ import { fireHooksDetached } from "../services/hooks.js";
 import { buildSurface } from "../services/surfaceBuild.js";
 import { retrieveWithMeta } from "../services/retrieval.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
+import { seedPortfolioV2Surface } from "../surface/portfolioV2Template.js";
 import * as budgetStarter from "../surface/budgetStarter.js";
 import * as readingStarter from "../surface/readingStarter.js";
 import * as chefbookStarter from "../surface/chefbookStarter.js";
@@ -180,7 +181,14 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
           fs.mkdirSync(path.dirname(filePath), { recursive: true });
           fs.writeFileSync(filePath, content, "utf-8");
         }
-        writeSurface(rootPath, starterDef.surface);
+        // Portfolio starter ships the v2 multi-file surface folder
+        // (AI1). Other starters keep their single-file surface for
+        // now — they're smaller and don't need the split.
+        if (starter === "portfolio") {
+          seedPortfolioV2Surface(rootPath);
+        } else {
+          writeSurface(rootPath, starterDef.surface);
+        }
         if (starterDef.actions) {
           // The .ariadne/ folder already exists from ensureAriadneFolder() above.
           fs.writeFileSync(

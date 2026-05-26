@@ -9,5 +9,6 @@
       "@ariadne/surface": ["./src/surface/runtime.js"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["src/surface-templates/**"]
 }
