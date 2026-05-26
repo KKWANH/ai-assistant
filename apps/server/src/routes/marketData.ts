@@ -10,7 +10,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory, getQuoteCalendars } from "../services/marketData.js";
+import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory, getQuoteCalendars, getQuoteNews, getDividendHistory } from "../services/marketData.js";
 
 const MAX_SYMBOLS = 60;
 
@@ -58,6 +58,32 @@ export async function marketDataRoutes(app: FastifyInstance): Promise<void> {
     const interval = (req.query.interval ?? "1d").trim();
     try {
       const points = await getQuoteHistory(raw, range, interval);
+      return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points });
+    } catch (e) {
+      return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points: [], error: String((e as Error)?.message ?? e) });
+    }
+  });
+
+  // AS — Recent news headlines for a single symbol (v1/finance/search).
+  app.get<{ Querystring: { symbol?: string; max?: string } }>("/market/news", async (req, reply) => {
+    const raw = (req.query.symbol ?? "").trim();
+    if (!raw) return reply.status(400).send({ error: "symbol query param is required" });
+    const max = Math.max(1, Math.min(20, Number(req.query.max) || 8));
+    try {
+      const items = await getQuoteNews(raw, max);
+      return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), items });
+    } catch (e) {
+      return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), items: [], error: String((e as Error)?.message ?? e) });
+    }
+  });
+
+  // AS — Dividend history for Total-Return computation.
+  app.get<{ Querystring: { symbol?: string; range?: string } }>("/market/dividends", async (req, reply) => {
+    const raw = (req.query.symbol ?? "").trim();
+    if (!raw) return reply.status(400).send({ error: "symbol query param is required" });
+    const range = (req.query.range ?? "5y").trim();
+    try {
+      const points = await getDividendHistory(raw, range);
       return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points });
     } catch (e) {
       return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), points: [], error: String((e as Error)?.message ?? e) });

@@ -392,6 +392,114 @@ export async function getQuoteCalendars(symbols: string[]): Promise<QuoteCalenda
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// AS — Yahoo news headlines via v1/finance/search (no auth needed).
+//      Returns recent news items per query. Cache 1h.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface QuoteNewsItem {
+  uuid: string;
+  title: string;
+  publisher: string;
+  link: string;
+  publishedAt: string;  // ISO date
+  thumbnail?: string;
+  relatedTickers?: string[];
+}
+
+const NEWS_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
+interface NewsCacheEntry { items: QuoteNewsItem[]; expires: number; }
+const newsCache = new Map<string, NewsCacheEntry>();
+
+export async function getQuoteNews(symbol: string, max = 8): Promise<QuoteNewsItem[]> {
+  const resolved = normalizeSymbol(symbol);
+  const key = `NEWS:${resolved}:${max}`;
+  const now = Date.now();
+  const hit = newsCache.get(key);
+  if (hit && hit.expires > now) return hit.items;
+
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(resolved)}&newsCount=${max}&quotesCount=0&enableFuzzyQuery=false`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": BROWSER_UA, Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`news ${resolved}: HTTP ${res.status}`);
+  const data = (await res.json()) as { news?: Array<{
+    uuid?: string; title?: string; publisher?: string; link?: string;
+    providerPublishTime?: number;
+    thumbnail?: { resolutions?: Array<{ url?: string; tag?: string }> };
+    relatedTickers?: string[];
+  }> };
+  const items: QuoteNewsItem[] = (data.news ?? []).flatMap((n) => {
+    if (!n.title || !n.link) return [];
+    const thumb = n.thumbnail?.resolutions?.find((r) => r.tag === "140x140")?.url
+      ?? n.thumbnail?.resolutions?.[0]?.url;
+    return [{
+      uuid: n.uuid ?? n.link,
+      title: n.title,
+      publisher: n.publisher ?? "Yahoo",
+      link: n.link,
+      publishedAt: typeof n.providerPublishTime === "number"
+        ? new Date(n.providerPublishTime * 1000).toISOString()
+        : new Date().toISOString(),
+      thumbnail: thumb,
+      relatedTickers: n.relatedTickers ?? [],
+    }];
+  });
+  newsCache.set(key, { items, expires: now + NEWS_CACHE_TTL_MS });
+  return items;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AS — Dividend history. Yahoo's chart endpoint with events=div returns
+//      per-symbol dividend payments. Used for Total Return computation
+//      (TR = price return + dividend yield).
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface DividendPoint { date: string; amount: number; }
+
+const DIV_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+interface DivCacheEntry { points: DividendPoint[]; expires: number; }
+const dividendCache = new Map<string, DivCacheEntry>();
+
+async function fetchYahooDividendsFrom(host: string, symbol: string, range: string): Promise<DividendPoint[]> {
+  const url = `${host}${encodeURIComponent(symbol)}?range=${range}&interval=1d&events=div`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`${host} ${symbol}: HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    chart?: { result?: Array<{ events?: { dividends?: Record<string, { amount?: number; date?: number }> } }> };
+  };
+  const dividends = data.chart?.result?.[0]?.events?.dividends ?? {};
+  const out: DividendPoint[] = [];
+  for (const v of Object.values(dividends)) {
+    if (typeof v.amount === "number" && typeof v.date === "number" && v.amount > 0) {
+      out.push({ date: new Date(v.date * 1000).toISOString().slice(0, 10), amount: v.amount });
+    }
+  }
+  out.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return out;
+}
+
+export async function getDividendHistory(symbol: string, range = "5y"): Promise<DividendPoint[]> {
+  const resolved = normalizeSymbol(symbol);
+  const key = `DIV:${resolved}:${range}`;
+  const now = Date.now();
+  const hit = dividendCache.get(key);
+  if (hit && hit.expires > now) return hit.points;
+  let lastErr: unknown = new Error(`no Yahoo hosts for ${resolved}`);
+  for (const host of YAHOO_CHART_HOSTS) {
+    try {
+      const points = await fetchYahooDividendsFrom(host, resolved, range);
+      dividendCache.set(key, { points, expires: now + DIV_CACHE_TTL_MS });
+      return points;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // AQ — Historical price series for benchmark overlay & technical analysis.
 // ─────────────────────────────────────────────────────────────────────────
 

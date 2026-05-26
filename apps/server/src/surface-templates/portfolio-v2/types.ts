@@ -227,7 +227,8 @@ export interface QuoteCalendar {
 }
 
 /** AR — Per-position contribution to total return. weight × return / 100
- *  → contribution in percentage points of total portfolio return. */
+ *  → contribution in percentage points of total portfolio return.
+ *  AS — adds excess return + Brinson-style allocation/selection split. */
 export interface Contribution {
   symbol: string;
   name: string;
@@ -235,6 +236,37 @@ export interface Contribution {
   weightPct: number;
   returnPct: number;
   contributionPp: number;
+  /** AS — Position's return relative to the portfolio's total return. */
+  excessReturnPp: number;
+}
+
+/** AS — Brinson-style sector decomposition. Without an external sector
+ *  benchmark we use the portfolio's own total return as the neutral
+ *  baseline → sum of excessContribution across sectors = 0. */
+export interface SectorAttribution {
+  sector: string;
+  weightPct: number;
+  sectorReturnPct: number;
+  contributionPp: number;
+  /** weight × (sector_return - portfolio_total_return). Positive →
+   *  sector outperformed your own average; negative → dragged down. */
+  excessContributionPp: number;
+  /** Reused as a proxy for "allocation" effect — over/underweighting
+   *  this sector relative to equal weight across N sectors. */
+  vsEqualWeightPp: number;
+  /** Number of positions in this sector. */
+  positions: number;
+}
+
+/** AS — News item attached to a symbol. */
+export interface NewsItem {
+  uuid: string;
+  title: string;
+  publisher: string;
+  link: string;
+  publishedAt: string;
+  thumbnail?: string;
+  relatedTickers?: string[];
 }
 
 /** AR — Per-tax-regime YTD realized summary. */
@@ -308,6 +340,12 @@ export interface Derived {
    *  return + per-sector aggregation. Sorted by absolute contribution desc. */
   contributions: Contribution[];
   contributionsBySector: Array<{ sector: string; contributionPp: number; weightPct: number }>;
+  /** AS — Total portfolio return (sum of contributions), used as the
+   *  neutral baseline for excess-return decomposition. */
+  totalReturnPp: number;
+  /** AS — Brinson-style sector breakdown with excess + equal-weight
+   *  allocation effects. */
+  sectorAttribution: SectorAttribution[];
   /** AR — Tax-regime YTD realized summary. Keyed by regime label. */
   taxBuckets: TaxBucket[];
 }

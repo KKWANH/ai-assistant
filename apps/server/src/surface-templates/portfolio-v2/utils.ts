@@ -68,7 +68,7 @@ export function regionOf(symbol: string, currency: string): string {
 }
 
 // ─ AQ — FIFO realized P&L from transaction log ───────────────────────────
-import type { Transaction, RealizedPnL, RiskMetrics, HistPoint, Contribution, TaxBucket, RawPosition } from "./types";
+import type { Transaction, RealizedPnL, RiskMetrics, HistPoint, Contribution, SectorAttribution, TaxBucket, RawPosition } from "./types";
 
 interface Lot { date: string; shares: number; price: number; fee: number; }
 
@@ -229,45 +229,94 @@ export function saveBaseToStorage(base: string): void {
   try { localStorage.setItem(LS_KEY, base); } catch { /* */ }
 }
 
-// ─ AR — Performance attribution ──────────────────────────────────────────
+// ─ AR/AS — Performance attribution ───────────────────────────────────────
 // contribution_pp = (position_weight × position_return) / 100
-// Aggregated per-sector for the "어느 섹터가 alpha 만들었나" view.
+// excess_pp = weight × (position_return − portfolio_total_return)
+//
+// AS — Sector breakdown adds two interpretive views:
+//   1. excessContributionPp = w_s × (r_s − R_p)  — Brinson-style
+//      "selection" using portfolio total return as the neutral baseline
+//      (sums to 0 across sectors; positive → sector beat your average).
+//   2. vsEqualWeightPp = (w_s − 1/N) × r_s  — proxy "allocation" effect
+//      treating equal-weight as the neutral allocation. Positive → you
+//      were overweight a winning sector or underweight a loser.
+//
+// True Brinson would need external benchmark sector weights + returns,
+// which Yahoo's free API doesn't expose. The portfolio-relative view
+// answers most of the same questions a PM asks.
 export function computeContributions(
   positions: RawPosition[],
   fxMap: Record<string, number>,
-): { contributions: Contribution[]; bySector: Array<{ sector: string; contributionPp: number; weightPct: number }> } {
+): {
+  contributions: Contribution[];
+  bySector: Array<{ sector: string; contributionPp: number; weightPct: number }>;
+  sectorAttribution: SectorAttribution[];
+  totalReturnPp: number;
+} {
   const totalInvested = positions.reduce((s, p) => s + toBase(p.market_value, p.currency, fxMap), 0);
-  if (totalInvested <= 0) return { contributions: [], bySector: [] };
-  const contributions: Contribution[] = positions
+  if (totalInvested <= 0) {
+    return { contributions: [], bySector: [], sectorAttribution: [], totalReturnPp: 0 };
+  }
+  // First pass: weight + return → contribution. We need the total return
+  // before computing excess, so go in two passes.
+  const enriched = positions
     .filter((p) => Number.isFinite(p.return_pct))
     .map((p) => {
       const baseValue = toBase(p.market_value, p.currency, fxMap);
       const weightPct = (baseValue / totalInvested) * 100;
       const returnPct = Number.isFinite(p.return_pct) ? p.return_pct : 0;
       const contributionPp = (weightPct * returnPct) / 100;
-      return {
-        symbol: p.symbol,
-        name: p.name || p.symbol,
-        sector: p.sector || "기타",
-        weightPct,
-        returnPct,
-        contributionPp,
-      };
-    })
+      return { p, baseValue, weightPct, returnPct, contributionPp };
+    });
+  const totalReturnPp = enriched.reduce((s, x) => s + x.contributionPp, 0);
+
+  const contributions: Contribution[] = enriched
+    .map((x) => ({
+      symbol: x.p.symbol,
+      name: x.p.name || x.p.symbol,
+      sector: x.p.sector || "기타",
+      weightPct: x.weightPct,
+      returnPct: x.returnPct,
+      contributionPp: x.contributionPp,
+      excessReturnPp: (x.weightPct * (x.returnPct - totalReturnPp)) / 100,
+    }))
     .sort((a, b) => Math.abs(b.contributionPp) - Math.abs(a.contributionPp));
 
-  // Sector aggregation. Sum contributions; weight is the cohort weight.
-  const sectorMap = new Map<string, { contributionPp: number; weightPct: number }>();
+  // Sector aggregation.
+  const sectorMap = new Map<string, { contributionPp: number; weightPct: number; sectorReturnWeighted: number; positions: number }>();
   for (const c of contributions) {
-    const cur = sectorMap.get(c.sector) ?? { contributionPp: 0, weightPct: 0 };
+    const cur = sectorMap.get(c.sector) ?? { contributionPp: 0, weightPct: 0, sectorReturnWeighted: 0, positions: 0 };
     cur.contributionPp += c.contributionPp;
     cur.weightPct += c.weightPct;
+    cur.sectorReturnWeighted += c.weightPct * c.returnPct;
+    cur.positions += 1;
     sectorMap.set(c.sector, cur);
   }
-  const bySector = Array.from(sectorMap.entries())
-    .map(([sector, v]) => ({ sector, ...v }))
-    .sort((a, b) => Math.abs(b.contributionPp) - Math.abs(a.contributionPp));
-  return { contributions, bySector };
+
+  const numSectors = sectorMap.size;
+  const equalWeightPct = numSectors > 0 ? 100 / numSectors : 0;
+  const sectorAttribution: SectorAttribution[] = Array.from(sectorMap.entries())
+    .map(([sector, v]) => {
+      const sectorReturnPct = v.weightPct > 0 ? v.sectorReturnWeighted / v.weightPct : 0;
+      return {
+        sector,
+        weightPct: v.weightPct,
+        sectorReturnPct,
+        contributionPp: v.contributionPp,
+        excessContributionPp: (v.weightPct * (sectorReturnPct - totalReturnPp)) / 100,
+        vsEqualWeightPp: ((v.weightPct - equalWeightPct) * sectorReturnPct) / 100,
+        positions: v.positions,
+      };
+    })
+    .sort((a, b) => Math.abs(b.excessContributionPp) - Math.abs(a.excessContributionPp));
+
+  // Legacy bySector for back-compat with AR section.
+  const bySector = sectorAttribution.map((s) => ({
+    sector: s.sector,
+    contributionPp: s.contributionPp,
+    weightPct: s.weightPct,
+  }));
+  return { contributions, bySector, sectorAttribution, totalReturnPp };
 }
 
 // ─ AR — Tax-regime YTD realized P&L ──────────────────────────────────────

@@ -173,6 +173,18 @@ async function handleBridgeRequest(
       return res.calendars;
     }
 
+    case "getQuoteNews": {
+      const [symbol, max] = args as [string, number?];
+      const res = await api.getQuoteNews(symbol, max ?? 8);
+      return res.items;
+    }
+
+    case "getDividendHistory": {
+      const [symbol, range] = args as [string, string?];
+      const res = await api.getDividendHistory(symbol, range ?? "5y");
+      return res.points;
+    }
+
     default:
       throw new Error(`Unknown method: ${method}`);
   }

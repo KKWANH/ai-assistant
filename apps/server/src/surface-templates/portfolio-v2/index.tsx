@@ -25,7 +25,7 @@
  */
 
 import { React, useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, Transaction, Benchmark, QuoteCalendar } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, Transaction, Benchmark, QuoteCalendar, NewsItem } from "./types";
 import { parseYaml } from "./yaml";
 import { toBase, regionOf, daysBetween, computeRealized, computeRiskMetrics, computeContributions, computeTaxBuckets, detectMajorityCurrency, loadBaseFromStorage, saveBaseToStorage } from "./utils";
 import {
@@ -72,6 +72,9 @@ export default function App() {
   const [activeThesis, setActiveThesis] = useState<string | null>(null);
   const [activePriceHistory, setActivePriceHistory] = useState<PricePoint[]>([]);
   const [activeNews, setActiveNews] = useState<string | null>(null);
+  // AS — Yahoo news headlines + dividend history fetched on row click.
+  const [activeYahooNews, setActiveYahooNews] = useState<NewsItem[]>([]);
+  const [activeDividends, setActiveDividends] = useState<Array<{ date: string; amount: number }>>([]);
   // AM/AQ — reporting currency. AQ: initial value is loaded from
   // localStorage (so user's last choice persists); falls back to the
   // majority data-currency once data loads (effect below); final fallback
@@ -540,8 +543,8 @@ export default function App() {
     // bySector weights. Returns null when history insufficient.
     const risk = computeRiskMetrics(history, bySector);
 
-    // AR — performance attribution + tax buckets.
-    const { contributions, bySector: contributionsBySector } = computeContributions(positions, fxMap);
+    // AR/AS — performance attribution + tax buckets.
+    const { contributions, bySector: contributionsBySector, sectorAttribution, totalReturnPp } = computeContributions(positions, fxMap);
     const taxBuckets = computeTaxBuckets(transactions, positions);
 
     return {
@@ -550,7 +553,7 @@ export default function App() {
       accountRollup, closingAccounts, taxAccounts, staleTheses, missingTheses,
       concentration, gainers, losers, capViolators,
       realized, realizedTotalBase, realizedYTDBase, risk,
-      contributions, contributionsBySector, taxBuckets,
+      contributions, contributionsBySector, totalReturnPp, sectorAttribution, taxBuckets,
     };
   }, [positions, cash, metals, funds, accounts, fxMap, transactions, history]);
 
@@ -607,10 +610,12 @@ export default function App() {
     setActiveThesis(null);
     setActivePriceHistory([]);
     setActiveNews(null);
+    setActiveYahooNews([]);
+    setActiveDividends([]);
     const key = fileKey(p);
+    // Yahoo lookup symbol for the live data fetches.
+    const yahooSym = p.quote_symbol || p.symbol;
 
-    // Three independent fetches; failure of any is silently ignored
-    // (the modal renders the missing-file fallback message in each pane).
     const tasks: Promise<unknown>[] = [];
 
     if (p.thesis_id) {
@@ -640,6 +645,24 @@ export default function App() {
         setActiveNews(body);
       } catch (_e) { /* */ }
     })());
+    // AS — Yahoo news headlines for this symbol.
+    if (yahooSym && typeof ariadne.getQuoteNews === "function") {
+      tasks.push((async () => {
+        try {
+          const items = await ariadne.getQuoteNews(yahooSym, 8);
+          setActiveYahooNews(items);
+        } catch (_e) { /* */ }
+      })());
+    }
+    // AS — Yahoo dividend history → fuels TR calculation.
+    if (yahooSym && typeof ariadne.getDividendHistory === "function") {
+      tasks.push((async () => {
+        try {
+          const points = await ariadne.getDividendHistory(yahooSym, "5y");
+          setActiveDividends(points);
+        } catch (_e) { /* */ }
+      })());
+    }
 
     await Promise.allSettled(tasks);
   }, [ariadne]);
@@ -675,6 +698,8 @@ export default function App() {
           thesisBody={activeThesis}
           priceHistory={activePriceHistory}
           newsBody={activeNews}
+          yahooNews={activeYahooNews}
+          dividends={activeDividends}
           liveQuote={liveQuotes[liveKey]}
           calendar={calendars[liveKey]}
           onBack={() => setActivePosition(null)}

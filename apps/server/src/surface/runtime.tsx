@@ -131,6 +131,15 @@ export interface AriadneSDK {
     exDividendDate?: string;
     dividendRate?: number; dividendYield?: number;
   }>>;
+  /** AS — Recent news headlines for a single symbol. Yahoo v1 finance
+   *  search; cache 1h server-side. */
+  getQuoteNews(symbol: string, max?: number): Promise<Array<{
+    uuid: string; title: string; publisher: string; link: string;
+    publishedAt: string; thumbnail?: string; relatedTickers?: string[];
+  }>>;
+  /** AS — Dividend history for Total-Return computation. Date + amount
+   *  per dividend payment. range: defaults to '5y'. */
+  getDividendHistory(symbol: string, range?: string): Promise<Array<{ date: string; amount: number }>>;
   /** Returns the current theme mode. Colours come from CSS custom properties. */
   theme: AriadneTheme;
 }
@@ -204,6 +213,10 @@ export function useAriadne(): AriadneSDK {
       callHost<Array<{ date: string; close: number }>>("getQuoteHistory", [symbol, range ?? "1y", interval ?? "1d"]),
     getQuoteCalendars: (symbols: string[]) =>
       callHost<Array<{ symbol: string; resolvedSymbol: string; earningsDate?: string; earningsType?: "actual" | "estimate"; exDividendDate?: string; dividendRate?: number; dividendYield?: number }>>("getQuoteCalendars", [symbols]),
+    getQuoteNews: (symbol: string, max?: number) =>
+      callHost<Array<{ uuid: string; title: string; publisher: string; link: string; publishedAt: string; thumbnail?: string; relatedTickers?: string[] }>>("getQuoteNews", [symbol, max ?? 8]),
+    getDividendHistory: (symbol: string, range?: string) =>
+      callHost<Array<{ date: string; amount: number }>>("getDividendHistory", [symbol, range ?? "5y"]),
     theme: detectTheme(),
   });
   return sdk.current;
@@ -276,6 +289,9 @@ export function LineChart({ data, width = 480, height = 240, title, color, compa
   const mutedColor = CV.mutedFg;
   const gridColor = CV.border;
 
+  // AS — hover tracking. Index of the data point closest to cursor x.
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
   if (!data.length) return <svg width={width} height={height} />;
 
   const cmp = compare && compare.length === data.length ? compare : null;
@@ -300,6 +316,16 @@ export function LineChart({ data, width = 480, height = 240, title, color, compa
     ? cmp.map((d, i) => `${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(" ")
     : "";
 
+  // AS — index lookup from svg-local mouse x. Snap to nearest data point.
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const localX = e.clientX - rect.left - PAD.left;
+    if (localX < 0 || localX > W) { setHoverIdx(null); return; }
+    const idx = Math.round((localX / W) * (data.length - 1));
+    if (idx >= 0 && idx < data.length) setHoverIdx(idx);
+  };
+
   // Legend geometry — centre two entries in a row below the title.
   const SWATCH = 16;
   const entryW = (s: string) => SWATCH + 6 + s.length * 5.6;
@@ -310,7 +336,13 @@ export function LineChart({ data, width = 480, height = 240, title, color, compa
   const compareEntryX = legendX + entryW(primaryLabel) + legendGap;
 
   return (
-    <svg width={width} height={height} style={{ fontFamily: "sans-serif", overflow: "visible" }}>
+    <svg
+      width={width}
+      height={height}
+      style={{ fontFamily: "sans-serif", overflow: "visible" }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverIdx(null)}
+    >
       {title && (
         <text x={width / 2} y={14} textAnchor="middle" fontSize={13} fontWeight={600} fill={textColor}>
           {title}
@@ -375,6 +407,43 @@ export function LineChart({ data, width = 480, height = 240, title, color, compa
         {data.map((d, i) => (
           <circle key={i} cx={x(i)} cy={y(d.value)} r={3} fill={lineColor} />
         ))}
+        {/* AS — hover crosshair + tooltip. SVG-only so the surface
+            iframe doesn't need extra DOM nodes outside the chart. */}
+        {hoverIdx != null && data[hoverIdx] && (
+          <g>
+            <line x1={x(hoverIdx)} y1={0} x2={x(hoverIdx)} y2={H} stroke={mutedColor} strokeDasharray="3 3" />
+            <circle cx={x(hoverIdx)} cy={y(data[hoverIdx]!.value)} r={5} fill={lineColor} stroke="rgb(var(--background))" strokeWidth={2} />
+            {cmp && cmp[hoverIdx] && (
+              <circle cx={x(hoverIdx)} cy={y(cmp[hoverIdx]!.value)} r={5} fill={mutedColor} stroke="rgb(var(--background))" strokeWidth={2} />
+            )}
+            {(() => {
+              const point = data[hoverIdx]!;
+              const cmpPoint = cmp ? cmp[hoverIdx] : null;
+              // Tooltip box positioned to right of the cursor unless close
+              // to the right edge — then flip left.
+              const boxW = cmp ? 160 : 120;
+              const boxH = cmp ? 50 : 34;
+              const xp = x(hoverIdx);
+              const yp = y(point.value);
+              const boxX = xp + 8 + boxW > W ? xp - boxW - 8 : xp + 8;
+              const boxY = Math.max(0, Math.min(H - boxH, yp - boxH / 2));
+              return (
+                <g pointerEvents="none">
+                  <rect x={boxX} y={boxY} width={boxW} height={boxH} rx={4} fill="rgb(var(--card))" stroke={gridColor} />
+                  <text x={boxX + 8} y={boxY + 14} fontSize={10} fontWeight={600} fill={textColor}>{point.label}</text>
+                  <text x={boxX + 8} y={boxY + 28} fontSize={10} fill={lineColor}>
+                    {primaryLabel}: {compactNum(point.value)}
+                  </text>
+                  {cmpPoint && (
+                    <text x={boxX + 8} y={boxY + 42} fontSize={10} fill={mutedColor}>
+                      {compareLabel}: {compactNum(cmpPoint.value)}
+                    </text>
+                  )}
+                </g>
+              );
+            })()}
+          </g>
+        )}
       </g>
     </svg>
   );

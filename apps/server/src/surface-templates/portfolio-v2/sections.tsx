@@ -9,7 +9,7 @@
  */
 
 import { BarChart, PieChart, LineChart, useState, useMemo } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, QuoteCalendar } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, QuoteCalendar, NewsItem } from "./types";
 import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase } from "./utils";
 import { Markdown } from "./markdown";
 import {
@@ -749,6 +749,8 @@ export function PositionDetailPage({
   thesisBody,
   priceHistory,
   newsBody,
+  yahooNews,
+  dividends,
   liveQuote,
   calendar,
   onBack,
@@ -762,6 +764,10 @@ export function PositionDetailPage({
   priceHistory: PricePoint[];
   /** Markdown body of analysis/news/<key>.md (analyst targets + headlines). */
   newsBody: string | null;
+  /** AS — Yahoo headlines for this symbol (live feed). */
+  yahooNews?: NewsItem[];
+  /** AS — Yahoo dividend history for TR calculation. */
+  dividends?: Array<{ date: string; amount: number }>;
   /** AO — Yahoo's live snapshot (52w high/low, vol, etc.) — used as a
    *  fallback when thesis/news files are absent so the page never shows
    *  an ugly "파일 없음" pane. */
@@ -882,12 +888,36 @@ export function PositionDetailPage({
         )}
       </div>
 
-      {/* AO — KPI grid. Same as before but now full-width across the page. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 16 }}>
+      {/* AO — KPI grid. AS — adds TR vs PR row: TR = price return +
+          dividends received since the position's buy_date / lookback. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 8 }}>
         <KpiCard label="평가금액" value={fmtMoney(p.market_value, p.currency)} muted={`${fmtNum(p.shares)}주`} />
         <KpiCard label="매수가" value={fmtNum(p.buy_price)} muted={p.currency} />
         <KpiCard label="현재가" value={fmtNum(p.current_price)} muted={Number.isFinite(pl) ? `${pl >= 0 ? "+" : ""}${pl.toFixed(2)}` : "—"} />
-        <KpiCard label="수익률" value={fmtPct(Number.isFinite(p.return_pct) ? p.return_pct : 0)} muted={p.confidence ?? "—"} />
+        <KpiCard label="PR (가격 수익률)" value={fmtPct(Number.isFinite(p.return_pct) ? p.return_pct : 0)} muted={p.confidence ?? "—"} />
+        {(() => {
+          // AS — Total Return = Price Return + per-share dividend yield
+          // over the holding period. Approximation: use the dividend
+          // history Yahoo gave us; sum dividends paid since buy_price was
+          // established (use the price history's first date as a proxy
+          // when we don't know the exact buy date).
+          const sinceDate = priceHistory.length > 0 ? priceHistory[0]!.label : null;
+          const dividendsSince = dividends && sinceDate
+            ? dividends.filter((d) => d.date >= sinceDate).reduce((s, d) => s + d.amount, 0)
+            : 0;
+          if (dividendsSince <= 0 || !(p.buy_price > 0)) return null;
+          const trPct = p.buy_price > 0
+            ? (((p.current_price - p.buy_price) + dividendsSince) / p.buy_price) * 100
+            : 0;
+          const dividendYieldPp = (dividendsSince / p.buy_price) * 100;
+          return (
+            <KpiCard
+              label="TR (총수익률)"
+              value={fmtPct(trPct)}
+              muted={`배당 +${dividendYieldPp.toFixed(2)}pp`}
+            />
+          );
+        })()}
         <KpiCard label="목표가" value={fmtNum(p.target_price)} muted={targetPct != null ? `${targetPct >= 0 ? "+" : ""}${targetPct.toFixed(1)}%` : "미설정"} />
         <KpiCard label="손절" value={fmtNum(p.stop_loss)} muted={stopPct != null ? `-${Math.abs(stopPct).toFixed(1)}%` : "미설정"} />
       </div>
@@ -999,10 +1029,107 @@ export function PositionDetailPage({
           tables (analyst-target grids), headings, lists, bold/italic,
           links. Was <pre> with whitespace-pre-wrap before; analysts'
           target tables were unreadable. */}
+      {/* AS — Live Yahoo news headlines. Always rendered when we have
+          any. Sits above the user's curated analysis/news/<key>.md so
+          fresh headlines bubble to the top. */}
+      {yahooNews && yahooNews.length > 0 && (
+        <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 8, color: "rgb(var(--muted-foreground))" }}>
+            실시간 뉴스 · Yahoo Finance ({yahooNews.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {yahooNews.map((n) => {
+              const ago = (() => {
+                const ms = Date.now() - new Date(n.publishedAt).getTime();
+                if (!Number.isFinite(ms)) return "";
+                const h = Math.floor(ms / 3_600_000);
+                if (h < 1) return `${Math.floor(ms / 60_000)}분 전`;
+                if (h < 24) return `${h}시간 전`;
+                return `${Math.floor(h / 24)}일 전`;
+              })();
+              return (
+                <a
+                  key={n.uuid}
+                  href={n.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "flex", gap: 8, alignItems: "flex-start",
+                    padding: 8, borderRadius: 4,
+                    background: "rgb(var(--background))",
+                    border: "1px solid rgb(var(--border))",
+                    color: "rgb(var(--foreground))", textDecoration: "none",
+                  }}
+                >
+                  {n.thumbnail && (
+                    <img
+                      src={n.thumbnail}
+                      alt=""
+                      style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3, marginBottom: 3 }}>{n.title}</div>
+                    <div style={{ fontSize: 10, color: "rgb(var(--muted-foreground))" }}>
+                      {n.publisher} · {ago}
+                      {n.relatedTickers && n.relatedTickers.length > 0 && (
+                        <span style={{ marginLeft: 6 }}>
+                          {n.relatedTickers.slice(0, 4).map((t) => (
+                            <code key={t} style={{ fontSize: 9, marginRight: 4, padding: "1px 4px", background: "rgb(var(--surface-2))", borderRadius: 2 }}>{t}</code>
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {newsBody && (
         <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, color: "rgb(var(--muted-foreground))" }}>뉴스 · 증권사 의견</div>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, color: "rgb(var(--muted-foreground))" }}>뉴스 · 증권사 의견 (내 메모)</div>
           <Markdown source={newsBody} />
+        </div>
+      )}
+
+      {/* AS — Dividend payment history (last 5y). Renders only when the
+          security pays dividends. Useful when checking yield trends. */}
+      {dividends && dividends.length > 0 && (
+        <div style={{ marginBottom: 16, padding: 12, background: "rgb(var(--surface-2))", borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, color: "rgb(var(--muted-foreground))" }}>
+            배당 이력 · {dividends.length}회 (Yahoo)
+          </div>
+          {(() => {
+            const total = dividends.reduce((s, d) => s + d.amount, 0);
+            const recent = dividends.slice(-5).reverse();
+            return (
+              <>
+                <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 6 }}>
+                  합계 {fmtNum(total, { decimals: 2 })} {p.currency}
+                  {dividends.length >= 4 && (() => {
+                    // Annualised yield estimate: trailing 4 dividends / current price.
+                    const trailing4 = dividends.slice(-4).reduce((s, d) => s + d.amount, 0);
+                    if (p.current_price > 0) {
+                      return <span> · 추정 수익률 {((trailing4 / p.current_price) * 100).toFixed(2)}% (trailing 4)</span>;
+                    }
+                    return null;
+                  })()}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {recent.map((d) => (
+                    <div key={d.date} style={{ fontSize: 10, padding: "3px 8px", background: "rgb(var(--background))", border: "1px solid rgb(var(--border))", borderRadius: 4 }}>
+                      <span style={{ color: "rgb(var(--muted-foreground))" }}>{d.date}</span>
+                      <strong style={{ marginLeft: 6 }}>{fmtNum(d.amount, { decimals: 2 })}</strong>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -1243,36 +1370,75 @@ export function BaseCurrencySelector({
   );
 }
 
-// ─ AR — Attribution section ──────────────────────────────────────────────
-// Per-position + per-sector contribution to total return (in pp).
-// "Which positions built or destroyed alpha this year." Self-review:
-// without this a PM can't answer "왜 이번 분기 outperform 했나".
+// ─ AR/AS — Attribution section ───────────────────────────────────────────
+// Per-position + per-sector contribution to total return (in pp). AS
+// adds Brinson-style sector decomposition with two interpretive views:
+//   · excess vs portfolio TR — "which sectors beat your own average"
+//     (sums to 0 across sectors; portfolio-relative)
+//   · vs equal weight — "did over/underweighting help" (allocation effect)
+//
+// Real Brinson would need external sector benchmark weights+returns;
+// Yahoo's free API doesn't expose this. Portfolio-relative answers most
+// of the same PM questions.
 export function AttributionSection({ derived, isMobile }: { derived: Derived; isMobile?: boolean }) {
   const top = derived.contributions.slice(0, 10);
   if (top.length === 0) return null;
-  const totalReturnPp = derived.contributions.reduce((s, c) => s + c.contributionPp, 0);
-  // Chart: contribution per position (top 10 abs).
+  const totalReturnPp = derived.totalReturnPp;
   const chartData = top.map((c) => ({ label: c.symbol, value: Number(c.contributionPp.toFixed(2)) }));
-  const sectorChartData = derived.contributionsBySector.slice(0, 8).map((s) => ({
+  const sectorChartData = derived.sectorAttribution.slice(0, 8).map((s) => ({
     label: s.sector,
     value: Number(s.contributionPp.toFixed(2)),
   }));
-  const chartW = isMobile ? Math.min(window.innerWidth - 48, 600) : 540;
+  const excessChartData = derived.sectorAttribution.slice(0, 8).map((s) => ({
+    label: s.sector,
+    value: Number(s.excessContributionPp.toFixed(2)),
+  }));
+  const chartW = isMobile ? Math.min(window.innerWidth - 48, 600) : 360;
   return (
     <Section title="수익 기여도 (alpha 분해)" icon="🎯">
       <div style={{ fontSize: 11, color: "rgb(var(--muted-foreground))", marginBottom: 8 }}>
         총합 가중 수익 <strong style={{ color: totalReturnPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>{totalReturnPp >= 0 ? "+" : ""}{totalReturnPp.toFixed(2)}pp</strong>
-        {" · "} 종목별 기여도 = 비중 × 수익률
+        {" · "} 기여도 = 비중 × 수익률
+        {" · "} excess = 비중 × (섹터수익 − 포트수익)
       </div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${chartW}px, 1fr))`, gap: 12, marginBottom: 12 }}>
-        <Chart title="종목별 기여 (top 10, pp)">
+        <Chart title="종목 기여 top 10 (pp)">
           <BarChart data={chartData} title="" width={chartW} height={200} />
         </Chart>
-        <Chart title="섹터별 기여 (pp)">
+        <Chart title="섹터 기여 (pp)">
           <BarChart data={sectorChartData} title="" width={chartW} height={200} />
         </Chart>
+        <Chart title="섹터 excess (vs 포트 평균, pp)">
+          <BarChart data={excessChartData} title="" width={chartW} height={200} />
+        </Chart>
       </div>
-      <Table headers={["종목", "섹터", "비중", "수익률", "기여 (pp)"]}>
+
+      {/* Sector Brinson-style table */}
+      <h4 style={subHead}>섹터 분해 (Brinson-style, portfolio-relative)</h4>
+      <Table headers={["섹터", "종목수", "비중", "섹터 수익률", "기여 (pp)", "excess vs 포트", "할당 효과"]}>
+        {derived.sectorAttribution.map((s) => (
+          <tr key={s.sector} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
+            <td style={tdLeft}><strong>{s.sector}</strong></td>
+            <td style={tdRight}>{s.positions}</td>
+            <td style={tdRight}>{s.weightPct.toFixed(1)}%</td>
+            <td style={{ ...tdRight, color: s.sectorReturnPct >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+              {fmtPct(s.sectorReturnPct)}
+            </td>
+            <td style={{ ...tdRight, color: s.contributionPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))", fontWeight: 600 }}>
+              {s.contributionPp >= 0 ? "+" : ""}{s.contributionPp.toFixed(2)}pp
+            </td>
+            <td style={{ ...tdRight, color: s.excessContributionPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+              {s.excessContributionPp >= 0 ? "+" : ""}{s.excessContributionPp.toFixed(2)}pp
+            </td>
+            <td style={{ ...tdRight, color: s.vsEqualWeightPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+              {s.vsEqualWeightPp >= 0 ? "+" : ""}{s.vsEqualWeightPp.toFixed(2)}pp
+            </td>
+          </tr>
+        ))}
+      </Table>
+
+      <h4 style={subHead}>종목 기여 top 10</h4>
+      <Table headers={["종목", "섹터", "비중", "수익률", "기여", "excess"]}>
         {top.map((c) => (
           <tr key={c.symbol} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
             <td style={tdLeft}>
@@ -1288,6 +1454,9 @@ export function AttributionSection({ derived, isMobile }: { derived: Derived; is
             </td>
             <td style={{ ...tdRight, color: c.contributionPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))", fontWeight: 600 }}>
               {c.contributionPp >= 0 ? "+" : ""}{c.contributionPp.toFixed(2)}pp
+            </td>
+            <td style={{ ...tdRight, color: c.excessReturnPp >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))" }}>
+              {c.excessReturnPp >= 0 ? "+" : ""}{c.excessReturnPp.toFixed(2)}pp
             </td>
           </tr>
         ))}

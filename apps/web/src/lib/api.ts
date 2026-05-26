@@ -381,6 +381,28 @@ export const getQuoteCalendars = (symbols: string[]) =>
     `/market/calendar?symbols=${encodeURIComponent(symbols.join(","))}`,
   );
 
+// AS — News + dividend history client wrappers.
+export interface QuoteNewsItem {
+  uuid: string;
+  title: string;
+  publisher: string;
+  link: string;
+  publishedAt: string;
+  thumbnail?: string;
+  relatedTickers?: string[];
+}
+export const getQuoteNews = (symbol: string, max = 8) =>
+  request<{ symbol: string; resolved: string; items: QuoteNewsItem[]; error?: string }>(
+    "GET",
+    `/market/news?symbol=${encodeURIComponent(symbol)}&max=${max}`,
+  );
+
+export const getDividendHistory = (symbol: string, range = "5y") =>
+  request<{ symbol: string; resolved: string; points: Array<{ date: string; amount: number }>; error?: string }>(
+    "GET",
+    `/market/dividends?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}`,
+  );
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 export const getReports = (status?: string) =>
   request<Report[]>("GET", `/reports${status ? `?status=${status}` : ""}`);
