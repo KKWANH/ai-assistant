@@ -88,7 +88,8 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
      *   runTemplate(id, input)
      *   stageFile(path, content)     → { runId, added, removed }
      *   getRun(runId)
-     *   getQuotes(symbols)          → Array<{ symbol, price, currency }>
+     *   getQuotes(symbols)          → Array<{ symbol, price, currency, … }>
+     *   getQuotesDetailed(symbols)  → { quotes, errors }
      *   getFxRates(base, currencies) → Record<currency, rate>
      *   getTheme()      → { mode }  (colours come from CSS vars)
      */
@@ -118,6 +119,7 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
         stageFile: function (p, content) { return call('stageFile', [p, content]); },
         getRun: function (id) { return call('getRun', [id]); },
         getQuotes: function (symbols) { return call('getQuotes', [symbols]); },
+        getQuotesDetailed: function (symbols) { return call('getQuotesDetailed', [symbols]); },
         getFxRates: function (base, currencies) { return call('getFxRates', [base, currencies]); },
         getTheme: function () { return Promise.resolve(window.__ariadneTheme); },
       };

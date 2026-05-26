@@ -20,7 +20,14 @@
 
 import logger from "../logger.js";
 
-const YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/";
+// Yahoo provides two equivalent v8 chart endpoints, query1 and query2.
+// They occasionally fail independently (one rate-limits while the other
+// is fine). We try query1 first, then transparently fall back to query2
+// before declaring the symbol unresolved.
+const YAHOO_CHART_HOSTS = [
+  "https://query1.finance.yahoo.com/v8/finance/chart/",
+  "https://query2.finance.yahoo.com/v8/finance/chart/",
+];
 const UA = "Mozilla/5.0 (compatible; Ariadne/1.0; +https://github.com/ariadne)";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -93,14 +100,14 @@ export function normalizeSymbol(raw: string): string {
   return s;
 }
 
-/** Fetch a single symbol's latest price from the Yahoo v8 chart endpoint. */
-async function fetchYahooQuote(symbol: string): Promise<Quote> {
-  const url = `${YAHOO_CHART}${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+/** Fetch a single symbol's latest price from a single Yahoo v8 host. */
+async function fetchYahooQuoteFrom(host: string, symbol: string): Promise<Quote> {
+  const url = `${host}${encodeURIComponent(symbol)}?interval=1d&range=1d`;
   const res = await fetch(url, {
     headers: { "User-Agent": UA, Accept: "application/json" },
     signal: AbortSignal.timeout(8000),
   });
-  if (!res.ok) throw new Error(`Yahoo ${symbol}: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`${host} ${symbol}: HTTP ${res.status}`);
 
   const data = (await res.json()) as {
     chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; currency?: string; fullExchangeName?: string; exchangeName?: string } }> };
@@ -108,7 +115,7 @@ async function fetchYahooQuote(symbol: string): Promise<Quote> {
   const meta = data.chart?.result?.[0]?.meta;
   const price = meta?.regularMarketPrice;
   if (typeof price !== "number" || !isFinite(price) || price <= 0) {
-    throw new Error(`Yahoo ${symbol}: no usable price`);
+    throw new Error(`${host} ${symbol}: no usable price`);
   }
   return {
     symbol,
@@ -118,6 +125,21 @@ async function fetchYahooQuote(symbol: string): Promise<Quote> {
     market: meta?.fullExchangeName ?? meta?.exchangeName ?? undefined,
     source: "yahoo",
   };
+}
+
+/** Fetch with transparent host failover (query1 → query2). Errors from
+ *  the last attempt propagate; the surface sees them via the detailed
+ *  error API. */
+async function fetchYahooQuote(symbol: string): Promise<Quote> {
+  let lastErr: unknown = new Error(`no Yahoo hosts configured for ${symbol}`);
+  for (const host of YAHOO_CHART_HOSTS) {
+    try {
+      return await fetchYahooQuoteFrom(host, symbol);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 /**

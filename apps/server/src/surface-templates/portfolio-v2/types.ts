@@ -87,6 +87,13 @@ export interface ManualAsset {
   notes?: string;
 }
 
+/** Per-symbol quote failure surfaced to the user as an 'unquotable' badge. */
+export interface QuoteFailure {
+  inputSymbol: string;
+  resolvedSymbol: string;
+  reason: string;
+}
+
 /** Aggregates derived from raw data — computed in index.tsx, consumed by sections. */
 export interface Derived {
   totalNetWorthBase: number;

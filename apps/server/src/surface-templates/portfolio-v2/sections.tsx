@@ -9,7 +9,7 @@
  */
 
 import { BarChart, PieChart } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure } from "./types";
 import { fmtMoney, fmtPct, daysBetween, daysUntil, toBase } from "./utils";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
@@ -155,6 +155,10 @@ export interface PositionsTableProps {
   positions: RawPosition[];
   visiblePositions: RawPosition[];
   fxMap: Record<string, number>;
+  /** Symbols Yahoo couldn't quote, keyed by inputSymbol — renders an
+   *  'unquotable' badge in the symbol column. Best-effort: missing
+   *  entries fall back to the CSV-supplied current_price. */
+  quoteFailures: Record<string, QuoteFailure>;
   search: string;
   setSearch: (s: string) => void;
   filterAccount: string;
@@ -197,9 +201,18 @@ export function PositionsTable(p: PositionsTableProps) {
           {p.visiblePositions.map((pos) => {
             const stale = pos.last_reviewed ? daysBetween(pos.last_reviewed) > 90 : false;
             const noThesis = !pos.thesis_id;
+            const qs = (pos.quote_symbol ?? pos.symbol).toUpperCase();
+            const quoteFail = p.quoteFailures[qs];
             return (
               <tr key={`${pos.account_id}-${pos.symbol}`} style={{ borderBottom: "1px solid rgb(var(--border))" }}>
-                <td style={tdLeft}><strong>{pos.symbol}</strong></td>
+                <td style={tdLeft}>
+                  <strong>{pos.symbol}</strong>
+                  {quoteFail && (
+                    <span title={`quote failed: ${quoteFail.reason}`} style={{ marginLeft: 4 }}>
+                      <Badge tone="warning">no quote</Badge>
+                    </span>
+                  )}
+                </td>
                 <td style={{ ...tdLeft, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pos.name}>{pos.name}</td>
                 <td style={tdLeft}>{accountLabel(pos.account_id)}</td>
                 <td style={tdLeft}>{pos.asset_class}</td>

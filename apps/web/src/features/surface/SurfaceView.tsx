@@ -149,6 +149,12 @@ async function handleBridgeRequest(
       return res.quotes;
     }
 
+    case "getQuotesDetailed": {
+      const [symbols] = args as [string[]];
+      const res = await api.getQuotesDetailed(symbols ?? []);
+      return res;
+    }
+
     case "getFxRates": {
       const [base, currencies] = args as [string, string[]];
       const res = await api.getFxRates(base ?? "USD", currencies ?? []);

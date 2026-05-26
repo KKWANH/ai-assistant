@@ -25,7 +25,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useAriadne } from "@ariadne/surface";
-import type { Account, RawPosition, CashBucket, ManualAsset, Derived } from "./types";
+import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure } from "./types";
 import { parseYaml } from "./yaml";
 import { toBase, regionOf, daysBetween } from "./utils";
 import {
@@ -44,6 +44,7 @@ export default function App() {
   const [analysisFiles, setAnalysisFiles] = useState<{ macro: string[]; meso: string[]; micro: string[] }>({ macro: [], meso: [], micro: [] });
 
   const [fxMap, setFxMap] = useState<Record<string, number>>({ KRW: 1 });
+  const [quoteFailures, setQuoteFailures] = useState<Record<string, QuoteFailure>>({});
   const [base] = useState<string>("KRW");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -143,6 +144,28 @@ export default function App() {
           if (!cancelled) setFxMap(m);
         } catch (_e) {
           if (!cancelled) setFxMap({ [base]: 1 });
+        }
+
+        // Live quotes — only for positions explicitly marked as Yahoo-quotable.
+        // The detailed call returns errors per-symbol so we can render an
+        // "unquotable" badge on positions whose ticker Yahoo couldn't price.
+        // Paper metals / robo funds (quote_source: manual) are skipped here;
+        // they keep their CSV-provided market_value.
+        const yahooSyms = posList
+          .filter((p) => (p.quote_source ?? "yahoo") === "yahoo")
+          .map((p) => p.quote_symbol ?? p.symbol)
+          .filter((s): s is string => !!s);
+        if (yahooSyms.length > 0 && typeof ariadne.getQuotesDetailed === "function") {
+          try {
+            const { errors } = await ariadne.getQuotesDetailed(yahooSyms);
+            if (!cancelled && errors.length > 0) {
+              const m: Record<string, QuoteFailure> = {};
+              for (const e of errors) m[e.inputSymbol] = e;
+              setQuoteFailures(m);
+            }
+          } catch (_e) {
+            /* quote failures are non-fatal — surface keeps CSV values */
+          }
         }
 
         setLoading(false);
@@ -274,6 +297,7 @@ export default function App() {
         positions={positions}
         visiblePositions={visiblePositions}
         fxMap={fxMap}
+        quoteFailures={quoteFailures}
         search={search}
         setSearch={setSearch}
         filterAccount={filterAccount}

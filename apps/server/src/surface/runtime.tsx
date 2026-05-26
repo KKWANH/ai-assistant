@@ -55,8 +55,25 @@ export interface CsvData {
 
 export interface Quote {
   symbol: string;
+  /** What the user passed in — preserved across the normalizer. */
+  inputSymbol?: string;
+  /** What we actually queried Yahoo with. */
+  resolvedSymbol?: string;
   price: number;
   currency: string;
+  /** Yahoo's exchange/market identifier (KSE / KOSDAQ / NasdaqGS / …). */
+  market?: string;
+  /** Which provider resolved this — 'yahoo' today; future fallbacks
+   *  ('alpha-vantage', 'finnhub', …) set their own name. */
+  source?: string;
+}
+
+/** Per-symbol error returned by getQuotesDetailed so surfaces can show
+ *  which positions are currently unquotable instead of blanking them. */
+export interface QuoteError {
+  inputSymbol: string;
+  resolvedSymbol: string;
+  reason: string;
 }
 
 export interface AriadneTheme {
@@ -83,8 +100,14 @@ export interface AriadneSDK {
    *  Same shape the AI's edit_file uses. */
   stageFile(path: string, content: string): Promise<StageFileResult>;
   getRun(runId: string): Promise<unknown>;
-  /** Live stock/crypto quotes for the given symbols (best-effort; may be partial). */
+  /** Live stock/crypto quotes for the given symbols (best-effort; may be partial).
+   *  Per-symbol failures are silently dropped — use getQuotesDetailed() if
+   *  you need to know which symbols failed and why. */
   getQuotes(symbols: string[]): Promise<Quote[]>;
+  /** Detailed variant: returns { quotes, errors } so the caller can
+   *  render an 'unquotable' badge on the positions whose symbols
+   *  Yahoo (and any fallback provider) couldn't price. */
+  getQuotesDetailed(symbols: string[]): Promise<{ quotes: Quote[]; errors: QuoteError[] }>;
   /** Live FX rates relative to `base` — units of base per 1 unit of each currency. */
   getFxRates(base: string, currencies: string[]): Promise<Record<string, number>>;
   /** Returns the current theme mode. Colours come from CSS custom properties. */
@@ -152,6 +175,8 @@ export function useAriadne(): AriadneSDK {
       callHost<StageFileResult>("stageFile", [p, content]),
     getRun: (runId: string) => callHost<unknown>("getRun", [runId]),
     getQuotes: (symbols: string[]) => callHost<Quote[]>("getQuotes", [symbols]),
+    getQuotesDetailed: (symbols: string[]) =>
+      callHost<{ quotes: Quote[]; errors: QuoteError[] }>("getQuotesDetailed", [symbols]),
     getFxRates: (base: string, currencies: string[]) =>
       callHost<Record<string, number>>("getFxRates", [base, currencies]),
     theme: detectTheme(),

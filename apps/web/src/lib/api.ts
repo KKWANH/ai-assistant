@@ -287,14 +287,30 @@ export const search = (query: string) =>
 // ── Market data (live quotes + FX) ────────────────────────────────────────────
 export interface Quote {
   symbol: string;
+  inputSymbol?: string;
+  resolvedSymbol?: string;
   price: number;
   currency: string;
+  market?: string;
+  source?: string;
+}
+
+export interface QuoteError {
+  inputSymbol: string;
+  resolvedSymbol: string;
+  reason: string;
 }
 
 export const getQuotes = (symbols: string[]) =>
   request<{ quotes: Quote[] }>(
     "GET",
     `/market/quotes?symbols=${encodeURIComponent(symbols.join(","))}`,
+  );
+
+export const getQuotesDetailed = (symbols: string[]) =>
+  request<{ quotes: Quote[]; errors: QuoteError[] }>(
+    "GET",
+    `/market/quotes?detailed=1&symbols=${encodeURIComponent(symbols.join(","))}`,
   );
 
 export const getFxRates = (base: string, currencies: string[]) =>
