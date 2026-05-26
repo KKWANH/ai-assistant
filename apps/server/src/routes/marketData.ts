@@ -10,7 +10,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { getQuotes, getFxRates } from "../services/marketData.js";
+import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol } from "../services/marketData.js";
 
 const MAX_SYMBOLS = 60;
 
@@ -23,13 +23,29 @@ function parseList(raw: string | undefined): string[] {
 }
 
 export async function marketDataRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Querystring: { symbols?: string } }>("/market/quotes", async (req, reply) => {
+  app.get<{ Querystring: { symbols?: string; detailed?: string } }>("/market/quotes", async (req, reply) => {
     const symbols = parseList(req.query.symbols);
     if (symbols.length === 0) {
       return reply.status(400).send({ error: "symbols query param is required" });
     }
+    // detailed=1 returns { quotes, errors } — used by surfaces that want
+    // to show per-position 'unquotable' badges instead of silently
+    // blanking failed symbols. Default shape stays backwards-compatible.
+    if (req.query.detailed === "1") {
+      const result = await getQuotesDetailed(symbols).catch(() => ({ quotes: [], errors: [] }));
+      return reply.send(result);
+    }
     const quotes = await getQuotes(symbols).catch(() => []);
     return reply.send({ quotes });
+  });
+
+  // GET /api/market/normalize?symbol=005930  → { input: "005930", resolved: "005930.KS" }
+  // Lets surfaces preview what a user-written ticker would resolve to
+  // before adding it (handy for the watchlist add flow).
+  app.get<{ Querystring: { symbol?: string } }>("/market/normalize", async (req, reply) => {
+    const raw = (req.query.symbol ?? "").trim();
+    if (!raw) return reply.status(400).send({ error: "symbol query param is required" });
+    return reply.send({ input: raw.toUpperCase(), resolved: normalizeSymbol(raw) });
   });
 
   app.get<{ Querystring: { base?: string; symbols?: string } }>("/market/fx", async (req, reply) => {

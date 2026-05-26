@@ -4,9 +4,18 @@
  *
  * Yahoo's v8 chart endpoint is UNOFFICIAL and has no SLA: it can rate-limit,
  * block, or change shape. Callers must treat live data as best-effort — each
- * symbol is fetched in isolation (Promise.allSettled), failures are dropped
- * rather than thrown, and successful results are cached for a few minutes to
+ * symbol is fetched in isolation (Promise.allSettled), failures are reported
+ * back per-symbol (no longer silently dropped — surfaces show which positions
+ * are unquotable), and successful results are cached for a few minutes to
  * keep outbound call volume low.
+ *
+ * Symbol normalization (AH): users write '005930' or 'AAPL' in their CSV.
+ * normalizeSymbol() routes to the right exchange before hitting Yahoo:
+ *   - 6-digit numeric → KR (`005930` → `005930.KS`)
+ *   - All-caps 2-5 char alpha → US (`AAPL` stays as-is)
+ *   - Letter.suffix → as-is (`SAP.DE`, `BRK-B`, `BRK.B` → `BRK-B`)
+ *   - Anything else passes through (paper assets / FX pairs handled
+ *     by getFxRates path)
  */
 
 import logger from "../logger.js";
@@ -17,8 +26,26 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface Quote {
   symbol: string;
+  /** What the user passed in — preserves their original spelling. */
+  inputSymbol?: string;
+  /** What we actually queried (after normalization). */
+  resolvedSymbol?: string;
   price: number;
   currency: string;
+  /** Exchange / market identifier from Yahoo's meta block, when present. */
+  market?: string;
+  /** Provider that resolved this quote. Always 'yahoo' today; an alternate
+   *  provider would set its own name and `getQuotesDetailed()` returns it
+   *  alongside the value. */
+  source?: string;
+}
+
+/** Per-symbol error returned by `getQuotesDetailed()` so surfaces can show
+ *  which positions couldn't be priced. */
+export interface QuoteError {
+  inputSymbol: string;
+  resolvedSymbol: string;
+  reason: string;
 }
 
 interface CacheEntry {
@@ -30,6 +57,42 @@ interface CacheEntry {
 // fetches are cached — caching a failure would freeze a transient blip.
 const cache = new Map<string, CacheEntry>();
 
+// ─────────────────────────────────────────────────────────────────────────
+// Symbol normalization — routes user-written tickers to the right Yahoo
+// suffix per exchange. Conservative: only resolves cases we're confident
+// about; anything ambiguous passes through unchanged so the user can
+// override via the `quote_symbol` CSV column.
+// ─────────────────────────────────────────────────────────────────────────
+
+const KR_6DIGIT = /^\d{6}$/;
+const US_BASIC  = /^[A-Z]{1,5}$/;           // AAPL, MSFT, F, V, BRK
+const HAS_SUFFIX = /\.[A-Z]{1,3}$/;         // .KS .KQ .AS .DE .L .PA .T .HK
+const BRK_DOT = /^([A-Z]+)\.([AB])$/;       // BRK.A → BRK-A, BRK.B → BRK-B (Yahoo wants hyphen)
+
+/** Normalize a user-written ticker to the form Yahoo Finance expects.
+ *  Returns the resolved symbol unchanged if no rule applies. */
+export function normalizeSymbol(raw: string): string {
+  const s = raw.trim().toUpperCase();
+  if (!s) return s;
+  // 1. KR codes: 6 digits → .KS by default. .KQ (KOSDAQ) is the same length
+  //    but Yahoo accepts .KS for both for many KOSDAQ tickers — if your
+  //    KOSDAQ stock 404s, override with the explicit `<digits>.KQ` in the
+  //    CSV's quote_symbol column. (Heuristic-safe default: .KS.)
+  if (KR_6DIGIT.test(s)) return `${s}.KS`;
+  // 2. Berkshire-class share suffix: Yahoo uses hyphen, users often write dot.
+  const brk = s.match(BRK_DOT);
+  if (brk) return `${brk[1]!}-${brk[2]!}`;
+  // 3. Anything with an exchange suffix already (SAP.DE, ASML.AS, BRK-B,
+  //    VUSA.AS, SXRZ.DE) passes through.
+  if (HAS_SUFFIX.test(s)) return s;
+  // 4. Crypto / FX pairs (BTC-USD, USDKRW=X) pass through.
+  if (s.includes("-") || s.includes("=X")) return s;
+  // 5. US basic tickers (AAPL, MSFT, …) pass through.
+  if (US_BASIC.test(s)) return s;
+  // 6. Anything else — preserve as-is and let Yahoo answer.
+  return s;
+}
+
 /** Fetch a single symbol's latest price from the Yahoo v8 chart endpoint. */
 async function fetchYahooQuote(symbol: string): Promise<Quote> {
   const url = `${YAHOO_CHART}${encodeURIComponent(symbol)}?interval=1d&range=1d`;
@@ -40,42 +103,86 @@ async function fetchYahooQuote(symbol: string): Promise<Quote> {
   if (!res.ok) throw new Error(`Yahoo ${symbol}: HTTP ${res.status}`);
 
   const data = (await res.json()) as {
-    chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; currency?: string } }> };
+    chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; currency?: string; fullExchangeName?: string; exchangeName?: string } }> };
   };
   const meta = data.chart?.result?.[0]?.meta;
   const price = meta?.regularMarketPrice;
   if (typeof price !== "number" || !isFinite(price) || price <= 0) {
     throw new Error(`Yahoo ${symbol}: no usable price`);
   }
-  return { symbol, price, currency: (meta?.currency ?? "").toUpperCase() };
+  return {
+    symbol,
+    resolvedSymbol: symbol,
+    price,
+    currency: (meta?.currency ?? "").toUpperCase(),
+    market: meta?.fullExchangeName ?? meta?.exchangeName ?? undefined,
+    source: "yahoo",
+  };
 }
 
-/** Resolve quotes for the given symbols. Cached; per-symbol failures are dropped. */
+/**
+ * Resolve quotes for the given symbols. Cached. Per-symbol failures
+ * are silently dropped from the returned array (legacy API). For a
+ * version that reports which symbols failed + why, use
+ * `getQuotesDetailed()`.
+ */
 export async function getQuotes(symbols: string[]): Promise<Quote[]> {
-  const wanted = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
-  const now = Date.now();
-  const out: Quote[] = [];
-  const toFetch: string[] = [];
+  const { quotes } = await getQuotesDetailed(symbols);
+  return quotes;
+}
 
-  for (const sym of wanted) {
-    const hit = cache.get(sym);
-    if (hit && hit.expires > now) out.push(hit.value);
-    else toFetch.push(sym);
+/**
+ * Detailed version of getQuotes(): returns the successful quotes AND a
+ * per-symbol error list for failures, so the surface can show which
+ * positions are currently unquotable (vs silently blanking them).
+ * Also surfaces the `resolvedSymbol` so the user can see what Yahoo
+ * actually got asked — useful when their CSV ticker mismatches.
+ */
+export async function getQuotesDetailed(
+  symbols: string[],
+): Promise<{ quotes: Quote[]; errors: QuoteError[] }> {
+  // Normalize once; remember the mapping so we can echo the user's
+  // input back even when we queried with a different symbol.
+  const mapped = symbols
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => ({ input: s.toUpperCase(), resolved: normalizeSymbol(s) }));
+  const dedup = new Map<string, { input: string; resolved: string }>();
+  for (const m of mapped) {
+    if (!dedup.has(m.resolved)) dedup.set(m.resolved, m);
+  }
+
+  const now = Date.now();
+  const quotes: Quote[] = [];
+  const errors: QuoteError[] = [];
+  const toFetch: Array<{ input: string; resolved: string }> = [];
+
+  for (const m of dedup.values()) {
+    const hit = cache.get(m.resolved);
+    if (hit && hit.expires > now) {
+      quotes.push({ ...hit.value, inputSymbol: m.input });
+    } else {
+      toFetch.push(m);
+    }
   }
 
   if (toFetch.length > 0) {
-    const settled = await Promise.allSettled(toFetch.map((s) => fetchYahooQuote(s)));
+    const settled = await Promise.allSettled(
+      toFetch.map((m) => fetchYahooQuote(m.resolved)),
+    );
     settled.forEach((r, i) => {
-      const sym = toFetch[i]!;
+      const m = toFetch[i]!;
       if (r.status === "fulfilled") {
-        cache.set(sym, { value: r.value, expires: now + CACHE_TTL_MS });
-        out.push(r.value);
+        cache.set(m.resolved, { value: r.value, expires: now + CACHE_TTL_MS });
+        quotes.push({ ...r.value, inputSymbol: m.input });
       } else {
-        logger.warn({ symbol: sym, err: String(r.reason) }, "market quote fetch failed");
+        const reason = String(r.reason);
+        logger.warn({ symbol: m.resolved, input: m.input, err: reason }, "market quote fetch failed");
+        errors.push({ inputSymbol: m.input, resolvedSymbol: m.resolved, reason });
       }
     });
   }
-  return out;
+  return { quotes, errors };
 }
 
 /**
