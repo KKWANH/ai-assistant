@@ -102,6 +102,12 @@ const IMAGE_TYPES = [
   "image/svg+xml",
 ];
 
+/** Paste text longer than this becomes a .txt file attachment instead of
+ *  landing in the textarea — prevents 500-line code dumps in the input box.
+ *  Matches ChatGPT's ~800 char / 15 line heuristic. */
+const PASTE_FILE_MIN_CHARS = 800;
+const PASTE_FILE_MIN_LINES = 15;
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -355,7 +361,9 @@ export function ChatComposer({
   // index of the table attachment currently open in the editor.
   const [tablePaste, setTablePaste] = useState<string | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   // Empty-state chips drive the composer via a store pulse — see
   // store.ts composerPulse. We use the pulse counter as the effect
   // dep so repeat clicks fire repeat actions.
@@ -482,10 +490,48 @@ export function ChatComposer({
     });
   };
 
-  // Offer to turn pasted tab-separated text into a table file.
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // 1. Clipboard images (screenshots, copy-from-browser, etc.)
+    for (const item of Array.from(e.clipboardData.items)) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          void handleFiles(dt.files);
+          return;
+        }
+      }
+    }
+
     const text = e.clipboardData.getData("text/plain");
-    if (text && looksLikeTable(text)) setTablePaste(text);
+    if (!text) return;
+
+    // 2. Tab-separated table → CSV (existing behaviour, unchanged)
+    if (looksLikeTable(text)) {
+      setTablePaste(text);
+      return;
+    }
+
+    // 3. Long text → .txt file attachment (ChatGPT-style)
+    //    Prevents 500-line code dumps landing in the input box.
+    const lineCount = (text.match(/\n/g) ?? []).length + 1;
+    if (text.length >= PASTE_FILE_MIN_CHARS || lineCount >= PASTE_FILE_MIN_LINES) {
+      e.preventDefault();
+      const now = new Date();
+      const stamp = `${now.getMonth() + 1}월 ${now.getDate()}일 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      setAttachments((prev) => [
+        ...prev,
+        {
+          name: `붙여넣기 텍스트 (${stamp}).txt`,
+          mediaType: "text/plain",
+          dataBase64: textToBase64(text),
+          kind: "file",
+        },
+      ]);
+      return;
+    }
   };
 
   const convertPastedTable = () => {
@@ -497,6 +543,29 @@ export function ChatComposer({
     ]);
     setContent((c) => c.replace(tablePaste, ""));
     setTablePaste(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.some((t) => t === "Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear when leaving the entire composer container, not child elements.
+    if (!composerRef.current?.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      void handleFiles(e.dataTransfer.files);
+    }
   };
 
   const handleSend = () => {
@@ -784,7 +853,22 @@ export function ChatComposer({
       )}
 
       {/* Main composer box */}
-      <div className="relative flex flex-col gap-2 rounded-xl border border-border bg-surface-2 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors">
+      <div
+        ref={composerRef}
+        className={`relative flex flex-col gap-2 rounded-xl border bg-surface-2 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors ${
+          isDragOver ? "border-accent bg-accent/5" : "border-border"
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Drag-to-attach overlay */}
+        {isDragOver && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-accent bg-accent/10">
+            <Paperclip className="h-5 w-5 text-accent" />
+            <span className="text-xs font-medium text-accent">파일을 놓아 첨부</span>
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           rows={1}
