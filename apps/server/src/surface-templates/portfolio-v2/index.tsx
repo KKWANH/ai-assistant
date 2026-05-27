@@ -720,10 +720,49 @@ export default function App() {
   }, [ariadne, activePosition, activeHistoryRange, refreshTick]);
 
   if (loading) {
-    return <div style={{ padding: 24, color: "rgb(var(--muted-foreground))" }}>Loading workspace…</div>;
+    // AV polish: skeleton mimicking the actual dashboard layout — the
+    // user sees the SHAPE of what's coming instead of "Loading…" text.
+    // 4 KPI tiles + a chart row + a table block. Self-contained CSS
+    // shimmer via inline keyframes (the surface bundle is sandboxed and
+    // can't reach the parent's globals.css).
+    return (
+      <div style={{ padding: "16px 20px", maxWidth: 1280, margin: "0 auto" }}>
+        <style>{`@keyframes ariadne-shimmer-sfc{from{background-position:-200% 0}to{background-position:200% 0}}.sfc-sk{background:linear-gradient(90deg,rgba(var(--border),.55),rgba(var(--muted-foreground),.32) 50%,rgba(var(--border),.55));background-size:200% 100%;animation:ariadne-shimmer-sfc 1.5s linear infinite;border-radius:6px}`}</style>
+        <div className="sfc-sk" style={{ height: 18, width: 120, marginBottom: 10 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 16 }}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} style={{ padding: 10, border: "1px solid rgb(var(--border))", borderRadius: 8, background: "rgb(var(--card))" }}>
+              <div className="sfc-sk" style={{ height: 10, width: "60%", marginBottom: 8 }} />
+              <div className="sfc-sk" style={{ height: 16, width: "80%" }} />
+            </div>
+          ))}
+        </div>
+        <div className="sfc-sk" style={{ height: 220, marginBottom: 16 }} />
+        <div className="sfc-sk" style={{ height: 18, width: 100, marginBottom: 10 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="sfc-sk" style={{ height: 36 }} />
+          ))}
+        </div>
+      </div>
+    );
   }
   if (loadError) {
-    return <div style={{ padding: 24, color: "rgb(var(--destructive))" }}>Failed to load: {loadError}</div>;
+    return (
+      <div style={{ padding: 24, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
+        <div style={{ maxWidth: 420, padding: 16, border: "1px solid rgb(var(--destructive))", borderRadius: 8, background: "rgb(var(--card))" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "rgb(var(--destructive))", marginBottom: 4 }}>워크스페이스 로드 실패</div>
+          <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", marginBottom: 10, wordBreak: "break-word" }}>{loadError}</div>
+          <button
+            type="button"
+            onClick={() => setRefreshTick((n) => n + 1)}
+            style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, background: "rgb(var(--accent))", color: "rgb(var(--accent-foreground))", border: 0, cursor: "pointer" }}
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // AR — responsive root: mobile drops the maxWidth + reduces padding.

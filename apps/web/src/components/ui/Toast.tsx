@@ -93,20 +93,27 @@ export function ToastList() {
   const { t } = useT();
   return (
     <div aria-live="polite" className={styles["container"]!}>
-      {toasts.map((item) => (
-        <div key={item.id} className={styles["toast"]!} role="alert">
-          {icons[item.variant ?? "default"]}
-          <div className={styles["content"]!}>
-            <p className={styles["toastTitle"]!}>{item.title}</p>
-            {item.description && (
-              <p className={styles["toastDescription"]!}>{item.description}</p>
-            )}
+      {toasts.map((item) => {
+        const variant = item.variant ?? "default";
+        // AV polish: variant-coloured left border + slide-in animation
+        // (animation defined in Toast.module.css). Close button is
+        // inline so the slide-out can play before unmount (future).
+        const cls = [styles["toast"]!, styles[variant] ?? ""].filter(Boolean).join(" ");
+        return (
+          <div key={item.id} className={cls} role="alert">
+            {icons[variant]}
+            <div className={styles["content"]!}>
+              <p className={styles["toastTitle"]!}>{item.title}</p>
+              {item.description && (
+                <p className={styles["toastDescription"]!}>{item.description}</p>
+              )}
+            </div>
+            <IconButton label={t("common.close")} size="xs" onClick={() => dismiss(item.id)}>
+              <X className="h-3.5 w-3.5" />
+            </IconButton>
           </div>
-          <IconButton label={t("common.close")} size="xs" onClick={() => dismiss(item.id)}>
-            <X className="h-3.5 w-3.5" />
-          </IconButton>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

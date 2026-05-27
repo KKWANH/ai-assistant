@@ -98,5 +98,16 @@ export function TabsContent({
 }) {
   const ctx = useContext(Ctx);
   if (ctx.value !== value) return null;
-  return <div role="tabpanel" className={className}>{children}</div>;
+  // AV polish: subtle fade-in when the panel mounts (or remounts on tab
+  // switch). `key={value}` forces React to remount and replay the
+  // animation each time the user changes tabs.
+  return (
+    <div
+      role="tabpanel"
+      key={value}
+      className={`animate-fade-in ${className}`}
+    >
+      {children}
+    </div>
+  );
 }

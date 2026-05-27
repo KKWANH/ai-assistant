@@ -8,6 +8,8 @@ import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
 import { ToastList } from "./components/ui/Toast";
+import { Spinner, PageSpinner } from "./components/ui/Spinner";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 
 // Route screens are code-split: each becomes its own chunk, loaded on demand.
 
@@ -119,8 +121,8 @@ const TutorialPage = lazyWithReload(() =>
 /** Centered spinner — used as the Suspense fallback while a route chunk loads. */
 function RouteFallback() {
   return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="h-5 w-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+    <div className="flex-1 flex items-center justify-center animate-fade-in">
+      <Spinner size="md" label="Loading" />
     </div>
   );
 }
@@ -181,8 +183,8 @@ function AuthGate() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-5 w-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background animate-fade-in">
+        <PageSpinner />
       </div>
     );
   }
@@ -209,5 +211,12 @@ function AuthGate() {
 }
 
 export default function App() {
-  return <AuthGate />;
+  // AV polish: wrap the whole tree in an ErrorBoundary so a render crash
+  // anywhere shows a friendly retry card instead of the blank-black-screen
+  // experience that AT-fix-3 inflicted on the user.
+  return (
+    <ErrorBoundary label="앱에 문제가 발생했음">
+      <AuthGate />
+    </ErrorBoundary>
+  );
 }

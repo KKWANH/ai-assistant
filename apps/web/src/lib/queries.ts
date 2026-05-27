@@ -444,9 +444,27 @@ export function useDeleteChat() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.deleteChat(id),
+    // AV polish: optimistic update — the row disappears from the
+    // sidebar list the instant the user clicks Delete, no waiting for
+    // the network round-trip. Rollback on error.
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ["chats"] });
+      const prev = qc.getQueryData<Chat[]>(["chats"]);
+      if (prev) {
+        qc.setQueryData<Chat[]>(["chats"], prev.filter((c) => c.id !== id));
+      }
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      // Roll back to the snapshot the cancel saved.
+      if (ctx?.prev) qc.setQueryData(["chats"], ctx.prev);
+    },
     onSuccess: (_, id) => {
-      void qc.invalidateQueries({ queryKey: ["chats"] });
       qc.removeQueries({ queryKey: ["chats", id] });
+    },
+    onSettled: () => {
+      // Reconcile with server (in case of races or new arrivals).
+      void qc.invalidateQueries({ queryKey: ["chats"] });
     },
   });
 }
