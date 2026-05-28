@@ -34,6 +34,8 @@ import { mcpRoutes } from "./routes/mcp.js";
 import { hooksRoutes } from "./routes/hooks.js";
 import { shutdownAll as shutdownMcp } from "./services/mcpClient.js";
 import { marketDataRoutes } from "./routes/marketData.js";
+import { filesRoutes } from "./routes/files.js";
+import { detectMarkitdown } from "./services/markitdown.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { attemptRoutes } from "./routes/attempts.js";
@@ -184,6 +186,7 @@ async function bootstrap(): Promise<void> {
       await api.register(mcpRoutes);
       await api.register(hooksRoutes);
       await api.register(marketDataRoutes);
+      await api.register(filesRoutes);
       await api.register(skillRoutes);
       await api.register(scheduleRoutes);
       await api.register(attemptRoutes);
@@ -256,6 +259,12 @@ async function bootstrap(): Promise<void> {
   const settings = getActiveSettings();
 
   await app.listen({ port: PORTS.server, host: "0.0.0.0" });
+
+  // AW — probe for `markitdown` CLI once at boot. Cached for the
+  // process lifetime; the /files/extract route gates on the result.
+  // Awaited but non-fatal (best-effort): a missing markitdown should
+  // not block the server from starting.
+  await detectMarkitdown();
 
   // Start the in-process action scheduler — ticks every 60s, fires
   // recurring action runs declared in the action_schedules table.

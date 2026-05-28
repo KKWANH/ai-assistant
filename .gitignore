@@ -55,3 +55,4 @@ id_rsa.*
 # real account names, real workspace paths). Keep them on the
 # contributor's machine; never ship in the repo.
 apps/server/src/eval/cases/user-promoted/
+.ariadne/cache/

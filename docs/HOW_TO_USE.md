@@ -68,6 +68,34 @@ ariadne admin       # open the loopback admin dashboard
 
 If you'd rather not install the alias, the equivalent is `./ops/ariadne.sh start`.
 
+### Optional: `markitdown` for richer PDF / Word / PPT extraction
+
+By default Ariadne extracts plain text from PDF (via `pdfjs-dist`) and
+DOCX (via `mammoth`). For richer markdown (headings, tables, lists +
+PPTX / XLSX support) install [microsoft/markitdown](https://github.com/microsoft/markitdown):
+
+```bash
+pip install 'markitdown[pdf,docx,pptx,xlsx]'
+```
+
+Then either add the install location to your shell `PATH` so the server
+picks it up, or set the explicit binary path in `.env`:
+
+```bash
+echo "MARKITDOWN_PATH=$(which markitdown)" >> .env
+ariadne restart
+```
+
+Confirm with `curl http://localhost:4319/api/files/markitdown-status` —
+you should see `{"available": true, "version": "0.x.y", ...}`.
+
+When markitdown is detected, the `POST /api/files/extract` endpoint
+converts PDF / DOCX / PPTX / XLSX / HTML / EML / IPYNB to markdown,
+cached in `<workspace>/.ariadne/cache/markdown/<sha256>.md` so repeat
+calls are O(1) reads. For visual context (slides, diagrams, equations)
+that don't survive markdown conversion, `GET /api/files/pdf-screenshot`
+renders a single PDF page to PNG.
+
 ---
 
 ## 2. Connect your AI provider
