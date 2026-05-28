@@ -143,6 +143,10 @@ export interface FileMeta {
   estimatedTokens: number;
   sensitive: boolean;
   sensitiveReason?: string;
+  /** AX — set when a markitdown-cached version exists at
+   *  <workspace>/.ariadne/cache/markdown/<hash>.md. Drives the "md"
+   *  badge in the file picker and unlocks the preview modal. */
+  hasMarkdown?: boolean;
 }
 
 export interface Snapshot {

@@ -6,6 +6,7 @@ import matter from "gray-matter";
 import yaml from "yaml";
 import type { FileMeta } from "@ariadne/shared";
 import { checkSensitive } from "../security/sensitive.js";
+import { isMarkdownCachedByHashSync } from "../services/markdownCache.js";
 
 const HEADING_RE = /^#{1,6}\s+(.+)/gm;
 
@@ -52,7 +53,7 @@ function xlsxSheetNames(buf: Buffer): string[] {
 }
 
 /** Build a FileMeta for a single file. `relPath` is relative to workspace root. */
-export async function buildFileMeta(absPath: string, relPath: string): Promise<FileMeta> {
+export async function buildFileMeta(absPath: string, relPath: string, workspaceRoot?: string): Promise<FileMeta> {
   const stat = fs.statSync(absPath);
   const buf = fs.readFileSync(absPath);
   const hash = sha256(buf);
@@ -72,6 +73,13 @@ export async function buildFileMeta(absPath: string, relPath: string): Promise<F
       }
     }
 
+    // AX — fast sync existence check by hash. workspaceRoot is the
+    // scanner's known-good absolute root; required for the cache path
+    // join.
+    const hasMarkdown = workspaceRoot
+      ? (isMarkdownCachedByHashSync(workspaceRoot, hash) || undefined)
+      : undefined;
+
     return {
       path: relPath,
       extension: ext,
@@ -86,6 +94,7 @@ export async function buildFileMeta(absPath: string, relPath: string): Promise<F
       estimatedTokens: estimateTokens(stat.size / 2), // rough estimate for binary
       sensitive: sensitiveReason !== null,
       sensitiveReason: sensitiveReason ?? undefined,
+      hasMarkdown,
     };
   }
 

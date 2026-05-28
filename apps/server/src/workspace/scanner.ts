@@ -63,7 +63,7 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
     }
 
     try {
-      const meta = await buildFileMeta(absPath, relPath);
+      const meta = await buildFileMeta(absPath, relPath, workspace.rootPath);
       files.push(meta);
     } catch {
       ignoredCount++;
@@ -140,6 +140,22 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
         }
       } catch (err) {
         logger.warn({ workspaceId: workspace.id, err }, "symbol indexer threw");
+      }
+      // AX — markitdown queue: convert any PDF/DOCX/PPTX/XLSX/HWP in the
+      // snapshot to markdown so the cache is warm before the user opens
+      // the file. Skips files already cached; concurrency-limited so a
+      // 200-file workspace doesn't fork 200 subprocesses at once.
+      try {
+        const { queueWorkspaceMarkdown } = await import("../services/markdownQueue.js");
+        const r = await queueWorkspaceMarkdown(workspace.rootPath, files);
+        if (r.converted > 0 || r.failed > 0) {
+          logger.info(
+            { workspaceId: workspace.id, ...r },
+            "markdown cache warmed",
+          );
+        }
+      } catch (err) {
+        logger.warn({ workspaceId: workspace.id, err }, "markdown queue threw");
       }
     })();
   });

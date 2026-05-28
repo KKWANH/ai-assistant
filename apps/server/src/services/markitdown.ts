@@ -30,20 +30,27 @@ import { access } from "node:fs/promises";
 import { constants as FS } from "node:fs";
 import logger from "../logger.js";
 
-/** Formats markitdown can convert without additional install steps
- *  (image / audio formats require LLM endpoints; we skip those). */
+/** Formats we can convert to markdown. Most go through markitdown
+ *  directly; `.hwp` (Hangul Word Processor) gets a side-pipeline through
+ *  hwp5txt because Korean academic users (notably the maintainer's
+ *  mother — the AW commit's motivating use case) live on HWP. */
 export const MARKITDOWN_FORMATS = new Set([
   ".pdf", ".docx", ".pptx", ".xlsx", ".xls",
   ".html", ".htm", ".xml",
   ".csv", ".json", ".jsonl", ".ipynb",
   ".msg", ".eml",
+  ".hwp",
 ]);
+const HWP_EXTS = new Set([".hwp"]);
 
 interface MarkitdownStatus {
   available: boolean;
   binaryPath: string | null;
   version: string | null;
   detectedAt: number;
+  /** HWP support — separate binary (hwp5txt), separately probed. */
+  hwpAvailable: boolean;
+  hwpBinaryPath: string | null;
 }
 
 let status: MarkitdownStatus = {
@@ -51,31 +58,56 @@ let status: MarkitdownStatus = {
   binaryPath: null,
   version: null,
   detectedAt: 0,
+  hwpAvailable: false,
+  hwpBinaryPath: null,
 };
 
-/** Probe for markitdown. Respects MARKITDOWN_PATH env override. Runs
- *  once at server boot — re-detection requires a restart. */
+/** Probe for markitdown + hwp5txt. Respects MARKITDOWN_PATH and
+ *  HWP5TXT_PATH env overrides. Runs once at server boot. */
 export async function detectMarkitdown(): Promise<MarkitdownStatus> {
-  const explicit = process.env["MARKITDOWN_PATH"]?.trim();
-  // Try the explicit path first, then PATH (just "markitdown").
-  const candidates = [explicit, "markitdown"].filter(Boolean) as string[];
-  for (const cand of candidates) {
+  // markitdown
+  let mdAvailable = false;
+  let mdBinary: string | null = null;
+  let mdVersion: string | null = null;
+  for (const cand of [process.env["MARKITDOWN_PATH"]?.trim(), "markitdown"].filter(Boolean) as string[]) {
     try {
-      // If the candidate is an absolute path, also stat it.
-      if (cand.startsWith("/")) {
-        await access(cand, FS.X_OK);
-      }
-      const version = await runMarkitdownArgs(cand, ["--version"], 5000);
-      const v = version.trim().split(/\s+/).pop() ?? null;
-      status = { available: true, binaryPath: cand, version: v, detectedAt: Date.now() };
-      logger.info({ binaryPath: cand, version: v }, "markitdown detected");
-      return status;
-    } catch {
-      // Try next candidate.
-    }
+      if (cand.startsWith("/")) await access(cand, FS.X_OK);
+      const v = await runCmd(cand, ["--version"], 5000);
+      mdAvailable = true;
+      mdBinary = cand;
+      mdVersion = v.trim().split(/\s+/).pop() ?? null;
+      logger.info({ binaryPath: cand, version: mdVersion }, "markitdown detected");
+      break;
+    } catch { /* try next */ }
   }
-  status = { available: false, binaryPath: null, version: null, detectedAt: Date.now() };
-  logger.info("markitdown not available — extraction falls back to pdfjs/mammoth");
+  if (!mdAvailable) {
+    logger.info("markitdown not available — extraction falls back to pdfjs/mammoth");
+  }
+
+  // hwp5txt (Korean Hangul). Probed independently — users can have
+  // either, both, or neither.
+  let hwpAvailable = false;
+  let hwpBinary: string | null = null;
+  for (const cand of [process.env["HWP5TXT_PATH"]?.trim(), "hwp5txt"].filter(Boolean) as string[]) {
+    try {
+      if (cand.startsWith("/")) await access(cand, FS.X_OK);
+      // hwp5txt has no --version; --help exits 0.
+      await runCmd(cand, ["--help"], 5000);
+      hwpAvailable = true;
+      hwpBinary = cand;
+      logger.info({ binaryPath: cand }, "hwp5txt detected — .hwp extraction enabled");
+      break;
+    } catch { /* try next */ }
+  }
+  if (!hwpAvailable) {
+    logger.info("hwp5txt not available — .hwp files will be skipped");
+  }
+
+  status = {
+    available: mdAvailable, binaryPath: mdBinary, version: mdVersion,
+    detectedAt: Date.now(),
+    hwpAvailable, hwpBinaryPath: hwpBinary,
+  };
   return status;
 }
 
@@ -83,24 +115,38 @@ export function getMarkitdownStatus(): MarkitdownStatus {
   return status;
 }
 
-/** Convert a file to markdown using markitdown. Throws if markitdown
- *  isn't installed, or the subprocess exits non-zero, or stdout is
- *  empty. Caller wraps in try/catch and falls back where appropriate. */
+/** Convert a file to markdown. Dispatches:
+ *   - .hwp → hwp5txt subprocess, output wrapped in a minimal markdown
+ *     stub (no structure but plain text is enough for AI context)
+ *   - everything else → markitdown
+ *  Throws if the relevant binary isn't installed or the subprocess
+ *  fails. Caller handles fallback. */
 export async function convertToMarkdown(absPath: string, timeoutMs = 30_000): Promise<string> {
+  const ext = absPath.slice(absPath.lastIndexOf(".")).toLowerCase();
+  if (HWP_EXTS.has(ext)) {
+    if (!status.hwpAvailable || !status.hwpBinaryPath) {
+      throw new Error("hwp5txt not installed — pip install pyhwp or set HWP5TXT_PATH");
+    }
+    const text = await runCmd(status.hwpBinaryPath, [absPath], timeoutMs);
+    if (!text.trim()) throw new Error(`hwp5txt empty output for ${absPath}`);
+    // HWP gives plain text. Wrap with a header so the AI sees the
+    // source filename and the markdown chunker still has a heading
+    // anchor. No structure inference — that needs a different
+    // extractor (LibreOffice → ODT → markdown would be the next step).
+    const filename = absPath.split("/").pop() ?? absPath;
+    return `# ${filename}\n\n${text}`;
+  }
   if (!status.available || !status.binaryPath) {
     throw new Error("markitdown not installed — set MARKITDOWN_PATH or pip install markitdown");
   }
-  const out = await runMarkitdownArgs(status.binaryPath, [absPath], timeoutMs);
-  if (!out.trim()) {
-    throw new Error(`markitdown produced empty output for ${absPath}`);
-  }
+  const out = await runCmd(status.binaryPath, [absPath], timeoutMs);
+  if (!out.trim()) throw new Error(`markitdown produced empty output for ${absPath}`);
   return out;
 }
 
 /** Internal: spawn helper that collects stdout, enforces a timeout,
- *  and rejects on non-zero exit. Used for both --version probing and
- *  conversion. */
-function runMarkitdownArgs(bin: string, args: string[], timeoutMs: number): Promise<string> {
+ *  and rejects on non-zero exit. Shared by markitdown + hwp5txt. */
+function runCmd(bin: string, args: string[], timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       stdio: ["ignore", "pipe", "pipe"],

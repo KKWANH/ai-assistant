@@ -17,6 +17,7 @@
 
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir, rename, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import logger from "../logger.js";
 import { convertToMarkdown, MARKITDOWN_FORMATS, getMarkitdownStatus } from "./markitdown.js";
@@ -111,4 +112,12 @@ export async function isMarkdownCached(workspaceRoot: string, absPath: string): 
   } catch {
     return { cached: false, bytes: null };
   }
+}
+
+/** AX — sync existence check by pre-computed hash. Used during scan
+ *  where metadata.ts already has the file hash, so we skip re-reading
+ *  the source file (a ~MB read per binary file is wasteful when all
+ *  we need is to check whether a cache entry exists). */
+export function isMarkdownCachedByHashSync(workspaceRoot: string, hash: string): boolean {
+  return existsSync(cachePathFor(workspaceRoot, hash));
 }

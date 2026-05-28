@@ -53,6 +53,7 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       available: s.available,
       version: s.version,
       formats: Array.from(MARKITDOWN_FORMATS).sort(),
+      hwpAvailable: s.hwpAvailable,
     });
   });
 

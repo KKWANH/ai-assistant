@@ -9,7 +9,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Database, FileSpreadsheet, Save, FileDiff } from "lucide-react";
+import { Database, FileSpreadsheet, Save, FileDiff, FileText, BadgeCheck } from "lucide-react";
+import { DocumentPreview } from "./DocumentPreview";
 import {
   useSnapshot,
   useScanWorkspace,
@@ -42,6 +43,18 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
         .sort((a, b) => a.localeCompare(b)),
     [snapshot],
   );
+
+  // AX — Documents: binary docs (pdf/docx/pptx/xlsx/hwp) listed
+  // separately with markdown-cache badges. Clicking opens the preview
+  // modal (markdown + optional PDF page screenshot).
+  const docFiles = useMemo(
+    () =>
+      (snapshot?.files ?? [])
+        .filter((f) => ["pdf", "docx", "pptx", "xlsx", "hwp"].includes(f.extension))
+        .sort((a, b) => a.path.localeCompare(b.path)),
+    [snapshot],
+  );
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
 
   const [selected, setSelected] = useState("");
   const activePath = dataFiles.includes(selected) ? selected : "";
@@ -136,13 +149,69 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
             {t("workspace.scanFiles")}
           </Button>
         </div>
-      ) : dataFiles.length === 0 ? (
-        <div className="rounded-xl border border-border border-dashed px-6 py-8 text-center">
-          <FileSpreadsheet className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">{t("workspace.data.empty")}</p>
-        </div>
       ) : (
         <>
+          {/* AX — Documents (PDF / DOCX / PPTX / XLSX / HWP) with
+              markdown-cache badges. Click → preview modal. */}
+          {docFiles.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-3">
+              <h3 className="flex items-center gap-1.5 text-xs font-medium text-foreground mb-2">
+                <FileText className="h-3.5 w-3.5 text-accent" />
+                {t("workspace.documents.heading") ?? "Documents"}
+                <span className="text-2xs text-muted-foreground">({docFiles.length})</span>
+              </h3>
+              <ul className="flex flex-col gap-1">
+                {docFiles.map((f) => (
+                  <li key={f.path}>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPath(f.path)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs hover:bg-surface-3 transition-colors group"
+                    >
+                      <span className="font-mono text-foreground truncate flex-1">{f.path}</span>
+                      <span className="text-2xs text-muted-foreground uppercase shrink-0">
+                        {f.extension}
+                      </span>
+                      {f.hasMarkdown ? (
+                        <span
+                          className="flex items-center gap-0.5 text-2xs text-accent shrink-0"
+                          title={t("workspace.documents.mdReady") ?? "Markdown ready"}
+                        >
+                          <BadgeCheck className="h-3 w-3" />
+                          md
+                        </span>
+                      ) : (
+                        <span
+                          className="text-2xs text-muted-foreground shrink-0 opacity-60"
+                          title={t("workspace.documents.mdPending") ?? "Markdown not yet cached"}
+                        >
+                          —
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {previewPath && (
+            <DocumentPreview
+              workspaceId={workspaceId}
+              path={previewPath}
+              onClose={() => setPreviewPath(null)}
+            />
+          )}
+
+          {dataFiles.length === 0 ? (
+            docFiles.length === 0 && (
+              <div className="rounded-xl border border-border border-dashed px-6 py-8 text-center">
+                <FileSpreadsheet className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">{t("workspace.data.empty")}</p>
+              </div>
+            )
+          ) : (
+            <>
           {/* File picker */}
           <div className="flex flex-wrap gap-1.5">
             {dataFiles.map((path) => (
@@ -232,6 +301,8 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
                 <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
               )}
             </div>
+          )}
+            </>
           )}
         </>
       )}
