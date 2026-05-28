@@ -14,11 +14,14 @@ import { Button } from "../../components/ui/Button";
 
 interface ExtractResponse {
   markdown: string;
-  source: "cache" | "markitdown" | "fallback";
+  source: "cache" | "markitdown" | "pymupdf" | "fallback";
+  backend: "markitdown" | "pymupdf";
   hash: string;
   bytes: number;
   truncated: boolean;
 }
+
+type BackendChoice = "auto" | "markitdown" | "pymupdf";
 
 interface PreviewProps {
   workspaceId: string;
@@ -31,6 +34,11 @@ export function DocumentPreview({ workspaceId, path, onClose }: PreviewProps) {
   const [data, setData] = useState<ExtractResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // AZ — extractor backend selector. "auto" lets the server dispatch
+  // (pymupdf for Korean PDFs, markitdown otherwise). Manual override
+  // forces a re-extract bypassing cache.
+  const [backend, setBackend] = useState<BackendChoice>("auto");
+  const [available, setAvailable] = useState<{ pymupdf: boolean; markitdown: boolean } | null>(null);
   const isPdf = /\.pdf$/i.test(path);
   // Only for PDFs: "Show page N" jumper. Page rendered via the screenshot
   // endpoint; total pages comes from the response header.
@@ -47,14 +55,23 @@ export function DocumentPreview({ workspaceId, path, onClose }: PreviewProps) {
     };
   }, []);
 
-  const load = async () => {
+  // AZ — fetch available backends once so the UI greys out unavailable
+  // choices (e.g. pymupdf when not installed). Polled on first open.
+  useEffect(() => {
+    void fetch("/api/files/markitdown-status")
+      .then((r) => r.json() as Promise<{ available: boolean; pymupdfAvailable?: boolean }>)
+      .then((s) => setAvailable({ markitdown: !!s.available, pymupdf: !!s.pymupdfAvailable }))
+      .catch(() => setAvailable({ markitdown: true, pymupdf: false }));
+  }, []);
+
+  const load = async (overrideBackend?: BackendChoice) => {
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/files/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, path }),
+        body: JSON.stringify({ workspaceId, path, backend: overrideBackend ?? backend }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string; hint?: string };
@@ -73,6 +90,12 @@ export function DocumentPreview({ workspaceId, path, onClose }: PreviewProps) {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, path]);
+
+  // Re-load whenever the user picks a different backend.
+  const handleBackendChange = (next: BackendChoice) => {
+    setBackend(next);
+    void load(next);
+  };
 
   const loadScreenshot = async (page: number) => {
     if (!isPdf) return;
@@ -122,12 +145,29 @@ export function DocumentPreview({ workspaceId, path, onClose }: PreviewProps) {
             </h2>
             {data && (
               <span className="text-2xs text-muted-foreground shrink-0">
-                {data.source} · {(data.bytes / 1024).toFixed(1)} KB
+                {data.source}
+                {data.source === "cache" && ` · ${data.backend}`}
+                {" · "}{(data.bytes / 1024).toFixed(1)} KB
                 {data.truncated && ` · ${t("workspace.documents.truncated") ?? "truncated"}`}
               </span>
             )}
           </div>
           <div className="flex items-center gap-1.5">
+            {/* AZ — backend chooser: only relevant for PDFs since pymupdf
+                is PDF-only. Auto is the smart default; manual override
+                forces a re-extract via the selected backend. */}
+            {isPdf && available && available.pymupdf && (
+              <select
+                value={backend}
+                onChange={(e) => handleBackendChange(e.target.value as BackendChoice)}
+                title="Extractor backend"
+                className="text-2xs px-2 py-1 rounded border border-border bg-surface-2 text-foreground"
+              >
+                <option value="auto">auto</option>
+                <option value="markitdown" disabled={!available.markitdown}>markitdown</option>
+                <option value="pymupdf">pymupdf (KR)</option>
+              </select>
+            )}
             <Button
               size="sm"
               variant="ghost"

@@ -52,6 +52,8 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
   app.get("/files/markitdown-status", async (_req, reply) => {
     const s = getMarkitdownStatus();
     const lo = getLibreofficeStatus();
+    const { getPyMuPDFStatus } = await import("../services/pymupdf.js");
+    const pm = getPyMuPDFStatus();
     return reply.send({
       available: s.available,
       version: s.version,
@@ -61,6 +63,13 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       // formats when LibreOffice is installed.
       libreofficeAvailable: lo.available,
       screenshotFormats: [".pdf", ...(lo.available ? Array.from(LO_FORMATS).sort() : [])],
+      // AZ — second PDF backend (pymupdf4llm). When installed, the auto
+      // dispatcher picks it for Korean-content PDFs over markitdown.
+      pymupdfAvailable: pm.available,
+      backends: [
+        ...(s.available ? ["markitdown"] : []),
+        ...(pm.available ? ["pymupdf"] : []),
+      ],
     });
   });
 
@@ -68,11 +77,11 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/files/extract — convert file to markdown via markitdown.
   // ────────────────────────────────────────────────────────────────
   app.post<{
-    Body: { workspaceId?: string; path?: string; chunked?: boolean; chunkChars?: number };
+    Body: { workspaceId?: string; path?: string; chunked?: boolean; chunkChars?: number; backend?: "auto" | "markitdown" | "pymupdf" };
   }>(
     "/files/extract",
     async (req, reply) => {
-      const { workspaceId, path: subPath, chunked, chunkChars } = req.body ?? {};
+      const { workspaceId, path: subPath, chunked, chunkChars, backend } = req.body ?? {};
       if (!workspaceId || !subPath) {
         return reply.status(400).send({ error: "workspaceId and path required" });
       }
@@ -95,7 +104,7 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await getOrExtractMarkdown(ws.rootPath, absPath);
+        const result = await getOrExtractMarkdown(ws.rootPath, absPath, backend ?? "auto");
         // AY — chunked mode: split the markdown so the client can paginate
         // a 200-page PDF without pulling all of it into one prompt.
         if (chunked) {

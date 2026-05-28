@@ -37,6 +37,7 @@ import { marketDataRoutes } from "./routes/marketData.js";
 import { filesRoutes } from "./routes/files.js";
 import { detectMarkitdown } from "./services/markitdown.js";
 import { detectLibreoffice } from "./services/libreoffice.js";
+import { detectPyMuPDF } from "./services/pymupdf.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { attemptRoutes } from "./routes/attempts.js";
@@ -261,11 +262,11 @@ async function bootstrap(): Promise<void> {
 
   await app.listen({ port: PORTS.server, host: "0.0.0.0" });
 
-  // AW/AY — probe for external file-handling binaries once at boot.
+  // AW/AY/AZ — probe for external file-handling binaries once at boot.
   // Cached for the process lifetime; routes gate on the result. Awaited
-  // but non-fatal — missing markitdown/LibreOffice should not block
-  // the server from starting.
-  await Promise.all([detectMarkitdown(), detectLibreoffice()]);
+  // but non-fatal — missing tools should not block the server from
+  // starting. Probes run in parallel since they're independent.
+  await Promise.all([detectMarkitdown(), detectLibreoffice(), detectPyMuPDF()]);
 
   // Start the in-process action scheduler — ticks every 60s, fires
   // recurring action runs declared in the action_schedules table.
