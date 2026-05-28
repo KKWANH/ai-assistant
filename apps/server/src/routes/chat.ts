@@ -566,7 +566,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
               kind: meta.kind,
               size: meta.size,
             });
-            attachmentRefs.push({ uploadId });
+            attachmentRefs.push({ uploadId, useMarkdown: att.useMarkdown });
           }
         }
 

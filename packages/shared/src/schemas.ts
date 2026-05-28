@@ -142,6 +142,12 @@ export const PostAttachmentSchema = z.object({
   name: z.string().min(1),
   mediaType: z.string().min(1),
   dataBase64: z.string().min(1),
+  /** AY — when true, the server converts the file to markdown via
+   *  markitdown before extracting text. Drops the file's binary
+   *  footprint in the prompt by ~10x for slide decks while preserving
+   *  headings + tables. Falls back to legacy extraction if markitdown
+   *  isn't installed or the conversion fails. */
+  useMarkdown: z.boolean().optional(),
 });
 export type PostAttachmentInput = z.infer<typeof PostAttachmentSchema>;
 

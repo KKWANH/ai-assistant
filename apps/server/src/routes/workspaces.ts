@@ -352,6 +352,49 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(snapshot);
   });
 
+  // AY — SSE stream for workspace-scoped push events. Client opens
+  // `EventSource('/api/workspaces/:id/events')` and receives JSON-line
+  // pushes when a scan finishes, the markdown cache warms, etc.
+  // Avoids the "scan twice to see the md badge" UX wart from AX.
+  app.get<{ Params: { id: string } }>("/workspaces/:id/events", async (req, reply) => {
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+    if (!workspace) return;
+    const { subscribeWorkspace, subscriberCount } = await import("../services/workspaceEvents.js");
+    const { Readable } = await import("node:stream");
+
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+      "X-Subscribers": String(subscriberCount(workspace.id) + 1),
+    });
+    // SSE comment line — opens the stream so the client's onopen fires
+    // immediately, before any real event.
+    reply.raw.write(`: connected\n\n`);
+
+    const stream = new Readable({ read() { /* push-driven */ } });
+    stream.pipe(reply.raw);
+
+    const unsubscribe = subscribeWorkspace(workspace.id, (event) => {
+      reply.raw.write(`event: ${event.type}\n`);
+      reply.raw.write(`data: ${JSON.stringify(event.data ?? {})}\n\n`);
+    });
+
+    // Heartbeat every 25s so proxies don't drop the connection as idle.
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(`: heartbeat\n\n`); } catch { /* socket dead */ }
+    }, 25_000);
+
+    const cleanup = () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      try { reply.raw.end(); } catch { /* */ }
+    };
+    req.raw.on("close", cleanup);
+    req.raw.on("error", cleanup);
+  });
+
   // GET /api/workspaces/:id/search?q=…&topK=N
   // The chat path's retrieveRelevantChunks engine, exposed as a standalone
   // surface so the UI's /workspaces/:id/search page can rank workspace

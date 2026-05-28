@@ -61,6 +61,8 @@ const en = {
   "workspace.documents.reextract": "Re-extract",
   "workspace.documents.screenshot": "Page screenshot",
   "workspace.documents.truncated": "truncated",
+  "composer.markdownOn": "Sending as markdown — click to send raw",
+  "composer.markdownOff": "Sending raw — click to convert to markdown",
   "nav.noRunsYet": "No runs yet",
   "nav.addWorkspace": "+ Add workspace",
   "nav.newWorkspace": "New workspace",

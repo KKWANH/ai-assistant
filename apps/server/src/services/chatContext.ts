@@ -101,8 +101,10 @@ export async function buildChatContext(
           dataBase64: upload.data.toString("base64"),
         });
       } else {
-        // Parse the file to text
-        const text = await parseUploadedFile(upload.data, upload.meta.name, att.uploadId);
+        // Parse the file to text. AY — when the user toggled "send as
+        // markdown" and markitdown is installed, route through it for
+        // structure-preserving extraction.
+        const text = await parseUploadedFile(upload.data, upload.meta.name, att.uploadId, !!att.useMarkdown);
         const capped = text.length > 4000 ? text.slice(0, 4000) + "\n[...truncated...]" : text;
         fileParts.push(`--- Attached file: ${upload.meta.name} ---\n${capped}`);
       }
@@ -274,6 +276,10 @@ export async function buildChatContext(
 
 export interface AttachmentRef {
   uploadId: string;
+  /** AY — chat composer toggle: when true, convert this attachment via
+   *  markitdown before extracting text. Drops binary footprint for
+   *  PPT/PDF/DOCX by ~10x while preserving structure. */
+  useMarkdown?: boolean;
 }
 
 /**
@@ -336,7 +342,31 @@ function buildHistoryText(history: ChatMessage[]): string {
   return lines.join("\n");
 }
 
-async function parseUploadedFile(data: Buffer, name: string, _uploadId: string): Promise<string> {
+async function parseUploadedFile(data: Buffer, name: string, _uploadId: string, useMarkdown = false): Promise<string> {
+  // AY — markitdown path: structure-preserving extraction. Writes the
+  // upload to a tmp file (markitdown reads from disk), runs the CLI,
+  // returns the markdown. Falls through to the legacy per-extension
+  // pipeline on any failure (CLI missing, conversion error, etc.).
+  if (useMarkdown) {
+    try {
+      const { getMarkitdownStatus, convertToMarkdown } = await import("./markitdown.js");
+      if (getMarkitdownStatus().available) {
+        const ext = (name.split(".").pop() ?? "").toLowerCase();
+        const tmp = path.join("/tmp", `ariadne-md-${Date.now().toString(36)}.${ext || "bin"}`);
+        await fs.promises.writeFile(tmp, data);
+        try {
+          const md = await convertToMarkdown(tmp);
+          return md.length > 8000 ? md.slice(0, 6000) + "\n[...truncated...]" : md;
+        } finally {
+          try { await fs.promises.unlink(tmp); } catch { /* */ }
+        }
+      }
+    } catch (err) {
+      // Logged once; we still try the legacy path below.
+      const logger = (await import("../logger.js")).default;
+      logger.debug({ name, err: String(err) }, "markitdown attachment extract failed — falling back");
+    }
+  }
   const ext = (name.split(".").pop() ?? "").toLowerCase();
 
   // PDF

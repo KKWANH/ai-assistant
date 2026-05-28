@@ -28,6 +28,8 @@ import {
 } from "../services/markdownCache.js";
 import { renderPdfPage } from "../services/pdfScreenshot.js";
 import { MARKITDOWN_FORMATS } from "../services/markitdown.js";
+import { convertToPdfCached, getLibreofficeStatus, LO_FORMATS } from "../services/libreoffice.js";
+import { chunkMarkdown } from "../services/markdownChunks.js";
 import logger from "../logger.js";
 
 /** Resolve `subPath` relative to the workspace root, rejecting escapes
@@ -49,21 +51,28 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
   // ────────────────────────────────────────────────────────────────
   app.get("/files/markitdown-status", async (_req, reply) => {
     const s = getMarkitdownStatus();
+    const lo = getLibreofficeStatus();
     return reply.send({
       available: s.available,
       version: s.version,
       formats: Array.from(MARKITDOWN_FORMATS).sort(),
       hwpAvailable: s.hwpAvailable,
+      // AY — screenshot-capable extensions = .pdf always, plus the LO
+      // formats when LibreOffice is installed.
+      libreofficeAvailable: lo.available,
+      screenshotFormats: [".pdf", ...(lo.available ? Array.from(LO_FORMATS).sort() : [])],
     });
   });
 
   // ────────────────────────────────────────────────────────────────
   // POST /api/files/extract — convert file to markdown via markitdown.
   // ────────────────────────────────────────────────────────────────
-  app.post<{ Body: { workspaceId?: string; path?: string } }>(
+  app.post<{
+    Body: { workspaceId?: string; path?: string; chunked?: boolean; chunkChars?: number };
+  }>(
     "/files/extract",
     async (req, reply) => {
-      const { workspaceId, path: subPath } = req.body ?? {};
+      const { workspaceId, path: subPath, chunked, chunkChars } = req.body ?? {};
       if (!workspaceId || !subPath) {
         return reply.status(400).send({ error: "workspaceId and path required" });
       }
@@ -87,6 +96,16 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
 
       try {
         const result = await getOrExtractMarkdown(ws.rootPath, absPath);
+        // AY — chunked mode: split the markdown so the client can paginate
+        // a 200-page PDF without pulling all of it into one prompt.
+        if (chunked) {
+          const chunks = chunkMarkdown(result.markdown, { chunkChars });
+          return reply.send({
+            ...result,
+            chunks,
+            chunkCount: chunks.length,
+          });
+        }
         return reply.send(result);
       } catch (e) {
         const msg = String((e as Error).message);
@@ -149,12 +168,32 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
     } catch (e) {
       return reply.status(400).send({ error: String((e as Error).message) });
     }
-    if (path.extname(absPath).toLowerCase() !== ".pdf") {
-      return reply.status(415).send({ error: "Only PDFs are supported (DOCX/PPTX screenshot is on the roadmap)" });
+    const ext = path.extname(absPath).toLowerCase();
+    // AY — DOCX/PPTX/ODT/RTF: route through LibreOffice headless → PDF
+    // cache (hash-keyed), then render via the existing pdfScreenshot.
+    // PDF inputs short-circuit to renderPdfPage directly. 503 with hint
+    // when LO isn't installed but a non-PDF was requested.
+    let pdfPath = absPath;
+    if (ext !== ".pdf") {
+      if (!LO_FORMATS.has(ext)) {
+        return reply.status(415).send({ error: `Screenshot not supported for ${ext}` });
+      }
+      const lo = getLibreofficeStatus();
+      if (!lo.available) {
+        return reply.status(503).send({
+          error: "LibreOffice not installed",
+          hint: "brew install --cask libreoffice (macOS) or apt install libreoffice-core (linux), then set LIBREOFFICE_PATH",
+        });
+      }
+      try {
+        pdfPath = await convertToPdfCached(ws.rootPath, absPath);
+      } catch (e) {
+        return reply.status(500).send({ error: String((e as Error).message) });
+      }
     }
 
     try {
-      const result = await renderPdfPage(absPath, page, scale);
+      const result = await renderPdfPage(pdfPath, page, scale);
       reply.header("Content-Type", "image/png");
       reply.header(
         "Content-Disposition",

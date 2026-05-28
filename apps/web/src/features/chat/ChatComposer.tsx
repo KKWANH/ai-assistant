@@ -57,6 +57,17 @@ export interface PendingAttachment {
   dataBase64: string;
   kind: "image" | "file";
   previewUrl?: string;
+  /** AY — when true, server converts via markitdown before extracting
+   *  text. Defaults to true for PDF/DOCX/PPTX/XLSX/HWP file attachments;
+   *  user can toggle off via the chip menu. */
+  useMarkdown?: boolean;
+}
+
+/** Extensions that benefit from markitdown conversion. */
+const MARKITDOWN_PREFER_EXTS = new Set(["pdf", "docx", "pptx", "xlsx", "xls", "hwp", "html"]);
+function shouldDefaultMarkdown(name: string): boolean {
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  return MARKITDOWN_PREFER_EXTS.has(ext);
 }
 
 /** Web-search mode: off (never), auto (the server decides), on (always). */
@@ -475,10 +486,16 @@ export function ChatComposer({
         dataBase64: base64,
         kind: isImage ? "image" : "file",
         previewUrl: isImage ? URL.createObjectURL(file) : undefined,
+        useMarkdown: !isImage && shouldDefaultMarkdown(file.name),
       });
     }
     setAttachments((prev) => [...prev, ...newAtts]);
   }, []);
+
+  /** AY — toggle the "send as markdown" flag on a single attachment chip. */
+  const toggleAttachmentMarkdown = (i: number) => {
+    setAttachments((prev) => prev.map((a, idx) => idx === i ? { ...a, useMarkdown: !a.useMarkdown } : a));
+  };
 
   const removeAttachment = (i: number) => {
     setAttachments((prev) => {
@@ -578,6 +595,7 @@ export function ChatComposer({
         name: a.name,
         mediaType: a.mediaType,
         dataBase64: a.dataBase64,
+        useMarkdown: a.useMarkdown,
       })),
       webSearch: webMode,
       workspaceId: chatComposerWorkspaceId,
@@ -779,6 +797,7 @@ export function ChatComposer({
                     mediaType,
                     dataBase64: textToBase64(r.value.content ?? ""),
                     kind: "file",
+                    useMarkdown: shouldDefaultMarkdown(name),
                   });
                 } else {
                   toast({
@@ -837,6 +856,24 @@ export function ChatComposer({
                       <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="text-foreground max-w-[120px] truncate">{att.name}</span>
                     </>
+                  )}
+                  {/* AY — markdown toggle. Only shown for formats where
+                      markitdown helps; click toggles per-attachment. */}
+                  {shouldDefaultMarkdown(att.name) && (
+                    <button
+                      type="button"
+                      onClick={() => toggleAttachmentMarkdown(i)}
+                      title={att.useMarkdown
+                        ? (t("composer.markdownOn") ?? "Sending as markdown — click to send raw")
+                        : (t("composer.markdownOff") ?? "Sending raw — click to convert to markdown")}
+                      className={`ml-0.5 px-1.5 py-0.5 rounded text-2xs font-medium transition-colors ${
+                        att.useMarkdown
+                          ? "bg-accent/15 text-accent hover:bg-accent/25"
+                          : "bg-surface-3 text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+                      }`}
+                    >
+                      md
+                    </button>
                   )}
                   <button
                     onClick={() => removeAttachment(i)}

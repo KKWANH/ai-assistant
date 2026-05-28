@@ -145,19 +145,39 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
       // snapshot to markdown so the cache is warm before the user opens
       // the file. Skips files already cached; concurrency-limited so a
       // 200-file workspace doesn't fork 200 subprocesses at once.
+      // AY — push a workspace event after the queue finishes so the
+      // client refetches the snapshot and the "md" badge appears
+      // without a second scan.
       try {
         const { queueWorkspaceMarkdown } = await import("../services/markdownQueue.js");
+        const { publishWorkspaceEvent } = await import("../services/workspaceEvents.js");
         const r = await queueWorkspaceMarkdown(workspace.rootPath, files);
         if (r.converted > 0 || r.failed > 0) {
           logger.info(
             { workspaceId: workspace.id, ...r },
             "markdown cache warmed",
           );
+          publishWorkspaceEvent({
+            type: "markdown-warmed",
+            workspaceId: workspace.id,
+            data: { converted: r.converted, failed: r.failed, alreadyCached: r.alreadyCached },
+          });
         }
       } catch (err) {
         logger.warn({ workspaceId: workspace.id, err }, "markdown queue threw");
       }
     })();
+  });
+
+  // AY — emit scan-complete event after the snapshot is built. The
+  // background queue's own event (above) fires later when conversions
+  // finish; subscribers usually want both.
+  void import("../services/workspaceEvents.js").then(({ publishWorkspaceEvent }) => {
+    publishWorkspaceEvent({
+      type: "scan-complete",
+      workspaceId: workspace.id,
+      data: { fileCount: snapshot.fileCount, totalEstimatedTokens: snapshot.totalEstimatedTokens },
+    });
   });
 
   return snapshot;

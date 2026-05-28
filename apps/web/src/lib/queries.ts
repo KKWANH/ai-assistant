@@ -1,6 +1,7 @@
 /**
  * TanStack Query hooks for all server state.
  */
+import { useEffect } from "react";
 import {
   useQuery,
   useMutation,
@@ -52,6 +53,28 @@ export function useWorkspace(id: string) {
 }
 
 export function useSnapshot(workspaceId: string, enabled = true) {
+  const qc = useQueryClient();
+  // AY — subscribe to workspace push events via SSE. When the server
+  // emits `scan-complete` or `markdown-warmed`, invalidate the snapshot
+  // query so the UI refetches without manual rescans.
+  useEffect(() => {
+    if (!workspaceId || !enabled) return;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/workspaces/${encodeURIComponent(workspaceId)}/events`, { withCredentials: true });
+    } catch { return; }
+    const refetch = () => {
+      void qc.invalidateQueries({ queryKey: qk.snapshot(workspaceId) });
+    };
+    es.addEventListener("scan-complete", refetch);
+    es.addEventListener("markdown-warmed", refetch);
+    es.addEventListener("embedding-indexed", refetch);
+    // EventSource error fires on initial connection issues + auto-
+    // reconnects internally; we don't need to recreate on every error.
+    return () => {
+      es?.close();
+    };
+  }, [workspaceId, enabled, qc]);
   return useQuery({
     queryKey: qk.snapshot(workspaceId),
     queryFn: () => api.getSnapshot(workspaceId),

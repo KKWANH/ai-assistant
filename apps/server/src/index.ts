@@ -36,6 +36,7 @@ import { shutdownAll as shutdownMcp } from "./services/mcpClient.js";
 import { marketDataRoutes } from "./routes/marketData.js";
 import { filesRoutes } from "./routes/files.js";
 import { detectMarkitdown } from "./services/markitdown.js";
+import { detectLibreoffice } from "./services/libreoffice.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { attemptRoutes } from "./routes/attempts.js";
@@ -260,11 +261,11 @@ async function bootstrap(): Promise<void> {
 
   await app.listen({ port: PORTS.server, host: "0.0.0.0" });
 
-  // AW — probe for `markitdown` CLI once at boot. Cached for the
-  // process lifetime; the /files/extract route gates on the result.
-  // Awaited but non-fatal (best-effort): a missing markitdown should
-  // not block the server from starting.
-  await detectMarkitdown();
+  // AW/AY — probe for external file-handling binaries once at boot.
+  // Cached for the process lifetime; routes gate on the result. Awaited
+  // but non-fatal — missing markitdown/LibreOffice should not block
+  // the server from starting.
+  await Promise.all([detectMarkitdown(), detectLibreoffice()]);
 
   // Start the in-process action scheduler — ticks every 60s, fires
   // recurring action runs declared in the action_schedules table.

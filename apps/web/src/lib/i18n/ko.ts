@@ -54,6 +54,8 @@ const ko: Record<TranslationKey, string> = {
   "workspace.documents.reextract": "재추출",
   "workspace.documents.screenshot": "페이지 미리보기",
   "workspace.documents.truncated": "truncated",
+  "composer.markdownOn": "마크다운 변환 후 전송 — 클릭해서 원본 전송",
+  "composer.markdownOff": "원본 그대로 전송 — 클릭해서 마크다운으로",
   "nav.noRunsYet": "실행 내역 없음",
   "nav.addWorkspace": "+ 워크스페이스 추가",
   "nav.newWorkspace": "새 워크스페이스",
