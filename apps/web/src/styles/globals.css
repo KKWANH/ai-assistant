@@ -67,6 +67,26 @@
      Kept as absolute px so tiny badges don't shrink further on mobile. */
   --text-2xs: 11px;
   --text-2xs--line-height: 1.4;
+
+  /* BA — motion + elevation as Tailwind theme tokens. In @theme so the
+     elevation values also surface as `shadow-elevation-{1,2,3}`
+     utilities (used by DocumentPreview etc.), while the raw
+     --motion-*/--ease-* names are read directly by the .animate-*
+     utilities and the Dialog/Toast CSS. One easing system app-wide. */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.20);
+  --elevation-2: 0 4px 12px -2px rgb(0 0 0 / 0.30);
+  --elevation-3: 0 16px 32px -8px rgb(0 0 0 / 0.45);
+
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-elevation-3: var(--elevation-3);
 }
 
 /* ── Base reset ── */
