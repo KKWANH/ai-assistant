@@ -32,9 +32,33 @@ import { getDb } from "./index.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
+// JSON column deserialisation. Hardened (BD1): a single malformed value
+// — partial write, hand-edit, botched migration, disk corruption — must
+// NOT crash the request handler. `fallback` is exactly the "couldn't
+// read a value" answer; parse failures degrade to it and warn-log so
+// corruption stays visible rather than silently swallowed. The db layer
+// keeps no logger dependency (avoids a circular import with services
+// that import repo) — console.warn is the dependency-free choice here.
 function j<T>(v: string | null | undefined, fallback: T): T {
   if (!v) return fallback;
-  return JSON.parse(v) as T;
+  try {
+    return JSON.parse(v) as T;
+  } catch (err) {
+    console.warn(`[repo] malformed JSON column — using fallback: ${String(err)} | sample: ${v.slice(0, 80)}`);
+    return fallback;
+  }
+}
+
+/** j() for the raw `JSON.parse(row[...] as string)` sites that pass an
+ *  `unknown` value. Same corruption-safe contract — never throws. */
+function safeJson<T>(v: unknown, fallback: T): T {
+  if (typeof v !== "string" || v.length === 0) return fallback;
+  try {
+    return JSON.parse(v) as T;
+  } catch (err) {
+    console.warn(`[repo] malformed JSON column — using fallback: ${String(err)} | sample: ${v.slice(0, 80)}`);
+    return fallback;
+  }
 }
 
 /**
@@ -266,12 +290,8 @@ export function dbUpdateRun(id: string, fields: Partial<Run>): Run | null {
 }
 
 function rowToRun(row: Record<string, unknown>): Run {
-  const usageJson = row["usage_json"] as string | null | undefined;
-  const usage: RunUsage | null = usageJson ? (JSON.parse(usageJson) as RunUsage) : null;
-  const blockResultsJson = row["block_results_json"] as string | null | undefined;
-  const blockResults: BlockResult[] = blockResultsJson
-    ? (JSON.parse(blockResultsJson) as BlockResult[])
-    : [];
+  const usage = safeJson<RunUsage | null>(row["usage_json"], null);
+  const blockResults = safeJson<BlockResult[]>(row["block_results_json"], []);
   return {
     id: row["id"] as string,
     kind: ((row["kind"] as string | null) ?? "template") as Run["kind"],
@@ -731,7 +751,7 @@ function rowToReport(row: Record<string, unknown>): Report {
     createdByName: (row["created_by_name"] as string | null) ?? null,
     createdAt: row["created_at"] as string,
     status: row["status"] as ReportStatus,
-    triage: triageJson ? (JSON.parse(triageJson) as ReportTriage) : null,
+    triage: safeJson<ReportTriage | null>(triageJson, null),
     triagedAt: (row["triaged_at"] as string | null) ?? null,
     decidedBy: (row["decided_by"] as string | null) ?? null,
     decidedAt: (row["decided_at"] as string | null) ?? null,
