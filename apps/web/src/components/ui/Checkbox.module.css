@@ -38,7 +38,7 @@
   border-radius: 0.25rem;
   border: 1px solid rgb(var(--border));
   background-color: rgb(var(--surface-2));
-  transition: background-color 100ms, border-color 100ms;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
 }
 
 /* Checked state — driven by :has() so no JS needed */
@@ -61,7 +61,7 @@
   color: white;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 100ms;
+  transition: opacity var(--motion-fast);
 }
 
 .control:has(.nativeInput:checked) .checkIcon {
@@ -76,12 +76,12 @@
 }
 
 .labelText {
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   color: rgb(var(--foreground));
   line-height: 1.25;
 }
 
 .description {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: rgb(var(--muted-foreground));
 }

@@ -6,7 +6,7 @@
 }
 
 .label {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: rgb(var(--muted-foreground));
 }
@@ -39,10 +39,10 @@
   border: 1px solid rgb(var(--border));
   background-color: rgb(var(--surface-2));
   padding: 0.25rem 2rem 0.25rem 0.75rem;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   color: rgb(var(--foreground));
   appearance: none;
-  transition: border-color 100ms, box-shadow 100ms;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
   outline: none;
 }
 
@@ -61,11 +61,11 @@
 
 /* ── Hint / error text ── */
 .hint {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: rgb(var(--muted-foreground));
 }
 
 .error {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: rgb(var(--destructive));
 }

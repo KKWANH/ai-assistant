@@ -46,7 +46,7 @@ export function Spinner({
         width={px}
         height={px}
         fill="none"
-        style={{ animation: "spin 0.9s linear infinite" }}
+        style={{ animation: "ariadne-spin 0.9s linear infinite" }}
       >
         <circle cx="12" cy="12" r="10" stroke={ringColor} strokeOpacity={0.18} strokeWidth={3} />
         <path

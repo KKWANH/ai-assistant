@@ -18,12 +18,12 @@
   flex-shrink: 0;
   white-space: nowrap;
   padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: color 100ms;
+  transition: color var(--motion-fast);
   color: rgb(var(--muted-foreground));
   outline: none;
 }

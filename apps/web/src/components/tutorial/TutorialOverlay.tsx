@@ -129,7 +129,7 @@ export function TutorialOverlay() {
   return createPortal(
     // The outer layer captures pointer events so the app is inert mid-tour;
     // clicking the dimmed area (anywhere but the card) dismisses the tour.
-    <div className="fixed inset-0 z-[100]" onClick={finish}>
+    <div className="fixed inset-0 z-[var(--z-tutorial)]" onClick={finish}>
       {rect ? (
         // Spotlight: dimmer (huge box-shadow) + bright accent ring + glow.
         <div

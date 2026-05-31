@@ -236,7 +236,7 @@ function AttachmentViewer({ att, onClose }: { att: ChatAttachment; onClose: () =
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70"
+      className="fixed inset-0 z-[var(--z-lightbox)] flex items-center justify-center p-4 bg-black/70"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

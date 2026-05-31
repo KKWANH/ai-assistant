@@ -7,9 +7,9 @@
 /* ── Tooltip bubble ── */
 .bubble {
   position: absolute;
-  z-index: 50;
+  z-index: var(--z-tooltip);
   padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   border-radius: var(--radius-md);
   white-space: nowrap;
   pointer-events: none;

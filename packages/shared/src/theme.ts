@@ -24,7 +24,9 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
     card: "24 24 29",
     "card-foreground": "228 228 231",
     muted: "39 39 46",
-    "muted-foreground": "138 138 150",
+    /* BG4: 138→161 so muted text clears WCAG AA (4.5:1) on muted/border
+       surfaces too (was 4.35 on muted), not just on background. */
+    "muted-foreground": "161 161 173",
     border: "39 39 46",
     "border-strong": "63 63 74",
     ring: "245 245 247",
@@ -56,7 +58,8 @@ export const THEME_TOKENS: Record<ThemeMode, ThemeTokens> = {
     card: "248 246 242",
     "card-foreground": "28 28 31",
     muted: "234 233 228",
-    "muted-foreground": "110 110 120",
+    /* BG4: 110→96 so muted text clears WCAG AA on muted (was 4.15, under). */
+    "muted-foreground": "96 96 106",
     border: "223 222 217",
     "border-strong": "196 195 189",
     ring: "10 10 12",

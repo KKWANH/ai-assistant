@@ -7,7 +7,7 @@
 
 .interactive {
   cursor: pointer;
-  transition: border-color 100ms;
+  transition: border-color var(--motion-fast);
 }
 .interactive:hover {
   border-color: rgb(var(--border-strong));

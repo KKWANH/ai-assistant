@@ -2,7 +2,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -25,7 +25,7 @@
 /* ── Panel ── */
 .panel {
   position: relative;
-  z-index: 10;
+  z-index: var(--z-raised);
   width: 100%;
   /* Phone-safe height — body content scrolls instead of pushing off
      screen when the dialog is taller than the viewport. */
@@ -56,14 +56,14 @@
 }
 
 .title {
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: rgb(var(--foreground));
   margin: 0;
 }
 
 .description {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: rgb(var(--muted-foreground));
   margin: 0.125rem 0 0;
 }
