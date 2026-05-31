@@ -180,6 +180,7 @@ Operationally that means:
 | How do I run / install it? | `INSTALL.md`, `QUICKSTART.md`, `HOW_TO_USE.md` |
 | How is the code structured? | `ARCHITECTURE.md`, `PERFORMANCE_ARCHITECTURE.md` |
 | API surface? | `API.md` |
+| How do I build a custom surface (Layer 2 SDK)? | `SURFACE_SDK.md` |
 | Retrieval internals? | `RAG_HARNESS.md`, `SYMBOL_INDEX_PLAN.md` |
 | Portfolio app schema? | `PORTFOLIO_STARTER_V2.md` |
 | Backlog / what's next? | `PLANNED.md` |
