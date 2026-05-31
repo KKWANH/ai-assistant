@@ -1,5 +1,11 @@
 # Positioning — what Ariadne is (and isn't)
 
+> **⚠️ Superseded for product definition by [`PRODUCT.md`](PRODUCT.md).**
+> This doc's "work OS" framing became the spine of the canonical
+> definition, but for the authoritative one-liner, target users, and the
+> layer model (platform + flagship app), read PRODUCT.md first. Kept here
+> for the longer positioning rationale and the demo-audience breakdown.
+
 This is the strategy document. It tells anyone working on Ariadne — or
 writing about Ariadne — what bets we're making, which battles we're not
 fighting, and what features matter because of that.

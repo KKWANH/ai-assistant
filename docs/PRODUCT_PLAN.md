@@ -1,5 +1,14 @@
 # Ariadne PRODUCT_PLAN.md
 
+> **⚠️ Historical origin vision — superseded by [`PRODUCT.md`](PRODUCT.md).**
+> Earliest design doc. Its concepts (evidence pack, traceability,
+> portable `.ariadne`) live on, but its *implementation* scope is
+> overtaken: there IS hybrid retrieval (the "Gasp Filter" idea was
+> dropped — don't reuse that term), full document parsing, multi-provider,
+> and staged-diff editing. The "not an agent" stance relaxed to "narrow
+> safe core + wide extension SDK." Read PRODUCT.md for the current
+> definition.
+
 ## 0. Product Identity
 
 **Product name:** Ariadne  

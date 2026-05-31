@@ -1,5 +1,10 @@
 # Planned — not yet built
 
+> Backlog. For what the product **is** (vs what's planned), see
+> [`PRODUCT.md`](PRODUCT.md). Anything here is scoped against that
+> definition — especially the layer model (a planned feature belongs to
+> Layer 0/1/2/3).
+
 Larger features the user has explicitly asked for that don't fit into the
 current batch. Each block is sized so a future session can pick it up
 without rediscovery.

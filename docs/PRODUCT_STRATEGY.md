@@ -1,5 +1,11 @@
 # Product Strategy — licensing, IP/data sovereignty, monetization, regulation
 
+> **⚠️ Superseded for product definition by [`PRODUCT.md`](PRODUCT.md).**
+> Kept for the business/legal/regulatory rationale. Note: its §1.3 AGPL+
+> commercial licensing recommendation is **dead** — the repo ships **MIT**
+> (PRODUCT.md §6). Read this only for the data-sovereignty argument and
+> the local-first invariants, not for "what the product is."
+
 This is the strategy memo from the **lawyer / license / PM** angle. It
 picks up where [`POSITIONING.md`](POSITIONING.md) §8 ("open positioning
 questions") punted, and gives Ariadne a defensible, *legible* shape for

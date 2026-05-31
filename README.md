@@ -7,13 +7,18 @@
 Ask questions over PDFs, CSVs, notes, and code. Automate repeatable work.
 Review every AI edit as a staged diff. Never train on your data.
 
+A batteries-included app today (the **Portfolio cockpit**), and a
+platform you can build on — ship your own dashboard as a sandboxed
+React surface the host feeds with files, live data, retrieval, and the
+model. [See what Ariadne is →](docs/PRODUCT.md)
+
 <img src="docs/diagrams/hero.svg" alt="Local files become evidence-backed work" width="520">
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node ≥22](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](docs/INSTALL.md)
 [![retrieval Hit@6 76.5%](https://img.shields.io/badge/retrieval%20Hit%406-76.5%25-success.svg)](docs/RAG_HARNESS.md)
 
-[**How to use →**](docs/HOW_TO_USE.md) · [Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [Positioning](docs/POSITIONING.md) · [Launch plan](docs/LAUNCH_PLAN.md) · [API](docs/API.md)
+[**What is Ariadne? →**](docs/PRODUCT.md) · [How to use](docs/HOW_TO_USE.md) · [Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [API](docs/API.md)
 
 </div>
 

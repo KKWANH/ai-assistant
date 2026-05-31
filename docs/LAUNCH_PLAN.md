@@ -1,5 +1,10 @@
 # Launch Plan — what to do, week by week
 
+> **⚠️ Execution playbook, not a definition doc. For what the product
+> is, read [`PRODUCT.md`](PRODUCT.md).** Stale spot: Week 1 still says
+> ship an AGPL-3.0 LICENSE — the repo ships **MIT** (PRODUCT.md §6).
+> Treat license steps here as superseded.
+
 A concrete launch sequence for taking Ariadne from "running on my Mac
 mini" to "people on the internet are using it." Picks up where
 [`PRODUCT_STRATEGY.md`](PRODUCT_STRATEGY.md) §5 left off (which listed

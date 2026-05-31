@@ -1,5 +1,11 @@
 # Promotion strategy
 
+> **⚠️ Mixed-vintage launch playbook — for the product definition read
+> [`PRODUCT.md`](PRODUCT.md).** Contains stale vocabulary ("Gasp filter",
+> "evidence pack" as the headline). The canonical killer-feature ranking
+> is in PRODUCT.md §5 (platform/custom-surfaces first). Overlaps with
+> LAUNCH_PLAN.md.
+
 This file is the launch playbook for Ariadne. It captures the audience,
 the message, the channels, and the assets to prepare. Keep it as a working
 doc — update each row as something ships or as a channel proves out.
