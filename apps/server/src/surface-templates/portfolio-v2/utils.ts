@@ -57,6 +57,19 @@ export function daysUntil(iso: string, ref: Date = new Date()): number {
   return -daysBetween(iso, ref);
 }
 
+/** BH1 — compact Korean relative time for the live-data indicator.
+ *  "방금" (<10s) · "N초 전" · "N분 전" · "N시간 전" · else the wall-clock time. */
+export function timeAgoKo(ts: number, now: number = Date.now()): string {
+  const s = Math.max(0, Math.round((now - ts) / 1000));
+  if (s < 10) return "방금";
+  if (s < 60) return `${s}초 전`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 /** FX conversion: amount in `from` → base. fxMap is { USD: 0.00075, EUR: 0.00072, KRW: 1 }
  *  (each entry = how many base-units 1 unit of `from` equals).
  *  AM defensive: undefined / NaN amounts → 0. Better than propagating NaN

@@ -33,11 +33,15 @@ import {
   PositionsTable, CashAndManualAssets, RecentAnalysis,
   TriggerGauge,
   ValueTrendChart, ReturnsBarChart, PositionDetailPage,
-  WatchlistTable, BaseCurrencySelector,
+  WatchlistTable, BaseCurrencySelector, LiveIndicator,
   AllocationGrid, RealizedPnLSection,
   AttributionSection, TaxYTDSection, EventCalendar, RebalanceSimulator,
   PositionSizer,
 } from "./sections";
+
+// BH1 — auto-refresh cadence while the tab is visible. 60s is live enough for
+// a portfolio cockpit without hammering Yahoo (hidden tabs don't poll at all).
+const AUTO_REFRESH_MS = 60_000;
 
 // AM — key used to look up price history + news files.
 // Prefer KR listing code (6-digit), fall back to Yahoo/display symbol.
@@ -111,6 +115,8 @@ export default function App() {
   const [quickFilter, setQuickFilter] = useState<"all" | "gainers" | "losers" | "stale" | "cap">("all");
   // AN — bumping refreshTick re-runs the load() effect, re-fetching FX + quotes.
   const [refreshTick, setRefreshTick] = useState(0);
+  // BH1 — wall-clock of the last successful load, for the live indicator.
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   // AT — live-price overlay. The CSV's current_price / market_value /
   // return_pct are ignored when we have a fresh Yahoo quote; stored
@@ -366,7 +372,10 @@ export default function App() {
           } catch (_e) { /* */ }
         }
 
-        setLoading(false);
+        if (!cancelled) {
+          setLastUpdated(Date.now()); // BH1 — stamp liveness on success
+          setLoading(false);
+        }
       } catch (e: any) {
         if (!cancelled) {
           setLoadError(e?.message ?? String(e));
@@ -414,6 +423,24 @@ export default function App() {
   }, [ariadne, base, dataCurrencies, refreshTick]);
 
   const refreshQuotes = useCallback(() => setRefreshTick((n) => n + 1), []);
+
+  // BH1 — auto-refresh. Re-fetch quotes/FX on an interval, but ONLY while the
+  // tab is visible: no background polling keeps us well inside Yahoo's rate
+  // limits and avoids burning the user's machine. Returning to a hidden tab
+  // refreshes immediately so the numbers are never quietly stale.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const stop = () => { if (timer != null) { clearInterval(timer); timer = null; } };
+    const start = () => { if (timer == null) timer = setInterval(refreshQuotes, AUTO_REFRESH_MS); };
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else { refreshQuotes(); start(); }
+    };
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility); };
+  }, [refreshQuotes]);
 
   // AR — responsive: track viewport width. <720px = mobile (single-column
   // KPI grids, narrower charts, condensed padding). Re-runs on resize.
@@ -807,7 +834,8 @@ export default function App() {
     <div style={rootStyle}>
       {/* AM — base currency selector pinned to the top right. AO: list
           is limited to currencies actually present in the data. */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        <LiveIndicator lastUpdated={lastUpdated} loading={loading} />
         <BaseCurrencySelector base={base} onChange={setBase} options={dataCurrencies} onRefresh={refreshQuotes} />
       </div>
 

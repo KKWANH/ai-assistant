@@ -8,9 +8,9 @@
  *   PositionsTable → CashAndManualAssets → RecentAnalysis
  */
 
-import { BarChart, PieChart, LineChart, useState, useMemo } from "@ariadne/surface";
+import { BarChart, PieChart, LineChart, useState, useMemo, useEffect } from "@ariadne/surface";
 import type { Account, RawPosition, CashBucket, ManualAsset, Derived, QuoteFailure, LiveQuote, BucketTarget, IndexTrigger, HistPoint, PricePoint, QuoteCalendar, NewsItem } from "./types";
-import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase } from "./utils";
+import { fmtMoney, fmtPct, fmtNum, daysBetween, daysUntil, toBase, timeAgoKo } from "./utils";
 import { Markdown } from "./markdown";
 import {
   Section, ActionCard, KpiCard, Chart, Table, SortHead, Badge, AnalysisColumn,
@@ -1438,6 +1438,39 @@ export function WatchlistTable({
 // the currencies actually present in the data (positions/cash/assets) —
 // no point offering JPY if there's nothing JPY-denominated. fxMap
 // re-resolves on change and every fmtMoney() call re-renders accordingly.
+// ─ BH1 — Live-data indicator ─────────────────────────────────────────────
+// A quiet "the numbers are fresh" signal: a pulsing dot + relative
+// last-updated time. Auto-refresh (visibility-aware, in index.tsx) keeps the
+// data current; this just makes that liveness legible. Dot colour: green =
+// fresh, amber = stale (>5 min, e.g. the tab was hidden a while), blue =
+// fetching. Re-renders itself every 20s so the relative label stays honest.
+export function LiveIndicator({ lastUpdated, loading }: { lastUpdated: number | null; loading?: boolean }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 20_000);
+    return () => clearInterval(id);
+  }, []);
+  const stale = lastUpdated == null || now - lastUpdated > 5 * 60_000;
+  const dot = loading ? "rgb(var(--info))" : stale ? "rgb(var(--warning))" : "rgb(var(--success))";
+  const pulsing = loading || !stale;
+  const label = loading
+    ? "업데이트 중…"
+    : lastUpdated == null ? "대기 중" : `실시간 · ${timeAgoKo(lastUpdated, now)}`;
+  return (
+    <div
+      title={lastUpdated ? `마지막 업데이트: ${new Date(lastUpdated).toLocaleString()}` : undefined}
+      style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "rgb(var(--muted-foreground))" }}
+    >
+      <style>{"@keyframes pf-live-pulse{0%,100%{opacity:1}50%{opacity:.3}}"}</style>
+      <span style={{
+        width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0,
+        animation: pulsing ? "pf-live-pulse 1.8s ease-in-out infinite" : "none",
+      }} />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function BaseCurrencySelector({
   base, onChange, options, onRefresh,
 }: {
