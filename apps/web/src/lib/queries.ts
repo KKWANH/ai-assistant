@@ -54,24 +54,70 @@ export function useWorkspace(id: string) {
 
 export function useSnapshot(workspaceId: string, enabled = true) {
   const qc = useQueryClient();
-  // AY — subscribe to workspace push events via SSE. When the server
-  // emits `scan-complete` or `markdown-warmed`, invalidate the snapshot
-  // query so the UI refetches without manual rescans.
+  // AY/BD3 — subscribe to workspace push events via SSE. On any event
+  // (scan-complete / markdown-warmed / embedding-indexed) invalidate the
+  // snapshot so the UI refetches without a manual rescan.
+  //
+  // BD3 resilience (PRODUCT.md §4.4 — graceful degradation):
+  //   1. Refetch on every (re)open, not just on events. The native
+  //      EventSource auto-reconnects on transient drops, but events that
+  //      fired DURING the downtime are lost — a catch-up refetch on
+  //      `onopen` closes that gap.
+  //   2. Recover from PERMANENT close. If the browser gives up
+  //      (readyState===CLOSED — e.g. server 5xx on reconnect, auth
+  //      expiry), native EventSource never retries again. We schedule a
+  //      manual reconnect with capped exponential backoff so a transient
+  //      server blip doesn't leave the stream dead until remount.
   useEffect(() => {
     if (!workspaceId || !enabled) return;
     let es: EventSource | null = null;
-    try {
-      es = new EventSource(`/api/workspaces/${encodeURIComponent(workspaceId)}/events`, { withCredentials: true });
-    } catch { return; }
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let backoff = 1000; // 1s → … → 30s cap
+
     const refetch = () => {
       void qc.invalidateQueries({ queryKey: qk.snapshot(workspaceId) });
     };
-    es.addEventListener("scan-complete", refetch);
-    es.addEventListener("markdown-warmed", refetch);
-    es.addEventListener("embedding-indexed", refetch);
-    // EventSource error fires on initial connection issues + auto-
-    // reconnects internally; we don't need to recreate on every error.
+
+    const connect = () => {
+      if (cancelled) return;
+      try {
+        es = new EventSource(`/api/workspaces/${encodeURIComponent(workspaceId)}/events`, { withCredentials: true });
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      es.onopen = () => {
+        backoff = 1000;        // healthy connection → reset backoff
+        refetch();             // catch up on anything missed while down
+      };
+      es.addEventListener("scan-complete", refetch);
+      es.addEventListener("markdown-warmed", refetch);
+      es.addEventListener("embedding-indexed", refetch);
+      es.onerror = () => {
+        // CONNECTING (0) = browser is auto-retrying; leave it alone.
+        // CLOSED (2) = browser gave up → we must reconnect ourselves.
+        if (es && es.readyState === EventSource.CLOSED) {
+          es.close();
+          es = null;
+          scheduleReconnect();
+        }
+      };
+    };
+
+    const scheduleReconnect = () => {
+      if (cancelled || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        backoff = Math.min(backoff * 2, 30_000);
+        connect();
+      }, backoff);
+    };
+
+    connect();
     return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       es?.close();
     };
   }, [workspaceId, enabled, qc]);
