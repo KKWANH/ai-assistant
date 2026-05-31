@@ -348,8 +348,8 @@ export function AppShell({ children }: AppShellProps) {
     setMobileNavOpen(false);
   }, [location.pathname]);
 
-  const activeChatId = location.pathname.startsWith("/chat/")
-    ? location.pathname.split("/chat/")[1]
+  const activeChatId: string | null = location.pathname.startsWith("/chat/")
+    ? (location.pathname.split("/chat/")[1] ?? null)
     : null;
 
   // Split chats: global (no workspace) vs grouped by workspace.

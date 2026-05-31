@@ -137,7 +137,15 @@ function AppContent() {
   return (
     <>
       <AppShell>
+        {/* BD2 — route-level error boundary. A render crash in any lazy
+            route (ChatView, WorkspaceOverview, etc.) is contained here:
+            the AppShell chrome (sidebar, header) survives and the user
+            gets a Retry card instead of a blank screen — the
+            "never blank-screen" invariant (PRODUCT.md §4.4). The app
+            root has its own outer boundary; this inner one keeps the
+            shell alive so navigation still works after a route crash. */}
         <Suspense fallback={<RouteFallback />}>
+          <ErrorBoundary label="이 화면을 여는 중 문제가 발생했어요">
           <Routes>
             {/* Chat-first home */}
             <Route path="/" element={<ChatView />} />
@@ -169,6 +177,7 @@ function AppContent() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </ErrorBoundary>
         </Suspense>
       </AppShell>
       <CreateWorkspaceDialog />

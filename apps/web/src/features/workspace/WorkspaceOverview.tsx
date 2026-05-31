@@ -70,6 +70,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { TokenEstimate } from "../../components/ui/TokenEstimate";
+import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { NotFoundRedirect } from "../../components/NotFoundRedirect";
 import { useToast } from "../../components/ui/Toast";
@@ -1066,7 +1067,13 @@ export function WorkspaceOverview() {
         <TabsContent value="surface" className="flex-1 flex flex-col min-h-0 p-0">
           {hasSurface ? (
             <div className="flex-1 flex flex-col min-h-0 p-4">
-              <SurfaceView workspaceId={ws.id} />
+              {/* BD2 — surfaces are user-authored React bundles (the
+                  highest crash risk in the app). Its own boundary so a
+                  broken surface shows a Retry card in THIS tab while the
+                  other workspace tabs (chat, data, runs) keep working. */}
+              <ErrorBoundary label="커스텀 화면을 불러오는 중 문제가 발생했어요">
+                <SurfaceView workspaceId={ws.id} />
+              </ErrorBoundary>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto min-h-0">
