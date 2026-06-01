@@ -294,8 +294,12 @@ const en = {
   "workspace.patterns.exclude": "Exclude",
 
   "workspace.surface.customScreen": "Custom screen",
-  "workspace.surface.createRuns": "Create & runs",
+  "workspace.surface.createRuns": "Templates",
   "workspace.surface.editScreen": "Edit screen",
+  "workspace.surface.tip.customScreen": "A screen built just for this workspace (e.g. a portfolio dashboard).",
+  "workspace.surface.tip.templates": "Run a saved task that turns your files into a structured output.",
+  "workspace.surface.tip.editScreen": "Edit the custom screen's code.",
+  "workspace.surface.tip.memory": "Facts and preferences this workspace remembers across chats.",
   "workspace.surface.addTitle": "Add a custom screen",
   "workspace.surface.addBody": "Write a TypeScript component that reads your files, shows charts, and triggers runs — all in one interactive view.",
   "workspace.surface.addBtn": "Add screen",

@@ -289,8 +289,12 @@ const ko: Record<TranslationKey, string> = {
   "workspace.patterns.exclude": "제외",
 
   "workspace.surface.customScreen": "맞춤 화면",
-  "workspace.surface.createRuns": "만들기 및 실행",
+  "workspace.surface.createRuns": "템플릿",
   "workspace.surface.editScreen": "화면 편집",
+  "workspace.surface.tip.customScreen": "이 워크스페이스 전용으로 만든 화면 (예: 포트폴리오 대시보드)",
+  "workspace.surface.tip.templates": "파일을 정해진 형식의 결과물로 바꾸는 저장된 작업을 실행",
+  "workspace.surface.tip.editScreen": "맞춤 화면의 코드 편집",
+  "workspace.surface.tip.memory": "이 워크스페이스가 대화 간에 기억하는 사실·선호",
   "workspace.surface.addTitle": "맞춤 화면 추가",
   "workspace.surface.addBody": "파일을 읽고, 차트를 표시하고, 실행을 트리거하는 TypeScript 컴포넌트를 작성해 인터랙티브 화면을 만들 수 있습니다.",
   "workspace.surface.addBtn": "화면 추가",

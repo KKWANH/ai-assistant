@@ -1006,7 +1006,7 @@ export function WorkspaceOverview() {
               </span>
             </TabsTrigger>
             <TabsTrigger value="surface">
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.customScreen")}>
                 <Layout className="h-3.5 w-3.5" />
                 {t("workspace.surface.customScreen")}
               </span>
@@ -1018,13 +1018,13 @@ export function WorkspaceOverview() {
               </span>
             </TabsTrigger>
             <TabsTrigger value="standard">
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.templates")}>
                 <Play className="h-3.5 w-3.5" />
                 {t("workspace.surface.createRuns")}
               </span>
             </TabsTrigger>
             <TabsTrigger value="edit">
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.editScreen")}>
                 <Code2 className="h-3.5 w-3.5" />
                 {t("workspace.surface.editScreen")}
               </span>
@@ -1038,7 +1038,7 @@ export function WorkspaceOverview() {
               </TabsTrigger>
             )}
             <TabsTrigger value="memory">
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.memory")}>
                 <BrainCircuit className="h-3.5 w-3.5" />
                 {t("memory.tab")}
               </span>
