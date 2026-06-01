@@ -1,0 +1,19 @@
+[package]
+name = "ariadne-desktop"
+version = "0.1.0"
+description = "Ariadne desktop shell (Tauri sidecar over the local Node server)"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# No extra crates for the Phase 0 spike — std covers port-picking, spawning the
+# Node sidecar, and the readiness probe. Phase 1 (bundled Node binary) may add
+# tauri-plugin-shell + the updater plugin.
+tauri = { version = "2", features = [] }
+
+[profile.release]
+opt-level = "s"
+lto = true
