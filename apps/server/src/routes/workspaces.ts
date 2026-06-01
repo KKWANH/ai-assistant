@@ -16,6 +16,7 @@ import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
 import { fireHooksDetached } from "../services/hooks.js";
 import { buildSurface } from "../services/surfaceBuild.js";
+import { exportWorkspaceTemplate } from "../services/workspaceTemplate.js";
 import { retrieveWithMeta } from "../services/retrieval.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
 import { seedPortfolioV2Surface } from "../surface/portfolioV2Template.js";
@@ -213,6 +214,20 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
     return reply.send(workspace);
+  });
+
+  // GET /api/workspaces/:id/export — download the workspace as a portable
+  // .ariadne.tar template (BL1): manifest + surface + actions + any
+  // author-listed seed files. No personal data unless the author opted in
+  // via .ariadne/template.yaml seedFiles.
+  app.get<{ Params: { id: string } }>("/workspaces/:id/export", async (req, reply) => {
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+    if (!workspace) return;
+    const { manifest, tar } = await exportWorkspaceTemplate(workspace.rootPath, workspace.name);
+    const safeName = (manifest.name || "workspace").replace(/[^\w.-]+/g, "_") || "workspace";
+    reply.header("content-type", "application/x-tar");
+    reply.header("content-disposition", `attachment; filename="${safeName}.ariadne.tar"`);
+    return reply.send(tar);
   });
 
   // GET /api/workspaces/:id/history — list recent commits in the
