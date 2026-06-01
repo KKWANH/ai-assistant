@@ -610,6 +610,8 @@ const en = {
   "tutorial.page.back": "Back",
   "tutorial.page.next": "Next",
   "tutorial.page.getStarted": "Get started",
+  "tutorial.page.createWorkspace": "Create your first workspace",
+  "tutorial.page.justChat": "Just start chatting",
   "tutorial.page.progress": "{current} / {total}",
   "tutorial.page.exampleBadge": "Example",
   // Side-rail short titles (X2 / translator-qa §6) — the full title

@@ -605,6 +605,8 @@ const ko: Record<TranslationKey, string> = {
   "tutorial.page.back": "이전",
   "tutorial.page.next": "다음",
   "tutorial.page.getStarted": "시작하기",
+  "tutorial.page.createWorkspace": "첫 워크스페이스 만들기",
+  "tutorial.page.justChat": "그냥 대화 시작",
   "tutorial.page.progress": "{current} / {total}",
   "tutorial.page.exampleBadge": "예시",
   // 좌측 사이드 레일용 짧은 라벨 (X2 / translator-qa §6)

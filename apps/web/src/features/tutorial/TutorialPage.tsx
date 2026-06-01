@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import { useT } from "../../lib/i18n";
 import { useMe } from "../../lib/queries";
+import { useUIStore } from "../../lib/store";
 import { Button } from "../../components/ui/Button";
 import { getTutorialSections } from "./tutorialSections";
 
@@ -17,6 +18,7 @@ export function TutorialPage() {
   const { t } = useT();
   const navigate = useNavigate();
   const { data: me } = useMe();
+  const { setCreateWorkspaceOpen } = useUIStore();
   // Simple/Easy mode hides the developer-flavored pages (Agent, MCP,
   // Actions, suggestions, reports). The 12-page tour collapses to 7
   // plain-language pages for non-devs.
@@ -132,9 +134,20 @@ export function TutorialPage() {
             {t("tutorial.page.progress", { current: step + 1, total })}
           </span>
           {isLast ? (
-            <Button variant="primary" size="sm" type="button" onClick={() => navigate("/")}>
-              {t("tutorial.page.getStarted")}
-            </Button>
+            // BK4 — end on a concrete first action, not a dead-end "got it".
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" type="button" onClick={() => navigate("/")}>
+                {t("tutorial.page.justChat")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                type="button"
+                onClick={() => { navigate("/"); setCreateWorkspaceOpen(true); }}
+              >
+                {t("tutorial.page.createWorkspace")}
+              </Button>
+            </div>
           ) : (
             <Button
               variant="primary"
