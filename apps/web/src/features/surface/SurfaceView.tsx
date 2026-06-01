@@ -204,9 +204,12 @@ async function handleBridgeRequest(
 
 export interface SurfaceViewProps {
   workspaceId: string;
+  /** BJ3 — bump to force the iframe to reload the freshly-built bundle (the
+   *  editor's live preview increments this on each successful build). */
+  reloadKey?: string | number;
 }
 
-export function SurfaceView({ workspaceId }: SurfaceViewProps) {
+export function SurfaceView({ workspaceId, reloadKey }: SurfaceViewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { data: surfaceData, isLoading } = useSurface(workspaceId);
   const { theme } = useUIStore();
@@ -214,10 +217,11 @@ export function SurfaceView({ workspaceId }: SurfaceViewProps) {
   const [surfaceError, setSurfaceError] = useState<SurfaceErrorMessage | null>(null);
 
   // Clear a stale crash banner when the surface reloads — theme re-keys the
-  // iframe (remount), workspace switch swaps it entirely.
+  // iframe (remount), workspace switch swaps it entirely, a rebuild bumps
+  // reloadKey (BJ3 live preview).
   useEffect(() => {
     setSurfaceError(null);
-  }, [workspaceId, theme]);
+  }, [workspaceId, theme, reloadKey]);
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -338,7 +342,7 @@ export function SurfaceView({ workspaceId }: SurfaceViewProps) {
         </div>
       )}
       <iframe
-        key={theme}
+        key={`${theme}:${reloadKey ?? ""}`}
         ref={iframeRef}
         src={`/surface/${workspaceId}/host?theme=${theme}`}
         sandbox="allow-scripts"

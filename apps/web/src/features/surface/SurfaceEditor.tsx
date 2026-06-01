@@ -13,7 +13,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Save, Hammer, AlertCircle, CheckCircle, Lock, FileCode, Plus, Trash2 } from "lucide-react";
+import { Save, Hammer, AlertCircle, CheckCircle, Lock, FileCode, Plus, Trash2, Zap } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -21,6 +21,10 @@ import { useSurface, useSaveSurface, useBuildSurface } from "../../lib/queries";
 import * as api from "../../lib/api";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
+import { SurfaceView } from "./SurfaceView";
+
+const LIVE_KEY = "ariadne.surfaceLivePreview";
+const LIVE_DEBOUNCE_MS = 900;
 
 export interface SurfaceEditorProps {
   workspaceId: string;
@@ -76,6 +80,16 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
   const [buildOk, setBuildOk] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  // BJ3 — live preview: debounce-auto-save+build on edit + an embedded preview
+  // that reloads on each successful build, so the surface dev loop is type →
+  // pause → see, with no manual Save/Build/tab-switch.
+  const [livePreview, setLivePreview] = useState<boolean>(() => {
+    try { return localStorage.getItem(LIVE_KEY) !== "0"; } catch { return true; }
+  });
+  const [buildNonce, setBuildNonce] = useState(0);   // bumped on each ok build → reloads preview
+  const [changeSeq, setChangeSeq] = useState(0);     // bumped on each edit → drives the debounce
+  const autoBuildTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // AK — multi-file folder support. When .ariadne/surface/ exists, the
   // editor switches into 'folder mode': a small tab strip across the
   // top, click-to-swap between files. Saving routes to the new
@@ -126,6 +140,7 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             setDirty(true);
+            setChangeSeq((s) => s + 1); // BJ3 — drives the live-mode debounce
             // In folder mode, also persist the in-memory edit per-file
             // so the user can tab-hop without losing changes.
             if (folderMode && activeFile) {
@@ -198,37 +213,67 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
     }
   };
 
-  const handleBuild = async () => {
+  const handleBuild = async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
     setBuildError(null);
     setBuildOk(false);
-    // Save first if dirty
+    // Save current source first (folder mode → the active file).
     if (dirty) {
       const source = getSource();
       try {
-        await saveSurface.mutateAsync(source);
+        if (folderMode && activeFile) {
+          await api.saveSurfaceFolderFile(workspaceId, activeFile, source);
+        } else {
+          await saveSurface.mutateAsync(source);
+        }
         setDirty(false);
       } catch (err) {
         const e = err as Error & { status?: number };
         if (e.status === 403) {
           setReadOnly(true);
-          toast({ title: t("surface.saveFailed"), variant: "error" });
+          if (!silent) toast({ title: t("surface.saveFailed"), variant: "error" });
           return;
         }
-        toast({ title: t("surface.saveFailed"), description: (err as Error).message, variant: "error" });
+        if (!silent) toast({ title: t("surface.saveFailed"), description: (err as Error).message, variant: "error" });
         return;
       }
     }
     try {
       const result = await buildSurface.mutateAsync();
       if (result.ok) {
-        setBuildOk(true);
-        toast({ title: t("surface.buildSucceeded"), variant: "success" });
+        setBuildNonce((n) => n + 1); // BJ3 — reload the embedded live preview
+        // In live mode the refreshing preview IS the feedback — skip the
+        // success banner/toast so a pause-triggered build isn't noisy. Errors
+        // still surface below regardless.
+        if (!silent) {
+          setBuildOk(true);
+          toast({ title: t("surface.buildSucceeded"), variant: "success" });
+        }
       } else {
         setBuildError(result.error ?? t("surface.buildFailed"));
       }
     } catch (err) {
       setBuildError(err instanceof Error ? err.message : t("surface.buildFailed"));
     }
+  };
+
+  // BJ3 — debounced auto-save+build while live preview is on. Re-runs on each
+  // edit (changeSeq); the trailing timer wins so we build once edits settle.
+  useEffect(() => {
+    if (!livePreview || readOnly || changeSeq === 0) return;
+    if (autoBuildTimer.current) clearTimeout(autoBuildTimer.current);
+    autoBuildTimer.current = setTimeout(() => { void handleBuild({ silent: true }); }, LIVE_DEBOUNCE_MS);
+    return () => { if (autoBuildTimer.current) clearTimeout(autoBuildTimer.current); };
+    // handleBuild is captured fresh each render; the effect re-runs on changeSeq.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changeSeq, livePreview, readOnly]);
+
+  const toggleLive = () => {
+    setLivePreview((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(LIVE_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
   };
 
   if (isLoading) {
@@ -253,6 +298,16 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
         {dirty && (
           <span className="text-xs text-muted-foreground">{t("surface.unsavedChanges")}</span>
         )}
+        <Button
+          variant={livePreview ? "primary" : "outline"}
+          size="sm"
+          leftIcon={<Zap className="h-3.5 w-3.5" />}
+          disabled={readOnly}
+          onClick={toggleLive}
+          title={t("surface.livePreviewHint")}
+        >
+          {t("surface.livePreview")}
+        </Button>
         <Button
           variant="secondary"
           size="sm"
@@ -400,12 +455,27 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
         </div>
       )}
 
-      {/* CodeMirror mount point */}
-      <div
-        ref={editorRef}
-        className="rounded-xl border border-border overflow-hidden bg-surface-2"
-        style={{ height: "500px" }}
-      />
+      {/* BJ3 — editor + live preview split. Stacks on narrow screens. */}
+      <div className="flex flex-col lg:flex-row gap-3">
+        {/* CodeMirror mount point */}
+        <div
+          ref={editorRef}
+          className="rounded-xl border border-border overflow-hidden bg-surface-2 min-w-0 lg:flex-1"
+          style={{ height: "500px" }}
+        />
+        {livePreview && (
+          <div className="min-w-0 lg:flex-1 flex flex-col" style={{ height: "500px" }}>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+              <Zap className="h-3 w-3 text-accent" />
+              {t("surface.preview")}
+              {state?.built === false && <span className="text-warning">· {t("surface.notBuilt")}</span>}
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col">
+              <SurfaceView workspaceId={workspaceId} reloadKey={buildNonce} />
+            </div>
+          </div>
+        )}
+      </div>
 
       <p className="text-xs text-muted-foreground">
         {t("surface.footerPrefix")}{" "}
