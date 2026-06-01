@@ -698,6 +698,21 @@ export interface ActionSchedule {
   createdAt: string;
 }
 
+/** A webhook that fires a workspace action when POSTed to with its secret.
+ *  The secret in the URL is the auth — there is no cookie on a webhook call. */
+export interface ActionTrigger {
+  id: string;
+  /** Unguessable secret embedded in the webhook URL. */
+  secret: string;
+  workspaceId: string;
+  /** The action.id inside the workspace's actions.yaml. */
+  actionId: string;
+  accountId: string;
+  /** ISO timestamp of the most recent fire, null before the first. */
+  lastFiredAt: string | null;
+  createdAt: string;
+}
+
 /* ------------------------------------------------------------------ *
  * Skills — short, reusable prompt snippets owned by an account.
  *

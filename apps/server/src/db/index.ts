@@ -200,6 +200,16 @@ function runMigrations(db: DatabaseSync): void {
       next_run_at  TEXT NOT NULL,
       created_at   TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS action_triggers (
+      id            TEXT PRIMARY KEY,
+      secret        TEXT NOT NULL UNIQUE,
+      workspace_id  TEXT NOT NULL,
+      action_id     TEXT NOT NULL,
+      account_id    TEXT NOT NULL,
+      last_fired_at TEXT,
+      created_at    TEXT NOT NULL
+    );
   `);
 
   // Agent attempts — per-chat staging "branches". A chat has at most

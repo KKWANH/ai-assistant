@@ -43,6 +43,8 @@ import {
   Undo2,
   BrainCircuit,
   Workflow,
+  Webhook,
+  Copy,
 } from "lucide-react";
 
 import {
@@ -60,6 +62,9 @@ import {
   useCreateSchedule,
   useUpdateSchedule,
   useDeleteSchedule,
+  useTriggers,
+  useCreateTrigger,
+  useDeleteTrigger,
   useWorkspaceHistory,
   useRewindWorkspaceCommit,
   useMe,
@@ -215,10 +220,12 @@ function SchedulesSection({
   const createSchedule = useCreateSchedule();
   const updateSchedule = useUpdateSchedule();
   const deleteSchedule = useDeleteSchedule();
+  const runAction = useRunAction();
 
   const [adding, setAdding] = useState(false);
   const [actionId, setActionId] = useState(actionOptions[0]?.id ?? "");
   const [frequency, setFrequency] = useState<ScheduleFrequency>("daily");
+  const [runningId, setRunningId] = useState<string | null>(null);
 
   const freqLabel = (f: ScheduleFrequency): string =>
     f === "hourly"
@@ -245,6 +252,22 @@ function SchedulesSection({
       setAdding(false);
     } catch {
       toast({ title: t("schedules.failed"), variant: "error" });
+    }
+  };
+
+  // "Run now" reuses the manual action-run path — the schedule row itself
+  // has no ad-hoc trigger; firing the underlying action is the same thing
+  // the scheduler does on a tick. Lets the user test a schedule without
+  // waiting for the next 09:00.
+  const runNow = async (id: string, actId: string) => {
+    setRunningId(id);
+    try {
+      await runAction.mutateAsync({ workspaceId, actionId: actId });
+      toast({ title: t("schedules.runStarted"), variant: "success" });
+    } catch {
+      toast({ title: t("schedules.failed"), variant: "error" });
+    } finally {
+      setRunningId(null);
     }
   };
 
@@ -346,6 +369,16 @@ function SchedulesSection({
               </div>
               <button
                 type="button"
+                onClick={() => void runNow(s.id, s.actionId)}
+                disabled={runningId === s.id}
+                className="inline-flex items-center gap-1 text-2xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-3 transition-colors shrink-0 disabled:opacity-50"
+                title={t("schedules.runNow")}
+              >
+                <Play className="h-3 w-3" />
+                {t("schedules.runNow")}
+              </button>
+              <button
+                type="button"
                 onClick={() =>
                   void updateSchedule.mutateAsync({
                     id: s.id,
@@ -369,6 +402,140 @@ function SchedulesSection({
                 }}
                 aria-label={t("schedules.delete")}
                 title={t("schedules.delete")}
+                className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-surface-3 transition-colors shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Event triggers — webhook URLs that fire a workspace action when POSTed to.
+ *  The secret in the URL is the auth; copy it into CI / a file-watcher / etc. */
+function TriggersSection({
+  workspaceId,
+  actionOptions,
+}: {
+  workspaceId: string;
+  actionOptions: { id: string; name: string }[];
+}) {
+  const { t } = useT();
+  const { toast } = useToast();
+  const { data: triggers } = useTriggers(workspaceId);
+  const createTrigger = useCreateTrigger();
+  const deleteTrigger = useDeleteTrigger();
+
+  const [adding, setAdding] = useState(false);
+  const [actionId, setActionId] = useState(actionOptions[0]?.id ?? "");
+
+  const actionName = (id: string): string =>
+    actionOptions.find((a) => a.id === id)?.name ?? id;
+  const urlFor = (secret: string): string => `${window.location.origin}/api/triggers/${secret}`;
+
+  const submitNew = async () => {
+    if (!actionId) return;
+    try {
+      await createTrigger.mutateAsync({ workspaceId, input: { workspaceId, actionId } });
+      setAdding(false);
+    } catch {
+      toast({ title: t("triggers.failed"), variant: "error" });
+    }
+  };
+
+  const copyUrl = async (secret: string) => {
+    try {
+      await navigator.clipboard.writeText(urlFor(secret));
+      toast({ title: t("triggers.copied"), variant: "success" });
+    } catch {
+      toast({ title: t("triggers.copyFailed"), variant: "error" });
+    }
+  };
+
+  return (
+    <section className="mt-6">
+      <div className="flex items-end justify-between mb-3 gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground mb-0.5 flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-accent" />
+            {t("triggers.title")}
+          </h2>
+          <p className="text-xs text-muted-foreground">{t("triggers.subtitle")}</p>
+        </div>
+        {!adding && (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => setAdding(true)}
+            className="shrink-0"
+          >
+            {t("triggers.add")}
+          </Button>
+        )}
+      </div>
+
+      {adding && (
+        <div className="rounded-lg border border-accent bg-surface-2 px-3 py-2.5 mb-2 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 flex-1 min-w-[200px]">
+            <span className="text-2xs text-muted-foreground">{t("triggers.pickAction")}</span>
+            <select
+              value={actionId}
+              onChange={(e) => setActionId(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {actionOptions.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
+          <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>
+            {t("schedules.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void submitNew()}
+            disabled={!actionId || createTrigger.isPending}
+            loading={createTrigger.isPending}
+          >
+            {t("triggers.create")}
+          </Button>
+        </div>
+      )}
+
+      {(triggers ?? []).length === 0 && !adding ? (
+        <p className="text-xs text-muted-foreground px-1">{t("triggers.empty")}</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {(triggers ?? []).map((tr) => (
+            <Card key={tr.id} className="flex items-center gap-3 px-4 py-2.5">
+              <Webhook className="h-3.5 w-3.5 shrink-0 text-accent" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-foreground truncate">{actionName(tr.actionId)}</div>
+                <div className="text-2xs text-muted-foreground font-mono truncate">{urlFor(tr.secret)}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyUrl(tr.secret)}
+                className="text-2xs px-2 py-1 rounded-md border border-border text-foreground hover:bg-surface-3 transition-colors shrink-0 inline-flex items-center gap-1"
+                title={t("triggers.copy")}
+              >
+                <Copy className="h-3 w-3" />
+                {t("triggers.copy")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(t("triggers.confirmDelete"))) {
+                    void deleteTrigger.mutateAsync({ id: tr.id, workspaceId });
+                  }
+                }}
+                aria-label={t("triggers.delete")}
+                title={t("triggers.delete")}
                 className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-surface-3 transition-colors shrink-0"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -775,15 +942,6 @@ export function WorkspaceOverview() {
         )}
       </section>
 
-      {/* Schedules — only meaningful when the workspace has at least one
-          action to schedule against. */}
-      {customActions.length > 0 && (
-        <SchedulesSection
-          workspaceId={ws.id}
-          actionOptions={customActions.map((a) => ({ id: a.id, name: a.name }))}
-        />
-      )}
-
       {/* Recent outputs */}
       <section>
         <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-3">
@@ -1037,6 +1195,14 @@ export function WorkspaceOverview() {
                 </span>
               </TabsTrigger>
             )}
+            {!isSimple && (
+              <TabsTrigger value="schedules">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  {t("workspace.schedules.tab")}
+                </span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="memory">
               <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.memory")}>
                 <BrainCircuit className="h-3.5 w-3.5" />
@@ -1133,6 +1299,41 @@ export function WorkspaceOverview() {
               <Suspense fallback={<EditorFallback />}>
                 <ActionsEditor workspaceId={ws.id} />
               </Suspense>
+            </WorkspacePanel>
+          </TabsContent>
+        )}
+
+        {/* Schedules — recurring runs of a workspace action. Promoted out
+            of "Create & runs" into its own tab next to Actions so the
+            already-running scheduler is visible, not buried (PLANNED Bet 1). */}
+        {!isSimple && (
+          <TabsContent value="schedules" className="flex-1 overflow-y-auto min-h-0">
+            <WorkspacePanel>
+              {customActions.length > 0 ? (
+                <>
+                  {/* Surface where automated output lands — a scheduled/triggered
+                      run produces a Run (the brief) visible under Create & runs. */}
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("standard"); setUserPickedTab(true); }}
+                    className="text-2xs text-accent hover:underline mb-3"
+                  >
+                    {t("schedules.viewRuns")}
+                  </button>
+                  <SchedulesSection
+                    workspaceId={ws.id}
+                    actionOptions={customActions.map((a) => ({ id: a.id, name: a.name }))}
+                  />
+                  <TriggersSection
+                    workspaceId={ws.id}
+                    actionOptions={customActions.map((a) => ({ id: a.id, name: a.name }))}
+                  />
+                </>
+              ) : (
+                <Card className="p-4 text-center">
+                  <p className="text-sm text-muted-foreground">{t("schedules.needAction")}</p>
+                </Card>
+              )}
             </WorkspacePanel>
           </TabsContent>
         )}

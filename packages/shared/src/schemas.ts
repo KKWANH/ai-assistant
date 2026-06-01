@@ -194,6 +194,12 @@ export const UpdateScheduleSchema = z.object({
 });
 export type UpdateScheduleInput = z.infer<typeof UpdateScheduleSchema>;
 
+export const CreateTriggerSchema = z.object({
+  workspaceId: z.string().min(1),
+  actionId: z.string().min(1),
+});
+export type CreateTriggerInput = z.infer<typeof CreateTriggerSchema>;
+
 /* ── Skills ─────────────────────────────────────────────────────────── */
 
 const SkillVariableSchema = z.object({

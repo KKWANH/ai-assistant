@@ -1146,6 +1146,39 @@ const en = {
   "template.job-search-review.description": "Weekly check-in over your applications + interview notes + offer comparisons.",
   "template.source-audit.name": "Source audit",
   "template.source-audit.description": "Walk every claim in a draft and verify each source is cited correctly.",
+
+  // ── Schedules (run-now + dedicated tab) ─────────────────────────────────────
+  "workspace.schedules.tab": "Schedules",
+  "schedules.runNow": "Run now",
+  "schedules.runStarted": "Run started — see Create & runs",
+  "schedules.needAction": "Create an action first (Actions tab) — a schedule runs an existing action on a clock.",
+
+  // ── Providers / API keys (registry-driven) ──────────────────────────────────
+  "model.trait.minimax": "Fast, low-cost OpenAI-compatible models — strong at coding & office tasks",
+  "settings.apiKeys.heading": "API keys",
+  "settings.apiKeys.subtitle": "Paste a provider key to use it without a shell env var. Stored locally on this machine; used over the env var.",
+  "settings.apiKeys.save": "Save",
+  "settings.apiKeys.clear": "Clear",
+  "settings.apiKeys.saved": "API key saved",
+  "settings.apiKeys.cleared": "API key cleared",
+  "settings.apiKeys.failed": "Couldn't save the key",
+  "settings.apiKeys.placeholder": "Paste API key",
+  "settings.apiKeys.placeholderSet": "A key is set — paste a new one to replace it",
+
+  // ── Event triggers + schedule run surfacing ─────────────────────────────────
+  "schedules.viewRuns": "Automated runs appear under Create & runs →",
+  "triggers.title": "Event triggers",
+  "triggers.subtitle": "A webhook URL that runs an action when POSTed to (e.g. fire when CI fails). The secret in the URL is the auth — treat it like a password.",
+  "triggers.add": "Add trigger",
+  "triggers.pickAction": "Action to run",
+  "triggers.create": "Create",
+  "triggers.empty": "No triggers yet. Create one to get a webhook URL.",
+  "triggers.copy": "Copy URL",
+  "triggers.copied": "Webhook URL copied",
+  "triggers.copyFailed": "Couldn't copy the URL",
+  "triggers.delete": "Delete trigger",
+  "triggers.confirmDelete": "Delete this trigger? Its webhook URL will stop working.",
+  "triggers.failed": "Couldn't create the trigger",
 } as const;
 
 export type TranslationKey = keyof typeof en;

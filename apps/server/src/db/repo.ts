@@ -22,6 +22,7 @@ import type {
   ReportTriage,
   Skill,
   ActionSchedule,
+  ActionTrigger,
   ScheduleFrequency,
   AgentAttempt,
   AttemptStatus,
@@ -953,6 +954,61 @@ function rowToSchedule(row: Record<string, unknown>): ActionSchedule {
     enabled: Boolean(row["enabled"]),
     lastRunAt: (row["last_run_at"] as string | null) ?? null,
     nextRunAt: row["next_run_at"] as string,
+    createdAt: row["created_at"] as string,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Action triggers — webhook-fired action runs
+// ---------------------------------------------------------------------------
+
+export function dbInsertTrigger(t: ActionTrigger): void {
+  getDb()
+    .prepare(
+      `INSERT INTO action_triggers
+        (id, secret, workspace_id, action_id, account_id, last_fired_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(t.id, t.secret, t.workspaceId, t.actionId, t.accountId, t.lastFiredAt, t.createdAt);
+}
+
+export function dbGetTrigger(id: string): ActionTrigger | null {
+  const row = getDb()
+    .prepare("SELECT * FROM action_triggers WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? rowToTrigger(row) : null;
+}
+
+export function dbGetTriggerBySecret(secret: string): ActionTrigger | null {
+  const row = getDb()
+    .prepare("SELECT * FROM action_triggers WHERE secret = ?")
+    .get(secret) as Record<string, unknown> | undefined;
+  return row ? rowToTrigger(row) : null;
+}
+
+export function dbListTriggersForWorkspace(workspaceId: string): ActionTrigger[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM action_triggers WHERE workspace_id = ? ORDER BY created_at DESC")
+    .all(workspaceId) as Record<string, unknown>[];
+  return rows.map(rowToTrigger);
+}
+
+export function dbTouchTrigger(id: string, firedAt: string): void {
+  getDb().prepare("UPDATE action_triggers SET last_fired_at = ? WHERE id = ?").run(firedAt, id);
+}
+
+export function dbDeleteTrigger(id: string): void {
+  getDb().prepare("DELETE FROM action_triggers WHERE id = ?").run(id);
+}
+
+function rowToTrigger(row: Record<string, unknown>): ActionTrigger {
+  return {
+    id: row["id"] as string,
+    secret: row["secret"] as string,
+    workspaceId: row["workspace_id"] as string,
+    actionId: row["action_id"] as string,
+    accountId: row["account_id"] as string,
+    lastFiredAt: (row["last_fired_at"] as string | null) ?? null,
     createdAt: row["created_at"] as string,
   };
 }

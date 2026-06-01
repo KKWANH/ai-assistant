@@ -1147,6 +1147,39 @@ const ko: Record<TranslationKey, string> = {
   "template.job-search-review.description": "지원 현황·면접 노트·오퍼 비교를 주기적으로 점검.",
   "template.source-audit.name": "출처 점검",
   "template.source-audit.description": "초안의 모든 주장에 대해 출처 인용이 올바른지 검증.",
+
+  // ── Schedules (지금 실행 + 전용 탭) ──────────────────────────────────────────
+  "workspace.schedules.tab": "스케줄",
+  "schedules.runNow": "지금 실행",
+  "schedules.runStarted": "실행을 시작했습니다 — Create & runs에서 확인",
+  "schedules.needAction": "먼저 액션을 만드세요 (Actions 탭) — 스케줄은 기존 액션을 주기적으로 실행합니다.",
+
+  // ── Providers / API keys (레지스트리 기반) ───────────────────────────────────
+  "model.trait.minimax": "빠르고 저렴한 OpenAI 호환 모델 — 코딩·오피스 작업에 강함",
+  "settings.apiKeys.heading": "API 키",
+  "settings.apiKeys.subtitle": "셸 환경변수 없이 키를 붙여넣어 바로 사용합니다. 이 기기에 로컬 저장되며 환경변수보다 우선합니다.",
+  "settings.apiKeys.save": "저장",
+  "settings.apiKeys.clear": "지우기",
+  "settings.apiKeys.saved": "API 키를 저장했습니다",
+  "settings.apiKeys.cleared": "API 키를 지웠습니다",
+  "settings.apiKeys.failed": "키를 저장하지 못했습니다",
+  "settings.apiKeys.placeholder": "API 키 붙여넣기",
+  "settings.apiKeys.placeholderSet": "키가 설정되어 있습니다 — 새 키를 붙여넣으면 교체됩니다",
+
+  // ── 이벤트 트리거 + 스케줄 실행 노출 ─────────────────────────────────────────
+  "schedules.viewRuns": "자동 실행 결과는 Create & runs에 나타납니다 →",
+  "triggers.title": "이벤트 트리거",
+  "triggers.subtitle": "POST하면 액션을 실행하는 웹훅 URL (예: CI 실패 시 발사). URL의 시크릿이 인증 수단이니 비밀번호처럼 다루세요.",
+  "triggers.add": "트리거 추가",
+  "triggers.pickAction": "실행할 액션",
+  "triggers.create": "생성",
+  "triggers.empty": "아직 트리거가 없습니다. 만들면 웹훅 URL이 생성됩니다.",
+  "triggers.copy": "URL 복사",
+  "triggers.copied": "웹훅 URL을 복사했습니다",
+  "triggers.copyFailed": "URL 복사 실패",
+  "triggers.delete": "트리거 삭제",
+  "triggers.confirmDelete": "이 트리거를 삭제할까요? 웹훅 URL이 더는 작동하지 않습니다.",
+  "triggers.failed": "트리거를 만들지 못했습니다",
 };
 
 export default ko;

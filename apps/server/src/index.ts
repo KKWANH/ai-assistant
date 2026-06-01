@@ -40,6 +40,7 @@ import { detectLibreoffice } from "./services/libreoffice.js";
 import { detectPyMuPDF } from "./services/pymupdf.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
+import { triggerRoutes } from "./routes/triggers.js";
 import { attemptRoutes } from "./routes/attempts.js";
 import { startScheduler } from "./services/scheduler.js";
 import { seedAdmin } from "./auth/accounts.js";
@@ -128,7 +129,12 @@ async function bootstrap(): Promise<void> {
         const isAuthOpen =
           url === "/api/auth/login" || url === "/api/auth/logout" || url === "/api/auth/reset" ||
           url.endsWith("/auth/login") || url.endsWith("/auth/logout") || url.endsWith("/auth/reset");
-        if (isAuthOpen) return;
+        // Webhook fire (POST /api/triggers/:secret) authenticates by its secret,
+        // not a cookie — let it through the gate. Management routes
+        // (POST /workspaces/:id/triggers, DELETE /triggers/:id) stay protected.
+        const isTriggerFire =
+          req.method === "POST" && /\/triggers\/[^/]+$/.test(url.split("?")[0] ?? url);
+        if (isAuthOpen || isTriggerFire) return;
 
         const ctx = accessContext(req);
         req.accessContext = ctx;
@@ -182,6 +188,7 @@ async function bootstrap(): Promise<void> {
       await api.register(accountRoutes);
       await api.register(surfaceRoutes);
       await api.register(actionRoutes);
+      await api.register(triggerRoutes);
       await api.register(reportRoutes);
       await api.register(evalCaseRoutes);
       await api.register(memoryRoutes);
