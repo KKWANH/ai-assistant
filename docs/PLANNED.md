@@ -129,10 +129,44 @@ another batch.
   in the README capabilities list).
 - **Workspace git history** — auto-commit `.ariadne/` snapshots on
   every run.
-- **Template marketplace** — ship-able templates beyond the four
-  built-in starters.
+- **Template marketplace** — export shipped (BL1); import / trust / clone +
+  discovery remaining. See §5 below.
 - **Team workspace visibility** — currently private / public are
   per-machine; team scopes need an org concept first.
 
 These are noted but not prioritized; they appear in `PRODUCT_PLAN.md`
 under v0.2+.
+
+---
+
+## 5. Workspace marketplace (federated) — BL, in progress
+
+Share workspaces between people as portable `.ariadne.tar` templates, **no
+central server** (preserves the §4.1 local-first invariant). Foundation already
+present: visibility (public/private), starters, surfaces + actions.
+
+**Shipped — BL1 (export):**
+- `.ariadne/template.yaml` manifest (name, version, author, category, tags,
+  surface/actions paths, `seedFiles[]`, `surfaceRuntimeVersion` → ties to the
+  BJ6 SDK version).
+- `services/workspaceTemplate.ts` `exportWorkspaceTemplate()` + `GET
+  /api/workspaces/:id/export` → `<name>.ariadne.tar`. **Privacy default:** only
+  author-listed `seedFiles` are included — no personal data otherwise. Adds the
+  `tar` dependency (node-tar v7).
+
+**Remaining (each sized for a fresh session):**
+- **BL2 import** — `POST /api/workspaces/import` for an uploaded `.ariadne.tar`
+  (Fastify multipart) + a Git-URL form. Extract (guard `../` / zip-slip),
+  validate the manifest, create a workspace at a chosen rootPath, seed files,
+  build the surface — mirror starter instantiation in `routes/workspaces.ts`.
+  Plus a frontend import entry near "New workspace".
+- **BL3 trust** — import-time consent gate showing the manifest + the surface's
+  capability surface (arbitrary JS in a sandboxed iframe; BJ1's error boundary
+  already contains a broken/hostile surface). Signing / capability-restriction
+  deferred, flagged loudly.
+- **BL4 clone + discovery** — `POST /api/workspaces/:id/clone`; discovery v1 =
+  an in-repo "Featured templates" Git-URL list + `docs/MARKETPLACE.md` spec
+  (NOT a central registry).
+
+Verify: export → import on a fresh workspace → surface builds + renders; clone a
+public workspace; network tab clean of non-tunnel hosts.
