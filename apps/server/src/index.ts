@@ -130,10 +130,16 @@ async function bootstrap(): Promise<void> {
           url === "/api/auth/login" || url === "/api/auth/logout" || url === "/api/auth/reset" ||
           url.endsWith("/auth/login") || url.endsWith("/auth/logout") || url.endsWith("/auth/reset");
         // Webhook fire (POST /api/triggers/:secret) authenticates by its secret,
-        // not a cookie — let it through the gate. Management routes
-        // (POST /workspaces/:id/triggers, DELETE /triggers/:id) stay protected.
+        // not a cookie — let it through the gate. The pattern is START-ANCHORED
+        // so it matches ONLY /api/triggers/<secret> and can NOT match nested
+        // routes such as /workspaces/:id/actions/triggers/run or
+        // /scripts/triggers/run (those must stay behind auth — an unanchored
+        // /triggers/ match was an auth-bypass, caught in review). Management
+        // routes (POST /workspaces/:id/triggers, DELETE /triggers/:id) also stay
+        // protected: the former has no trailing segment, the latter isn't POST.
+        const firePath = url.split("?")[0] ?? url;
         const isTriggerFire =
-          req.method === "POST" && /\/triggers\/[^/]+$/.test(url.split("?")[0] ?? url);
+          req.method === "POST" && /^\/(?:api\/)?triggers\/[^/]+$/.test(firePath);
         if (isAuthOpen || isTriggerFire) return;
 
         const ctx = accessContext(req);

@@ -114,12 +114,16 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     id: "minimax", label: "MiniMax", kind: "openai-compatible", envKey: "MINIMAX_API_KEY",
     baseURL: "https://api.minimax.io/v1",
     defaultModel: "MiniMax-M2.5",
+    // Pricing USD/1M tokens (minimax.io, 2026): M2.5 = 0.15/1.15 and M2 =
+    // 0.26/1.00 are confirmed list prices; M3/M2.7/M2.1 are approximated to the
+    // M2.5 tier (verify on the pricing page if exact cost reporting matters for
+    // those). Without an entry costOf() would report $0 for this paid provider.
     models: [
-      { id: "MiniMax-M2.5", label: "MiniMax M2.5", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
-      { id: "MiniMax-M3", label: "MiniMax M3", traitKey: "model.trait.minimax", speed: "normal", costTier: "mid" },
-      { id: "MiniMax-M2.7", label: "MiniMax M2.7", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
-      { id: "MiniMax-M2.1", label: "MiniMax M2.1", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
-      { id: "MiniMax-M2", label: "MiniMax M2", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
+      { id: "MiniMax-M2.5", label: "MiniMax M2.5", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 } },
+      { id: "MiniMax-M3", label: "MiniMax M3", traitKey: "model.trait.minimax", speed: "normal", costTier: "mid", pricing: { inUsd: 0.15, outUsd: 1.15 } },
+      { id: "MiniMax-M2.7", label: "MiniMax M2.7", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 } },
+      { id: "MiniMax-M2.1", label: "MiniMax M2.1", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 } },
+      { id: "MiniMax-M2", label: "MiniMax M2", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.26, outUsd: 1.0 } },
     ],
   },
   ollama: {

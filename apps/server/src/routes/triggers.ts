@@ -43,7 +43,14 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
       if (!canAccessWorkspace(ws, req.account)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
-      return reply.send(dbListTriggersForWorkspace(req.params.workspaceId));
+      // A trigger secret is a credential. On a shared/built-in/public workspace
+      // canAccessWorkspace is true for other accounts, so only return the
+      // caller's OWN triggers — otherwise listing would leak someone else's
+      // webhook secret (caught in review).
+      const mine = dbListTriggersForWorkspace(req.params.workspaceId).filter(
+        (tr) => tr.accountId === req.account?.id,
+      );
+      return reply.send(mine);
     },
   );
 

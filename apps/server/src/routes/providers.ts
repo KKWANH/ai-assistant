@@ -17,6 +17,7 @@ import type { FastifyInstance } from "fastify";
 import { PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { ProviderId, ProviderStatus } from "@ariadne/shared";
 import { isProviderConfigured } from "../config.js";
+import { evictProviderCache } from "../providers/index.js";
 import { dbSetSetting } from "../db/repo.js";
 import { listOllamaModels } from "../services/ollamaModels.js";
 
@@ -60,6 +61,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
       // Plaintext in the local settings table for now — see resolveProviderKey()
       // for the keychain migration note. Empty string = clear → env fallback.
       dbSetSetting(`providerKey:${id}`, (req.body?.key ?? "").trim());
+      evictProviderCache(id); // rebuild the client with the new key on next use
       return reply.send({ ok: true, configured: isProviderConfigured(id) });
     },
   );
@@ -69,6 +71,7 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
     const id = req.params.id as ProviderId;
     if (!PROVIDERS.includes(id)) return reply.status(404).send({ error: "Unknown provider" });
     dbSetSetting(`providerKey:${id}`, "");
+    evictProviderCache(id);
     return reply.send({ ok: true, configured: isProviderConfigured(id) });
   });
 }

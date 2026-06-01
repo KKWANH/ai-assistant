@@ -149,6 +149,20 @@ export function extractJson(raw: string): string {
  */
 const providerCache = new Map<string, AiProvider>();
 
+/** Drop cached provider instance(s) so the next getProvider() rebuilds the
+ *  client with fresh config. Call after an API key changes — otherwise a
+ *  cached client keeps using the key it was constructed with until the
+ *  process restarts, and the in-app "save key" would appear to do nothing. */
+export function evictProviderCache(providerId?: ProviderId): void {
+  if (!providerId) {
+    providerCache.clear();
+    return;
+  }
+  for (const key of [...providerCache.keys()]) {
+    if (key.startsWith(`${providerId}|`)) providerCache.delete(key);
+  }
+}
+
 export async function getProvider(settings: Pick<Settings, "provider" | "model">): Promise<AiProvider> {
   const { provider, model } = settings;
   const key = `${provider}|${model}`;
