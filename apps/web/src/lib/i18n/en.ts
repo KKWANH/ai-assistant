@@ -116,6 +116,9 @@ const en = {
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "What would you like to do?",
   "chat.empty.subtitle": "An AI that runs on your computer — every answer points back at the source.",
+  "chat.empty.noProvider.title": "Set up an AI provider first",
+  "chat.empty.noProvider.body": "Add an Anthropic or OpenAI API key, or run Ollama locally, to start a conversation. Keys stay on your machine.",
+  "chat.empty.noProvider.action": "Connect a provider in Settings",
   "chat.empty.startNew": "Or start a new conversation",
   "chat.empty.sendToStart": "Send a message to start the conversation.",
 

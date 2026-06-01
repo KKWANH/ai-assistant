@@ -15,6 +15,7 @@ import {
   FileText,
   Play,
   MessageSquarePlus,
+  KeyRound,
 } from "lucide-react";
 import type { Chat, ChatMessage, GenerationStatus } from "@ariadne/shared";
 import {
@@ -26,6 +27,7 @@ import {
   useRunAction,
   useOpenAttemptForChat,
   useChatAttempts,
+  useProviderStatus,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
@@ -52,6 +54,15 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   const navigate = useNavigate();
   const { setCreateWorkspaceOpen, pulseComposer } = useUIStore();
   const { t } = useT();
+
+  // BK1 — first-run provider guard. Until a real (non-mock) provider is
+  // configured, typing into the composer silently goes nowhere; surface a calm
+  // setup prompt instead. Default to "has provider" while the status loads so
+  // the card never flashes for already-configured users.
+  const { data: providerStatus } = useProviderStatus();
+  const hasRealProvider = providerStatus
+    ? providerStatus.some((p) => p.id !== "mock" && p.configured)
+    : true;
 
   // EVERY chip is actionable. Mom's real-world test showed dashed
   // informational tips read as "broken buttons" — clicking them did
@@ -95,6 +106,24 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
           {t("chat.empty.subtitle")}
         </p>
       </div>
+
+      {!hasRealProvider && (
+        <Card className="w-full flex items-start gap-3 px-4 py-3.5 mb-3 border-warning/40 bg-warning/5">
+          <KeyRound className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">{t("chat.empty.noProvider.title")}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+              {t("chat.empty.noProvider.body")}
+            </p>
+            <button
+              className="self-start text-xs text-accent hover:underline mt-1.5"
+              onClick={() => navigate("/settings")}
+            >
+              {t("chat.empty.noProvider.action")} →
+            </button>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         {examples.map((ex) =>

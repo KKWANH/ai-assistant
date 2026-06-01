@@ -109,6 +109,9 @@ const ko: Record<TranslationKey, string> = {
   // ── Chat ────────────────────────────────────────────────────────────────────
   "chat.empty.title": "무엇을 도와드릴까요?",
   "chat.empty.subtitle": "내 컴퓨터에서 실행되는 AI — 답의 출처를 끝까지 추적합니다.",
+  "chat.empty.noProvider.title": "먼저 AI 제공자를 설정하세요",
+  "chat.empty.noProvider.body": "Anthropic·OpenAI API 키를 추가하거나 Ollama를 로컬에서 실행하면 대화를 시작할 수 있어요. 키는 내 컴퓨터에만 저장됩니다.",
+  "chat.empty.noProvider.action": "설정에서 제공자 연결",
   "chat.empty.startNew": "새 대화 시작하기",
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
 
