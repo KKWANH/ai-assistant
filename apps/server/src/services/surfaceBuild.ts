@@ -62,14 +62,12 @@ export async function buildSurface(workspaceRoot: string): Promise<BuildResult> 
 
   // The entry shim is inlined so we don't need to write a temp file.
   // esbuild's stdin feature lets us supply a virtual entry point.
+  // BJ1: mount via the runtime's mountSurface() so every surface gets the same
+  // error boundary + host crash reporting, instead of a bare ReactDOM.render.
   const entryContents = `
-import React from "react";
-import ReactDOM from "react-dom/client";
 import Component from ${JSON.stringify(srcPath)};
-const root = document.getElementById("surface-root");
-if (root) {
-  ReactDOM.createRoot(root).render(React.createElement(Component));
-}
+import { mountSurface } from "@ariadne/surface";
+mountSurface(Component);
 `;
 
   try {

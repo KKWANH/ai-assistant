@@ -560,6 +560,7 @@ const ko: Record<TranslationKey, string> = {
   "surface.view.notBuilt.bodyPrefix": "",
   "surface.view.notBuilt.bodyMid": "을 열고",
   "surface.view.notBuilt.bodySuffix": "을 클릭해 컴파일하세요.",
+  "surface.view.crash.title": "맞춤 화면에서 오류가 발생했습니다",
   "surface.view.iframeTitle": "맞춤 화면",
 
   // ── Tutorial ────────────────────────────────────────────────────────────────

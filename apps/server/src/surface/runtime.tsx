@@ -40,6 +40,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import ReactDOM from "react-dom/client";
 
 export { React, useState, useEffect, useCallback, useRef, useMemo };
 export { useState as useStateAlias, useEffect as useEffectAlias };
@@ -618,5 +619,87 @@ export function PieChart({ data, width = 320, height = 280, title }: PieChartPro
         ) : null
       )}
     </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Crash isolation (BJ1)
+// ---------------------------------------------------------------------------
+// Without this, a surface that throws at render time unmounts React and leaves
+// a blank iframe with no signal to the host. `mountSurface` wraps the surface
+// in an error boundary (themed in-iframe fallback for render crashes) and
+// installs window handlers for the throws React can't catch — module-eval,
+// event handlers, rejected promises. All three report to the host so
+// SurfaceView can show a real error instead of nothing.
+
+/** Tell the host a surface-level error happened. One-way notification (no
+ *  reqId) — distinct from the SDK request/response channel. */
+function reportSurfaceError(kind: "render" | "runtime" | "promise", message: string, stack?: string): void {
+  try {
+    window.parent.postMessage(
+      { source: "ariadne-surface", type: "surface-error", kind, message, stack },
+      "*",
+    );
+  } catch {
+    /* parent unreachable — nothing more we can do from inside the sandbox */
+  }
+}
+
+interface ErrorBoundaryState {
+  error: Error | null;
+}
+
+export class SurfaceErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
+  }
+  componentDidCatch(error: Error): void {
+    reportSurfaceError("render", error.message, error.stack);
+  }
+  render(): React.ReactNode {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <div style={{ padding: 24, fontFamily: "ui-sans-serif, system-ui, sans-serif", color: "rgb(var(--foreground))" }}>
+        <div style={{ maxWidth: 560, margin: "0 auto", border: "1px solid rgb(var(--destructive))", borderRadius: 12, padding: 20, background: "color-mix(in srgb, rgb(var(--destructive)) 6%, transparent)" }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>This surface failed to render</div>
+          <div style={{ fontSize: 12, color: "rgb(var(--muted-foreground))", marginBottom: 12 }}>
+            Your surface code threw while rendering. Fix it in the Edit screen, then Build again.
+          </div>
+          <pre style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", whiteSpace: "pre-wrap", wordBreak: "break-word", color: "rgb(var(--destructive))", background: "rgb(var(--card))", borderRadius: 6, padding: "8px 10px", margin: 0, maxHeight: 240, overflow: "auto" }}>
+            {error.message}{error.stack ? `\n\n${error.stack}` : ""}
+          </pre>
+        </div>
+      </div>
+    );
+  }
+}
+
+/**
+ * Mount a surface component with crash isolation + host error reporting.
+ * The build shim calls this instead of touching ReactDOM directly, so every
+ * surface gets the same safety net.
+ */
+export function mountSurface(Component: React.ComponentType, rootId = "surface-root"): void {
+  if (typeof window !== "undefined") {
+    window.addEventListener("error", (e: ErrorEvent) => {
+      reportSurfaceError("runtime", e.message, e.error?.stack);
+    });
+    window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+      const r = e.reason as { message?: string; stack?: string } | undefined;
+      reportSurfaceError("promise", r?.message ?? String(e.reason), r?.stack);
+    });
+  }
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  ReactDOM.createRoot(root).render(
+    React.createElement(SurfaceErrorBoundary, null, React.createElement(Component)),
   );
 }

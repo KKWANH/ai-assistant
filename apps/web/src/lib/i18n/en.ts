@@ -565,6 +565,7 @@ const en = {
   "surface.view.notBuilt.bodyPrefix": "Open",
   "surface.view.notBuilt.bodyMid": "and click",
   "surface.view.notBuilt.bodySuffix": "to compile.",
+  "surface.view.crash.title": "The custom screen hit an error",
   "surface.view.iframeTitle": "Custom screen",
 
   // ── Tutorial ────────────────────────────────────────────────────────────────

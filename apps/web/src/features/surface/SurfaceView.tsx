@@ -10,7 +10,7 @@
  *  - All actual API calls are made by THIS component (authenticated via
  *    the existing session cookie). The surface never touches /api directly.
  */
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import * as api from "../../lib/api";
 import { useSurface } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
@@ -33,6 +33,16 @@ interface HostReply {
   ok: boolean;
   result?: unknown;
   error?: string;
+}
+
+/** BJ1 — one-way crash notification from the surface runtime's mountSurface().
+ *  Distinct from the request/response SDK channel (no reqId). */
+interface SurfaceErrorMessage {
+  source: "ariadne-surface";
+  type: "surface-error";
+  kind: "render" | "runtime" | "promise";
+  message: string;
+  stack?: string;
 }
 
 // ── CSV parser (lightweight, RFC 4180-ish) ────────────────────────────────────
@@ -201,17 +211,33 @@ export function SurfaceView({ workspaceId }: SurfaceViewProps) {
   const { data: surfaceData, isLoading } = useSurface(workspaceId);
   const { theme } = useUIStore();
   const { t } = useT();
+  const [surfaceError, setSurfaceError] = useState<SurfaceErrorMessage | null>(null);
+
+  // Clear a stale crash banner when the surface reloads — theme re-keys the
+  // iframe (remount), workspace switch swaps it entirely.
+  useEffect(() => {
+    setSurfaceError(null);
+  }, [workspaceId, theme]);
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      const data = event.data as SurfaceRequest | undefined;
+      const data = event.data as (SurfaceRequest | SurfaceErrorMessage) | undefined;
       if (!data || data.source !== "ariadne-surface") return;
       // Only accept messages from the iframe
       if (event.source !== iframeRef.current?.contentWindow) return;
 
-      const { reqId } = data;
+      // BJ1 — surface crashed (render / module-eval / rejected promise). Show
+      // it instead of letting the iframe sit silently blank.
+      if ("type" in data && data.type === "surface-error") {
+        setSurfaceError(data);
+        return;
+      }
 
-      handleBridgeRequest(workspaceId, data)
+      // Everything past the guard is a bridge request.
+      const req = data as SurfaceRequest;
+      const { reqId } = req;
+
+      handleBridgeRequest(workspaceId, req)
         .then((result) => {
           const reply: HostReply = {
             source: "ariadne-host",
@@ -292,6 +318,25 @@ export function SurfaceView({ workspaceId }: SurfaceViewProps) {
 
   return (
     <div className="rounded-xl border border-border overflow-hidden flex flex-col" style={{ minHeight: "0", flex: "1 1 0" }}>
+      {surfaceError && (
+        <div className="flex items-start gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-2">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-foreground">{t("surface.view.crash.title")}</p>
+            <p className="text-2xs text-muted-foreground font-mono truncate" title={surfaceError.message}>
+              {surfaceError.message}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSurfaceError(null)}
+            aria-label={t("common.close")}
+            className="text-muted-foreground hover:text-foreground text-xs shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <iframe
         key={theme}
         ref={iframeRef}
