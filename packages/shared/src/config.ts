@@ -1,95 +1,182 @@
 import path from "node:path";
 
-/** AI providers Ariadne can route to. v0.1 picks one at a time. */
+/** AI providers Ariadne can route to. v0.1 picks one at a time.
+ *  ADD A PROVIDER: append its id here AND add an entry to PROVIDER_REGISTRY
+ *  below. For an OpenAI-compatible API that is the whole job — the server
+ *  factory, Settings UI, model choices, pricing and vision flags all derive
+ *  from the registry. */
 export const PROVIDERS = [
   "anthropic",
   "openai",
   "gemini",
   "moonshot",
+  "minimax",
   "ollama",
   "vllm",
   "mock",
 ] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
-/** Human labels for the Settings UI. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = {
-  anthropic: "Anthropic (Claude)",
-  openai: "OpenAI",
-  gemini: "Google Gemini",
-  moonshot: "Moonshot / Kimi",
-  ollama: "Ollama (local)",
-  vllm: "vLLM (self-hosted)",
-  mock: "Mock (no API key)",
-};
+/** How the server instantiates a provider. "openai-compatible" needs no
+ *  bespoke class — the generic OpenAICompatibleProvider drives it from the
+ *  descriptor's { baseURL, envKey }. */
+export type ProviderKind =
+  | "anthropic"
+  | "openai"
+  | "gemini"
+  | "openai-compatible"
+  | "ollama"
+  | "vllm"
+  | "mock";
+
+export interface ModelEntry {
+  /** Model string passed to the provider API. */
+  id: string;
+  /** Friendly brand label (proper noun, not translated). */
+  label: string;
+  /** i18n key for the one-line trait shown in the model picker. */
+  traitKey: string;
+  speed: "fast" | "normal" | "slow";
+  costTier: "low" | "mid" | "premium";
+  /** Accepts image input. Default false. */
+  vision?: boolean;
+  /** API list price, USD per 1M tokens. Omit for free/local. */
+  pricing?: { inUsd: number; outUsd: number };
+  /** Keep out of the picker but still resolve cost for historical usage. */
+  hidden?: boolean;
+}
+
+export interface ProviderDescriptor {
+  id: ProviderId;
+  label: string;
+  kind: ProviderKind;
+  /** Env var holding the API key; also the settings-table key id
+   *  (`providerKey:<id>`). Omit for keyless providers (ollama/mock). */
+  envKey?: string;
+  /** Base URL for openai-compatible providers. */
+  baseURL?: string;
+  /** Runs on the user's own machine/network — no API-key billing. */
+  local?: boolean;
+  defaultModel: string;
+  models: ModelEntry[];
+}
 
 /**
- * Default model per provider. The Ollama default is only a hint — the server
- * resolves it to whatever model is actually installed on the machine (see
- * resolveOllamaModel), so a fresh install runs on local models with no setup.
- *
- * The vllm default is the model the user is most likely to be serving — Qwen
- * 2.5 7B Instruct is small enough to fit on a single 24GB GPU and is the
- * shape vLLM's tutorials use. Override with VLLM_MODEL or by picking another
- * model id in the UI; vLLM will reject anything that doesn't match the model
- * it was launched with, so the user has to keep these in sync.
+ * SINGLE SOURCE OF TRUTH for every provider + model. The tables below
+ * (labels, defaults, choices, pricing, vision) are DERIVED from this — do not
+ * hand-maintain them. Pricing is USD per 1M tokens from public list prices
+ * (2025–2026); `hidden` models are off-menu but kept so historical usage
+ * still costs correctly. The vllm/ollama defaults are hints — the server
+ * resolves Ollama to an installed model, and vLLM serves whatever it was
+ * launched with.
  */
-export const DEFAULT_MODELS: Record<ProviderId, string> = {
-  anthropic: "claude-sonnet-4-6",
-  openai: "gpt-4o",
-  gemini: "gemini-3.5-flash",
-  moonshot: "kimi-k2.6",
-  ollama: "qwen3:8b",
-  vllm: "Qwen/Qwen2.5-7B-Instruct",
-  mock: "mock",
+export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
+  anthropic: {
+    id: "anthropic", label: "Anthropic (Claude)", kind: "anthropic", envKey: "ANTHROPIC_API_KEY",
+    defaultModel: "claude-sonnet-4-6",
+    models: [
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 3, outUsd: 15 } },
+      { id: "claude-opus-4-7", label: "Claude Opus", traitKey: "model.trait.opus", speed: "slow", costTier: "premium", vision: true, pricing: { inUsd: 15, outUsd: 75 } },
+      { id: "claude-haiku-4-5", label: "Claude Haiku", traitKey: "model.trait.haiku", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.8, outUsd: 4 } },
+    ],
+  },
+  openai: {
+    id: "openai", label: "OpenAI", kind: "openai", envKey: "OPENAI_API_KEY",
+    defaultModel: "gpt-4o",
+    models: [
+      { id: "gpt-4o", label: "GPT-4o", traitKey: "model.trait.gpt4o", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 2.5, outUsd: 10 } },
+      { id: "gpt-4o-mini", label: "GPT-4o mini", traitKey: "model.trait.gpt4oMini", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.15, outUsd: 0.6 } },
+      { id: "o3-mini", label: "o3-mini", traitKey: "model.trait.o3mini", speed: "normal", costTier: "low", pricing: { inUsd: 1.1, outUsd: 4.4 } },
+    ],
+  },
+  gemini: {
+    id: "gemini", label: "Google Gemini", kind: "gemini", envKey: "GEMINI_API_KEY",
+    defaultModel: "gemini-3.5-flash",
+    models: [
+      { id: "gemini-3.5-flash", label: "Gemini Flash", traitKey: "model.trait.geminiFlash", speed: "fast", costTier: "mid", vision: true, pricing: { inUsd: 1.5, outUsd: 9 } },
+      { id: "gemini-3.1-flash-lite", label: "Gemini Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.1, outUsd: 0.4 } },
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", traitKey: "model.trait.geminiFlash", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.15, outUsd: 0.6 }, hidden: true },
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", traitKey: "model.trait.geminiFlash", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 1.25, outUsd: 10 }, hidden: true },
+    ],
+  },
+  moonshot: {
+    id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY",
+    defaultModel: "kimi-k2.6",
+    models: [
+      { id: "kimi-k2.6", label: "Kimi K2", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.55, outUsd: 2.65 } },
+      { id: "moonshot-v1-128k", label: "Moonshot v1 128k", traitKey: "model.trait.kimi", speed: "normal", costTier: "mid", pricing: { inUsd: 1.63, outUsd: 6.53 } },
+      { id: "moonshot-v1-32k", label: "Moonshot v1 32k", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.81, outUsd: 3.26 } },
+      { id: "kimi-for-coding", label: "Kimi for Coding", traitKey: "model.trait.kimiCoding", speed: "normal", costTier: "low", pricing: { inUsd: 0, outUsd: 0 } },
+      { id: "kimi-k2-0711-preview", label: "Kimi K2 (preview)", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.6, outUsd: 2.5 }, hidden: true },
+    ],
+  },
+  minimax: {
+    id: "minimax", label: "MiniMax", kind: "openai-compatible", envKey: "MINIMAX_API_KEY",
+    baseURL: "https://api.minimax.io/v1",
+    defaultModel: "MiniMax-M2.5",
+    models: [
+      { id: "MiniMax-M2.5", label: "MiniMax M2.5", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
+      { id: "MiniMax-M3", label: "MiniMax M3", traitKey: "model.trait.minimax", speed: "normal", costTier: "mid" },
+      { id: "MiniMax-M2.7", label: "MiniMax M2.7", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
+      { id: "MiniMax-M2.1", label: "MiniMax M2.1", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
+      { id: "MiniMax-M2", label: "MiniMax M2", traitKey: "model.trait.minimax", speed: "normal", costTier: "low" },
+    ],
+  },
+  ollama: {
+    id: "ollama", label: "Ollama (local)", kind: "ollama", local: true,
+    defaultModel: "qwen3:8b",
+    models: [
+      { id: "qwen3:8b", label: "Qwen 3 (8B)", traitKey: "model.trait.qwen8b", speed: "normal", costTier: "low" },
+      { id: "qwen3:4b", label: "Qwen 3 (4B)", traitKey: "model.trait.qwen4b", speed: "fast", costTier: "low" },
+      { id: "qwen3:0.6b", label: "Qwen 3 (0.6B)", traitKey: "model.trait.qwen06b", speed: "fast", costTier: "low" },
+    ],
+  },
+  vllm: {
+    id: "vllm", label: "vLLM (self-hosted)", kind: "vllm", local: true,
+    defaultModel: "Qwen/Qwen2.5-7B-Instruct",
+    models: [
+      { id: "Qwen/Qwen2.5-7B-Instruct", label: "Qwen 2.5 7B (vLLM)", traitKey: "model.trait.vllm", speed: "fast", costTier: "low" },
+      { id: "Qwen/Qwen2.5-14B-Instruct", label: "Qwen 2.5 14B (vLLM)", traitKey: "model.trait.vllm", speed: "normal", costTier: "low" },
+      { id: "meta-llama/Llama-3.1-8B-Instruct", label: "Llama 3.1 8B (vLLM)", traitKey: "model.trait.vllm", speed: "fast", costTier: "low" },
+    ],
+  },
+  mock: {
+    id: "mock", label: "Mock (no API key)", kind: "mock", local: true,
+    defaultModel: "mock",
+    models: [
+      { id: "mock", label: "Mock", traitKey: "model.trait.mock", speed: "fast", costTier: "low", vision: true },
+    ],
+  },
 };
 
-/** Suggested model choices surfaced in the Settings UI. */
-export const MODEL_CHOICES: Record<ProviderId, string[]> = {
-  anthropic: ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"],
-  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
-  gemini: ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
-  moonshot: ["kimi-k2.6", "moonshot-v1-128k", "moonshot-v1-32k", "kimi-for-coding"],
-  ollama: ["qwen3:8b", "qwen3:4b", "qwen3:0.6b"],
-  vllm: ["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-14B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"],
-  mock: ["mock"],
-};
+const REGISTRY_LIST: ProviderDescriptor[] = PROVIDERS.map((id) => PROVIDER_REGISTRY[id]);
+
+/** Human labels for the Settings UI. (derived — edit PROVIDER_REGISTRY) */
+export const PROVIDER_LABELS: Record<ProviderId, string> = Object.fromEntries(
+  REGISTRY_LIST.map((p) => [p.id, p.label]),
+) as Record<ProviderId, string>;
+
+/** Default model per provider. (derived) */
+export const DEFAULT_MODELS: Record<ProviderId, string> = Object.fromEntries(
+  REGISTRY_LIST.map((p) => [p.id, p.defaultModel]),
+) as Record<ProviderId, string>;
+
+/** Suggested model choices surfaced in the Settings UI. (derived; hidden excluded) */
+export const MODEL_CHOICES: Record<ProviderId, string[]> = Object.fromEntries(
+  REGISTRY_LIST.map((p) => [p.id, p.models.filter((m) => !m.hidden).map((m) => m.id)]),
+) as Record<ProviderId, string[]>;
 
 /**
- * Pricing table: USD per 1 million tokens (input / output).
- * Sources: public list prices (2025–2026). Older entries are kept so cost
- * still resolves for historical usage records.
- * Ollama, mock, and unknown models are free → {input:0, output:0}.
+ * Pricing table: USD per 1 million tokens (input / output). (derived)
+ * Ollama, mock, vLLM and any unlisted model have no entry → treated as free.
  */
-export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // Anthropic Claude
-  "claude-sonnet-4-6":  { input: 3.00,  output: 15.00 },
-  "claude-opus-4-7":    { input: 15.00, output: 75.00 },
-  "claude-haiku-4-5":   { input: 0.80,  output: 4.00  },
-  // OpenAI
-  "gpt-4o":             { input: 2.50,  output: 10.00 },
-  "gpt-4o-mini":        { input: 0.15,  output: 0.60  },
-  "o3-mini":            { input: 1.10,  output: 4.40  },
-  // Google Gemini
-  "gemini-3.5-flash":      { input: 1.50, output: 9.00 },
-  "gemini-3.1-flash-lite": { input: 0.10, output: 0.40 },
-  "gemini-2.5-flash":   { input: 0.15,  output: 0.60  },
-  "gemini-2.5-pro":     { input: 1.25,  output: 10.00 },
-  // Moonshot / Kimi
-  "kimi-k2.6":          { input: 0.55,  output: 2.65  },
-  "moonshot-v1-128k":   { input: 1.63,  output: 6.53  },
-  "moonshot-v1-32k":    { input: 0.81,  output: 3.26  },
-  "kimi-k2-0711-preview": { input: 0.60, output: 2.50 },
-  // Kimi Code (membership-bundled, separate quota system — pricing isn't
-  // per-token but per-quota-window. List as 0 so cost UI doesn't lie.)
-  "kimi-for-coding":    { input: 0, output: 0 },
-  // Ollama (local) — free. Any unlisted local model also resolves to free.
-  "qwen3:8b":           { input: 0, output: 0 },
-  "qwen3:4b":           { input: 0, output: 0 },
-  "qwen3:0.6b":         { input: 0, output: 0 },
-  // Mock — free
-  "mock":               { input: 0, output: 0 },
-};
+export const MODEL_PRICING: Record<string, { input: number; output: number }> = Object.fromEntries(
+  REGISTRY_LIST.flatMap((p) =>
+    p.models
+      .filter((m) => m.pricing)
+      .map((m) => [m.id, { input: m.pricing!.inUsd, output: m.pricing!.outUsd }]),
+  ),
+);
 
 /**
  * Compute USD cost for a given model and token counts.
@@ -113,16 +200,9 @@ export function costOf(model: string, inputTokens: number, outputTokens: number)
  * negative an obscure vision model (user picks a different one) than
  * false-positive a text model (user hits the dead-end).
  */
-const VISION_CAPABLE_MODELS = new Set<string>([
-  // Anthropic — Claude 3+ all support vision
-  "claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5",
-  // OpenAI — GPT-4o family supports images
-  "gpt-4o", "gpt-4o-mini",
-  // Google Gemini — current flash/pro support vision
-  "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro",
-  // Mock claims vision so tests don't have to special-case it
-  "mock",
-]);
+const VISION_CAPABLE_MODELS = new Set<string>(
+  REGISTRY_LIST.flatMap((p) => p.models.filter((m) => m.vision).map((m) => m.id)),
+);
 
 export function modelHasVision(model: string): boolean {
   if (VISION_CAPABLE_MODELS.has(model)) return true;

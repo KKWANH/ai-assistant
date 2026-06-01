@@ -170,6 +170,15 @@ import type { ProviderStatus } from "@ariadne/shared";
 export const getProviderStatus = () =>
   request<ProviderStatus[]>("GET", "/providers/status");
 
+/** Save an API key for a provider (stored server-side; overrides the env var).
+ *  An empty key clears it. Keys are never read back — only `configured`. */
+export const setProviderKey = (id: string, key: string) =>
+  request<{ ok: boolean; configured: boolean }>("PUT", `/providers/${encodeURIComponent(id)}/key`, { key });
+
+/** Clear a saved API key for a provider (reverts to the env var if present). */
+export const clearProviderKey = (id: string) =>
+  request<{ ok: boolean; configured: boolean }>("DELETE", `/providers/${encodeURIComponent(id)}/key`);
+
 // ── Surface ───────────────────────────────────────────────────────────────────
 import type { SurfaceState } from "@ariadne/shared";
 
@@ -706,6 +715,8 @@ import type {
   ActionSchedule,
   CreateScheduleInput,
   UpdateScheduleInput,
+  ActionTrigger,
+  CreateTriggerInput,
 } from "@ariadne/shared";
 
 export const listSchedules = (workspaceId: string) =>
@@ -716,6 +727,13 @@ export const updateSchedule = (id: string, input: UpdateScheduleInput) =>
   request<ActionSchedule>("PATCH", `/schedules/${id}`, input);
 export const deleteSchedule = (id: string) =>
   request<{ ok: boolean }>("DELETE", `/schedules/${id}`);
+
+export const listTriggers = (workspaceId: string) =>
+  request<ActionTrigger[]>("GET", `/workspaces/${workspaceId}/triggers`);
+export const createTrigger = (workspaceId: string, input: CreateTriggerInput) =>
+  request<ActionTrigger>("POST", `/workspaces/${workspaceId}/triggers`, input);
+export const deleteTrigger = (id: string) =>
+  request<{ ok: boolean }>("DELETE", `/triggers/${id}`);
 
 // ── Skills ────────────────────────────────────────────────────────────────────
 import type { Skill, CreateSkillInput, UpdateSkillInput } from "@ariadne/shared";

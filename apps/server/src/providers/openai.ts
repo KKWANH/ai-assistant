@@ -135,8 +135,8 @@ export class OpenAIProvider implements AiProvider {
 export class MoonshotProvider extends OpenAIProvider {
   override readonly id: ProviderId = "moonshot";
 
-  constructor(model: string) {
-    const key = process.env.MOONSHOT_API_KEY ?? "dummy";
+  constructor(model: string, apiKey?: string) {
+    const key = apiKey ?? process.env.MOONSHOT_API_KEY ?? "dummy";
     const platform = (process.env.MOONSHOT_PLATFORM ?? "").toLowerCase();
     const baseURL =
       process.env.MOONSHOT_BASE_URL
@@ -190,5 +190,17 @@ export class VllmProvider extends OpenAIProvider {
       apiKey: process.env.VLLM_API_KEY ?? "vllm", // vLLM checks only when --api-key was set
       baseURL: `${base}/v1`,
     });
+  }
+}
+
+/** Generic OpenAI-compatible provider — driven entirely by a base URL + key
+ *  from the provider registry. A new OpenAI-compatible API (MiniMax, DeepSeek,
+ *  …) needs NO bespoke class: add a PROVIDER_REGISTRY entry with
+ *  kind:"openai-compatible" + baseURL, and getProvider() routes here. */
+export class OpenAICompatibleProvider extends OpenAIProvider {
+  override readonly id: ProviderId;
+  constructor(id: ProviderId, model: string, baseURL: string, apiKey?: string) {
+    super(model, { apiKey: apiKey || "dummy", baseURL });
+    this.id = id;
   }
 }

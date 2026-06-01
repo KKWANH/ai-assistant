@@ -15,9 +15,10 @@ import {
   Plus,
   Trash2,
   Pencil,
+  KeyRound,
 } from "lucide-react";
-import { PROVIDERS, PROVIDER_LABELS } from "@ariadne/shared";
-import type { AccountMode } from "@ariadne/shared";
+import { PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
+import type { AccountMode, ProviderId } from "@ariadne/shared";
 import {
   useSettings,
   useUsage,
@@ -29,11 +30,13 @@ import {
   useCreateSkill,
   useUpdateSkill,
   useDeleteSkill,
+  useSetProviderKey,
 } from "../../lib/queries";
 import type { Skill } from "@ariadne/shared";
 import { useT, LOCALES, type Locale } from "../../lib/i18n";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Textarea";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -53,6 +56,64 @@ function SectionHeading({
       {icon}
       {children}
     </h2>
+  );
+}
+
+/** One provider's API-key field. Write-only — we never read the key back, only
+ *  the `configured` flag. Saving an empty value clears it (reverts to env). */
+function ApiKeyRow({ id, label, configured }: { id: ProviderId; label: string; configured: boolean }) {
+  const { t } = useT();
+  const { toast } = useToast();
+  const setKey = useSetProviderKey();
+  const [value, setValue] = useState("");
+
+  const submit = async (key: string) => {
+    try {
+      await setKey.mutateAsync({ id, key });
+      setValue("");
+      toast({ title: key ? t("settings.apiKeys.saved") : t("settings.apiKeys.cleared"), variant: "success" });
+    } catch (err) {
+      toast({
+        title: t("settings.apiKeys.failed"),
+        description: err instanceof Error ? err.message : String(err),
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <Card className="flex items-center gap-3 px-4 py-2.5">
+      <span className="flex items-center gap-1.5 text-sm text-foreground w-40 shrink-0">
+        {configured ? (
+          <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
+        ) : (
+          <KeyRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        )}
+        {label}
+      </span>
+      <Input
+        type="password"
+        autoComplete="off"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={configured ? t("settings.apiKeys.placeholderSet") : t("settings.apiKeys.placeholder")}
+        className="flex-1 font-mono text-xs"
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => void submit(value)}
+        disabled={!value.trim() || setKey.isPending}
+        loading={setKey.isPending}
+      >
+        {t("settings.apiKeys.save")}
+      </Button>
+      {configured && (
+        <Button variant="ghost" size="sm" onClick={() => void submit("")} disabled={setKey.isPending}>
+          {t("settings.apiKeys.clear")}
+        </Button>
+      )}
+    </Card>
   );
 }
 
@@ -193,6 +254,25 @@ export function SettingsView() {
                   )}
                 </div>
               </Card>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* API keys — paste a provider key in-app; no shell env var needed.
+          Saved to the local settings table and used over the env var. */}
+      <section>
+        <SectionHeading icon={<KeyRound className="h-3.5 w-3.5" />}>
+          {t("settings.apiKeys.heading")}
+        </SectionHeading>
+        <p className="text-xs text-muted-foreground mb-2">{t("settings.apiKeys.subtitle")}</p>
+        <div className="flex flex-col gap-1.5">
+          {PROVIDERS.filter((pid) => PROVIDER_REGISTRY[pid].envKey).map((pid) => {
+            const live = liveProviders?.find((p) => p.id === pid);
+            const fallback = settings.providers.find((p) => p.id === pid);
+            const configured = live?.configured ?? fallback?.configured ?? false;
+            return (
+              <ApiKeyRow key={pid} id={pid} label={PROVIDER_LABELS[pid]} configured={configured} />
             );
           })}
         </div>

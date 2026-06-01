@@ -1,19 +1,23 @@
 /**
- * Provider status route.
+ * Provider status + API-key management.
  *
- * GET /api/providers/status — live availability for each provider, as the
- * shared `ProviderStatus` contract ({ id, label, configured, models }):
- *   - ollama: fetches /api/tags from OLLAMA_BASE_URL. The timeout is generous
- *     because a busy Ollama (loading or running a large model) can be slow to
- *     answer even when perfectly healthy — a short timeout caused false
- *     "not running" reports.
- *   - anthropic/openai/gemini/moonshot: API key env var present?
- *   - mock: always available.
+ * GET    /api/providers/status   — availability per provider
+ *                                  ({ id, label, configured, models }).
+ * PUT    /api/providers/:id/key  — save an API key into the settings table
+ *                                  (body { key }); an empty key clears it.
+ * DELETE /api/providers/:id/key  — clear a saved key (revert to the env var).
+ *
+ * Keys are write-only over the wire: no GET ever returns a key, only the
+ * derived `configured` boolean. ollama is probed live; mock is always on.
+ * `configured`/key resolution lives in config.ts so the env-var ↔ settings ↔
+ * (future) keychain precedence stays in one place.
  */
 
 import type { FastifyInstance } from "fastify";
-import { PROVIDERS, PROVIDER_LABELS } from "@ariadne/shared";
+import { PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { ProviderId, ProviderStatus } from "@ariadne/shared";
+import { isProviderConfigured } from "../config.js";
+import { dbSetSetting } from "../db/repo.js";
 import { listOllamaModels } from "../services/ollamaModels.js";
 
 async function checkOllama(): Promise<ProviderStatus> {
@@ -28,21 +32,8 @@ async function checkOllama(): Promise<ProviderStatus> {
   };
 }
 
-const KEY_ENV: Partial<Record<ProviderId, string>> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GEMINI_API_KEY",
-  moonshot: "MOONSHOT_API_KEY",
-};
-
-function checkKeyProvider(id: ProviderId): ProviderStatus {
-  const envKey = KEY_ENV[id];
-  return {
-    id,
-    label: PROVIDER_LABELS[id],
-    configured: envKey ? !!process.env[envKey] : false,
-    models: [],
-  };
+function statusOf(id: ProviderId): ProviderStatus {
+  return { id, label: PROVIDER_LABELS[id], configured: isProviderConfigured(id), models: [] };
 }
 
 export async function providerRoutes(app: FastifyInstance): Promise<void> {
@@ -51,12 +42,33 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
     const statuses = await Promise.all(
       PROVIDERS.map(async (id): Promise<ProviderStatus> => {
         if (id === "ollama") return checkOllama();
-        if (id === "mock") {
-          return { id: "mock", label: PROVIDER_LABELS["mock"], configured: true, models: [] };
-        }
-        return checkKeyProvider(id);
-      })
+        return statusOf(id);
+      }),
     );
     return reply.send(statuses);
+  });
+
+  // PUT /api/providers/:id/key — save (empty body.key clears) the API key.
+  app.put<{ Params: { id: string }; Body: { key?: string } }>(
+    "/providers/:id/key",
+    async (req, reply) => {
+      const id = req.params.id as ProviderId;
+      if (!PROVIDERS.includes(id)) return reply.status(404).send({ error: "Unknown provider" });
+      if (!PROVIDER_REGISTRY[id].envKey) {
+        return reply.status(400).send({ error: "This provider does not use an API key" });
+      }
+      // Plaintext in the local settings table for now — see resolveProviderKey()
+      // for the keychain migration note. Empty string = clear → env fallback.
+      dbSetSetting(`providerKey:${id}`, (req.body?.key ?? "").trim());
+      return reply.send({ ok: true, configured: isProviderConfigured(id) });
+    },
+  );
+
+  // DELETE /api/providers/:id/key — clear a saved key (revert to env var).
+  app.delete<{ Params: { id: string } }>("/providers/:id/key", async (req, reply) => {
+    const id = req.params.id as ProviderId;
+    if (!PROVIDERS.includes(id)) return reply.status(404).send({ error: "Unknown provider" });
+    dbSetSetting(`providerKey:${id}`, "");
+    return reply.send({ ok: true, configured: isProviderConfigured(id) });
   });
 }

@@ -8,6 +8,7 @@
  * holds keys and identifiers so it stays language-neutral.
  */
 import type { TranslationKey } from "./i18n/en";
+import { PROVIDER_REGISTRY, PROVIDERS } from "@ariadne/shared";
 
 export type ModelSpeed = "fast" | "normal" | "slow";
 export type ModelCostTier = "low" | "mid" | "premium";
@@ -29,65 +30,29 @@ export interface ModelPrice {
   outUsd: number;
 }
 
-const KNOWN: Record<string, ModelInfo> = {
-  // Anthropic Claude
-  "claude-opus-4-7":   { label: "Claude Opus",   traitKey: "model.trait.opus",   speed: "slow",   costTier: "premium" },
-  "claude-sonnet-4-6": { label: "Claude Sonnet", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid" },
-  "claude-haiku-4-5":  { label: "Claude Haiku",  traitKey: "model.trait.haiku",  speed: "fast",   costTier: "low" },
-  // OpenAI
-  "gpt-4o":      { label: "GPT-4o",      traitKey: "model.trait.gpt4o",     speed: "normal", costTier: "mid" },
-  "gpt-4o-mini": { label: "GPT-4o mini", traitKey: "model.trait.gpt4oMini", speed: "fast",   costTier: "low" },
-  "o3-mini":     { label: "o3-mini",     traitKey: "model.trait.o3mini",    speed: "normal", costTier: "low" },
-  // Google Gemini
-  "gemini-3.5-flash":      { label: "Gemini Flash",      traitKey: "model.trait.geminiFlash",     speed: "fast", costTier: "mid" },
-  "gemini-3.1-flash-lite": { label: "Gemini Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low" },
-  // Moonshot / Kimi
-  "kimi-k2.6":       { label: "Kimi K2",       traitKey: "model.trait.kimi",       speed: "normal", costTier: "low" },
-  "kimi-for-coding": { label: "Kimi for Coding", traitKey: "model.trait.kimiCoding", speed: "normal", costTier: "low" },
-  // Ollama (local)
-  "qwen3:8b":   { label: "Qwen 3 (8B)",   traitKey: "model.trait.qwen8b",  speed: "normal", costTier: "low" },
-  "qwen3:4b":   { label: "Qwen 3 (4B)",   traitKey: "model.trait.qwen4b",  speed: "fast",   costTier: "low" },
-  "qwen3:0.6b": { label: "Qwen 3 (0.6B)", traitKey: "model.trait.qwen06b", speed: "fast",   costTier: "low" },
-  // vLLM self-hosted (the user picks one; vLLM serves what it was launched with)
-  "Qwen/Qwen2.5-7B-Instruct":      { label: "Qwen 2.5 7B (vLLM)",   traitKey: "model.trait.vllm",  speed: "fast",   costTier: "low" },
-  "Qwen/Qwen2.5-14B-Instruct":     { label: "Qwen 2.5 14B (vLLM)",  traitKey: "model.trait.vllm",  speed: "normal", costTier: "low" },
-  "meta-llama/Llama-3.1-8B-Instruct": { label: "Llama 3.1 8B (vLLM)", traitKey: "model.trait.vllm", speed: "fast",  costTier: "low" },
-  // Mock
-  mock: { label: "Mock", traitKey: "model.trait.mock", speed: "fast", costTier: "low" },
-};
+// Derived from the shared PROVIDER_REGISTRY — the single source of truth for
+// models. Add a model there, not here. (traitKey is a plain string in the
+// registry; the keys all exist in the i18n dictionaries, so the cast is safe.)
+const KNOWN: Record<string, ModelInfo> = Object.fromEntries(
+  PROVIDERS.flatMap((pid) =>
+    PROVIDER_REGISTRY[pid].models.map((m): [string, ModelInfo] => [
+      m.id,
+      { label: m.label, traitKey: m.traitKey as TranslationKey, speed: m.speed, costTier: m.costTier },
+    ]),
+  ),
+);
 
 /**
- * Exact API list prices, USD per 1M tokens (input / output).
- * From official pricing pages, checked 2026-05-22:
- *   Anthropic — platform.claude.com/docs/en/about-claude/pricing
- *   OpenAI    — openai.com/api/pricing
- *   Google    — ai.google.dev/gemini-api/docs/pricing
- *   Moonshot  — kimi.com (Kimi K2.6)
- * Local Ollama models and the mock provider run for free → { 0, 0 }.
- * When adding a new model, look up its current price on the provider's page.
+ * Exact API list prices, USD per 1M tokens — derived from PROVIDER_REGISTRY.
+ * Models with no `pricing` entry (Ollama, vLLM, mock, unknown) run free.
  */
-const MODEL_PRICING: Record<string, ModelPrice> = {
-  "claude-opus-4-7":       { inUsd: 5,    outUsd: 25 },
-  "claude-sonnet-4-6":     { inUsd: 3,    outUsd: 15 },
-  "claude-haiku-4-5":      { inUsd: 1,    outUsd: 5 },
-  "gpt-4o":                { inUsd: 2.5,  outUsd: 10 },
-  "gpt-4o-mini":           { inUsd: 0.15, outUsd: 0.6 },
-  "o3-mini":               { inUsd: 1.1,  outUsd: 4.4 },
-  "gemini-3.5-flash":      { inUsd: 1.5,  outUsd: 9 },
-  "gemini-3.1-flash-lite": { inUsd: 0.25, outUsd: 1.5 },
-  "kimi-k2.6":             { inUsd: 0.6,  outUsd: 2.5 },
-  // Kimi Code: bundled in Kimi membership ($8-19/mo) with quota-window
-  // billing, not per-token. Display as 0 so the cost UI doesn't lie.
-  "kimi-for-coding":       { inUsd: 0,    outUsd: 0 },
-  "qwen3:8b":   { inUsd: 0, outUsd: 0 },
-  "qwen3:4b":   { inUsd: 0, outUsd: 0 },
-  "qwen3:0.6b": { inUsd: 0, outUsd: 0 },
-  // vLLM self-hosted — runs on the user's own hardware, no per-token cost.
-  "Qwen/Qwen2.5-7B-Instruct":         { inUsd: 0, outUsd: 0 },
-  "Qwen/Qwen2.5-14B-Instruct":        { inUsd: 0, outUsd: 0 },
-  "meta-llama/Llama-3.1-8B-Instruct": { inUsd: 0, outUsd: 0 },
-  mock:         { inUsd: 0, outUsd: 0 },
-};
+const MODEL_PRICING: Record<string, ModelPrice> = Object.fromEntries(
+  PROVIDERS.flatMap((pid) =>
+    PROVIDER_REGISTRY[pid].models
+      .filter((m) => m.pricing)
+      .map((m): [string, ModelPrice] => [m.id, m.pricing!]),
+  ),
+);
 
 /** Derive info for a model not in the table (e.g. a user-installed Ollama model).
  *  The size token in the name, if any, gives a rough speed hint. */

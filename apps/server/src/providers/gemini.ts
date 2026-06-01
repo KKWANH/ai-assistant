@@ -7,9 +7,9 @@ export class GeminiProvider implements AiProvider {
   private client: GoogleGenAI;
   private model: string;
 
-  constructor(model: string) {
+  constructor(model: string, apiKey?: string) {
     this.model = model;
-    this.client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? "" });
+    this.client = new GoogleGenAI({ apiKey: apiKey ?? process.env.GEMINI_API_KEY ?? "" });
   }
 
   async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {

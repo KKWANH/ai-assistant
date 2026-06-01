@@ -1,4 +1,6 @@
 import type { ProviderId, Settings } from "@ariadne/shared";
+import { PROVIDER_REGISTRY } from "@ariadne/shared";
+import { resolveProviderKey } from "../config.js";
 
 export interface ProviderUsage {
   inputTokens: number;
@@ -157,17 +159,17 @@ export async function getProvider(settings: Pick<Settings, "provider" | "model">
   switch (provider) {
     case "anthropic": {
       const { AnthropicProvider } = await import("./anthropic.js");
-      instance = new AnthropicProvider(model);
+      instance = new AnthropicProvider(model, resolveProviderKey("anthropic"));
       break;
     }
     case "openai": {
       const { OpenAIProvider } = await import("./openai.js");
-      instance = new OpenAIProvider(model);
+      instance = new OpenAIProvider(model, { apiKey: resolveProviderKey("openai") });
       break;
     }
     case "moonshot": {
       const { MoonshotProvider } = await import("./openai.js");
-      instance = new MoonshotProvider(model);
+      instance = new MoonshotProvider(model, resolveProviderKey("moonshot"));
       break;
     }
     case "ollama": {
@@ -182,13 +184,26 @@ export async function getProvider(settings: Pick<Settings, "provider" | "model">
     }
     case "gemini": {
       const { GeminiProvider } = await import("./gemini.js");
-      instance = new GeminiProvider(model);
+      instance = new GeminiProvider(model, resolveProviderKey("gemini"));
       break;
     }
-    case "mock":
-    default: {
+    case "mock": {
       const { MockProvider } = await import("./mock.js");
       instance = new MockProvider();
+      break;
+    }
+    default: {
+      // Registry-driven: any openai-compatible provider (e.g. minimax) needs
+      // no bespoke case — the generic client is driven by its descriptor's
+      // { baseURL, envKey }. Falls back to mock for anything unrecognised.
+      const desc = PROVIDER_REGISTRY[provider];
+      if (desc?.kind === "openai-compatible" && desc.baseURL) {
+        const { OpenAICompatibleProvider } = await import("./openai.js");
+        instance = new OpenAICompatibleProvider(provider, model, desc.baseURL, resolveProviderKey(provider));
+      } else {
+        const { MockProvider } = await import("./mock.js");
+        instance = new MockProvider();
+      }
       break;
     }
   }

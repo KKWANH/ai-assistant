@@ -282,6 +282,19 @@ export function useConfirmContext() {
 }
 
 // ── Provider status ───────────────────────────────────────────────────────────
+/** Save (or clear, when key is "") a provider API key, then refresh the
+ *  provider status + settings so the configured badge updates immediately. */
+export function useSetProviderKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, key }: { id: string; key: string }) => api.setProviderKey(id, key),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["providerStatus"] });
+      void qc.invalidateQueries({ queryKey: qk.settings });
+    },
+  });
+}
+
 export function useProviderStatus() {
   return useQuery({
     queryKey: ["providerStatus"] as const,
@@ -1106,6 +1119,46 @@ export function useDeleteSchedule() {
       qc.setQueryData<ActionSchedule[]>(
         ["schedules", workspaceId] as const,
         (prev) => (prev ? prev.filter((s) => s.id !== id) : prev),
+      );
+    },
+  });
+}
+
+// ── Event triggers ──────────────────────────────────────────────────────────
+
+export function useTriggers(workspaceId: string) {
+  return useQuery({
+    queryKey: ["triggers", workspaceId] as const,
+    queryFn: () => api.listTriggers(workspaceId),
+    enabled: !!workspaceId,
+  });
+}
+
+export function useCreateTrigger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      workspaceId,
+      input,
+    }: {
+      workspaceId: string;
+      input: import("@ariadne/shared").CreateTriggerInput;
+    }) => api.createTrigger(workspaceId, input),
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ["triggers", created.workspaceId] });
+    },
+  });
+}
+
+export function useDeleteTrigger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, workspaceId }: { id: string; workspaceId: string }) =>
+      api.deleteTrigger(id).then(() => ({ id, workspaceId })),
+    onSuccess: ({ id, workspaceId }) => {
+      qc.setQueryData<import("@ariadne/shared").ActionTrigger[]>(
+        ["triggers", workspaceId] as const,
+        (prev) => (prev ? prev.filter((tr) => tr.id !== id) : prev),
       );
     },
   });

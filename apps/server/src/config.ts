@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
-import { resolvePaths, DEFAULT_MODELS, PROVIDER_LABELS, MODEL_CHOICES, PROVIDERS } from "@ariadne/shared";
+import { resolvePaths, DEFAULT_MODELS, PROVIDER_LABELS, MODEL_CHOICES, PROVIDERS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { Settings, ProviderStatus, ProviderId } from "@ariadne/shared";
 import { dbGetSetting, dbSetSetting } from "./db/repo.js";
 
@@ -61,16 +61,34 @@ function buildSettings(provider: ProviderId, model: string): Settings {
   return { provider, model, providers };
 }
 
+/**
+ * Resolve a provider's API key: an in-app key saved to the settings table
+ * (`providerKey:<id>`) wins over the env var, so desktop / non-technical
+ * users can paste a key in Settings instead of exporting a shell var.
+ * Returns undefined for keyless providers (ollama/vllm/mock) or when neither
+ * source is set.
+ *
+ * Interim storage: settings table, plaintext (local-first DB on the user's
+ * own machine). The desktop build moves this to the OS keychain
+ * (DESKTOP_APP_PLAN §4.4) — keep key reads going through here so that swap
+ * stays local to this function.
+ */
+export function resolveProviderKey(id: ProviderId): string | undefined {
+  const envKey = PROVIDER_REGISTRY[id].envKey;
+  if (!envKey) return undefined;
+  const stored = dbGetSetting(`providerKey:${id}`);
+  if (stored && stored.trim()) return stored.trim();
+  const fromEnv = process.env[envKey];
+  return fromEnv && fromEnv.trim() ? fromEnv : undefined;
+}
+
 /** Whether a provider can be used without further setup (API key present, or keyless). */
 export function isProviderConfigured(id: ProviderId): boolean {
-  switch (id) {
-    case "anthropic": return !!process.env.ANTHROPIC_API_KEY;
-    case "openai": return !!process.env.OPENAI_API_KEY;
-    case "gemini": return !!process.env.GEMINI_API_KEY;
-    case "moonshot": return !!process.env.MOONSHOT_API_KEY;
-    case "ollama": return true; // local — always potentially available
-    case "vllm": return !!process.env.VLLM_BASE_URL; // off unless the user pointed at a vLLM server
-    case "mock": return true;
-    default: return false;
+  const d = PROVIDER_REGISTRY[id];
+  if (d.local) {
+    // vLLM needs a server URL; ollama/mock are always potentially available.
+    if (id === "vllm") return !!process.env.VLLM_BASE_URL;
+    return true;
   }
+  return !!resolveProviderKey(id);
 }
