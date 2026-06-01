@@ -80,9 +80,17 @@ import {
 } from "@ariadne/surface";
 ```
 
-Also exported: the TypeScript types `AriadneSDK`, `Quote`, `QuoteError`,
-`CsvData`, `AriadneTheme`, `StageFileResult`, and the `*Props` types for each
-chart.
+Also exported: the TypeScript types `AriadneSDK`, `SurfaceFile`, `Quote`,
+`QuoteError`, `CsvData`, `AriadneTheme`, `QuoteCalendar`, `NewsItem`,
+`StageFileResult`, and the `*Props` types for each chart.
+
+**Editor autocomplete.** When you save a surface, Ariadne writes a generated
+`.ariadne/surface-env.d.ts` (the full SDK contract) and a tiny
+`.ariadne/tsconfig.json` beside it. Open the workspace folder in any TS-aware
+editor and `@ariadne/surface` resolves with full types — no `npm install`. The
+contract is self-contained (SDK precise; React/JSX loose), and the build ignores
+these files (esbuild aliases `@ariadne/surface` to the runtime). Canonical
+source: `packages/surface-sdk/surface-env.d.ts`.
 
 ---
 
@@ -109,7 +117,7 @@ useEffect(() => {
 
 | Method | Returns | Notes |
 |---|---|---|
-| `listFiles()` | `Array<{ path, size, extension, estimatedTokens }>` | The whole workspace file list. **Note:** the shipped type says `string[]` but the runtime returns objects — see [Gotchas](#gotchas). |
+| `listFiles()` | `SurfaceFile[]` — `{ path, size, extension, estimatedTokens }` | The whole workspace file list. |
 | `readText(path)` | `string` | Raw file contents. Throws if the file is missing. |
 | `readCsv(path)` | `{ headers: string[], rows: Record<string,string>[] }` | Every cell is a **string** — coerce numbers yourself (`Number(r.shares)`). Rows are keyed by header. |
 | `stageFile(path, content)` | `{ runId, added, removed }` | Stages a data-file edit for review (does **not** write to disk). Deep-link the user to `/runs/:runId/diff` to apply. Same staged-diff gate the AI's `edit_file` uses. |
@@ -217,9 +225,6 @@ export default function App() {
 
 Honest list of what trips builders up today (and what's being fixed):
 
-- **`listFiles()` type lies.** The `AriadneSDK` type declares `Promise<string[]>`,
-  but the host returns `Array<{ path, size, extension, estimatedTokens }>`. Read
-  `f.path`. (Type fix tracked under the typed-package work.)
 - **CSV cells are always strings.** `readCsv` does no type coercion — `Number(...)`
   every numeric column, and guard `NaN` (a single `NaN` propagated into a total
   collapses the whole render to `—`).

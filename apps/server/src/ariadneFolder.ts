@@ -1,6 +1,30 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { assertInsideAriadne } from "./security/pathGuard.js";
+
+/** BJ2 — canonical @ariadne/surface type contract, copied into each workspace
+ *  so surface builders get IDE autocomplete with no node_modules. */
+const SURFACE_ENV_DTS_SRC = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../packages/surface-sdk/surface-env.d.ts",
+);
+
+/** Tiny tsconfig that puts the .d.ts + surface in scope for the editor. */
+const SURFACE_TSCONFIG = `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["surface-env.d.ts", "surface.tsx", "surface/**/*.ts", "surface/**/*.tsx"]
+}
+`;
 
 const SUB_DIRS = ["runs", "snapshots", "artifacts", "evidence", "scripts", "surface-dist"] as const;
 
@@ -121,6 +145,34 @@ export function writeSurface(workspaceRoot: string, source: string): void {
   const dest = path.resolve(path.join(workspaceRoot, SURFACE_TSX_FILE));
   assertInsideAriadne(workspaceRoot, dest);
   fs.writeFileSync(dest, source, "utf-8");
+  seedSurfaceTypes(workspaceRoot);
+}
+
+/**
+ * BJ2 — drop the @ariadne/surface type contract + a tiny tsconfig next to the
+ * surface so a builder's editor resolves the SDK with autocomplete. The build
+ * ignores these (esbuild aliases @ariadne/surface to runtime.tsx); they're
+ * purely an editor aid. Best-effort: silently skips if the contract source is
+ * absent (e.g. a trimmed deploy). The .d.ts is generated — rewritten when it
+ * drifts; the tsconfig is written once so builder tweaks survive.
+ */
+export function seedSurfaceTypes(workspaceRoot: string): void {
+  if (!fs.existsSync(SURFACE_ENV_DTS_SRC)) return;
+  const base = path.join(workspaceRoot, ".ariadne");
+  fs.mkdirSync(base, { recursive: true });
+
+  const dts = fs.readFileSync(SURFACE_ENV_DTS_SRC, "utf-8");
+  const dtsDest = path.join(base, "surface-env.d.ts");
+  assertInsideAriadne(workspaceRoot, dtsDest);
+  if (!fs.existsSync(dtsDest) || fs.readFileSync(dtsDest, "utf-8") !== dts) {
+    fs.writeFileSync(dtsDest, dts, "utf-8");
+  }
+
+  const tsconfigDest = path.join(base, "tsconfig.json");
+  assertInsideAriadne(workspaceRoot, tsconfigDest);
+  if (!fs.existsSync(tsconfigDest)) {
+    fs.writeFileSync(tsconfigDest, SURFACE_TSCONFIG, "utf-8");
+  }
 }
 
 /** Returns the absolute path to the built bundle, or null if it doesn't exist. */

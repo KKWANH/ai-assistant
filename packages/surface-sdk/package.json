@@ -1,0 +1,11 @@
+{
+  "name": "@ariadne/surface-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Canonical @ariadne/surface type contract. Seeded into each workspace's .ariadne/ so surface builders get IDE autocomplete + type-checking with no node_modules.",
+  "types": "surface-env.d.ts",
+  "exports": {
+    "./surface-env.d.ts": "./surface-env.d.ts"
+  }
+}

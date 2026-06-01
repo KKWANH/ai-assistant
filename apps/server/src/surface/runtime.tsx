@@ -54,6 +54,14 @@ export interface CsvData {
   rows: Record<string, string>[];
 }
 
+/** What listFiles() actually returns — the host maps the snapshot to these. */
+export interface SurfaceFile {
+  path: string;
+  size: number;
+  extension: string;
+  estimatedTokens: number;
+}
+
 export interface Quote {
   symbol: string;
   /** What the user passed in — preserved across the normalizer. */
@@ -98,7 +106,7 @@ export interface StageFileResult {
 }
 
 export interface AriadneSDK {
-  listFiles(): Promise<string[]>;
+  listFiles(): Promise<SurfaceFile[]>;
   readText(path: string): Promise<string>;
   readCsv(path: string): Promise<CsvData>;
   listTemplates(): Promise<Array<{ id: string; name: string }>>;
@@ -196,7 +204,7 @@ function callHost<T>(method: string, args: unknown[]): Promise<T> {
  */
 export function useAriadne(): AriadneSDK {
   const sdk = useRef<AriadneSDK>({
-    listFiles: () => callHost<string[]>("listFiles", []),
+    listFiles: () => callHost<SurfaceFile[]>("listFiles", []),
     readText: (p: string) => callHost<string>("readText", [p]),
     readCsv: (p: string) => callHost<CsvData>("readCsv", [p]),
     listTemplates: () => callHost<Array<{ id: string; name: string }>>("listTemplates", []),
