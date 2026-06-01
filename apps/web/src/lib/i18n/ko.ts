@@ -540,6 +540,7 @@ const ko: Record<TranslationKey, string> = {
   "surface.livePreview": "라이브",
   "surface.livePreviewHint": "편집 시 자동 저장·빌드하고 미리보기를 갱신합니다",
   "surface.preview": "미리보기",
+  "surface.scaffold.title": "템플릿으로 시작:",
   "surface.saved": "저장됨",
   "surface.saveFailed": "저장 실패",
   "surface.buildSucceeded": "빌드 성공",

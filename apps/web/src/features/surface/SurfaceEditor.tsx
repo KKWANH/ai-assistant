@@ -26,6 +26,57 @@ import { SurfaceView } from "./SurfaceView";
 const LIVE_KEY = "ariadne.surfaceLivePreview";
 const LIVE_DEBOUNCE_MS = 900;
 
+// BJ5 — small starter scaffolds so a builder begins from a working example,
+// not a blank file (or a 4K-line flagship). Inserted into the empty editor.
+const SCAFFOLDS: Array<{ id: string; label: string; source: string }> = [
+  {
+    id: "minimal",
+    label: "Minimal",
+    source: `import { React } from "@ariadne/surface";
+
+export default function App() {
+  return (
+    <div style={{ padding: 24, color: "rgb(var(--foreground))" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Hello from your surface</h1>
+      <p style={{ color: "rgb(var(--muted-foreground))" }}>
+        Edit this in the Edit screen — with Live on it rebuilds as you type.
+      </p>
+    </div>
+  );
+}
+`,
+  },
+  {
+    id: "data",
+    label: "Data + chart",
+    source: `import { React, useState, useEffect, useAriadne, BarChart } from "@ariadne/surface";
+
+export default function App() {
+  const ariadne = useAriadne();
+  const [bars, setBars] = useState<Array<{ label: string; value: number }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Point this at a CSV in your workspace (header row, then columns).
+      const { rows } = await ariadne.readCsv("data.csv");
+      const data = rows.map((r) => ({ label: r.name ?? "", value: Number(r.value) || 0 }));
+      if (!cancelled) setBars(data);
+    })().catch(() => { /* missing file etc. — leave empty */ });
+    return () => { cancelled = true; };
+  }, [ariadne]);
+
+  return (
+    <div style={{ padding: 24, color: "rgb(var(--foreground))" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>My data</h1>
+      <BarChart data={bars} title="From data.csv" />
+    </div>
+  );
+}
+`,
+  },
+];
+
 export interface SurfaceEditorProps {
   workspaceId: string;
 }
@@ -276,6 +327,15 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
     });
   };
 
+  // BJ5 — drop a starter scaffold into the empty editor. The CodeMirror change
+  // listener picks it up (dirty + changeSeq) so Live mode builds it immediately.
+  const applyScaffold = (source: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: source } });
+    view.focus();
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
@@ -453,6 +513,18 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
             <span>{t("surface.newFile")}</span>
           </button>
         </div>
+      )}
+
+      {/* BJ5 — starter scaffolds for an empty surface (skip in folder mode). */}
+      {(surfaceData?.source ?? "").trim() === "" && !readOnly && !folderMode && (
+        <Card className="flex flex-wrap items-center gap-2 px-4 py-3">
+          <span className="text-xs font-medium text-foreground mr-1">{t("surface.scaffold.title")}</span>
+          {SCAFFOLDS.map((s) => (
+            <Button key={s.id} variant="outline" size="sm" onClick={() => applyScaffold(s.source)}>
+              {s.label}
+            </Button>
+          ))}
+        </Card>
       )}
 
       {/* BJ3 — editor + live preview split. Stacks on narrow screens. */}

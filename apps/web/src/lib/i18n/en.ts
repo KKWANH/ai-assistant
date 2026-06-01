@@ -545,6 +545,7 @@ const en = {
   "surface.livePreview": "Live",
   "surface.livePreviewHint": "Auto-save, rebuild, and refresh the preview as you edit",
   "surface.preview": "Preview",
+  "surface.scaffold.title": "Start from a template:",
   "surface.saved": "Saved",
   "surface.saveFailed": "Save failed",
   "surface.buildSucceeded": "Build succeeded",
