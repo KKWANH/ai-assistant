@@ -129,8 +129,11 @@ real edits is short:
 
 ### 4.1 Server: accept a port from CLI/env
 
-`apps/server/src/index.ts` currently reads `PORTS.server` (4319). Make it
-take `ARIADNE_PORT` from env first, fall back to the constant. ~3 lines.
+**Already done.** `PORTS.server` in `packages/shared/src/config.ts` is
+`Number(env("ARIADNE_PORT") ?? 4319)`, and `apps/server/src/index.ts` calls
+`app.listen({ port: PORTS.server })` — so the sidecar can pass `ARIADNE_PORT`
+today, no change needed. (Phase 1 may add an `ARIADNE_HOST` to bind
+loopback-only instead of `0.0.0.0`; not required for the Phase 0 spike.)
 
 ### 4.2 Auth: treat sidecar as "local"
 

@@ -22,11 +22,16 @@ Core design phrase:
 
 ## 1. Design Principles
 
-### 1.1 Run, Not Chat
+### 1.1 Chat Is the Door, the Run Cockpit Is the Room
 
-Chat is secondary.
+Chat is the **entry point** — where users land, ask, and start work. (v0.2:
+real users got lost when dropped straight into the cockpit, so chat became
+the home.) But chat is the *door*, not the room. The product — the thing of
+lasting value — is the **run cockpit**: durable, inspectable records, not a
+transcript. Every chat should lead *into* the cockpit, and the cockpit is
+where the user should end up living.
 
-The primary objects are:
+The primary durable objects are:
 
 - Workspace;
 - Template;
@@ -37,7 +42,9 @@ The primary objects are:
 - Evidence Pack;
 - Artifact.
 
-Avoid designing around chat bubbles. Design around durable records.
+Chat bubbles are fine at the door. But design the lasting surfaces around
+durable records, not the transcript — never let the transcript become the
+product.
 
 Bad pattern:
 
@@ -1072,9 +1079,9 @@ Do not build:
 - arbitrary plugin UI;
 - terminal panel.
 
-> Updated (v0.2): the "no chat-first home" rule is **reversed**. Real users were
-> lost in the run cockpit, so chat is now the entry point — the evidence-backed
-> run pipeline remains the core and is one click away.
+> Updated (v0.3, 2026-06-01): chat-first *home* stands, but see §1.1 — "Chat
+> Is the Door, the Run Cockpit Is the Room." Chat is the entry point; the run
+> cockpit is the product and the destination, never just a transcript.
 
 ---
 
