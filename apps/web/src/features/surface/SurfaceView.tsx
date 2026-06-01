@@ -45,6 +45,13 @@ interface SurfaceErrorMessage {
   stack?: string;
 }
 
+/** BJ6 — non-fatal notice (e.g. SDK version skew). */
+interface SurfaceWarningMessage {
+  source: "ariadne-surface";
+  type: "surface-warning";
+  message: string;
+}
+
 // ── CSV parser (lightweight, RFC 4180-ish) ────────────────────────────────────
 
 function parseCsv(text: string): {
@@ -215,17 +222,19 @@ export function SurfaceView({ workspaceId, reloadKey }: SurfaceViewProps) {
   const { theme } = useUIStore();
   const { t } = useT();
   const [surfaceError, setSurfaceError] = useState<SurfaceErrorMessage | null>(null);
+  const [surfaceWarning, setSurfaceWarning] = useState<string | null>(null);
 
-  // Clear a stale crash banner when the surface reloads — theme re-keys the
-  // iframe (remount), workspace switch swaps it entirely, a rebuild bumps
+  // Clear stale crash/warning banners when the surface reloads — theme re-keys
+  // the iframe (remount), workspace switch swaps it entirely, a rebuild bumps
   // reloadKey (BJ3 live preview).
   useEffect(() => {
     setSurfaceError(null);
+    setSurfaceWarning(null);
   }, [workspaceId, theme, reloadKey]);
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      const data = event.data as (SurfaceRequest | SurfaceErrorMessage) | undefined;
+      const data = event.data as (SurfaceRequest | SurfaceErrorMessage | SurfaceWarningMessage) | undefined;
       if (!data || data.source !== "ariadne-surface") return;
       // Only accept messages from the iframe
       if (event.source !== iframeRef.current?.contentWindow) return;
@@ -234,6 +243,11 @@ export function SurfaceView({ workspaceId, reloadKey }: SurfaceViewProps) {
       // it instead of letting the iframe sit silently blank.
       if ("type" in data && data.type === "surface-error") {
         setSurfaceError(data);
+        return;
+      }
+      // BJ6 — non-fatal notice (e.g. SDK version skew).
+      if ("type" in data && data.type === "surface-warning") {
+        setSurfaceWarning(data.message);
         return;
       }
 
@@ -334,6 +348,20 @@ export function SurfaceView({ workspaceId, reloadKey }: SurfaceViewProps) {
           <button
             type="button"
             onClick={() => setSurfaceError(null)}
+            aria-label={t("common.close")}
+            className="text-muted-foreground hover:text-foreground text-xs shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {surfaceWarning && (
+        <div className="flex items-start gap-2 border-b border-warning/40 bg-warning/10 px-3 py-2">
+          <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+          <p className="min-w-0 flex-1 text-2xs text-muted-foreground">{surfaceWarning}</p>
+          <button
+            type="button"
+            onClick={() => setSurfaceWarning(null)}
             aria-label={t("common.close")}
             className="text-muted-foreground hover:text-foreground text-xs shrink-0"
           >

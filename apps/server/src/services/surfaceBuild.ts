@@ -65,9 +65,9 @@ export async function buildSurface(workspaceRoot: string): Promise<BuildResult> 
   // BJ1: mount via the runtime's mountSurface() so every surface gets the same
   // error boundary + host crash reporting, instead of a bare ReactDOM.render.
   const entryContents = `
-import Component from ${JSON.stringify(srcPath)};
+import Component, * as __surface from ${JSON.stringify(srcPath)};
 import { mountSurface } from "@ariadne/surface";
-mountSurface(Component);
+mountSurface(Component, { apiVersion: __surface.apiVersion });
 `;
 
   try {

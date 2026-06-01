@@ -691,11 +691,38 @@ export class SurfaceErrorBoundary extends React.Component<
 }
 
 /**
+ * Current SDK API version (BJ6). Bump on a BREAKING change to the
+ * @ariadne/surface contract (e.g. a changed return shape). A surface may
+ * `export const apiVersion = N` to record what it was built against; the host
+ * then warns — non-fatally — if that differs from this, instead of letting a
+ * shape mismatch fail silently.
+ */
+export const API_VERSION = 1;
+
+/** Non-fatal notice to the host (e.g. version skew). Same one-way channel as
+ *  reportSurfaceError, distinct `type`. */
+function reportSurfaceWarning(message: string): void {
+  try {
+    window.parent.postMessage(
+      { source: "ariadne-surface", type: "surface-warning", message },
+      "*",
+    );
+  } catch {
+    /* parent unreachable */
+  }
+}
+
+/**
  * Mount a surface component with crash isolation + host error reporting.
  * The build shim calls this instead of touching ReactDOM directly, so every
- * surface gets the same safety net.
+ * surface gets the same safety net. `opts.apiVersion` is the surface's declared
+ * target version (if any) — a mismatch with API_VERSION warns the host.
  */
-export function mountSurface(Component: React.ComponentType, rootId = "surface-root"): void {
+export function mountSurface(
+  Component: React.ComponentType,
+  opts?: { rootId?: string; apiVersion?: number },
+): void {
+  const rootId = opts?.rootId ?? "surface-root";
   if (typeof window !== "undefined") {
     window.addEventListener("error", (e: ErrorEvent) => {
       reportSurfaceError("runtime", e.message, e.error?.stack);
@@ -704,6 +731,13 @@ export function mountSurface(Component: React.ComponentType, rootId = "surface-r
       const r = e.reason as { message?: string; stack?: string } | undefined;
       reportSurfaceError("promise", r?.message ?? String(e.reason), r?.stack);
     });
+    // BJ6 — surface targets a different SDK major than the host is running.
+    if (opts?.apiVersion != null && opts.apiVersion !== API_VERSION) {
+      reportSurfaceWarning(
+        `This surface targets SDK API v${opts.apiVersion}, but the host runs v${API_VERSION}. ` +
+        `Some @ariadne/surface calls may behave differently — rebuild against the current SDK.`,
+      );
+    }
   }
   const root = document.getElementById(rootId);
   if (!root) return;

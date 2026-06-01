@@ -124,6 +124,12 @@ declare module "@ariadne/surface" {
    *  effects, not during render. */
   export function useAriadne(): AriadneSDK;
 
+  /** Current SDK API version the host is running. Bumped on a breaking change
+   *  to this contract. Your surface may `export const apiVersion = N` to record
+   *  what it was built against — the host warns (non-fatally) if N differs from
+   *  API_VERSION rather than letting a shape change fail silently. */
+  export const API_VERSION: number;
+
   // ── Chart components ───────────────────────────────────────────────────────
   // All take `data: Array<{ label, value }>`. Pass CSS-var colour strings
   // (e.g. "rgb(var(--info))"), never hex.

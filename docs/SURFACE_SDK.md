@@ -92,6 +92,13 @@ contract is self-contained (SDK precise; React/JSX loose), and the build ignores
 these files (esbuild aliases `@ariadne/surface` to the runtime). Canonical
 source: `packages/surface-sdk/surface-env.d.ts`.
 
+**SDK version.** The host exposes `API_VERSION` (currently `1`). Record what
+your surface was built against with a top-level `export const apiVersion = 1`.
+If the host later ships a breaking SDK change and bumps its version, it shows a
+non-fatal banner over your surface ("targets v1, host runs v2…") instead of
+letting a changed return shape fail silently. Optional, but recommended for
+surfaces you share.
+
 ---
 
 ## 3. `useAriadne()` — the data SDK
