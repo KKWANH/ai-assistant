@@ -36,6 +36,7 @@ import { loadActionDefs } from "../services/actions.js";
 import { getProvider } from "../providers/index.js";
 import { meteringProvider } from "../runs/engine.js";
 import { createAlert } from "../services/alerts.js";
+import { accountOverLimit } from "../services/limits.js";
 import { getActiveSettings, isProviderConfigured } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext } from "../services/chatContext.js";
@@ -131,6 +132,8 @@ interface StreamReplyOptions {
   /** Used for locale + saved profile context. */
   accountLocale: string | undefined;
   accountContext: string | undefined;
+  /** Account the usage is billed to (for per-account token limits). */
+  accountId: string | null;
   emit: (e: ChatStreamEvent) => void;
   controller: AbortController;
   assistantMsgId: string;
@@ -161,7 +164,7 @@ interface StreamReplyResult {
 async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamReplyResult> {
   const {
     chat, history, userContent, attachmentRefs, webSearchMode, agentMode: rawAgentMode,
-    mode, accountLocale, accountContext, emit, controller, assistantMsgId,
+    mode, accountLocale, accountContext, accountId, emit, controller, assistantMsgId,
     shouldGenerateTitle,
   } = opts;
 
@@ -191,7 +194,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       ? await resolveOllamaModel(settings.model)
       : settings.model;
   const rawProvider = await getProvider({ provider: settings.provider, model });
-  const provider = meteringProvider(rawProvider, assistantMsgId, model);
+  const provider = meteringProvider(rawProvider, assistantMsgId, model, accountId);
 
   // Instant mode short-circuit. Skip every upstream classifier
   // (agent, web-search, action-intent), skip workspace retrieval +
@@ -514,6 +517,14 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: "Message must have content or at least one attachment" });
       }
 
+      // Per-account token limit — block a new message once over the cap (the
+      // test account + the shared guest have one; everyone else is unlimited).
+      if (req.account && accountOverLimit(req.account.id)) {
+        return reply.status(429).send({
+          error: "You've reached your token limit. New messages are paused until your usage window resets.",
+        });
+      }
+
       // --- Hijack the raw response for SSE ---
       reply.hijack();
       const raw = reply.raw;
@@ -627,6 +638,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           webSearchMode: webSearch,
           agentMode: agentMode ?? false,
           mode,
+          accountId: req.account?.id ?? null,
           accountLocale: req.account?.locale,
           accountContext: req.account?.context,
           emit,
@@ -824,6 +836,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           // standard pipeline. (If we later thread the mode through
           // regenerate too, change here.)
           mode: "standard",
+          accountId: req.account?.id ?? null,
           accountLocale: req.account?.locale,
           accountContext: req.account?.context,
           emit,

@@ -1189,6 +1189,13 @@ const en = {
   // ── Guest mode ──────────────────────────────────────────────────────────────
   "auth.tryAsGuest": "Try as guest",
   "auth.guestNote": "Read & chat only — no runs or actions, small daily limit.",
+
+  // ── Usage limits ────────────────────────────────────────────────────────────
+  "settings.limits.heading": "Usage limits",
+  "settings.limits.subtitle": "Your token budget. New requests pause when a limit is reached.",
+  "settings.limits.daily": "Today (last 24h)",
+  "settings.limits.weekly": "This week (last 7 days)",
+  "settings.limits.tokens": "tokens",
 } as const;
 
 export type TranslationKey = keyof typeof en;

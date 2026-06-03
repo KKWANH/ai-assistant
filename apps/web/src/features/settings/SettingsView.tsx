@@ -31,6 +31,7 @@ import {
   useUpdateSkill,
   useDeleteSkill,
   useSetProviderKey,
+  useAccountLimits,
 } from "../../lib/queries";
 import type { Skill } from "@ariadne/shared";
 import { useT, LOCALES, type Locale } from "../../lib/i18n";
@@ -117,11 +118,29 @@ function ApiKeyRow({ id, label, configured }: { id: ProviderId; label: string; c
   );
 }
 
+/** A single token-budget bar (used / limit), turning red when over. */
+function LimitBar({ label, used, limit }: { label: string; used: number; limit: number }) {
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const over = used >= limit;
+  return (
+    <div>
+      <div className="flex items-center justify-between text-2xs text-muted-foreground mb-1">
+        <span>{label}</span>
+        <span className="font-mono">{used.toLocaleString()} / {limit.toLocaleString()}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
+        <div className={`h-full ${over ? "bg-destructive" : "bg-accent"}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export function SettingsView() {
   const { data: settings, isLoading } = useSettings();
   const { toast } = useToast();
   const { data: usage } = useUsage();
   const { data: liveProviders, isLoading: statusLoading } = useProviderStatus();
+  const { data: limits } = useAccountLimits();
   const { t, locale, setLocale } = useT();
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
@@ -277,6 +296,31 @@ export function SettingsView() {
           })}
         </div>
       </section>
+
+      {/* Usage limits — only shown for accounts that actually have a cap
+          (the test account, the guest). Unlimited accounts see nothing. */}
+      {limits && (limits.dailyTokenLimit != null || limits.weeklyTokenLimit != null) && (
+        <section>
+          <SectionHeading>{t("settings.limits.heading")}</SectionHeading>
+          <p className="text-xs text-muted-foreground mb-2">{t("settings.limits.subtitle")}</p>
+          <Card className="px-4 py-3 flex flex-col gap-3">
+            {limits.dailyTokenLimit != null && (
+              <LimitBar
+                label={t("settings.limits.daily")}
+                used={limits.dailyTokensUsed}
+                limit={limits.dailyTokenLimit}
+              />
+            )}
+            {limits.weeklyTokenLimit != null && (
+              <LimitBar
+                label={t("settings.limits.weekly")}
+                used={limits.weeklyTokensUsed}
+                limit={limits.weeklyTokenLimit}
+              />
+            )}
+          </Card>
+        </section>
+      )}
 
       {/* MCP servers — external Model Context Protocol endpoints
           the agent can call as tools. Local-only management. Hidden

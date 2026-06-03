@@ -104,7 +104,7 @@ async function runActionPipeline(runId: string, action: ActionDef): Promise<void
   let provider: AiProvider;
   try {
     const settings = getActiveSettings();
-    provider = meteringProvider(await getProvider(settings), runId, settings.model);
+    provider = meteringProvider(await getProvider(settings), runId, settings.model, run.createdBy ?? null);
   } catch (err) {
     failRun(run, "block", err);
     return;

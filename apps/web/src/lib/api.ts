@@ -721,6 +721,7 @@ import type {
   ActionTrigger,
   CreateTriggerInput,
   Alert,
+  AccountLimits,
 } from "@ariadne/shared";
 
 export const listSchedules = (workspaceId: string) =>
@@ -748,6 +749,10 @@ export const markAllAlertsRead = () =>
   request<{ ok: boolean; unreadCount: number }>("POST", "/alerts/read-all");
 export const deleteAlert = (id: string) =>
   request<{ ok: boolean; unreadCount: number }>("DELETE", `/alerts/${encodeURIComponent(id)}`);
+
+// ── Account usage limits ─────────────────────────────────────────────────────────
+export const getAccountLimits = () =>
+  request<AccountLimits>("GET", "/account/limits");
 
 // ── Skills ────────────────────────────────────────────────────────────────────
 import type { Skill, CreateSkillInput, UpdateSkillInput } from "@ariadne/shared";

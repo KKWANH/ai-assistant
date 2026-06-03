@@ -9,6 +9,7 @@
 import type { FastifyInstance } from "fastify";
 import { UpdateLocaleSchema, UpdateModeSchema, UpdateContextSchema } from "@ariadne/shared";
 import { updateAccountLocale, updateAccountMode, updateAccountContext } from "../auth/accounts.js";
+import { accountLimitStatus } from "../services/limits.js";
 
 export async function accountRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/account/locale
@@ -58,5 +59,11 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.send(updated);
+  });
+
+  // GET /api/account/limits — this account's token limits + windowed usage.
+  app.get("/account/limits", async (req, reply) => {
+    if (!req.account) return reply.status(401).send({ error: "Sign in required" });
+    return reply.send(accountLimitStatus(req.account.id));
   });
 }

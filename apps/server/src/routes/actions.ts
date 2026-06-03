@@ -15,6 +15,7 @@ import { loadWorkspaceActions, loadActionDefs } from "../services/actions.js";
 import { BUILTIN_TEMPLATES } from "../runs/templates.js";
 import { createActionRun } from "../runs/actionEngine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+import { accountOverLimit } from "../services/limits.js";
 
 export async function actionRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/workspaces/:id/actions
@@ -79,6 +80,10 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const workspace = await requireWorkspace(req.params.id, req, reply);
       if (!workspace) return;
+
+      if (req.account && accountOverLimit(req.account.id)) {
+        return reply.status(429).send({ error: "Token limit reached — try again after your usage resets." });
+      }
 
       const parsed = CreateActionRunSchema.safeParse(req.body ?? {});
       if (!parsed.success) {

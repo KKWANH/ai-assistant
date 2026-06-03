@@ -9,6 +9,7 @@ import {
 } from "../db/repo.js";
 import { createRun, confirmContext, getContextPick } from "../runs/engine.js";
 import { rejectGuest } from "./workspaceGuard.js";
+import { accountOverLimit } from "../services/limits.js";
 import { readArtifact } from "../ariadneFolder.js";
 import { isOwnerOrAdmin } from "./workspaceGuard.js";
 
@@ -25,6 +26,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/runs
   app.post("/runs", async (req, reply) => {
     if (await rejectGuest(req, reply)) return; // guests can't start template runs
+    if (req.account && accountOverLimit(req.account.id)) {
+      return reply.status(429).send({ error: "Token limit reached — runs are paused until your usage resets." });
+    }
     const parsed = CreateRunSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });

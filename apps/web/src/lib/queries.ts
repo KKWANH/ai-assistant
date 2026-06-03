@@ -1209,6 +1209,14 @@ export function useDeleteAlert() {
   });
 }
 
+export function useAccountLimits() {
+  return useQuery({
+    queryKey: ["accountLimits"] as const,
+    queryFn: api.getAccountLimits,
+    staleTime: 30_000,
+  });
+}
+
 // ── Skills ────────────────────────────────────────────────────────────────────
 
 export function useSkills() {

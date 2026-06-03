@@ -1190,6 +1190,13 @@ const ko: Record<TranslationKey, string> = {
   // ── Guest mode (게스트) ──────────────────────────────────────────────────────
   "auth.tryAsGuest": "게스트로 시도",
   "auth.guestNote": "읽기·채팅만 — 실행/액션 불가, 일일 한도 적음.",
+
+  // ── 사용 한도 ────────────────────────────────────────────────────────────────
+  "settings.limits.heading": "사용 한도",
+  "settings.limits.subtitle": "토큰 예산. 한도 도달 시 새 요청이 일시중지됩니다.",
+  "settings.limits.daily": "오늘 (최근 24시간)",
+  "settings.limits.weekly": "이번 주 (최근 7일)",
+  "settings.limits.tokens": "토큰",
 };
 
 export default ko;
