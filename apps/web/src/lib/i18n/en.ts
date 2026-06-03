@@ -1179,6 +1179,16 @@ const en = {
   "triggers.delete": "Delete trigger",
   "triggers.confirmDelete": "Delete this trigger? Its webhook URL will stop working.",
   "triggers.failed": "Couldn't create the trigger",
+
+  // ── Alerts (notification inbox) ─────────────────────────────────────────────
+  "alerts.title": "Notifications",
+  "alerts.empty": "No notifications yet",
+  "alerts.markAllRead": "Mark all read",
+  "alerts.dismiss": "Dismiss",
+
+  // ── Guest mode ──────────────────────────────────────────────────────────────
+  "auth.tryAsGuest": "Try as guest",
+  "auth.guestNote": "Read & chat only — no runs or actions, small daily limit.",
 } as const;
 
 export type TranslationKey = keyof typeof en;

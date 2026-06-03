@@ -22,6 +22,7 @@
  */
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
+import { NotificationsBell } from "../../features/alerts/NotificationsBell";
 import {
   FolderOpen,
   Play,
@@ -578,6 +579,7 @@ export function AppShell({ children }: AppShellProps) {
           >
             <Flag className="h-3.5 w-3.5" />
           </IconButton>
+          {me && <NotificationsBell />}
           <IconButton
             label={t("nav.toggleTheme")}
             description={t("nav.toggleTheme.desc")}

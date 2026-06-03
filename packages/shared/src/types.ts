@@ -713,6 +713,32 @@ export interface ActionTrigger {
   createdAt: string;
 }
 
+/** A persisted notification for an account — accumulates in the alert inbox
+ *  (the bell in the top bar). Created when a background-ish task finishes (an
+ *  agent chat run, an action/template run) or a usage limit is hit. */
+export interface Alert {
+  id: string;
+  accountId: string;
+  /** "chat_completed" | "run_completed" | "run_failed" | "limit_exceeded" */
+  type: string;
+  title: string;
+  body: string | null;
+  /** Client route to open on click, e.g. "/chat/<id>" or "/runs/<id>". */
+  link: string | null;
+  /** ISO timestamp when the user read it; null = unread. */
+  readAt: string | null;
+  createdAt: string;
+}
+
+/** An account's usage limits + current windowed usage (GET /api/account/limits).
+ *  A null limit = unlimited. Token windows are rolling (last 24h / last 7 days). */
+export interface AccountLimits {
+  dailyTokenLimit: number | null;
+  weeklyTokenLimit: number | null;
+  dailyTokensUsed: number;
+  weeklyTokensUsed: number;
+}
+
 /* ------------------------------------------------------------------ *
  * Skills — short, reusable prompt snippets owned by an account.
  *

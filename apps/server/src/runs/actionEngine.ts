@@ -30,6 +30,7 @@ import { listMemories, renderMemoryForPrompt } from "../services/workspaceMemory
 import { scriptEnv } from "../services/scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import { meteringProvider, makeDateRunId, traceEvent, appendTrace, failRun } from "./engine.js";
+import { createAlert } from "../services/alerts.js";
 import logger from "../logger.js";
 
 const BLOCK_LLM_TIMEOUT_MS = 60_000;
@@ -158,6 +159,9 @@ async function runActionPipeline(runId: string, action: ActionDef): Promise<void
     blockResults: results,
     usage: usage.inputTokens > 0 || usage.outputTokens > 0 ? usage : null,
   });
+
+  // Surface the finished run in the owner's alert inbox (the bell). Best-effort.
+  createAlert(run.createdBy, "run_completed", `${run.templateName} finished`, null, `/runs/${run.id}`);
 
   // Mirror engine.ts: auto-version the .ariadne/ artifacts in the
   // workspace's history repo. Background, no-op without git.

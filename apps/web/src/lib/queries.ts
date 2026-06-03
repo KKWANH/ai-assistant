@@ -342,6 +342,16 @@ export function useLogin() {
   });
 }
 
+export function useLoginAsGuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.loginAsGuest,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
+  });
+}
+
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
@@ -1161,6 +1171,41 @@ export function useDeleteTrigger() {
         (prev) => (prev ? prev.filter((tr) => tr.id !== id) : prev),
       );
     },
+  });
+}
+
+// ── Alerts (notification inbox) ─────────────────────────────────────────────────
+
+export function useAlerts() {
+  return useQuery({
+    queryKey: ["alerts"] as const,
+    queryFn: api.listAlerts,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+}
+
+export function useMarkAlertRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.markAlertRead(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+}
+
+export function useMarkAllAlertsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.markAllAlertsRead(),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+}
+
+export function useDeleteAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteAlert(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["alerts"] }),
   });
 }
 

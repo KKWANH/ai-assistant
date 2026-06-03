@@ -249,6 +249,9 @@ export const stageWorkspaceFile = (workspaceId: string, path: string, content: s
 export const login = (input: LoginInput) =>
   request<AuthInfo>("POST", "/auth/login", input);
 
+export const loginAsGuest = () =>
+  request<AuthInfo>("POST", "/auth/guest");
+
 /** Server-side cookie reset — clears `ariadne_session` (signed or
  *  malformed), deletes the session row if the cookie WAS valid. Safe
  *  to call without auth. Used by the "stuck on a 401 loop" recovery
@@ -717,6 +720,7 @@ import type {
   UpdateScheduleInput,
   ActionTrigger,
   CreateTriggerInput,
+  Alert,
 } from "@ariadne/shared";
 
 export const listSchedules = (workspaceId: string) =>
@@ -734,6 +738,16 @@ export const createTrigger = (workspaceId: string, input: CreateTriggerInput) =>
   request<ActionTrigger>("POST", `/workspaces/${workspaceId}/triggers`, input);
 export const deleteTrigger = (id: string) =>
   request<{ ok: boolean }>("DELETE", `/triggers/${id}`);
+
+// ── Alerts (notification inbox) ─────────────────────────────────────────────────
+export const listAlerts = () =>
+  request<{ alerts: Alert[]; unreadCount: number }>("GET", "/alerts");
+export const markAlertRead = (id: string) =>
+  request<{ ok: boolean; unreadCount: number }>("POST", `/alerts/${encodeURIComponent(id)}/read`);
+export const markAllAlertsRead = () =>
+  request<{ ok: boolean; unreadCount: number }>("POST", "/alerts/read-all");
+export const deleteAlert = (id: string) =>
+  request<{ ok: boolean; unreadCount: number }>("DELETE", `/alerts/${encodeURIComponent(id)}`);
 
 // ── Skills ────────────────────────────────────────────────────────────────────
 import type { Skill, CreateSkillInput, UpdateSkillInput } from "@ariadne/shared";

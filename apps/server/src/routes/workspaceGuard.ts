@@ -39,8 +39,12 @@ export function canViewWorkspace(workspace: Workspace, account: Account): boolea
   return isOwnerOrAdmin(workspace.createdBy, account);
 }
 
-/** Can `account` mutate this workspace (edit files, scan, delete, ...)? */
+/** Can `account` mutate this workspace (edit files, scan, delete, run, ...)? */
 export function canModifyWorkspace(workspace: Workspace, account: Account): boolean {
+  // Guests are read + chat only — never mutate or run anything in a workspace.
+  // This one check blocks every write-guarded route (actions/scripts/run,
+  // edit/scan/delete, triggers/schedules) for the guest role centrally.
+  if (account?.role === "guest") return false;
   if (isBuiltinWorkspace(workspace.id)) return true;
   return isOwnerOrAdmin(workspace.createdBy, account);
 }
@@ -97,6 +101,24 @@ export async function rejectRemoteAccess(
   reply: FastifyReply,
 ): Promise<boolean> {
   if (req.accessContext === "remote") {
+    await reply.status(403).send({ error: "Forbidden", detail });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Reject a guest (role "guest") with 403. Returns true when it rejected —
+ * callers should `return` immediately. Use on execution/mutation routes that
+ * are NOT workspace-write-guarded (e.g. POST /runs, staged-apply), since
+ * `canModifyWorkspace` already blocks guests on the workspace-scoped ones.
+ */
+export async function rejectGuest(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  detail = "Guests can't run or change projects — sign in to do that.",
+): Promise<boolean> {
+  if (req.account?.role === "guest") {
     await reply.status(403).send({ error: "Forbidden", detail });
     return true;
   }

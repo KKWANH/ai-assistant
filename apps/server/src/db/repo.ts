@@ -23,6 +23,7 @@ import type {
   Skill,
   ActionSchedule,
   ActionTrigger,
+  Alert,
   ScheduleFrequency,
   AgentAttempt,
   AttemptStatus,
@@ -387,17 +388,19 @@ export interface UsageEventRow {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** Account the usage is attributed to (for per-account limits). */
+  accountId?: string | null;
   createdAt: string;
 }
 
 export function dbInsertUsageEvent(e: UsageEventRow): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO usage_events (id,run_id,provider,model,input_tokens,output_tokens,cost_usd,created_at)
-     VALUES (?,?,?,?,?,?,?,?)`
+    `INSERT INTO usage_events (id,run_id,provider,model,input_tokens,output_tokens,cost_usd,account_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`
   ).run(
     e.id, e.runId, e.provider, e.model,
-    e.inputTokens, e.outputTokens, e.costUsd, e.createdAt
+    e.inputTokens, e.outputTokens, e.costUsd, e.accountId ?? null, e.createdAt
   );
 }
 
@@ -1009,6 +1012,104 @@ function rowToTrigger(row: Record<string, unknown>): ActionTrigger {
     actionId: row["action_id"] as string,
     accountId: row["account_id"] as string,
     lastFiredAt: (row["last_fired_at"] as string | null) ?? null,
+    createdAt: row["created_at"] as string,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Account token usage (windowed) + per-account limits
+// ---------------------------------------------------------------------------
+
+/** Sum input+output tokens an account used since `sinceIso` (rolling window). */
+export function dbGetAccountTokenUsage(accountId: string, sinceIso: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COALESCE(SUM(input_tokens + output_tokens),0) AS tokens
+       FROM usage_events WHERE account_id = ? AND created_at >= ?`,
+    )
+    .get(accountId, sinceIso) as { tokens: number } | undefined;
+  return row?.tokens ?? 0;
+}
+
+export function dbGetAccountLimits(
+  accountId: string,
+): { dailyTokenLimit: number | null; weeklyTokenLimit: number | null } | null {
+  const row = getDb()
+    .prepare("SELECT daily_token_limit, weekly_token_limit FROM account_limits WHERE account_id = ?")
+    .get(accountId) as { daily_token_limit: number | null; weekly_token_limit: number | null } | undefined;
+  if (!row) return null;
+  return { dailyTokenLimit: row.daily_token_limit ?? null, weeklyTokenLimit: row.weekly_token_limit ?? null };
+}
+
+export function dbSetAccountLimits(
+  accountId: string,
+  dailyTokenLimit: number | null,
+  weeklyTokenLimit: number | null,
+  createdAt: string,
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO account_limits (account_id, daily_token_limit, weekly_token_limit, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(account_id) DO UPDATE SET
+         daily_token_limit = excluded.daily_token_limit,
+         weekly_token_limit = excluded.weekly_token_limit`,
+    )
+    .run(accountId, dailyTokenLimit, weeklyTokenLimit, createdAt);
+}
+
+// ---------------------------------------------------------------------------
+// Alerts — persisted per-account notifications (the inbox / bell)
+// ---------------------------------------------------------------------------
+
+export function dbInsertAlert(a: Alert): void {
+  getDb()
+    .prepare(
+      `INSERT INTO alerts (id, account_id, type, title, body, link, read_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(a.id, a.accountId, a.type, a.title, a.body, a.link, a.readAt, a.createdAt);
+}
+
+export function dbListAlerts(accountId: string, limit = 50): Alert[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM alerts WHERE account_id = ? ORDER BY created_at DESC LIMIT ?")
+    .all(accountId, limit) as Record<string, unknown>[];
+  return rows.map(rowToAlert);
+}
+
+export function dbCountUnreadAlerts(accountId: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS n FROM alerts WHERE account_id = ? AND read_at IS NULL")
+    .get(accountId) as { n: number } | undefined;
+  return row?.n ?? 0;
+}
+
+export function dbMarkAlertRead(id: string, accountId: string, readAt: string): void {
+  getDb()
+    .prepare("UPDATE alerts SET read_at = ? WHERE id = ? AND account_id = ? AND read_at IS NULL")
+    .run(readAt, id, accountId);
+}
+
+export function dbMarkAllAlertsRead(accountId: string, readAt: string): void {
+  getDb()
+    .prepare("UPDATE alerts SET read_at = ? WHERE account_id = ? AND read_at IS NULL")
+    .run(readAt, accountId);
+}
+
+export function dbDeleteAlert(id: string, accountId: string): void {
+  getDb().prepare("DELETE FROM alerts WHERE id = ? AND account_id = ?").run(id, accountId);
+}
+
+function rowToAlert(row: Record<string, unknown>): Alert {
+  return {
+    id: row["id"] as string,
+    accountId: row["account_id"] as string,
+    type: row["type"] as string,
+    title: row["title"] as string,
+    body: (row["body"] as string | null) ?? null,
+    link: (row["link"] as string | null) ?? null,
+    readAt: (row["read_at"] as string | null) ?? null,
     createdAt: row["created_at"] as string,
   };
 }

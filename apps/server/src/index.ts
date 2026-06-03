@@ -41,9 +41,10 @@ import { detectPyMuPDF } from "./services/pymupdf.js";
 import { skillRoutes } from "./routes/skills.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { triggerRoutes } from "./routes/triggers.js";
+import { alertRoutes } from "./routes/alerts.js";
 import { attemptRoutes } from "./routes/attempts.js";
 import { startScheduler } from "./services/scheduler.js";
-import { seedAdmin } from "./auth/accounts.js";
+import { seedAdmin, seedGuest } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
 import { ensureDemoWorkspace } from "./demoWorkspace.js";
 import { validateSession } from "./auth/sessions.js";
@@ -96,6 +97,7 @@ async function bootstrap(): Promise<void> {
 
   // Seed the admin account + the built-in tutorial and demo workspaces
   seedAdmin();
+  seedGuest();
   ensureTutorialWorkspace();
   await ensureDemoWorkspace();
 
@@ -128,7 +130,9 @@ async function bootstrap(): Promise<void> {
         const url = req.url;
         const isAuthOpen =
           url === "/api/auth/login" || url === "/api/auth/logout" || url === "/api/auth/reset" ||
-          url.endsWith("/auth/login") || url.endsWith("/auth/logout") || url.endsWith("/auth/reset");
+          url === "/api/auth/guest" ||
+          url.endsWith("/auth/login") || url.endsWith("/auth/logout") || url.endsWith("/auth/reset") ||
+          url.endsWith("/auth/guest");
         // Webhook fire (POST /api/triggers/:secret) authenticates by its secret,
         // not a cookie — let it through the gate. The pattern is START-ANCHORED
         // so it matches ONLY /api/triggers/<secret> and can NOT match nested
@@ -195,6 +199,7 @@ async function bootstrap(): Promise<void> {
       await api.register(surfaceRoutes);
       await api.register(actionRoutes);
       await api.register(triggerRoutes);
+      await api.register(alertRoutes);
       await api.register(reportRoutes);
       await api.register(evalCaseRoutes);
       await api.register(memoryRoutes);

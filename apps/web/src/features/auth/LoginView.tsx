@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { useLogin } from "../../lib/queries";
+import { useLogin, useLoginAsGuest } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { resetSession } from "../../lib/api";
 import type { LoginInput } from "@ariadne/shared";
@@ -14,6 +14,7 @@ export function LoginView() {
   const [resetting, setResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const login = useLogin();
+  const guestLogin = useLoginAsGuest();
   const { t } = useT();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,6 +27,15 @@ export function LoginView() {
     }
     try {
       await login.mutateAsync(input);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("auth.failed"));
+    }
+  };
+
+  const handleGuest = async () => {
+    setError(null);
+    try {
+      await guestLogin.mutateAsync();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.failed"));
     }
@@ -102,6 +112,22 @@ export function LoginView() {
               {t("auth.signIn")}
             </Button>
           </form>
+
+          {/* Try without an account — a heavily-limited, read + chat only guest
+              session (no runs/actions, tiny daily token budget). */}
+          <div className="mt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="w-full"
+              loading={guestLogin.isPending}
+              onClick={() => void handleGuest()}
+            >
+              {t("auth.tryAsGuest")}
+            </Button>
+            <p className="mt-1.5 text-2xs text-center text-muted-foreground">{t("auth.guestNote")}</p>
+          </div>
 
           {/* Recovery affordance — "I keep getting errors / 401 loop /
               works in incognito" → drop the malformed cookie and reload.

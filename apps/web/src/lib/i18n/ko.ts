@@ -1180,6 +1180,16 @@ const ko: Record<TranslationKey, string> = {
   "triggers.delete": "트리거 삭제",
   "triggers.confirmDelete": "이 트리거를 삭제할까요? 웹훅 URL이 더는 작동하지 않습니다.",
   "triggers.failed": "트리거를 만들지 못했습니다",
+
+  // ── Alerts (알림 인박스) ─────────────────────────────────────────────────────
+  "alerts.title": "알림",
+  "alerts.empty": "알림이 없습니다",
+  "alerts.markAllRead": "모두 읽음",
+  "alerts.dismiss": "지우기",
+
+  // ── Guest mode (게스트) ──────────────────────────────────────────────────────
+  "auth.tryAsGuest": "게스트로 시도",
+  "auth.guestNote": "읽기·채팅만 — 실행/액션 불가, 일일 한도 적음.",
 };
 
 export default ko;

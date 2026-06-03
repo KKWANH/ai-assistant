@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { Account, AccountMode } from "@ariadne/shared";
 import { getDb } from "../db/index.js";
+import { dbSetAccountLimits } from "../db/repo.js";
 import { hashPassword } from "./passwords.js";
 import logger from "../logger.js";
 
@@ -52,7 +53,7 @@ export function createAccount(
   username: string,
   password: string,
   displayName: string,
-  role: "admin" | "user" = "user",
+  role: "admin" | "user" | "guest" = "user",
   locale = "en",
   mode: AccountMode = "standard"
 ): Account {
@@ -122,4 +123,32 @@ export function seedAdmin(): void {
   } else {
     logger.info({ username }, "Admin account seeded from env");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Seed the shared guest account ("Try as guest")
+// ---------------------------------------------------------------------------
+
+const GUEST_USERNAME = "guest";
+const GUEST_DAILY_TOKENS = 10_000;
+const GUEST_WEEKLY_TOKENS = 30_000;
+
+/** Seed the shared, passwordless guest account (idempotent). "Try as guest"
+ *  starts a session for this account. Role "guest" is read + chat only (see
+ *  canModifyWorkspace — it can't run actions/scripts/runs or mutate projects)
+ *  and is capped by a tiny token limit so an exposed instance can't be drained. */
+export function seedGuest(): void {
+  if (findAccountByUsername(GUEST_USERNAME)) return;
+  // Random, unusable password — the guest is reached via POST /auth/guest,
+  // never by password login.
+  const account = createAccount(
+    GUEST_USERNAME,
+    crypto.randomBytes(24).toString("base64url"),
+    "Guest",
+    "guest",
+    "en",
+    "simple",
+  );
+  dbSetAccountLimits(account.id, GUEST_DAILY_TOKENS, GUEST_WEEKLY_TOKENS, new Date().toISOString());
+  logger.info({ username: GUEST_USERNAME }, "Guest account seeded (read + chat only, token-capped)");
 }

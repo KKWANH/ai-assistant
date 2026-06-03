@@ -35,6 +35,7 @@ import {
 import { loadActionDefs } from "../services/actions.js";
 import { getProvider } from "../providers/index.js";
 import { meteringProvider } from "../runs/engine.js";
+import { createAlert } from "../services/alerts.js";
 import { getActiveSettings, isProviderConfigured } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext } from "../services/chatContext.js";
@@ -665,6 +666,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           createdAt: now(),
         };
         dbInsertMessage(assistantMsg);
+
+        // Agent runs can take a while and the user may navigate away — leave a
+        // bell notification when one finishes. Plain instant/standard replies
+        // aren't alerted (they're watched live as they stream).
+        if (agentTrace && agentTrace.steps.length > 0) {
+          createAlert(req.account.id, "chat_completed", "Agent task complete", null, `/chat/${chat.id}`);
+        }
 
         // Fold any durable facts from this conversation into the user's saved
         // profile — background, throttled, best-effort (never blocks the chat).

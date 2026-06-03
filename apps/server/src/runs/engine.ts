@@ -20,6 +20,7 @@ import { extractAndMapClaims, renderUnsupportedClaims, buildEvidencePack, comput
 import { writeArtifact, writeEvidence, writeRunRecord, readArtifact } from "../ariadneFolder.js";
 import type { AiProvider } from "../providers/index.js";
 import { getProvider } from "../providers/index.js";
+import { createAlert } from "../services/alerts.js";
 import { getActiveSettings } from "../config.js";
 import logger from "../logger.js";
 import type { Snapshot } from "@ariadne/shared";
@@ -414,6 +415,9 @@ ${fileContext}`;
     unsupportedCount,
     usage: usageToStore,
   });
+
+  // Surface the finished run in the owner's alert inbox (the bell). Best-effort.
+  createAlert(run.createdBy, "run_completed", `${run.templateName} finished`, null, `/runs/${run.id}`);
 
   // Auto-version the run's .ariadne/ artifacts. Background — never
   // blocks the completed response and silently no-ops when git is

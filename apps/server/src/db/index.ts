@@ -210,6 +210,26 @@ function runMigrations(db: DatabaseSync): void {
       last_fired_at TEXT,
       created_at    TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS alerts (
+      id          TEXT PRIMARY KEY,
+      account_id  TEXT NOT NULL,
+      type        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      body        TEXT,
+      link        TEXT,
+      read_at     TEXT,
+      created_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_alerts_account
+      ON alerts(account_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS account_limits (
+      account_id          TEXT PRIMARY KEY,
+      daily_token_limit   INTEGER,
+      weekly_token_limit  INTEGER,
+      created_at          TEXT NOT NULL
+    );
   `);
 
   // Agent attempts — per-chat staging "branches". A chat has at most
@@ -350,6 +370,12 @@ function runMigrations(db: DatabaseSync): void {
   accounts("mode", "TEXT");
   accounts("context", "TEXT");
   accounts("context_updated_at", "TEXT");
+
+  // usage_events gains account_id so per-account token limits can sum a window
+  // directly instead of a fragile JOIN through runs / chat_messages. NULL on
+  // rows from before this migration (and on usage not attributed to an account).
+  const usageEvents = addColumnIfMissing(db, "usage_events");
+  usageEvents("account_id", "TEXT");
 
   const reports = addColumnIfMissing(db, "reports");
   reports("attachments_json", "TEXT NOT NULL DEFAULT '[]'");

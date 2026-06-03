@@ -38,6 +38,28 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ account: safeAccount, accessContext: ctx });
   });
 
+  // POST /api/auth/guest — start a session as the shared, restricted guest
+  // account (no credentials). Role "guest" is read + chat only and token-capped.
+  app.post("/auth/guest", async (req, reply) => {
+    const account = findAccountByUsername("guest");
+    if (!account) return reply.status(503).send({ error: "Guest access is not available" });
+
+    const token = createSession(account.id);
+    const ctx = accessContext(req);
+
+    void reply.setCookie(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      path: "/",
+      maxAge: MAX_AGE_SECONDS,
+      signed: true,
+    });
+
+    const { passwordHash: _ph, salt: _s, ...safeAccount } = account;
+    return reply.send({ account: safeAccount, accessContext: ctx });
+  });
+
   // POST /api/auth/logout
   app.post("/auth/logout", async (req, reply) => {
     const token = req.unsignCookie(req.cookies[COOKIE_NAME] ?? "");
