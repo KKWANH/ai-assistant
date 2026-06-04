@@ -662,7 +662,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           userContent: content,
           attachmentRefs,
           webSearchMode: webSearch,
-          agentMode: agentMode ?? false,
+          // Guests are read + chat only — never the plan-execute agent (which
+          // can run shell/tests/edits). Downgrade to a plain chat answer.
+          agentMode: req.account?.role === "guest" ? "off" : (agentMode ?? false),
           mode,
           accountId: req.account?.id ?? null,
           accountLocale: req.account?.locale,
@@ -857,7 +859,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           userContent: nextContent,
           attachmentRefs: [],   // attachments are tied to the original send
           webSearchMode,
-          agentMode,
+          // Guests are read + chat only — never the plan-execute agent.
+          agentMode: req.account?.role === "guest" ? "off" : agentMode,
           // Regenerate doesn't surface a mode picker — re-run with the
           // standard pipeline. (If we later thread the mode through
           // regenerate too, change here.)
