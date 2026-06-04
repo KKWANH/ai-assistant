@@ -42,6 +42,7 @@ import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
+import { runDeepAgent } from "../services/orchestrator.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
 import { decideWebSearch, decideAgentMode, detectActionIntent, generateChatTitle } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
@@ -125,7 +126,7 @@ interface StreamReplyOptions {
   attachmentRefs: AttachmentRef[];
   webSearchMode: "on" | "off" | "auto" | undefined;
   /** boolean for legacy callers; tri-state for explicit auto-classifier opt-in. */
-  agentMode: boolean | "off" | "auto" | "on";
+  agentMode: boolean | "off" | "auto" | "on" | "deep";
   /** "instant" = skip every classifier/retrieval/memory step, just stream
    *  the direct provider answer. "standard" = full pipeline. */
   mode: "standard" | "instant";
@@ -262,8 +263,14 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   // cheap classifier and only enters the loop for multi-step prompts.
   // Legacy boolean callers (true/false) map to on/off.
   let agentMode: boolean;
+  let deepMode = false;
   if (typeof rawAgentMode === "boolean") {
     agentMode = rawAgentMode;
+  } else if (rawAgentMode === "deep") {
+    // R4 — explicit deep mode: decompose + fan out parallel sub-agents. Implies
+    // agent. Cost-aware, never auto-selected.
+    deepMode = true;
+    agentMode = true;
   } else if (rawAgentMode === "on") {
     agentMode = true;
   } else if (rawAgentMode === "auto" && hasContent) {
@@ -311,7 +318,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
 
   if (agentMode) {
     try {
-      const agentResult = await runAgent({
+      const agentResult = await (deepMode ? runDeepAgent : runAgent)({
         chat,
         history: convoHistory,
         userMessage: userContent,
@@ -626,7 +633,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         // (or a stop request) finds it by chat id. For "auto" we don't yet
         // know whether the agent will actually run — default to false; the
         // client learns by watching for agent_plan events on the SSE stream.
-        const willDefinitelyAgent = agentMode === true || agentMode === "on";
+        const willDefinitelyAgent = agentMode === true || agentMode === "on" || agentMode === "deep";
         const controller = new AbortController();
         const gen = beginGeneration({
           chatId: chat.id,
@@ -778,11 +785,11 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         body.webSearch === "on" || body.webSearch === "off" || body.webSearch === "auto"
           ? body.webSearch
           : (existing.webSearch ? "on" : "off");
-      const agentMode: boolean | "off" | "auto" | "on" =
-        body.agentMode === "on" || body.agentMode === "off" || body.agentMode === "auto"
+      const agentMode: boolean | "off" | "auto" | "on" | "deep" =
+        body.agentMode === "on" || body.agentMode === "off" || body.agentMode === "auto" || body.agentMode === "deep"
           ? body.agentMode
           : Boolean(body.agentMode);
-      const willDefinitelyAgent = agentMode === true || agentMode === "on";
+      const willDefinitelyAgent = agentMode === true || agentMode === "on" || agentMode === "deep";
 
       // 1. Save the prior content (if changed) and update in place.
       let userMsg = existing;

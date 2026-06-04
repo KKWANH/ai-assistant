@@ -160,10 +160,11 @@ export const PostMessageSchema = z.object({
   /**
    * Agent plan-and-execute mode: off (never), auto (classifier decides per
    * message — only kicks in for multi-step research-ish prompts), on
-   * (always). Legacy `boolean` still accepted from older clients: true→"on",
-   * false→"off".
+   * (always), deep (R4 — decompose into 2–4 sub-questions, fan out parallel
+   * sub-agents, synthesize; cost-aware, explicit only). Legacy `boolean` still
+   * accepted from older clients: true→"on", false→"off".
    */
-  agentMode: z.union([z.boolean(), z.enum(["off", "auto", "on"])]).optional(),
+  agentMode: z.union([z.boolean(), z.enum(["off", "auto", "on", "deep"])]).optional(),
   /**
    * Reply mode:
    *   - "standard" (default): full pipeline — workspace retrieval, memory

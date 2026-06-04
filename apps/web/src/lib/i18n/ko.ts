@@ -1122,13 +1122,14 @@ const ko: Record<TranslationKey, string> = {
 
   // ── 답변 모드 (T1 — Instant + Agent를 하나의 선택지로 통합) ─────────────
   "chat.composer.replyModeLabel": "답변 모드",
-  "chat.composer.replyModeTip": "즉답 = 바로 답, 가장 빠름. 자동 = 표준 흐름(자료 폴더 + 메모리 참조, 에이전트 필요 여부는 자동 판단). Agent = 항상 다단계 계획 실행. 평소에는 '자동'이면 충분합니다.",
+  "chat.composer.replyModeTip": "즉답 = 바로 답, 가장 빠름. 자동 = 표준 흐름(자료 폴더 + 메모리 참조, 에이전트 필요 여부는 자동 판단). Agent = 항상 다단계 계획 실행. 심층 = 여러 하위 질문으로 나눠 병렬 조사 후 통합(가장 비쌈 — 폭넓은 리서치용). 평소에는 '자동'이면 충분합니다.",
   // Easy 모드 전용 — translator-qa §4: "에이전트·다단계 계획" 단어가
   // Easy 사용자에게 무거움. ChatComposer가 isSimple일 때 이 키를 씁니다.
-  "chat.composer.replyModeTip.simple": "즉답: 바로 답. 자동: 알아서 처리. Agent: 시간이 걸려도 꼼꼼히 처리.",
+  "chat.composer.replyModeTip.simple": "즉답: 바로 답. 자동: 알아서 처리. Agent: 시간이 걸려도 꼼꼼히 처리. 심층: 여러 갈래로 나눠 병렬 조사.",
   "chat.composer.replyMode.instant": "즉답",
   "chat.composer.replyMode.auto": "자동",
   "chat.composer.replyMode.agent": "Agent",
+  "chat.composer.replyMode.deep": "심층",
 
   // ── 비전 가드 (W1.1) ───────────────────────────────────────────────────
   "chat.composer.visionBlocked": "현재 모델 ({model})은 이미지를 읽을 수 없습니다. 이 사진을 보내려면 위쪽에서 비전 지원 모델 (Claude, GPT-4o, Gemini)로 변경하십시오.",

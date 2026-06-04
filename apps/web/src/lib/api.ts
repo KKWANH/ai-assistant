@@ -477,7 +477,7 @@ export async function regenerateAfterEdit(
   body: {
     content: string;
     webSearch?: "on" | "off" | "auto";
-    agentMode?: boolean | "off" | "auto" | "on";
+    agentMode?: boolean | "off" | "auto" | "on" | "deep";
   },
   handlers: StreamHandlers,
 ): Promise<void> {

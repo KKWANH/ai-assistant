@@ -1122,11 +1122,12 @@ const en = {
 
   // ── Reply mode (T1 — replaces separate Instant + Agent toggles) ────────────
   "chat.composer.replyModeLabel": "Reply mode",
-  "chat.composer.replyModeTip": "Instant = direct answer, fastest. Auto = standard pipeline (workspace + memory + classifier decides if the agent is needed). Agent = always run the plan-and-execute loop. Default 'Auto' is right for most messages.",
-  "chat.composer.replyModeTip.simple": "Instant: direct answer. Auto: handles it for you. Agent: takes longer but works through it step by step.",
+  "chat.composer.replyModeTip": "Instant = direct answer, fastest. Auto = standard pipeline (workspace + memory + classifier decides if the agent is needed). Agent = always run the plan-and-execute loop. Deep = decompose into parallel sub-agents, then merge (costliest — for broad research). Default 'Auto' is right for most messages.",
+  "chat.composer.replyModeTip.simple": "Instant: direct answer. Auto: handles it for you. Agent: takes longer but works through it step by step. Deep: splits into parallel sub-agents for broad research.",
   "chat.composer.replyMode.instant": "Instant",
   "chat.composer.replyMode.auto": "Auto",
   "chat.composer.replyMode.agent": "Agent",
+  "chat.composer.replyMode.deep": "Deep",
 
   // ── Vision guard (W1.1) ────────────────────────────────────────────────────
   "chat.composer.visionBlocked": "The current model ({model}) can't read images. Pick a vision-capable model (Claude, GPT-4o, Gemini) from the model selector to send this.",

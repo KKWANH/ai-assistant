@@ -81,8 +81,11 @@ export type WebSearchMode = "off" | "auto" | "on";
  *      The everyday default. (server: mode="standard", agentMode="auto")
  *    - "agent" → standard pipeline + always-on agent loop. For
  *      multi-step research / coding work. (server: mode="standard",
- *      agentMode="on") */
-export type ReplyMode = "instant" | "auto" | "agent";
+ *      agentMode="on")
+ *    - "deep" → decompose into 2–4 parallel sub-agents, then synthesize a
+ *      merged answer. Costliest; for broad research / audit tasks.
+ *      (server: agentMode="deep") */
+export type ReplyMode = "instant" | "auto" | "agent" | "deep";
 /** Legacy alias kept so older callers that destructure {agentMode}
  *  from onSend still compile. New code should use ReplyMode. */
 export type AgentMode = "off" | "auto" | "on";
@@ -990,6 +993,7 @@ export function ChatComposer({
                   { value: "instant", label: t("chat.composer.replyMode.instant") },
                   { value: "auto", label: t("chat.composer.replyMode.auto") },
                   { value: "agent", label: t("chat.composer.replyMode.agent") },
+                  { value: "deep", label: t("chat.composer.replyMode.deep") },
                 ]}
                 value={replyMode}
                 onChange={setReplyMode}

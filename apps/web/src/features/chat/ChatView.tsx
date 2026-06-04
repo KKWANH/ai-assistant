@@ -388,6 +388,7 @@ function ThreadView({ chatId }: { chatId: string }) {
       // backwards-compatible.
       const apiMode = opts.replyMode === "instant" ? "instant" : undefined;
       const apiAgentMode =
+        opts.replyMode === "deep" ? "deep" :
         opts.replyMode === "agent" ? "on" :
         opts.replyMode === "auto" ? "auto" : undefined;
       await sendMessage.mutateAsync({
@@ -528,6 +529,7 @@ export function ChatView() {
 
       const apiMode = opts.replyMode === "instant" ? "instant" : undefined;
       const apiAgentMode =
+        opts.replyMode === "deep" ? "deep" :
         opts.replyMode === "agent" ? "on" :
         opts.replyMode === "auto" ? "auto" : undefined;
       // Send the message — streaming writes to the cache directly
