@@ -656,10 +656,10 @@ export function dbListMessages(chatId: string): ChatMessage[] {
 }
 
 function rowToMessage(row: Record<string, unknown>): ChatMessage {
-  const revisionsRaw = row["revisions_json"];
-  const revisions = revisionsRaw
-    ? (JSON.parse(revisionsRaw as string) as import("@ariadne/shared").MessageRevision[])
-    : undefined;
+  const revisions = j<import("@ariadne/shared").MessageRevision[]>(
+    row["revisions_json"] as string | null,
+    [],
+  );
   return {
     id: row["id"] as string,
     chatId: row["chat_id"] as string,
@@ -667,13 +667,8 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
     content: row["content"] as string,
     attachments: j<ChatAttachment[]>(row["attachments_json"] as string | null, []),
     webSearch: Boolean(row["web_search"]),
-    searchResults:
-      row["search_results_json"]
-        ? (JSON.parse(row["search_results_json"] as string) as SearchResult[])
-        : null,
-    agent: row["agent_json"]
-      ? (JSON.parse(row["agent_json"] as string) as AgentTrace)
-      : null,
+    searchResults: j<SearchResult[] | null>(row["search_results_json"] as string | null, null),
+    agent: j<AgentTrace | null>(row["agent_json"] as string | null, null),
     provider: (row["provider"] as string | null) ?? null,
     model: (row["model"] as string | null) ?? null,
     revisions: revisions && revisions.length > 0 ? revisions : undefined,
@@ -855,9 +850,10 @@ function rowToSkill(row: Record<string, unknown>): Skill {
     prompt: row["prompt"] as string,
     description: (row["description"] as string | null) ?? undefined,
     category: (row["category"] as string | null) ?? undefined,
-    variables: variablesRaw
-      ? (JSON.parse(variablesRaw) as import("@ariadne/shared").SkillVariable[])
-      : undefined,
+    variables: safeJson<import("@ariadne/shared").SkillVariable[] | undefined>(
+      variablesRaw,
+      undefined,
+    ),
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
   };

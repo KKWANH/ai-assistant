@@ -500,20 +500,11 @@ async function runTool(
         .trim();
       if (!cleaned) return "[calculate: empty expression]";
       try {
-        // Hard timeout via Promise.race — mathjs evaluations are
-        // synchronous so we wrap in a setImmediate boundary.
-        const result = await Promise.race<unknown>([
-          new Promise((resolve, reject) => {
-            try {
-              resolve(evaluate(cleaned));
-            } catch (err) {
-              reject(err);
-            }
-          }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), 200),
-          ),
-        ]);
+        // mathjs evaluate is synchronous; a Promise.race "timeout" can't
+        // interrupt it (the event loop is blocked during evaluation) and only
+        // leaks a timer, so call it directly. A malformed expression throws
+        // into the catch below.
+        const result: unknown = evaluate(cleaned);
         const formatted =
           typeof result === "number" || typeof result === "bigint"
             ? result.toString()
