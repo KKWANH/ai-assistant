@@ -2,6 +2,36 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AiProvider, ProviderUsage, CompleteRequest, CompleteWithImagesRequest } from "./index.js";
 import { extractJson, processThinkBlocks } from "./index.js";
 
+// Anthropic prompt caching (R1). A large, stable system prefix (instructions +
+// workspace metadata + memory) is re-sent every turn; marking it
+// `cache_control: ephemeral` lets turn 2+ read it from cache instead of
+// re-billing it (~90% cheaper input, lower TTFT). Caching is transparent — the
+// output is identical. Anthropic ignores cache_control below its ~1024-token
+// minimum, so we only wrap the prefix once it's comfortably large (~4096
+// chars ≈ 1024 tokens); smaller prefixes are sent as a plain string (no-op, no
+// wasted cache write).
+const CACHE_MIN_CHARS = 4096;
+
+function systemParam(system: string): string | Anthropic.TextBlockParam[] {
+  if (system.length < CACHE_MIN_CHARS) return system;
+  return [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
+}
+
+type AnthropicUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+};
+
+function readUsage(u: AnthropicUsage | null | undefined): ProviderUsage | undefined {
+  if (!u) return undefined;
+  const usage: ProviderUsage = { inputTokens: u.input_tokens, outputTokens: u.output_tokens };
+  if (u.cache_creation_input_tokens != null) usage.cacheCreationTokens = u.cache_creation_input_tokens;
+  if (u.cache_read_input_tokens != null) usage.cacheReadTokens = u.cache_read_input_tokens;
+  return usage;
+}
+
 export class AnthropicProvider implements AiProvider {
   readonly id = "anthropic" as const;
   private client: Anthropic;
@@ -21,7 +51,7 @@ export class AnthropicProvider implements AiProvider {
     const msg = await this.client.messages.create({
       model: this.model,
       max_tokens: 4096,
-      system: req.system,
+      system: systemParam(req.system),
       messages: [{ role: "user", content: req.prompt }],
       ...(useTool ? {
         tools: [{
@@ -44,9 +74,7 @@ export class AnthropicProvider implements AiProvider {
       const content = msg.content[0];
       raw = content?.type === "text" ? content.text : "";
     }
-    const usage = msg.usage
-      ? { inputTokens: msg.usage.input_tokens, outputTokens: msg.usage.output_tokens }
-      : undefined;
+    const usage = readUsage(msg.usage);
     return { text: wantsJson ? extractJson(raw) : raw, usage };
   }
 
@@ -58,7 +86,7 @@ export class AnthropicProvider implements AiProvider {
     const stream = this.client.messages.stream({
       model: this.model,
       max_tokens: 4096,
-      system: req.system,
+      system: systemParam(req.system),
       messages: [{ role: "user", content: req.prompt }],
     }, { signal: req.signal });
 
@@ -82,9 +110,7 @@ export class AnthropicProvider implements AiProvider {
     }
 
     const finalMsg = await stream.finalMessage();
-    const usage = finalMsg.usage
-      ? { inputTokens: finalMsg.usage.input_tokens, outputTokens: finalMsg.usage.output_tokens }
-      : undefined;
+    const usage = readUsage(finalMsg.usage);
 
     // Strip <think> blocks from final text
     const cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
@@ -104,7 +130,7 @@ export class AnthropicProvider implements AiProvider {
     const msg = await this.client.messages.create({
       model: this.model,
       max_tokens: 1024,
-      system: req.system,
+      system: systemParam(req.system),
       messages: [
         {
           role: "user",
@@ -118,9 +144,7 @@ export class AnthropicProvider implements AiProvider {
 
     const content = msg.content[0];
     const raw = content?.type === "text" ? content.text : "";
-    const usage = msg.usage
-      ? { inputTokens: msg.usage.input_tokens, outputTokens: msg.usage.output_tokens }
-      : undefined;
+    const usage = readUsage(msg.usage);
     return { text: req.json ? extractJson(raw) : raw, usage };
   }
 }

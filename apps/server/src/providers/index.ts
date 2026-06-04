@@ -5,6 +5,11 @@ import { resolveProviderKey } from "../config.js";
 export interface ProviderUsage {
   inputTokens: number;
   outputTokens: number;
+  /** Anthropic prompt caching (R1): tokens written to / read from the prompt
+   *  cache. `cacheReadTokens > 0` on turn 2+ confirms the stable prefix is
+   *  being cached. Absent on providers without explicit cache reporting. */
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
 }
 
 export interface ProviderImage {

@@ -246,18 +246,19 @@ export async function buildChatContext(
   // (confirmed facts) → attachments → web → workspace file excerpts →
   // history. Settings goes first so questions like "이 프로젝트 설정
   // 알려줘" can be answered from the system prompt alone.
-  const parts = [
-    workspaceMetaBlock,
-    memoryBlock,
-    attachmentBlock,
-    webBlock,
-    workspaceBlock,
-    historyBlock,
-  ].filter((s): s is string => !!s);
-  const contextBlock = parts.length > 0 ? parts.join("\n\n") + "\n\n" : "";
-  const prompt = `${contextBlock}User: ${userMessage.content}`;
-
-  const system =
+  // R1 — split into a stable, cacheable prefix and a dynamic tail. The model
+  // sees the SAME section order as before (settings → memory → attachments →
+  // web → excerpts → history → user message), but across two channels:
+  //   • system: base instructions + profile + workspace settings + memory.
+  //     These don't change turn-to-turn, so providers cache them (Anthropic
+  //     cache_control; OpenAI/vLLM/Ollama auto prefix-cache) and turn 2+ skips
+  //     re-billing them.
+  //   • prompt: attachments + web + workspace excerpts + the GROWING history +
+  //     the user message — kept out of the cached prefix because they change
+  //     every turn.
+  // `system` directly precedes `prompt`, so the concatenated text the model
+  // receives is byte-identical to the previous single-prompt layout.
+  const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
     "When a workspace is attached you receive its file index plus the contents of its " +
@@ -267,7 +268,26 @@ export async function buildChatContext(
     "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
     "and do not add bracketed citation markers like [1].";
 
-  return { system: appendUserProfile(system, accountContext), prompt, images, searchResults };
+  const stableBlocks = [workspaceMetaBlock, memoryBlock].filter(
+    (s): s is string => !!s,
+  );
+  const systemWithProfile = appendUserProfile(baseSystem, accountContext);
+  const system =
+    stableBlocks.length > 0
+      ? `${systemWithProfile}\n\n${stableBlocks.join("\n\n")}`
+      : systemWithProfile;
+
+  const dynamicBlocks = [
+    attachmentBlock,
+    webBlock,
+    workspaceBlock,
+    historyBlock,
+  ].filter((s): s is string => !!s);
+  const contextBlock =
+    dynamicBlocks.length > 0 ? dynamicBlocks.join("\n\n") + "\n\n" : "";
+  const prompt = `${contextBlock}User: ${userMessage.content}`;
+
+  return { system, prompt, images, searchResults };
 }
 
 // ---------------------------------------------------------------------------
