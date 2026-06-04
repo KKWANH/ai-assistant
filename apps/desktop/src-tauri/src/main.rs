@@ -54,6 +54,25 @@ fn repo_root() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// Stop the Node sidecar *gracefully* so its SIGTERM handler runs — the server
+/// tears down MCP child processes on SIGTERM (`index.ts`), so a plain SIGKILL
+/// would orphan every `npx @modelcontextprotocol/server-*` worker. On Unix:
+/// SIGTERM, give it a moment to clean up, then force-kill as a backstop.
+#[cfg(unix)]
+fn stop_sidecar(child: &mut Child) {
+    // SAFETY: `child.id()` is a live PID this process owns; SIGTERM is safe.
+    unsafe {
+        libc::kill(child.id() as libc::pid_t, libc::SIGTERM);
+    }
+    thread::sleep(Duration::from_millis(1500));
+    let _ = child.kill();
+}
+
+#[cfg(not(unix))]
+fn stop_sidecar(child: &mut Child) {
+    let _ = child.kill();
+}
+
 fn main() {
     let port = pick_free_port();
     let root = repo_root();
@@ -65,6 +84,10 @@ fn main() {
         .current_dir(&root)
         .env("ARIADNE_PORT", port.to_string())
         .env("ARIADNE_DESKTOP", "1")
+        // Loopback-only: the desktop webview is the only client. The server
+        // already defaults to 127.0.0.1, but set it explicitly so a stray
+        // ARIADNE_BIND in the user's shell env can't expose the sidecar.
+        .env("ARIADNE_BIND", "127.0.0.1")
         .spawn()
         .map_err(|e| eprintln!("Ariadne: failed to start the Node server: {e}"))
         .ok();
@@ -93,7 +116,7 @@ fn main() {
                 if let Some(state) = app.try_state::<Sidecar>() {
                     if let Ok(mut guard) = state.0.lock() {
                         if let Some(mut child) = guard.take() {
-                            let _ = child.kill();
+                            stop_sidecar(&mut child);
                         }
                     }
                 }

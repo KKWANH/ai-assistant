@@ -40,4 +40,8 @@ npm run tauri:dev --workspace @ariadne/desktop
   (the spike ships a single `icons/icon.png` — enough for `tauri dev`).
 - Settings → API keys is already in the web app; keychain storage is Phase 1.
 - Code signing + notarization + auto-updater (DESKTOP_APP_PLAN §6).
-- `ARIADNE_HOST=127.0.0.1` to bind loopback-only (server currently binds 0.0.0.0).
+- ~~Bind loopback-only~~ **done**: the server now defaults to `ARIADNE_BIND=127.0.0.1`
+  and the shell sets it explicitly; the `accessContext` socket check treats the
+  webview (loopback) as local-admin, so no login screen in desktop mode.
+- Graceful shutdown is wired: the shell SIGTERMs the sidecar so the server's MCP
+  cleanup runs (was SIGKILL, which orphaned `npx` MCP workers).

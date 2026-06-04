@@ -14,6 +14,12 @@ tauri-build = { version = "2", features = [] }
 # tauri-plugin-shell + the updater plugin.
 tauri = { version = "2", features = [] }
 
+# SIGTERM the Node sidecar on exit so its cleanup (MCP child shutdown) runs;
+# std's Child::kill is SIGKILL only, which would orphan MCP workers. Unix-only —
+# Windows falls back to Child::kill.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [profile.release]
 opt-level = "s"
 lto = true
