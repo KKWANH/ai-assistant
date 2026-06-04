@@ -2,11 +2,16 @@
 
 > Companion to [`AGENT_INTERNALS.md`](AGENT_INTERNALS.md). That doc is *how
 > ChatGPT/Claude harnesses work*; this doc maps each principle onto Ariadne's
-> **actual code** and proposes prioritized refactors. **This is a plan (prep),
-> not executed work** — each item is sized for a future session with file refs,
+> **actual code** and proposes prioritized refactors — each item with file refs,
 > concrete change, effort, risk, and a verification gate.
 >
 > Generated 2026-06-04 from a code-grounded assessment.
+>
+> **Status (2026-06-05): R1–R4 all shipped** (local commits, unpushed) — R1
+> prompt caching `d756df6`, R2 compaction + R3 parallel reads `714a0d4`,
+> R4 deep-mode sub-agent fan-out `7cbc926`. Each verified (tsc + live) before
+> commit; per-section status notes below. One R2 sub-part (planner budget
+> awareness) was deferred as speculative — see R2.
 
 ---
 
@@ -29,6 +34,10 @@ caching, context management, parallelism. That's where the leverage is.
 ---
 
 ## R1 — Prompt caching via a stable prefix (HIGHEST ROI)
+
+> **✅ Shipped — `d756df6`.** system/prompt split (stable prefix vs dynamic tail) +
+> Anthropic `cache_control` on a large system block + cache-usage capture in
+> `ProviderUsage`. Behavior-preserving: concatenation order unchanged.
 
 **Principle (§4.2/§6.1):** the loop re-sends a large, mostly-stable prefix every
 turn; caching it cuts input cost ~90% and latency ~80%. Ariadne re-sends but
@@ -64,6 +73,11 @@ chat. **Expected:** 30–50% planner input-token cut on multi-step runs; lower T
 
 ## R2 — Context compaction + token budgeting
 
+> **✅ Shipped (compaction) — `714a0d4`.** `buildSummarizedHistory()` summarizes
+> overflow into a digest, keeps recent turns verbatim, no-op for short chats.
+> The **token-budget-awareness** sub-part (expose cumulative budget to the
+> planner) was **deferred** — speculative until the planner acts on a budget.
+
 **Principle (§4.3):** real harnesses compact (server-side summarize) on overflow
 and make the model context-budget-aware. Ariadne grows linearly with only a crude
 char/message slice — long chats silently lose old context and waste tokens.
@@ -88,6 +102,10 @@ compaction + R1 caching compound (smaller, more stable prefix).
 
 ## R3 — Parallel tool execution
 
+> **✅ Shipped — `714a0d4`.** Consecutive read-only steps
+> (`read_file`/`list_files`/`web_search`) batch via `Promise.all`; everything
+> else stays sequential; replan-on-failure preserved (decided once per batch).
+
 **Principle (§3.2/§6.1):** models emit multiple tool calls per turn; independent
 calls run in parallel. Ariadne runs steps strictly sequentially (`agent.ts:217–301`),
 so a plan with two `read_file`s or a `read_file`+`web_search` pays serial latency.
@@ -107,6 +125,11 @@ plan completes in ~max(step) not sum(step); replan-on-failure still works.
 ---
 
 ## R4 — Sub-agent fan-out (bigger, optional)
+
+> **✅ Shipped — `7cbc926`.** `services/orchestrator.ts` `runDeepAgent` (decompose
+> → parallel isolated sub-agents → merged synthesis), gated behind an explicit
+> "deep" reply mode (web toggle + `agentMode:"deep"`). Calls `runAgent`, no
+> recursion. Built despite the original "defer" note, per request.
 
 **Principle (§4.4):** orchestrator-worker fan-out (spawn isolated sub-agents, merge
 results) beats a single agent on broad tasks — at higher token cost. Ariadne has no
