@@ -39,7 +39,7 @@ import { createAlert } from "../services/alerts.js";
 import { accountOverLimit } from "../services/limits.js";
 import { getActiveSettings, isProviderConfigured } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
-import { buildChatContext } from "../services/chatContext.js";
+import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
@@ -299,11 +299,21 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     }
   }
 
+  // R2 — compact a long history so older turns are summarized into a digest
+  // instead of being silently dropped by the recent-window cap. No-op (no LLM
+  // call) for short chats. Both the agent and the direct-chat path use the
+  // compacted history.
+  let convoHistory = history;
+  if (hasContent && shouldCompactHistory(history)) {
+    emit({ type: "status", text: "Compacting earlier conversation…" });
+    convoHistory = await buildSummarizedHistory(history, provider, controller.signal);
+  }
+
   if (agentMode) {
     try {
       const agentResult = await runAgent({
         chat,
-        history,
+        history: convoHistory,
         userMessage: userContent,
         provider,
         emit,
@@ -336,7 +346,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     emit({ type: "status", text: "Building context…" });
     let contextResult;
     try {
-      contextResult = await buildChatContext(chat, history, {
+      contextResult = await buildChatContext(chat, convoHistory, {
         content: userContent,
         attachments: attachmentRefs,
         webSearch: webSearchInput,

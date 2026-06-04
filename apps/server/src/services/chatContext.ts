@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared";
-import type { ProviderImage } from "../providers/index.js";
+import type { AiProvider, ProviderImage } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
@@ -360,6 +360,73 @@ function buildHistoryText(history: ChatMessage[]): string {
   }
 
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// History compaction (R2)
+// ---------------------------------------------------------------------------
+
+// Keep the most recent turns verbatim; summarize everything older into one
+// digest message once the conversation gets long. Without this, the
+// recent-window cap in buildHistoryText silently *drops* older turns and the
+// model loses early context. Compaction recovers it for the cost of one cheap
+// summary call, and only triggers for genuinely long chats.
+const KEEP_RECENT_MESSAGES = 12;
+const COMPACT_TRIGGER_CHARS = 12_000;
+
+/** Cheap predicate: does this history warrant a (latency-incurring)
+ *  summarization pass? Lets the caller show a status line before the work. */
+export function shouldCompactHistory(history: ChatMessage[]): boolean {
+  if (history.length <= KEEP_RECENT_MESSAGES + 4) return false;
+  const totalChars = history.reduce((n, m) => n + m.content.length, 0);
+  return totalChars > COMPACT_TRIGGER_CHARS;
+}
+
+/**
+ * Summarize the older portion of a long history into a single digest message,
+ * keeping the most recent turns verbatim. Returns the history unchanged when
+ * it's short enough (no LLM call) or if summarization fails (falls back to the
+ * full history — the recent-window cap downstream still bounds it).
+ */
+export async function buildSummarizedHistory(
+  history: ChatMessage[],
+  provider: AiProvider,
+  signal?: AbortSignal,
+): Promise<ChatMessage[]> {
+  if (!shouldCompactHistory(history)) return history;
+
+  const recent = history.slice(-KEEP_RECENT_MESSAGES);
+  const older = history.slice(0, -KEEP_RECENT_MESSAGES);
+  const olderText = older
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .join("\n")
+    .slice(0, 24_000);
+
+  let digest: string;
+  try {
+    const res = await provider.complete({
+      system:
+        "You compress chat history. Summarize the earlier conversation into a tight " +
+        "digest of 5–10 bullet points that preserves decisions, facts, names, numbers, " +
+        "file paths and unresolved threads. Reply in the conversation's language. No preamble.",
+      prompt: olderText,
+      signal,
+    });
+    digest = res.text.trim();
+  } catch {
+    return history;
+  }
+  if (!digest) return history;
+
+  const anchor = older[0] ?? recent[0];
+  if (!anchor) return history;
+  const summary: ChatMessage = {
+    ...anchor,
+    id: `summary-${anchor.id}`,
+    role: "assistant",
+    content: `[Summary of ${older.length.toString()} earlier messages]\n${digest}`,
+  };
+  return [summary, ...recent];
 }
 
 async function parseUploadedFile(data: Buffer, name: string, _uploadId: string, useMarkdown = false): Promise<string> {

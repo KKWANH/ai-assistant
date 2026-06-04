@@ -46,6 +46,15 @@ const STEP_TIMEOUT_MS = 60_000;
  */
 const MAX_REPLANS = 2;
 
+/**
+ * Tools that are read-only, side-effect-free, and take fixed args from the plan
+ * (no dependency on a prior step's result). A maximal run of consecutive such
+ * steps can execute concurrently (R3) — order doesn't matter and they don't
+ * feed each other. Everything else (edits, runs, mcp_call, reason/calculate
+ * which synthesize prior results) stays strictly sequential.
+ */
+const PARALLEL_TOOLS = new Set(["read_file", "list_files", "web_search"]);
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -214,20 +223,20 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   // against MAX_REPLANS so a long plan can't burn budget mid-execution.
   let replansUsed = 0;
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-    if (!step) continue;
-    if (signal.aborted) break;
-
-    // Mark running
+  // Execute one step: run its tool with a per-step timeout, update status, and
+  // emit progress. Returns the FULL tool result (step.result is truncated for
+  // display). Extracted so a run of independent read-only steps (R3) can be
+  // driven concurrently via Promise.all. Never throws — a tool failure is
+  // captured as a failed status so a parallel batch always resolves.
+  const executeStep = async (step: AgentStep): Promise<string> => {
     step.status = "running";
     emit({ type: "agent_step", step: { ...step } });
 
-    let result: string;
     // Per-step abort — fires if the agent is cancelled OR this step times
     // out, so the tool's in-flight LLM / network call is actually stopped.
     const stepCtl = new AbortController();
     const stepSignal = AbortSignal.any([signal, stepCtl.signal]);
+    let result: string;
     try {
       result = await withTimeout(
         runTool(step.tool, step.description, chat, provider, customActions, collectedSources, stepSignal),
@@ -245,28 +254,66 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         : `Tool failed: ${msg.slice(0, 200)}`;
       result = step.result;
     }
-
     emit({ type: "agent_step", step: { ...step } });
-    stepResults.push(`Step "${step.description}" (${step.tool}): ${step.result ?? ""}`);
+    return result;
+  };
+
+  let i = 0;
+  while (i < steps.length) {
+    if (signal.aborted) break;
+
+    // Group a maximal run of consecutive independent read-only steps so they
+    // run concurrently (R3). A single non-parallelizable step is just a run of
+    // length 1, executed exactly as before.
+    let runEnd = i;
+    if (steps[i] && PARALLEL_TOOLS.has(steps[i]!.tool)) {
+      while (
+        runEnd + 1 < steps.length &&
+        steps[runEnd + 1] &&
+        PARALLEL_TOOLS.has(steps[runEnd + 1]!.tool)
+      ) {
+        runEnd += 1;
+      }
+    }
+    const batch = steps.slice(i, runEnd + 1).filter((s): s is AgentStep => !!s);
+    if (batch.length === 0) {
+      i = runEnd + 1;
+      continue;
+    }
+
+    // Execute concurrently when the run has more than one step.
+    const results =
+      batch.length > 1
+        ? await Promise.all(batch.map((s) => executeStep(s)))
+        : [await executeStep(batch[0]!)];
+
+    // Record results in plan order for synthesis and re-planning.
+    for (const s of batch) {
+      stepResults.push(`Step "${s.description}" (${s.tool}): ${s.result ?? ""}`);
+    }
 
     // ── 3. Conditional re-plan ─────────────────────────────────────────────
     // Skip the re-planner LLM call unless something actually changed:
-    //   - the step failed (recover), OR
-    //   - the step returned little / no information (low signal)
-    // and we still have replan budget. Doc-promised but previously not done.
-    const isLast = i >= steps.length - 1;
-    // A `run_tests` step that reports ✗ should re-plan even though the
-    // step itself succeeded (status === "done") and the output is
-    // long. This is the fix-until-tests-pass loop the code-editing
-    // planner expects.
-    const testFailure = step.tool === "run_tests" && /^✗/.test(result.trimStart());
+    //   - a step failed (recover), OR
+    //   - the run returned little / no information (low signal), OR
+    //   - a run_tests step reported ✗ (fix-until-tests-pass loop)
+    // and we still have replan budget. For a parallel batch the decision is
+    // made once, after the whole run (the steps are independent); for a single
+    // step this is identical to the previous per-step behavior.
+    const lastIdx = runEnd;
+    const isLast = lastIdx >= steps.length - 1;
+    const lastStep = batch[batch.length - 1]!;
+    const lastResult = results[results.length - 1] ?? "";
+    const testFailure = lastStep.tool === "run_tests" && /^✗/.test(lastResult.trimStart());
+    const anyFailed = batch.some((s) => s.status === "failed");
+    const allLowInformation = results.every((r) => isLowInformation(r));
     const shouldConsiderReplan =
       !isLast &&
       replansUsed < MAX_REPLANS &&
-      (step.status === "failed" || isLowInformation(result) || testFailure);
+      (anyFailed || allLowInformation || testFailure);
 
     if (shouldConsiderReplan) {
-      const remaining = steps.slice(i + 1);
+      const remaining = steps.slice(lastIdx + 1);
       const revisedRaw = await safeComplete(provider, {
         system: buildReplannerSystem(customActions),
         prompt: buildReplannerPrompt(userMessage, stepResults, remaining),
@@ -283,7 +330,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         // re-render for nothing.
         if (revisedSteps.length > 0 && !plansEqual(revisedSteps, remaining)) {
           const newRemaining = revisedSteps
-            .slice(0, MAX_STEPS - (i + 1))
+            .slice(0, MAX_STEPS - (lastIdx + 1))
             .map((s) => ({
               id: crypto.randomUUID(),
               description: s.description,
@@ -291,13 +338,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
               note: s.note,
               status: "pending" as const,
             }));
-          steps.splice(i + 1, steps.length - (i + 1), ...newRemaining);
+          steps.splice(lastIdx + 1, steps.length - (lastIdx + 1), ...newRemaining);
           replansUsed += 1;
           emit({ type: "status", text: "Adjusting plan…" });
           emit({ type: "agent_plan", steps: [...steps] });
         }
       }
     }
+
+    i = runEnd + 1;
   }
 
   // ── 4. Final synthesis ─────────────────────────────────────────────────
