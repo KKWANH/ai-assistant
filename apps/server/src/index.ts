@@ -278,7 +278,18 @@ async function bootstrap(): Promise<void> {
 
   const settings = getActiveSettings();
 
-  await app.listen({ port: PORTS.server, host: "0.0.0.0" });
+  // Bind to loopback by default — reachable only from this machine and the
+  // local cloudflared tunnel. Opt into LAN/all-interfaces exposure with
+  // ARIADNE_BIND=0.0.0.0. The socket-based local-admin check in auth/context
+  // means a 0.0.0.0 bind no longer auto-admins anything sending Host: localhost.
+  const bindHost = process.env["ARIADNE_BIND"] ?? "127.0.0.1";
+  await app.listen({ port: PORTS.server, host: bindHost });
+  if (!["127.0.0.1", "localhost", "::1"].includes(bindHost)) {
+    logger.warn(
+      { bindHost },
+      "Bound to a non-loopback interface — the port is reachable from the network; remote clients still require login",
+    );
+  }
 
   // AW/AY/AZ — probe for external file-handling binaries once at boot.
   // Cached for the process lifetime; routes gate on the result. Awaited
@@ -300,7 +311,7 @@ async function bootstrap(): Promise<void> {
 
   logger.info(
     {
-      url: `http://0.0.0.0:${PORTS.server.toString()}`,
+      url: `http://${bindHost}:${PORTS.server.toString()}`,
       provider: settings.provider,
       model: settings.model,
       webDist: fs.existsSync(WEB_DIST) ? WEB_DIST : "(not built)",

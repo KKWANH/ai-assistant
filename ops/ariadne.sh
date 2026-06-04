@@ -12,6 +12,13 @@ export ARIADNE_LOG_DIR="${ARIADNE_LOG_DIR:-${ARIADNE_ROOT}/logs}"
 export ARIADNE_RUN_DIR="${ARIADNE_RUN_DIR:-${ARIADNE_ROOT}/run}"
 export ARIADNE_HOME="${ARIADNE_HOME:-${ARIADNE_ROOT}/data}"
 
+# The server binds loopback (127.0.0.1) by default for safety. cloudflared runs
+# on this host, so 0.0.0.0 preserves the existing tunnel binding; the
+# socket-based local-admin check keeps it safe (LAN clients are treated as
+# remote and must log in). Remove this line for the stricter loopback-only bind
+# if your tunnel targets localhost.
+export ARIADNE_BIND="${ARIADNE_BIND:-0.0.0.0}"
+
 # ── Load .env so the daemon sees provider keys + tunnel config ────────────
 if [[ -f "${ARIADNE_ROOT}/.env" ]]; then
   set -a

@@ -102,7 +102,6 @@ export function updateAccountContext(
 // ---------------------------------------------------------------------------
 
 const DEFAULT_USER = "admin";
-const DEFAULT_PASS = "ariadne";
 
 export function seedAdmin(): void {
   const db = getDb();
@@ -110,15 +109,19 @@ export function seedAdmin(): void {
   if (count > 0) return;
 
   const username = process.env["ARIADNE_ADMIN_USER"] ?? DEFAULT_USER;
-  const password = process.env["ARIADNE_ADMIN_PASSWORD"] ?? DEFAULT_PASS;
-  const isDefault = !process.env["ARIADNE_ADMIN_PASSWORD"];
+  const envPass = process.env["ARIADNE_ADMIN_PASSWORD"];
+  // No env password → generate a strong random one rather than ship a known
+  // default ("admin"/"ariadne" on an exposed instance is trivially guessable).
+  // Logged once (warn) so the local operator can copy it; set
+  // ARIADNE_ADMIN_PASSWORD to choose your own and silence this.
+  const password = envPass && envPass.length > 0 ? envPass : crypto.randomBytes(12).toString("base64url");
 
   createAccount(username, password, username, "admin");
 
-  if (isDefault) {
-    logger.info(
+  if (!envPass) {
+    logger.warn(
       { username, password },
-      "Admin account seeded (default credentials — set ARIADNE_ADMIN_PASSWORD to customise)"
+      "Admin account seeded with a GENERATED password — copy it now (or set ARIADNE_ADMIN_PASSWORD to choose your own)",
     );
   } else {
     logger.info({ username }, "Admin account seeded from env");
