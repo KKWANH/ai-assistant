@@ -33,6 +33,27 @@ function now(): string {
   return new Date().toISOString();
 }
 
+// Per-trigger rate limit for the public fire route. The secret authorises the
+// run, but a leaked/abused secret could hammer the endpoint and drain LLM
+// budget — so cap fires to a sliding window per trigger. In-memory is fine for
+// a self-hosted single process; this is best-effort abuse control, not billing.
+const FIRE_MAX = 10;
+const FIRE_WINDOW_MS = 60_000;
+const FIRE_PAYLOAD_MAX = 32_000;
+const fireTimestamps = new Map<string, number[]>();
+
+function fireRateLimited(triggerId: string): boolean {
+  const cutoff = Date.now() - FIRE_WINDOW_MS;
+  const recent = (fireTimestamps.get(triggerId) ?? []).filter((t) => t > cutoff);
+  if (recent.length >= FIRE_MAX) {
+    fireTimestamps.set(triggerId, recent);
+    return true;
+  }
+  recent.push(Date.now());
+  fireTimestamps.set(triggerId, recent);
+  return false;
+}
+
 export async function triggerRoutes(app: FastifyInstance): Promise<void> {
   // List every trigger on a workspace the caller can access.
   app.get<{ Params: { workspaceId: string } }>(
@@ -110,8 +131,14 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const trigger = dbGetTriggerBySecret(req.params.secret);
       if (!trigger) return reply.status(404).send({ error: "Unknown trigger" });
+      if (fireRateLimited(trigger.id)) {
+        return reply.status(429).send({ error: "Rate limit exceeded — slow down" });
+      }
       try {
         const payload = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {});
+        if (payload.length > FIRE_PAYLOAD_MAX) {
+          return reply.status(413).send({ error: "Payload too large" });
+        }
         const run = await createActionRun({
           workspaceId: trigger.workspaceId,
           actionId: trigger.actionId,
