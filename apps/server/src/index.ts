@@ -22,6 +22,7 @@ import { usageRoutes } from "./routes/usage.js";
 import { scriptRoutes } from "./routes/scripts.js";
 import { searchRoutes } from "./routes/search.js";
 import { chatRoutes } from "./routes/chat.js";
+import { compareRoutes } from "./routes/compare.js";
 import { providerRoutes } from "./routes/providers.js";
 import { accountRoutes } from "./routes/account.js";
 import { surfaceRoutes } from "./routes/surface.js";
@@ -194,6 +195,7 @@ async function bootstrap(): Promise<void> {
       await api.register(scriptRoutes);
       await api.register(searchRoutes);
       await api.register(chatRoutes);
+      await api.register(compareRoutes);
       await api.register(providerRoutes);
       await api.register(accountRoutes);
       await api.register(surfaceRoutes);

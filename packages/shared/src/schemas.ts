@@ -180,6 +180,17 @@ export const PostMessageSchema = z.object({
 });
 export type PostMessageInput = z.infer<typeof PostMessageSchema>;
 
+/** POST /api/compare — run one prompt against 2–4 models concurrently and
+ *  return every answer (the cross-vendor "second opinion"). */
+export const CompareSchema = z.object({
+  prompt: z.string().min(1),
+  models: z
+    .array(z.object({ provider: z.enum(PROVIDERS), model: z.string().min(1) }))
+    .min(2)
+    .max(4),
+});
+export type CompareInput = z.infer<typeof CompareSchema>;
+
 /* ── Action schedules ───────────────────────────────────────────────── */
 
 export const CreateScheduleSchema = z.object({
