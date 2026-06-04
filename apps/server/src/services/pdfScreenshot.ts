@@ -49,8 +49,8 @@ export async function renderPdfPage(
   const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({
     data: new Uint8Array(buf),
-    // Disable workers + font/image fetches we can't fulfil server-side.
-    useWorker: false,
+    // The legacy build already runs on the main thread (no worker). Disable
+    // eval + remote font fetches we can't fulfil server-side.
     isEvalSupported: false,
     disableFontFace: true,
   }).promise;
