@@ -168,9 +168,9 @@ and §5 (killer-feature ranking).
 This backlog drifted from reality once; the docs have drifted too. One
 batch to re-establish a single source of truth:
 
-- **License contradiction:** `PRODUCT_STRATEGY.md` still argues AGPL in its
-  body; the repo ships MIT (PRODUCT.md §6). Fix the body, not just the
-  header banner.
+- **License:** resolved — the repo now ships **AGPL-3.0-or-later** (see
+  LICENSE), matching `PRODUCT_STRATEGY.md` §1. PRODUCT.md §6, README, and the
+  planning-doc banners were reconciled to AGPL (2026-06).
 - **Superseded banners:** PRODUCT.md §8 asked for a one-line "superseded by
   PRODUCT.md for definition" banner on each historical doc (PRODUCT_PLAN,
   POSITIONING, LAUNCH_PLAN, PROMOTION). Never done.

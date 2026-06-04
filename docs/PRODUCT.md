@@ -147,8 +147,9 @@ headline.
   to the host via a postMessage SDK.
 - **Deploy:** single process, Cloudflare Tunnel, LAN/tunnel access split
   with per-route origin checks, multi-account.
-- **License:** **MIT.** (The AGPL recommendation in PRODUCT_STRATEGY §1.3
-  and LAUNCH_PLAN Week 1 is SUPERSEDED — repo ships MIT.)
+- **License:** **AGPL-3.0-or-later.** (Adopts the PRODUCT_STRATEGY §1.3
+  recommendation — a modified version offered over a network must publish its
+  source, blocking proprietary hosted forks while staying fully open source.)
 
 ---
 

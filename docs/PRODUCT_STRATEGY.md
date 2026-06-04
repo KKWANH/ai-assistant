@@ -1,10 +1,11 @@
 # Product Strategy — licensing, IP/data sovereignty, monetization, regulation
 
 > **⚠️ Superseded for product definition by [`PRODUCT.md`](PRODUCT.md).**
-> Kept for the business/legal/regulatory rationale. Note: its §1.3 AGPL+
-> commercial licensing recommendation is **dead** — the repo ships **MIT**
-> (PRODUCT.md §6). Read this only for the data-sovereignty argument and
-> the local-first invariants, not for "what the product is."
+> Kept for the business/legal/regulatory rationale. Update (2026-06): its §1.3
+> AGPL recommendation is now **adopted** — the repo ships **AGPL-3.0-or-later**
+> (see [`LICENSE`](../LICENSE)) to block proprietary hosted forks while staying
+> fully open source. Read this for the data-sovereignty argument and the
+> local-first invariants, not for "what the product is."
 
 This is the strategy memo from the **lawyer / license / PM** angle. It
 picks up where [`POSITIONING.md`](POSITIONING.md) §8 ("open positioning
@@ -22,27 +23,24 @@ question that this doc takes a position on but does not commit code on.
 
 > ## Update — §1 licensing recommendation superseded
 >
-> The §1 recommendation below is **AGPL-3.0 + commercial dual license**.
-> After a launch-readiness review (see [`docs/LAUNCH_PLAN.md`](LAUNCH_PLAN.md)
-> + reviewer notes in the project conversation), the decision was
-> **flipped to plain MIT** for v0.1. The repo now ships [`LICENSE`](../LICENSE)
-> as MIT.
+> The §1 recommendation below is **AGPL-3.0**. The project briefly shipped plain
+> MIT for v0.1 (maximise adoption, defer protection), then **reverted to
+> AGPL-3.0-or-later (2026-06)** — the repo now ships [`LICENSE`](../LICENSE) as
+> AGPL.
 >
-> **Why the flip:** AGPL deters hosted-SaaS clones but also deters the
-> contributors and enterprise users we actually want in the first year.
-> The reviewer's case ('the bet you should make is kernel positioning +
-> stars + ecosystem; monetize via packaging, marketplace, support,
-> managed setup, not via core-license restriction') is the stronger
-> argument *now* given (a) no evidence of imminent SaaS cloning, (b)
-> the local-first shape already forecloses most "AWS forks it"
-> scenarios, and (c) the "your data never leaves your machine" story
-> is more credible under an OSI-approved permissive license.
+> **Why AGPL now:** a competitor war-game made the hosted-clone threat concrete.
+> Under MIT a funded rival can fork the whole codebase, run a *proprietary*
+> hosted version, and never share changes back ("free R&D for competitors").
+> AGPL closes exactly that path — a modified version offered over a network must
+> publish its source — so no one can build a closed hosted moat on Ariadne's
+> code, while it stays fully open source for self-hosters and contributors.
 >
-> The §1 analysis below is preserved as the alternative reasoning —
-> we may revisit if a real hosted-clone competitor appears, at which
-> point a v2.0 relicensing decision (only-feasible-because contributors
-> sign DCO, not a CLA) becomes available. AGPL → MIT was one-way easy;
-> MIT → AGPL is one-way hard, so this is a real bet, not a hedge.
+> **Tradeoff accepted:** AGPL adoption is lower in some enterprise/community
+> circles than MIT. Mitigations: contributors sign DCO (no CLA friction), the
+> name "Ariadne" is protected separately by trademark, and a commercial dual
+> license can be offered later for parties who can't take AGPL. Note the
+> asymmetry — already-distributed MIT copies stay MIT-forkable forever, so the
+> earlier the switch, the wider the protected surface.
 
 ---
 

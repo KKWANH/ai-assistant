@@ -14,7 +14,7 @@ model. [See what Ariadne is →](docs/PRODUCT.md)
 
 <img src="docs/diagrams/hero.svg" alt="Local files become evidence-backed work" width="520">
 
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![node ≥22](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](docs/INSTALL.md)
 [![retrieval Hit@6 76.5%](https://img.shields.io/badge/retrieval%20Hit%406-76.5%25-success.svg)](docs/RAG_HARNESS.md)
 
@@ -232,5 +232,7 @@ the whole product, in one image.
 
 ## License
 
-[MIT](LICENSE). See [`docs/PRODUCT_STRATEGY.md`](docs/PRODUCT_STRATEGY.md)
+[AGPL-3.0-or-later](LICENSE) — a self-hosted modified version offered over a
+network must publish its source, which blocks proprietary hosted forks while
+keeping Ariadne fully open. See [`docs/PRODUCT_STRATEGY.md`](docs/PRODUCT_STRATEGY.md)
 §1 for the reasoning + alternatives considered.

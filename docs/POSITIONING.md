@@ -263,8 +263,9 @@ downstream decision.
    "supporter tier" with hosted backups / template marketplace /
    priority models is also viable. Defer until the desktop app ships.
 
-2. **Open-source license**. AGPL would prevent SaaS clones; MIT
-   maximises adoption. Lean MIT for v0.1, revisit if a clone emerges.
+2. **Open-source license**. AGPL prevents proprietary hosted forks; MIT
+   maximises adoption. **Decided: AGPL-3.0-or-later** (see LICENSE) — the
+   hosted-clone risk outweighs the adoption delta for a local-first product.
 
 3. **Brand split** if the desktop app gets traction — does
    "Ariadne Desktop" become the primary product and the web build

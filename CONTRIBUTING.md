@@ -88,8 +88,9 @@ we'll respond inside 72 hours. See [`SECURITY.md`](SECURITY.md) for scope.
 
 ## License
 
-By contributing, you agree your contribution is licensed under the same MIT
-license that covers the rest of the repository.
+By contributing, you agree your contribution is licensed under the same GNU
+Affero General Public License v3.0-or-later (AGPL-3.0) that covers the rest of
+the repository.
 
 ---
 

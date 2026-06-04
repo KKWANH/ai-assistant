@@ -1,9 +1,8 @@
 # Launch Plan — what to do, week by week
 
 > **⚠️ Execution playbook, not a definition doc. For what the product
-> is, read [`PRODUCT.md`](PRODUCT.md).** Stale spot: Week 1 still says
-> ship an AGPL-3.0 LICENSE — the repo ships **MIT** (PRODUCT.md §6).
-> Treat license steps here as superseded.
+> is, read [`PRODUCT.md`](PRODUCT.md).** The repo ships **AGPL-3.0-or-later**
+> (PRODUCT.md §6) — the Week 1 "ship an AGPL-3.0 LICENSE" step is now correct.
 
 A concrete launch sequence for taking Ariadne from "running on my Mac
 mini" to "people on the internet are using it." Picks up where
