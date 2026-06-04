@@ -20,7 +20,7 @@
 
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import { dbGetWorkspace } from "../db/repo.js";
+import { requireWorkspace } from "./workspaceGuard.js";
 import { getMarkitdownStatus } from "../services/markitdown.js";
 import {
   getOrExtractMarkdown,
@@ -85,8 +85,8 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       if (!workspaceId || !subPath) {
         return reply.status(400).send({ error: "workspaceId and path required" });
       }
-      const ws = dbGetWorkspace(workspaceId);
-      if (!ws) return reply.status(404).send({ error: "Workspace not found" });
+      const ws = await requireWorkspace(workspaceId, req, reply, "read");
+      if (!ws) return;
 
       let absPath: string;
       try {
@@ -143,8 +143,8 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       if (!workspaceId || !subPath) {
         return reply.status(400).send({ error: "workspaceId and path required" });
       }
-      const ws = dbGetWorkspace(workspaceId);
-      if (!ws) return reply.status(404).send({ error: "Workspace not found" });
+      const ws = await requireWorkspace(workspaceId, req, reply, "read");
+      if (!ws) return;
       let absPath: string;
       try {
         absPath = safeJoinWorkspace(ws.rootPath, subPath);
@@ -168,8 +168,8 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
     }
     const page = Math.max(1, Number(req.query.page) || 1);
     const scale = Math.min(4, Math.max(1, Number(req.query.scale) || 2));
-    const ws = dbGetWorkspace(workspaceId);
-    if (!ws) return reply.status(404).send({ error: "Workspace not found" });
+    const ws = await requireWorkspace(workspaceId, req, reply, "read");
+    if (!ws) return;
 
     let absPath: string;
     try {

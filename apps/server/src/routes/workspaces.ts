@@ -27,7 +27,7 @@ import * as codeStarter from "../surface/codeStarter.js";
 import * as decisionsStarter from "../surface/decisionsStarter.js";
 import * as papersStarter from "../surface/papersStarter.js";
 import logger from "../logger.js";
-import { canViewWorkspace, requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+import { canViewWorkspace, requireWorkspace, rejectRemoteAccess, rejectGuest } from "./workspaceGuard.js";
 
 /**
  * Sample files + custom surface scaffolded for each non-blank workspace
@@ -126,6 +126,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/workspaces
   app.post("/workspaces", async (req, reply) => {
+    if (await rejectGuest(req, reply)) return;
     const parsed = CreateWorkspaceSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { DirEntry, DirListing } from "@ariadne/shared";
+import { rejectRemoteAccess, rejectGuest } from "./workspaceGuard.js";
 
 /**
  * Filesystem browsing for the workspace folder picker.
@@ -14,6 +15,8 @@ import type { DirEntry, DirListing } from "@ariadne/shared";
 export async function fsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/fs/list?path=  — list a directory (defaults to the home dir)
   app.get<{ Querystring: { path?: string } }>("/fs/list", async (req, reply) => {
+    if (await rejectRemoteAccess("The folder picker only runs on the machine hosting Ariadne.", req, reply)) return;
+    if (await rejectGuest(req, reply)) return;
     const raw = req.query.path?.trim();
     const target = raw && raw !== "" ? path.resolve(raw) : os.homedir();
 
@@ -67,6 +70,8 @@ export async function fsRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { parent?: string; name?: string } }>(
     "/fs/mkdir",
     async (req, reply) => {
+      if (await rejectRemoteAccess("The folder picker only runs on the machine hosting Ariadne.", req, reply)) return;
+      if (await rejectGuest(req, reply)) return;
       const parent = req.body?.parent?.trim();
       const name = req.body?.name?.trim();
       if (!parent || !name || /[/\\]/.test(name)) {

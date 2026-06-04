@@ -53,6 +53,9 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string }; Body: { key?: string } }>(
     "/providers/:id/key",
     async (req, reply) => {
+      if (req.account.role !== "admin") {
+        return reply.status(403).send({ error: "Forbidden", detail: "Admin only — provider keys are a global setting." });
+      }
       const id = req.params.id as ProviderId;
       if (!PROVIDERS.includes(id)) return reply.status(404).send({ error: "Unknown provider" });
       if (!PROVIDER_REGISTRY[id].envKey) {
@@ -68,6 +71,9 @@ export async function providerRoutes(app: FastifyInstance): Promise<void> {
 
   // DELETE /api/providers/:id/key — clear a saved key (revert to env var).
   app.delete<{ Params: { id: string } }>("/providers/:id/key", async (req, reply) => {
+    if (req.account.role !== "admin") {
+      return reply.status(403).send({ error: "Forbidden", detail: "Admin only — provider keys are a global setting." });
+    }
     const id = req.params.id as ProviderId;
     if (!PROVIDERS.includes(id)) return reply.status(404).send({ error: "Unknown provider" });
     dbSetSetting(`providerKey:${id}`, "");
