@@ -471,6 +471,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string }; Body: unknown }>("/chats/:id", async (req, reply) => {
     const existing = dbGetChat(req.params.id);
     if (!existing) return reply.status(404).send({ error: "Chat not found" });
+    if (!isOwnerOrAdmin(existing.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
 
     const parsed = UpdateChatSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -491,6 +494,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>("/chats/:id", async (req, reply) => {
     const existing = dbGetChat(req.params.id);
     if (!existing) return reply.status(404).send({ error: "Chat not found" });
+    if (!isOwnerOrAdmin(existing.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     dbDeleteChat(req.params.id);
     return reply.send({ ok: true });
   });
@@ -515,6 +521,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const chat = dbGetChat(req.params.id);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });
+      if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
 
       const parsed = PostMessageSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -907,6 +916,11 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/chats/:id/stop — abort an in-progress generation
   // -------------------------------------------------------------------------
   app.post<{ Params: { id: string } }>("/chats/:id/stop", async (req, reply) => {
+    const chat = dbGetChat(req.params.id);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     abortGeneration(req.params.id);
     return reply.send({ ok: true });
   });
@@ -915,6 +929,11 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/chats/:id/active — status of an in-progress generation, if any
   // -------------------------------------------------------------------------
   app.get<{ Params: { id: string } }>("/chats/:id/active", async (req, reply) => {
+    const chat = dbGetChat(req.params.id);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     return reply.send({ active: getGenerationStatus(req.params.id) });
   });
 

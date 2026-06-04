@@ -57,6 +57,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/runs/:id/context", async (req, reply) => {
     const run = dbGetRun(req.params.id);
     if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
 
     const snapshot = dbGetLatestSnapshot(run.workspaceId);
     const contextPick = getContextPick(run, snapshot);
@@ -67,6 +70,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>("/runs/:id/context", async (req, reply) => {
     const run = dbGetRun(req.params.id);
     if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
 
     const parsed = ConfirmContextSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -86,6 +92,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/runs/:id/brief", async (req, reply) => {
     const run = dbGetRun(req.params.id);
     if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     if (!run.artifacts.brief) {
       return reply.status(404).send({ error: "Brief not yet available" });
     }
@@ -105,6 +114,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/runs/:id/evidence", async (req, reply) => {
     const run = dbGetRun(req.params.id);
     if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
 
     const pack = dbGetEvidencePack(run.id);
     return reply.send(pack);
@@ -114,6 +126,9 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/runs/:id/diff", async (req, reply) => {
     const run = dbGetRun(req.params.id);
     if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
     if (!run.artifacts.diff) {
       return reply.status(404).send({
         error: "Diff not available",
