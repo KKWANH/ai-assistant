@@ -423,6 +423,17 @@ export function AppShell({ children }: AppShellProps) {
       section: t("commandMenu.sectionApp"),
       onSelect: () => navigate("/compare"),
     },
+    {
+      id: "search-content",
+      label: t("commandMenu.searchContent"),
+      description: t("commandMenu.searchContentDesc"),
+      icon: <Search className="h-4 w-4" />,
+      section: t("commandMenu.sectionApp"),
+      onSelect: () => {
+        setSidebarSection("search");
+        navigate("/search");
+      },
+    },
     ...(workspaces?.map((ws) => ({
       id: `ws-${ws.id}`,
       label: ws.name,
@@ -523,15 +534,13 @@ export function AppShell({ children }: AppShellProps) {
               ⌘K
             </kbd>
           )}
-          {/* Search */}
+          {/* Search — opens the same ⌘K command palette (one unified search,
+              mouse or keyboard). Content search lives inside it as a command. */}
           <IconButton
             label={t("nav.search")}
             description={t("nav.search.desc")}
             size="sm"
-            onClick={() => {
-              setSidebarSection("search");
-              navigate("/search");
-            }}
+            onClick={() => setCommandMenuOpen(true)}
           >
             <Search className="h-3.5 w-3.5" />
           </IconButton>

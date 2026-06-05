@@ -94,6 +94,8 @@ const en = {
   "commandMenu.tutorialDesc": "Open the full Ariadne tutorial",
   "commandMenu.compare": "Compare models",
   "commandMenu.compareDesc": "Ask one prompt, see answers from several models",
+  "commandMenu.searchContent": "Search file contents",
+  "commandMenu.searchContentDesc": "Search inside your workspace files",
   "compare.title": "Compare models",
   "compare.subtitle": "Ask one question and see how different models answer — local and cloud, side by side.",
   "compare.promptPlaceholder": "Ask anything…",

@@ -87,6 +87,8 @@ const ko: Record<TranslationKey, string> = {
   "commandMenu.tutorialDesc": "Ariadne 전체 튜토리얼 열기",
   "commandMenu.compare": "모델 비교",
   "commandMenu.compareDesc": "한 프롬프트로 여러 모델의 답을 비교",
+  "commandMenu.searchContent": "파일 내용 검색",
+  "commandMenu.searchContentDesc": "워크스페이스 파일 안을 검색",
   "compare.title": "모델 비교",
   "compare.subtitle": "한 질문을 던지고 여러 모델의 답을 나란히 비교하세요 — 로컬과 클라우드를 한자리에서.",
   "compare.promptPlaceholder": "무엇이든 물어보세요…",

@@ -33,7 +33,7 @@ import {
 import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
 import { Tooltip } from "../../components/ui/Tooltip";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { Select } from "../../components/ui/Select";
 import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe, useSkills } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
 import { modelInfo, modelPrice } from "../../lib/modelInfo";
@@ -987,8 +987,8 @@ export function ChatComposer({
               option, not a hidden feature. */}
           <Tooltip content={t(isSimple ? "chat.composer.replyModeTip.simple" : "chat.composer.replyModeTip")} rich className="shrink-0">
             <span>
-              <SegmentedControl<ReplyMode>
-                ariaLabel={t("chat.composer.replyModeLabel")}
+              <Select
+                aria-label={t("chat.composer.replyModeLabel")}
                 options={[
                   { value: "instant", label: t("chat.composer.replyMode.instant") },
                   { value: "auto", label: t("chat.composer.replyMode.auto") },
@@ -996,7 +996,7 @@ export function ChatComposer({
                   { value: "deep", label: t("chat.composer.replyMode.deep") },
                 ]}
                 value={replyMode}
-                onChange={setReplyMode}
+                onChange={(e) => setReplyMode(e.target.value as ReplyMode)}
                 disabled={disabled}
               />
             </span>
