@@ -273,14 +273,25 @@ export async function retrieveWithMeta(
     return retrieveByHybridMeta(options.workspaceId, query, topK);
   }
 
-  // ── Embedding path — used when (a) the strategy is "auto" or
-  //    "semantic-only" AND (b) a workspaceId is provided AND (c) an
-  //    index actually exists. On "semantic-only" we return whatever
-  //    the semantic path produces (including empty) WITHOUT falling
-  //    through to keyword — that's the point of the comparison flag.
-  const allowSemantic = (force === "auto" || force === "semantic-only") && !!options.workspaceId;
-  if (allowSemantic) {
-    const semantic = await retrieveBySimilarityMeta(options.workspaceId!, query, topK);
+  // ── auto → hybrid (cycle-2 P1). The default/chat/action path fuses BM25 +
+  //    vector + symbol via RRF whenever an embedding index exists. Hybrid
+  //    measured strictly better than dense-only on the eval harness
+  //    (Hit@1 76.5% vs 52.9%, MRR 0.877 vs 0.697), but it used to be reachable
+  //    only via an explicit forceStrategy — so the live chat path silently ran
+  //    dense-only. With no index to fuse over, hybrid yields nothing and we
+  //    fall through to keyword+symbol below (unchanged behaviour for un-indexed
+  //    or provider-mismatched workspaces).
+  if (force === "auto" && options.workspaceId) {
+    const hybrid = await retrieveByHybridMeta(options.workspaceId, query, topK);
+    if (hybrid.chunks.length > 0) return hybrid;
+    if (hybrid.warnings.length > 0) warnings.push(...hybrid.warnings);
+  }
+
+  // ── semantic-only → pure vector path (an eval-comparison strategy). Returns
+  //    whatever the semantic path produces, including an honest empty result,
+  //    WITHOUT falling through to keyword — that's the point of the flag.
+  if (force === "semantic-only" && options.workspaceId) {
+    const semantic = await retrieveBySimilarityMeta(options.workspaceId, query, topK);
     if (semantic.usable) {
       return {
         chunks: semantic.chunks,
@@ -291,21 +302,14 @@ export async function retrieveWithMeta(
         warnings: semantic.warnings,
       };
     }
-    if (force === "semantic-only") {
-      // Honest empty result — caller asked for pure semantic and the
-      // index wasn't usable. No keyword fallback.
-      return {
-        chunks: [],
-        strategy: "none",
-        hasEmbeddingIndex: false,
-        embeddingProvider: semantic.provider,
-        candidateCount: 0,
-        warnings: ["forceStrategy=semantic-only and no usable index", ...semantic.warnings],
-      };
-    }
-    // Carry forward semantic warnings (out-of-date provider, etc.) into
-    // the keyword fallback so the UI / harness sees the full story.
-    if (semantic.warnings.length > 0) warnings.push(...semantic.warnings);
+    return {
+      chunks: [],
+      strategy: "none",
+      hasEmbeddingIndex: false,
+      embeddingProvider: semantic.provider,
+      candidateCount: 0,
+      warnings: ["forceStrategy=semantic-only and no usable index", ...semantic.warnings],
+    };
   }
 
   // ── keyword+symbol honesty: caller asked for the symbol boost but

@@ -41,13 +41,18 @@ import { evaluateCase, aggregate, type CaseMetrics, type AggregateMetrics } from
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-type StrategyId = "keyword-only" | "keyword+symbol" | "semantic-only" | "hybrid";
+type StrategyId = "auto" | "keyword-only" | "keyword+symbol" | "semantic-only" | "hybrid";
 
 const DEFAULT_STRATEGIES: StrategyId[] = [
   "keyword-only",
   "keyword+symbol",
   "semantic-only",
   "hybrid",
+  // The resolved default — what chat / actions actually run. Post cycle-2 P1
+  // this should track "hybrid" when an index exists (it falls back to
+  // keyword+symbol otherwise), so it doubles as a regression guard that the
+  // live path keeps using the strongest available strategy.
+  "auto",
 ];
 
 interface CliArgs {
