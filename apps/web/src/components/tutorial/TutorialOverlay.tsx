@@ -6,7 +6,7 @@
  * bright accent ring + glow that cuts through a dimmed backdrop, and the
  * step card is anchored next to it with a pointer.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
@@ -31,7 +31,20 @@ export function TutorialOverlay() {
   const { t } = useT();
   const navigate = useNavigate();
 
-  const TOUR_STEPS = getTourSteps(t);
+  // Keep only steps whose spotlight target actually exists right now, so the
+  // tour adapts to the mode/layout instead of pointing at nothing — easy mode
+  // hides the command/help/workspaces targets, so those steps drop out and the
+  // tour shows welcome → new-chat → composer → done. Steps with no target always
+  // stay. Re-evaluated whenever the tour (re)opens.
+  const allSteps = getTourSteps(t);
+  const TOUR_STEPS = useMemo(
+    () =>
+      allSteps.filter(
+        (s) => !s.target || document.querySelector(`[data-tour="${s.target}"]`) !== null,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tutorialOpen, t],
+  );
 
   // Auto-launch once, on the very first visit. Skipped on small screens —
   // the tour spotlights desktop sidebar/top-bar targets.

@@ -711,7 +711,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         // bell notification when one finishes. Plain instant/standard replies
         // aren't alerted (they're watched live as they stream).
         if (agentTrace && agentTrace.steps.length > 0) {
-          createAlert(req.account.id, "chat_completed", "Agent task complete", null, `/chat/${chat.id}`);
+          createAlert(req.account.id, "chat_completed", chat.title?.trim() || "New chat", "Agent task complete", `/chat/${chat.id}`);
         }
 
         // Fold any durable facts from this conversation into the user's saved
