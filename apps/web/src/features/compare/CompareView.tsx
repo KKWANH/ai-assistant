@@ -2,6 +2,9 @@
  * Compare models — one prompt, N models, side-by-side answers. The cross-vendor
  * "second opinion" single-vendor chat UIs can't offer: put a local Ollama model
  * next to Claude next to GPT on the same question and judge them together.
+ *
+ * Built from the shared design-system primitives (Button/Textarea/Card) + tokens
+ * so it stays visually consistent with the rest of the app by construction.
  */
 import { useState } from "react";
 import { Columns2 } from "lucide-react";
@@ -9,6 +12,9 @@ import { useT } from "../../lib/i18n";
 import { useProviderStatus } from "../../lib/queries";
 import { compareModels, type CompareResult } from "../../lib/api";
 import { Spinner } from "../../components/ui/Spinner";
+import { Button } from "../../components/ui/Button";
+import { Textarea } from "../../components/ui/Textarea";
+import { Card } from "../../components/ui/Card";
 
 interface Picked {
   provider: string;
@@ -53,8 +59,7 @@ export function CompareView() {
     }
   };
 
-  // While loading, show placeholder cards for the picked models so the grid
-  // doesn't jump when answers arrive.
+  // Placeholder cards while loading so the grid doesn't jump when answers land.
   const cards: CompareResult[] =
     results ?? picked.map((p) => ({ provider: p.provider, model: p.model, text: "" }));
   const gridCols = picked.length >= 3 ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-2";
@@ -68,12 +73,11 @@ export function CompareView() {
         </header>
         <p className="text-sm text-muted-foreground -mt-3">{t("compare.subtitle")}</p>
 
-        <textarea
+        <Textarea
+          rows={3}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={t("compare.promptPlaceholder")}
-          rows={3}
-          className="w-full px-3 py-2 rounded-lg border border-border bg-surface-2 text-sm text-foreground focus:outline-none focus:border-accent resize-y"
         />
 
         <div className="flex flex-col gap-2">
@@ -86,50 +90,38 @@ export function CompareView() {
             configured.map((p) => (
               <div key={p.id} className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-muted-foreground w-28 shrink-0">{p.label}</span>
-                {p.models.map((m) => {
-                  const on = picked.some((x) => keyOf(x) === `${p.id}:${m}`);
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => toggle(p.id, m)}
-                      className={`px-2 py-1 rounded-md text-2xs border transition-colors ${
-                        on
-                          ? "border-accent bg-accent/10 text-accent"
-                          : "border-border text-foreground hover:border-accent/50"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
+                {p.models.map((m) => (
+                  <Button
+                    key={m}
+                    size="xs"
+                    variant={picked.some((x) => keyOf(x) === `${p.id}:${m}`) ? "primary" : "outline"}
+                    onClick={() => toggle(p.id, m)}
+                  >
+                    {m}
+                  </Button>
+                ))}
               </div>
             ))
           )}
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void run()}
-            disabled={!canRun}
-            className="px-4 py-2 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {loading ? t("compare.running") : t("compare.run")}
-          </button>
+          <Button variant="primary" loading={loading} disabled={!canRun} onClick={() => void run()}>
+            {t("compare.run")}
+          </Button>
           {picked.length < 2 && (
             <span className="text-2xs text-muted-foreground">{t("compare.needTwo")}</span>
           )}
         </div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         {(loading || results) && (
           <div className={`grid grid-cols-1 gap-4 ${gridCols}`}>
             {cards.map((r, i) => (
-              <div
+              <Card
                 key={`${r.provider}:${r.model}:${i.toString()}`}
-                className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2 min-h-[130px]"
+                className="flex flex-col gap-2 min-h-[130px]"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground truncate">{r.model}</span>
@@ -140,13 +132,13 @@ export function CompareView() {
                     <Spinner size="sm" label={t("compare.running")} />
                   </div>
                 ) : r.error ? (
-                  <p className="text-xs text-red-500">{r.error}</p>
+                  <p className="text-xs text-destructive">{r.error}</p>
                 ) : (
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                     {r.text}
                   </p>
                 )}
-              </div>
+              </Card>
             ))}
           </div>
         )}
