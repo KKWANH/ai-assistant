@@ -41,6 +41,7 @@ import {
   Terminal,
   MessageSquare,
   MessageSquarePlus,
+  Columns2,
   Trash2,
   MoreHorizontal,
   Pencil,
@@ -413,6 +414,14 @@ export function AppShell({ children }: AppShellProps) {
       icon: <BookOpen className="h-4 w-4" />,
       section: t("commandMenu.sectionApp"),
       onSelect: () => navigate("/tutorial"),
+    },
+    {
+      id: "compare",
+      label: t("commandMenu.compare"),
+      description: t("commandMenu.compareDesc"),
+      icon: <Columns2 className="h-4 w-4" />,
+      section: t("commandMenu.sectionApp"),
+      onSelect: () => navigate("/compare"),
     },
     ...(workspaces?.map((ws) => ({
       id: `ws-${ws.id}`,

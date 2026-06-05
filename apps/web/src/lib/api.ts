@@ -170,6 +170,19 @@ import type { ProviderStatus } from "@ariadne/shared";
 export const getProviderStatus = () =>
   request<ProviderStatus[]>("GET", "/providers/status");
 
+export interface CompareResult {
+  provider: string;
+  model: string;
+  text: string;
+  usage?: { inputTokens: number; outputTokens: number };
+  error?: string;
+}
+/** Run one prompt against N models concurrently (cross-vendor compare). */
+export const compareModels = (
+  prompt: string,
+  models: { provider: string; model: string }[],
+) => request<{ results: CompareResult[] }>("POST", "/compare", { prompt, models });
+
 /** Save an API key for a provider (stored server-side; overrides the env var).
  *  An empty key clears it. Keys are never read back — only `configured`. */
 export const setProviderKey = (id: string, key: string) =>

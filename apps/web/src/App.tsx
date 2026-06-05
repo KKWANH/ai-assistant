@@ -117,6 +117,11 @@ const TutorialPage = lazyWithReload(() =>
     default: m.TutorialPage,
   }))
 );
+const CompareView = lazyWithReload(() =>
+  import("./features/compare/CompareView").then((m) => ({
+    default: m.CompareView,
+  }))
+);
 
 /** Centered spinner — used as the Suspense fallback while a route chunk loads. */
 function RouteFallback() {
@@ -171,6 +176,7 @@ function AppContent() {
             {/* Utility */}
             <Route path="/settings" element={<SettingsView />} />
             <Route path="/search" element={<SearchView />} />
+            <Route path="/compare" element={<CompareView />} />
             <Route path="/reports" element={<ReportsQueueView />} />
             <Route path="/tutorial" element={<TutorialPage />} />
 
