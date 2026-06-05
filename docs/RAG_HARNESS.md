@@ -599,3 +599,75 @@ with receipts. The harness already produced one measurable algorithm
 win this session: real hybrid retrieval lifted Hit@1 from 61.5 % to
 69.2 % with lower p95 than semantic-only. Without the harness that
 claim would be a feeling; with it, it's a row in a table.
+
+---
+
+## BATCH-NOTES
+
+### BATCH-4 — 2026-06-06 — commits `cb3f517`, `e76917f`, `9be73e8`
+
+Driven by a 106-agent deep-research pass on modern retrieval/RAG (27
+primary sources, 21 adversarially-verified claims, 4 refuted). The research's
+ranked wins for a local-first assistant were: Hybrid+Rerank (RRF-60), then
+Contextual/Late chunking, then AST chunking for code; with HyDE flagged as
+net-negative on a small local generator, and recall@k (not nDCG/MRR) as the
+right gate. Each change below was gated on `eval:strategy --use-db`.
+
+**Shipped:**
+
+- **P1 — wire hybrid into the live path (`cb3f517`).** The hybrid retriever
+  (BM25 + vector + symbol via RRF k=60) already existed but was reachable only
+  via an explicit `forceStrategy`; the chat/action/default (`"auto"`) path ran
+  dense-only or naive-keyword. `retrieveWithMeta`'s `auto` branch now tries
+  hybrid first (falls back to keyword+symbol when there's no index). Added an
+  `"auto"` row to the strategy harness as a live-path regression guard.
+  Measured (34-case set): the live path went **semantic 52.9 % → hybrid 76.5 %
+  Hit@1, MRR 0.697 → 0.877, Hit@3 85.3 % → 100 %**, 8 empty-result cases → 0.
+
+- **P2 — structural contextual chunking (`e76917f`).** A no-LLM approximation
+  of Anthropic's Contextual Retrieval: `chunkText` prepends a `path › nearest-
+  heading` header to each chunk before embedding + BM25 indexing, so document
+  identity/section survive into the index (the full LLM-per-chunk recipe was
+  the local-budget concern the research flagged). Live path **76.5 % → 82.4 %
+  Hit@1, MRR 0.877 → 0.897**; keyword rows unchanged by design.
+
+  Cumulative P1+P2 vs the pre-cycle dense-only baseline: **Hit@1 52.9 % →
+  82.4 % (+29.5pp), MRR 0.697 → 0.897.**
+
+**Tested and HELD (prove-before-ship):**
+
+- **P3 — cAST AST chunking for code.** Implemented split-then-merge AST
+  chunking (cf. arXiv:2506.15655) and built a discriminating fixture
+  (`pricing.ts`, `applyLoyaltyDiscount` fragmented by a blank line) + case
+  `code-ast-coherence-001`. A controlled A/B (cAST on vs off) gave a clean,
+  non-obvious verdict: cAST lifts **semantic-only +0.17 RR (0.33→0.50)** but
+  leaves **hybrid/auto unchanged (0.50→0.50)** — the hybrid path's BM25 +
+  symbol fusion already compensates for the lost embedding context that AST
+  boundaries fix. So cAST is real but **redundant given P1**; it was reverted
+  to avoid shipping an AST-chunking code path the live retriever doesn't
+  benefit from. The fixture + case stay as permanent coverage (`9be73e8`).
+
+**Deferred (research-flagged, not pursued this batch):**
+
+- **Reranking** (cross-encoder over the RRF pool) — the research's joint #1
+  win, but no verified on-device latency/lift numbers survived; needs a
+  benchmark of a small multilingual reranker (e.g. `bge-reranker-v2-m3`) on
+  this hardware before committing.
+- **Late Chunking** — the best no-LLM lost-context fix, validated *with*
+  nomic-embed — but it needs token-level embeddings, and Ollama's
+  `/api/embed` returns a single pooled vector, so it's likely blocked on the
+  current embedding runtime (verify before attempting).
+- **HyDE / query transforms** — explicitly NOT pursued: net-negative on a
+  small local generator per the research (benefit scales with generator size;
+  +25–40 % latency; hallucination risk). Reconsider only for the live-web
+  source driven by a cloud model.
+
+**Final strategy table (35 cases, with the new harder fixture):**
+
+```
+strategy        Hit@1   Hit@3   Hit@6    MRR
+keyword+symbol  60.0%   77.1%   77.1%   0.676
+semantic-only   60.0%   88.6%   97.1%   0.733
+hybrid          80.0%   97.1%  100.0%   0.882
+auto (live)     80.0%   97.1%  100.0%   0.882   ← tracks hybrid (P1 guard)
+```
