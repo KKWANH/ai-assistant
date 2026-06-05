@@ -120,6 +120,25 @@ Ariadne auto-detects whatever models are installed in Ollama. No `.env`
 changes needed. Start Ariadne and the chat composer's model picker
 will list them.
 
+> **Tune Ollama for Ariadne (important).** Ollama defaults its context window to
+> ~4096 tokens (VRAM-based) — but Ariadne builds rich prompts (workspace memory,
+> file excerpts, full web pages, long history) that easily exceed that, so the
+> tail gets **silently truncated** and the local model looks "dumber" than it is.
+> Raise the window and keep the model warm — these are Ollama **server** env vars
+> (the OpenAI-compatible `/v1` endpoint ignores per-request `num_ctx`/`keep_alive`):
+>
+> ```bash
+> export OLLAMA_CONTEXT_LENGTH=16384   # stop silent truncation (fine on 16 GB+ RAM)
+> export OLLAMA_KEEP_ALIVE=-1          # keep the model resident → no reload lag
+> export OLLAMA_FLASH_ATTENTION=1      # keeps the larger window cheap on memory
+> export OLLAMA_KV_CACHE_TYPE=q8_0     #  ”
+> # then (re)start `ollama serve` so it picks these up. On a macOS Homebrew
+> # service, add them to EnvironmentVariables in
+> # ~/Library/LaunchAgents/homebrew.mxcl.ollama.plist and reload the agent.
+> ```
+> Verify with `ollama ps`: the **CONTEXT** column should read `16384` and **UNTIL**
+> `Forever`.
+
 ### Option B: Hosted provider (Anthropic / OpenAI / Gemini / Moonshot / Kimi / vLLM)
 
 Edit `.env` (copy from `.env.example` if you haven't):
