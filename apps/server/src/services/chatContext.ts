@@ -406,9 +406,16 @@ export async function buildSummarizedHistory(
   try {
     const res = await provider.complete({
       system:
-        "You compress chat history. Summarize the earlier conversation into a tight " +
-        "digest of 5–10 bullet points that preserves decisions, facts, names, numbers, " +
-        "file paths and unresolved threads. Reply in the conversation's language. No preamble.",
+        "You compress earlier chat history into a structured digest that a later AI turn can " +
+        "rely on without seeing the original messages. Preserve meaning over brevity for " +
+        "decisions and open threads — those are the first context lost in compression. Output " +
+        "these labelled sections as terse bullets, omitting a section only when it is genuinely " +
+        "empty:\n" +
+        "## Context — what the conversation is about (1–2 bullets).\n" +
+        "## Decisions — every choice, conclusion, or answer already settled.\n" +
+        "## Open threads — unresolved questions, pending tasks, known bugs, next steps.\n" +
+        "## Facts — names, numbers, dates, file paths, IDs, stated preferences.\n" +
+        "Reply in the conversation's language. No preamble, no closing remarks.",
       prompt: olderText,
       signal,
     });

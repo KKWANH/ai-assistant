@@ -22,6 +22,20 @@ import logger from "../logger.js";
 
 const MAX_SUBTASKS = 4;
 
+// Each sub-agent returns its full synthesised answer, but the synthesiser only
+// needs the substance of each. Feeding several full answers (up to ~16k chars
+// apiece) bloats its context and invites lost-in-the-middle recall loss
+// (arXiv:2307.03172), so each finding is capped to a distilled ~1.5k-token
+// slice — the sub-agent isolation pattern (Anthropic: sub-agents hand back
+// 1–2k-token summaries, not raw context).
+const FINDING_CHAR_BUDGET = 6_000;
+
+function distillFinding(content: string): string {
+  const t = content.trim();
+  if (t.length <= FINDING_CHAR_BUDGET) return t;
+  return t.slice(0, FINDING_CHAR_BUDGET).trimEnd() + "\n\n…(truncated to keep the synthesis focused)";
+}
+
 export async function runDeepAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   const { userMessage, provider, emit, signal } = opts;
 
@@ -82,7 +96,7 @@ export async function runDeepAgent(opts: RunAgentOptions): Promise<RunAgentResul
   emit({ type: "status", text: "Synthesising the combined answer…" });
   const findings = subResults
     .filter((r) => r.content.trim())
-    .map((r, i) => `### Finding ${(i + 1).toString()} — ${r.task}\n${r.content}`)
+    .map((r, i) => `### Finding ${(i + 1).toString()} — ${r.task}\n${distillFinding(r.content)}`)
     .join("\n\n");
 
   let finalContent = "";
