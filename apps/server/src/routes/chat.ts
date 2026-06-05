@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult } from "@ariadne/shared";
 import { CreateChatSchema, UpdateChatSchema, PostMessageSchema, PROVIDER_LABELS } from "@ariadne/shared";
-import type { PostAttachmentInput, ProviderId } from "@ariadne/shared";
+import type { PostAttachmentInput, ProviderId, ActionDef } from "@ariadne/shared";
 import {
   dbCreateChat,
   dbListChats,
@@ -37,14 +37,14 @@ import { getProvider } from "../providers/index.js";
 import { meteringProvider } from "../runs/engine.js";
 import { createAlert } from "../services/alerts.js";
 import { accountOverLimit } from "../services/limits.js";
-import { getActiveSettings, isProviderConfigured } from "../config.js";
+import { getActiveSettings, getTriageSettings, isProviderConfigured } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { runDeepAgent } from "../services/orchestrator.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
-import { decideWebSearch, decideAgentMode, detectActionIntent, generateChatTitle } from "../services/triage.js";
+import { generateChatTitle, triage, type TriageResult } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
 import { isOwnerOrAdmin } from "./workspaceGuard.js";
 import {
@@ -259,9 +259,45 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     };
   }
 
-  // Resolve agent mode: explicit on/off keeps its value; "auto" runs a
-  // cheap classifier and only enters the loop for multi-step prompts.
-  // Legacy boolean callers (true/false) map to on/off.
+  // --- Tier-1 fused triage (fast tier) -------------------------------------
+  // ONE provider call on the fast/cheap triage model (e.g. Gemini Flash — see
+  // getTriageSettings) answers every pre-flight question the standard path
+  // needs (agent loop? web search? a title? a matching workspace action?)
+  // instead of 2–4 serial round-trips on the slow reasoning model. Web-search
+  // triage is only consumed on the direct-answer path, so we skip asking for it
+  // when the agent loop is already forced on (it runs its own searches).
+  const mayAnswerDirectly =
+    rawAgentMode !== "on" && rawAgentMode !== "deep" && rawAgentMode !== true;
+  let triageActions: ActionDef[] = [];
+  if (chat.workspaceId) {
+    const ws = dbGetWorkspace(chat.workspaceId);
+    if (ws) triageActions = loadActionDefs(ws.rootPath).actions;
+  }
+  const triageNeeds = {
+    agent: rawAgentMode === "auto" && hasContent,
+    webSearch: webSearchMode === "auto" && hasContent && mayAnswerDirectly,
+    title: shouldGenerateTitle && hasContent,
+    actions: triageActions,
+  };
+  let triagePromise: Promise<TriageResult | null> | null = null;
+  if (triageNeeds.agent || triageNeeds.webSearch || triageNeeds.title || triageNeeds.actions.length > 0) {
+    const triageSettings = getTriageSettings();
+    const triageModelName =
+      triageSettings.provider === "ollama"
+        ? await resolveOllamaModel(triageSettings.model)
+        : triageSettings.model;
+    const triageProvider = meteringProvider(
+      await getProvider({ provider: triageSettings.provider, model: triageModelName }),
+      assistantMsgId,
+      triageModelName,
+      accountId,
+    );
+    triagePromise = triage(triageProvider, userContent, triageNeeds, controller.signal).catch(() => null);
+  }
+
+  // Resolve agent mode: explicit on/off keeps its value; "auto" reads the triage
+  // verdict and only enters the loop for multi-step prompts. Legacy boolean
+  // callers (true/false) map to on/off.
   let agentMode: boolean;
   let deepMode = false;
   if (typeof rawAgentMode === "boolean") {
@@ -275,35 +311,29 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     agentMode = true;
   } else if (rawAgentMode === "auto" && hasContent) {
     emit({ type: "status", text: "Deciding whether to use the agent…" });
-    agentMode = await decideAgentMode(provider, userContent, controller.signal);
+    agentMode = (await triagePromise)?.agentMode ?? false;
   } else {
     agentMode = false;
   }
 
-  // First-turn title generation runs in parallel with the answer, resolved
-  // before we return so the caller can apply it to the chat row.
-  const chatTitlePromise: Promise<string> | null = shouldGenerateTitle && hasContent
-    ? generateChatTitle(provider, userContent, controller.signal).catch(() => "")
-    : null;
+  // First-turn title rides along on the same triage call; the caller applies it
+  // to the chat row after the answer streams (see StreamReplyResult.titlePromise).
+  const chatTitlePromise: Promise<string> | null =
+    triageNeeds.title && triagePromise ? triagePromise.then((t) => t?.title ?? "") : null;
 
   // Best-effort: surface a relevant workspace action as a chat suggestion.
-  if (chat.workspaceId) {
-    const ws = dbGetWorkspace(chat.workspaceId);
-    if (ws) {
-      const { actions } = loadActionDefs(ws.rootPath);
-      if (actions.length > 0) {
-        void detectActionIntent(provider, userContent, actions, controller.signal)
-          .then((s) => {
-            if (s) emit({
-              type: "intent_suggestion",
-              actionId: s.actionId,
-              actionName: s.actionName,
-              reason: s.reason,
-            });
-          })
-          .catch(() => { /* fail-open */ });
-      }
-    }
+  if (triageNeeds.actions.length > 0 && triagePromise) {
+    void triagePromise
+      .then((t) => {
+        if (t?.actionIntent)
+          emit({
+            type: "intent_suggestion",
+            actionId: t.actionIntent.actionId,
+            actionName: t.actionIntent.actionName,
+            reason: t.actionIntent.reason,
+          });
+      })
+      .catch(() => { /* fail-open */ });
   }
 
   // R2 — compact a long history so older turns are summarized into a digest
@@ -345,7 +375,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     let webSearchInput: boolean | Promise<boolean>;
     if (webMode === "auto" && hasContent) {
       emit({ type: "status", text: "Checking whether a web search helps…" });
-      webSearchInput = decideWebSearch(provider, userContent, controller.signal);
+      webSearchInput = (triagePromise ?? Promise.resolve(null)).then((t) => t?.webSearch ?? false);
     } else {
       webSearchInput = webMode === "on";
     }

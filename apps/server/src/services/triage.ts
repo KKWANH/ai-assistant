@@ -10,116 +10,150 @@ import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
 import type { ReportTriage, ReportType, ActionDef } from "@ariadne/shared";
 
-/**
- * Decide whether a chat message needs a live web search to answer well.
- * Used when the composer's web-search mode is "auto".
- *
- * Fails open to `false` — when in doubt, answer from the model directly
- * rather than producing an odd, citation-heavy reply to a simple message.
- */
-export async function decideWebSearch(
-  provider: AiProvider,
-  content: string,
-  signal: AbortSignal,
-): Promise<boolean> {
-  const trimmed = content.trim();
-  // Too short to be a real research question (greetings, "test", "ok").
-  if (trimmed.length < 8) return false;
-  try {
-    const { text } = await provider.complete({
-      system:
-        "You decide whether a user's message needs a live internet search to be answered well. " +
-        "Answer YES if it asks about current events, recent or time-sensitive data, prices, news, " +
-        "released-after-training facts, or specific real-world details that should be verified against " +
-        "up-to-date sources. Answer NO for greetings, tests, small talk, opinions, or any " +
-        "coding / writing / reasoning / general-knowledge task. Reply with exactly one word: YES or NO.",
-      prompt: trimmed.slice(0, 600),
-      signal,
-    });
-    return /\byes\b/i.test(text);
-  } catch {
-    return false;
-  }
+// ---------------------------------------------------------------------------
+// Fused pre-flight triage
+// ---------------------------------------------------------------------------
+
+/** Which pre-flight decisions the caller needs from a single triage call. */
+export interface TriageNeeds {
+  /** Decide whether the plan-execute agent loop is warranted (agent mode "auto"). */
+  agent: boolean;
+  /** Decide whether a live web search helps (web mode "auto", direct-answer path). */
+  webSearch: boolean;
+  /** Write a short title for a new chat (first message only). */
+  title: boolean;
+  /** Workspace actions to match the message against (empty = skip). */
+  actions: ActionDef[];
 }
 
-/**
- * Decide whether a chat message warrants the agent plan-and-execute loop.
- * Used when the composer's agent mode is "auto".
- *
- * Fails open to `false` — agent mode is slower than a plain stream, so we'd
- * rather miss a hard prompt than burn 10–30 s on a casual one. The bar is
- * deliberately high: only multi-step research / tool-chaining prompts pass.
- */
-export async function decideAgentMode(
-  provider: AiProvider,
-  content: string,
-  signal: AbortSignal,
-): Promise<boolean> {
-  const trimmed = content.trim();
-  // Single words, greetings, "ok" — never worth the agent's planning round.
-  if (trimmed.length < 20) return false;
-  try {
-    const { text } = await provider.complete({
-      system:
-        "You decide whether a user's message is worth running through a plan-and-execute " +
-        "agent loop (which decomposes the task into 2–5 steps, calls tools like web search " +
-        "or file read, and re-plans on failures). " +
-        "Answer YES only when the task plainly requires multi-step work or external lookups " +
-        "to do well — e.g. \"compare X and Y across these files\", \"research recent news on Z " +
-        "and summarise\", \"go through the holdings.csv and flag anomalies\". " +
-        "Answer NO for any task a single direct response handles well: questions, opinions, " +
-        "small talk, coding requests, writing requests, translation, general-knowledge " +
-        "lookups, anything where one well-chosen prompt is enough. Reply with exactly one " +
-        "word: YES or NO.",
-      prompt: trimmed.slice(0, 600),
-      signal,
-    });
-    return /\byes\b/i.test(text);
-  } catch {
-    return false;
-  }
+export interface TriageResult {
+  agentMode: boolean;
+  webSearch: boolean;
+  title: string;
+  actionIntent: { actionId: string; actionName: string; reason: string } | null;
 }
 
-/**
- * Detect whether the user's chat message expresses the intent of running one
- * of the workspace's actions. Returns the matched action (id, name, a short
- * reason) or null. Fails open — a hiccup never surfaces a wrong suggestion.
- */
-export async function detectActionIntent(
-  provider: AiProvider,
-  content: string,
+const TRIAGE_DEFAULTS: TriageResult = {
+  agentMode: false,
+  webSearch: false,
+  title: "",
+  actionIntent: null,
+};
+
+/** Tidy a title returned as a JSON string field (strip wrapping punctuation, cap length). */
+function cleanJsonTitle(v: unknown): string {
+  if (typeof v !== "string") return "";
+  const t = v.replace(/^["'`*#\s]+|["'`*\s.]+$/g, "").trim();
+  return t.length > 64 ? t.slice(0, 64).trim() : t;
+}
+
+/** Resolve a model-proposed actionId back to a real workspace action, or null. */
+function matchAction(
   actions: ActionDef[],
+  idRaw: unknown,
+  reasonRaw: unknown,
+): { actionId: string; actionName: string; reason: string } | null {
+  if (typeof idRaw !== "string" || idRaw.length === 0) return null;
+  const action = actions.find((a) => a.id === idRaw);
+  if (!action) return null;
+  return {
+    actionId: action.id,
+    actionName: action.name,
+    reason: typeof reasonRaw === "string" ? reasonRaw.trim().slice(0, 200) : "",
+  };
+}
+
+/** Lenient boolean parse — accepts a JSON true or a "true"/"yes" string. */
+const truthy = (v: unknown): boolean => v === true || /^(true|yes)$/i.test(String(v).trim());
+
+/**
+ * Fused pre-flight triage — ONE provider call that answers every "how should I
+ * handle this message?" question the standard chat path needs (agent loop? web
+ * search? a short title? a matching workspace action?) instead of 2–4 separate
+ * round-trips. Runs on the fast triage tier (see getTriageSettings) so these
+ * cheap classifications never sit on the slow reasoning model.
+ *
+ * Only the requested decisions are asked, and when none are needed the call is
+ * skipped entirely (returns defaults, no round-trip). Fails open to the cheap
+ * defaults so a triage hiccup never blocks or breaks a reply.
+ */
+export async function triage(
+  provider: AiProvider,
+  content: string,
+  needs: TriageNeeds,
   signal: AbortSignal,
-): Promise<{ actionId: string; actionName: string; reason: string } | null> {
+): Promise<TriageResult> {
   const trimmed = content.trim();
-  if (trimmed.length < 8 || actions.length === 0) return null;
-  try {
-    const list = actions
+  // Per-decision floors: skip questions too trivial to be worth asking.
+  const wantAgent = needs.agent && trimmed.length >= 20;
+  const wantWeb = needs.webSearch && trimmed.length >= 8;
+  const wantTitle = needs.title && trimmed.length >= 2;
+  const wantAction = needs.actions.length > 0 && trimmed.length >= 8;
+  if (!wantAgent && !wantWeb && !wantTitle && !wantAction) return { ...TRIAGE_DEFAULTS };
+
+  const questions: string[] = [];
+  const keys: string[] = [];
+  if (wantAgent) {
+    keys.push("agent");
+    questions.push(
+      '- "agent" (boolean): true ONLY when the task plainly requires multi-step work or external ' +
+        'lookups to do well — e.g. "compare X and Y across these files", "research recent news on Z ' +
+        'and summarise", "go through holdings.csv and flag anomalies". false for anything one direct ' +
+        "response handles well: questions, opinions, small talk, coding, writing, translation, " +
+        "general-knowledge lookups.",
+    );
+  }
+  if (wantWeb) {
+    keys.push("webSearch");
+    questions.push(
+      '- "webSearch" (boolean): true ONLY when answering needs a live internet search — current ' +
+        "events, recent or time-sensitive data, prices, news, or facts released after training. false " +
+        "for greetings, tests, small talk, opinions, or any coding / writing / reasoning / " +
+        "general-knowledge task.",
+    );
+  }
+  if (wantTitle) {
+    keys.push("title");
+    questions.push(
+      '- "title" (string): a very short 3–6 word title for a conversation that opens with this ' +
+        "message, in the same language as the message, with no quotes or surrounding punctuation.",
+    );
+  }
+  if (wantAction) {
+    keys.push("actionId", "actionReason");
+    const list = needs.actions
       .slice(0, 12)
-      .map((a) => `- ${a.id}: ${a.name}${a.description ? " — " + a.description : ""}`)
+      .map((a) => `    - ${a.id}: ${a.name}${a.description ? " — " + a.description : ""}`)
       .join("\n");
+    questions.push(
+      '- "actionId" (string or null): if the message clearly expresses the intent of running ONE of ' +
+        "the workspace actions below, return its id; otherwise null. Be conservative — only a strong, " +
+        'specific match. "actionReason" (string): a one-line reason, in the message\'s language, when ' +
+        "actionId is set. Actions:\n" + list,
+    );
+  }
+
+  try {
     const { text } = await provider.complete({
       system:
-        "You decide whether a user's chat message clearly expresses the intent of running ONE of " +
-        "the workspace's actions. If a single action is a good match, return its id and a one-line " +
-        "reason in the same language as the message. Otherwise return null. Be conservative — only " +
-        "match a strong, specific intent (e.g. \"summarise X\" → a summarise action). " +
-        'Reply with ONLY a JSON object: {"actionId":"...","reason":"..."} OR {"actionId":null}.',
-      prompt: "Actions:\n" + list + "\n\nMessage:\n" + trimmed.slice(0, 600),
+        "You are a fast triage classifier for a chat assistant. For the user's message, decide the " +
+        "items below and reply with ONLY a JSON object containing exactly these keys: " +
+        keys.map((k) => `"${k}"`).join(", ") +
+        ".\n" +
+        questions.join("\n"),
+      prompt: trimmed.slice(0, 800),
       json: true,
       signal,
     });
-    const parsed = JSON.parse(extractJson(text)) as { actionId?: string | null; reason?: string };
-    if (!parsed.actionId || typeof parsed.actionId !== "string") return null;
-    const action = actions.find((a) => a.id === parsed.actionId);
-    if (!action) return null;
-    return {
-      actionId: action.id,
-      actionName: action.name,
-      reason: typeof parsed.reason === "string" ? parsed.reason.trim().slice(0, 200) : "",
-    };
+    const parsed = JSON.parse(extractJson(text)) as Record<string, unknown>;
+    const result: TriageResult = { ...TRIAGE_DEFAULTS };
+    if (wantAgent) result.agentMode = truthy(parsed["agent"]);
+    if (wantWeb) result.webSearch = truthy(parsed["webSearch"]);
+    if (wantTitle) result.title = cleanJsonTitle(parsed["title"]);
+    if (wantAction) result.actionIntent = matchAction(needs.actions, parsed["actionId"], parsed["actionReason"]);
+    return result;
   } catch {
-    return null;
+    return { ...TRIAGE_DEFAULTS };
   }
 }
 

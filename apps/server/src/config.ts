@@ -44,6 +44,28 @@ export function getActiveSettings(): Settings {
   return buildSettings(provider, model);
 }
 
+/**
+ * Triage tier (Tier-1 routing). Pre-flight classifiers (agent / web-search /
+ * action-intent / title) are easy classification work, so they can run on a
+ * fast, cheap model rather than the reasoning model — the FrugalGPT cascade
+ * idea: triage on the cheap tier, reason on the strong one.
+ *
+ * Routing is OPT-IN via an explicit `triageProvider` (+ optional `triageModel`)
+ * setting, so a configured cloud key never silently sends message snippets to a
+ * vendor the user didn't pick for triage. With no setting (or one whose
+ * provider is no longer configured) triage falls back to the active reasoning
+ * model — pre-flight calls are still fused into one round-trip; they just run on
+ * the active model instead of a faster tier.
+ */
+export function getTriageSettings(): Settings {
+  const tp = dbGetSetting("triageProvider");
+  if (tp && PROVIDERS.includes(tp as ProviderId) && isProviderConfigured(tp as ProviderId)) {
+    const model = dbGetSetting("triageModel") ?? DEFAULT_MODELS[tp as ProviderId];
+    return buildSettings(tp as ProviderId, model);
+  }
+  return getActiveSettings();
+}
+
 export function saveSettings(provider: ProviderId, model: string): Settings {
   dbSetSetting("provider", provider);
   dbSetSetting("model", model);
