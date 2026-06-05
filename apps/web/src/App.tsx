@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from "react";
-import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialog";
 import { ReportDialog } from "./features/reports/ReportDialog";
@@ -139,6 +139,11 @@ function SurfaceEditorRoute() {
 }
 
 function AppContent() {
+  // Section-keyed entrance: re-mount + fade the route area when the top-level
+  // section changes (chat ↔ workspaces ↔ settings …), but NOT on within-section
+  // navigation (chat → chat keeps the composer draft + scroll).
+  const location = useLocation();
+  const routeSection = location.pathname.split("/")[1] || "home";
   return (
     <>
       <AppShell>
@@ -151,6 +156,7 @@ function AppContent() {
             shell alive so navigation still works after a route crash. */}
         <Suspense fallback={<RouteFallback />}>
           <ErrorBoundary label="이 화면을 여는 중 문제가 발생했어요">
+          <div key={routeSection} className="flex-1 min-h-0 flex flex-col animate-fade-in">
           <Routes>
             {/* Chat-first home */}
             <Route path="/" element={<ChatView />} />
@@ -183,6 +189,7 @@ function AppContent() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </div>
           </ErrorBoundary>
         </Suspense>
       </AppShell>
