@@ -69,6 +69,23 @@ cases:
     mustHit:
       - path: "README.md"
 
+  - id: code-ast-coherence-001
+    # applyLoyaltyDiscount() in pricing.ts has an internal blank line, so
+    # paragraph chunking fragments it — the signature lands in one chunk and
+    # the percentOff/subtotal logic in another, each context-stripped. This
+    # guards that the live hybrid path still retrieves the tail-logic chunk for
+    # a function-intent query: BM25 + symbol fusion compensates for the lost
+    # embedding context (a cycle-2 experiment confirmed AST chunking lifts
+    # semantic-only here, +0.17 RR, but leaves hybrid unchanged — so hybrid is
+    # the robustness that makes AST chunk boundaries unnecessary for us).
+    workspace: code-small
+    query: "where is the loyalty discount percentage applied to the cart subtotal"
+    mustHit:
+      - path: "src/pricing.ts"
+        contains: "percentOff"
+    shouldNotHit:
+      - "notes-distractor.md"
+
   # ── portfolio-small ────────────────────────────────────────────────
   - id: portfolio-tsla-001
     workspace: portfolio-small
