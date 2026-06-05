@@ -34,6 +34,7 @@ import {
 import type { ChatMessage, ChatAttachment, SearchResult, AgentStep, AgentTrace, AgentTool } from "@ariadne/shared";
 import { Badge } from "../../components/ui/Badge";
 import { useT } from "../../lib/i18n";
+import { localizeStatus } from "../../lib/statusText";
 import * as api from "../../lib/api";
 import { useEditMessage } from "../../lib/queries";
 import { parseCsv } from "../../lib/tableData";
@@ -434,7 +435,7 @@ export function StreamingIndicator({
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-      <span className="animate-pulse">{statusText || t("chat.streaming.generating")}</span>
+      <span className="animate-pulse">{localizeStatus(statusText, t) || t("chat.streaming.generating")}</span>
       {elapsed && <span className="font-mono text-muted-foreground/60">{elapsed}</span>}
     </div>
   );

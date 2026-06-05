@@ -226,6 +226,19 @@ const ko: Record<TranslationKey, string> = {
 
   // Streaming
   "chat.streaming.generating": "생성 중…",
+  "chat.status.planning": "단계 계획 중…",
+  "chat.status.answering": "답변 중…",
+  "chat.status.adjusting": "계획 조정 중…",
+  "chat.status.synthesising": "답변 종합 중…",
+  "chat.status.synthesisingCombined": "통합 답변 작성 중…",
+  "chat.status.decomposing": "하위 주제로 분해 중…",
+  "chat.status.buildingContext": "컨텍스트 구성 중…",
+  "chat.status.checkingWeb": "웹 검색이 필요한지 확인 중…",
+  "chat.status.compacting": "이전 대화 압축 중…",
+  "chat.status.decidingAgent": "에이전트 사용 여부 판단 중…",
+  "chat.status.generating": "생성 중…",
+  "chat.status.warmingUp": "모델 예열 중…",
+  "chat.status.researching": "하위 주제 병렬 조사 중…",
 
   // Agent
   "chat.agent.steps": "{done}/{total} 단계",

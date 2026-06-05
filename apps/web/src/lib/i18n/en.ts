@@ -233,6 +233,19 @@ const en = {
 
   // Streaming
   "chat.streaming.generating": "Generating…",
+  "chat.status.planning": "Planning steps…",
+  "chat.status.answering": "Answering…",
+  "chat.status.adjusting": "Adjusting plan…",
+  "chat.status.synthesising": "Synthesising answer…",
+  "chat.status.synthesisingCombined": "Synthesising the combined answer…",
+  "chat.status.decomposing": "Breaking the task into sub-topics…",
+  "chat.status.buildingContext": "Building context…",
+  "chat.status.checkingWeb": "Checking whether a web search helps…",
+  "chat.status.compacting": "Compacting earlier conversation…",
+  "chat.status.decidingAgent": "Deciding whether to use the agent…",
+  "chat.status.generating": "Generating…",
+  "chat.status.warmingUp": "Warming up the model…",
+  "chat.status.researching": "Researching sub-topics in parallel…",
 
   // Agent
   "chat.agent.steps": "{done}/{total} steps",
