@@ -3,7 +3,7 @@
  * suggestion, optionally with screenshots. It lands in the admin review queue,
  * is auto-triaged by the LLM, and may then be filed as a GitHub issue.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 import type { ReportType } from "@ariadne/shared";
 import { Dialog } from "../../components/ui/Dialog";
@@ -72,6 +72,30 @@ export function ReportDialog() {
     }
     if (next.length > 0) setImages((prev) => [...prev, ...next]);
   }
+
+  // Drop an image anywhere while the report dialog is open to attach it — the
+  // chat composer's window dropzone bails when a [role=dialog] is open, so the
+  // modal owns drops here.
+  useEffect(() => {
+    if (!reportDialogOpen) return;
+    const hasFiles = (dt: DataTransfer | null): boolean =>
+      !!dt && Array.from(dt.types).includes("Files");
+    const onDragOver = (e: DragEvent) => {
+      if (hasFiles(e.dataTransfer)) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) void addFiles(e.dataTransfer.files);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportDialogOpen]);
 
   function removeImage(i: number) {
     setImages((prev) => {

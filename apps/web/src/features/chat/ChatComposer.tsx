@@ -565,28 +565,43 @@ export function ChatComposer({
     setTablePaste(null);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.some((t) => t === "Files")) {
+  // Drop files ANYWHERE on the page to attach them — not just on the composer
+  // box. The listener is active while the composer is mounted (the chat view),
+  // so a file dragged in from another window attaches wherever it's dropped.
+  // Only reacts to file drags (ignores text/element drags); leaving the window
+  // clears the highlight.
+  useEffect(() => {
+    const hasFiles = (dt: DataTransfer | null): boolean =>
+      !!dt && Array.from(dt.types).includes("Files");
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e.dataTransfer)) return;
+      if (document.querySelector('[role="dialog"]')) return; // a modal owns drops
       e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
       setIsDragOver(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear when leaving the entire composer container, not child elements.
-    if (!composerRef.current?.contains(e.relatedTarget as Node)) {
+    };
+    const onDragLeave = (e: DragEvent) => {
+      // relatedTarget is null only when the pointer leaves the window entirely.
+      if (e.relatedTarget === null) setIsDragOver(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e.dataTransfer)) return;
+      if (document.querySelector('[role="dialog"]')) return; // a modal owns drops
+      e.preventDefault();
       setIsDragOver(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    if (e.dataTransfer.files.length > 0) {
-      void handleFiles(e.dataTransfer.files);
-    }
-  };
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        void handleFiles(e.dataTransfer.files);
+      }
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [handleFiles]);
 
   const handleSend = () => {
     const trimmed = content.trim();
@@ -898,9 +913,6 @@ export function ChatComposer({
         className={`relative flex flex-col gap-2 rounded-xl border bg-surface-2 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors ${
           isDragOver ? "border-accent bg-accent/5" : "border-border"
         }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
         {/* Drag-to-attach overlay */}
         {isDragOver && (
