@@ -100,9 +100,16 @@ cmd_start() {
     (cd "${ARIADNE_ROOT}" && npm install)
   fi
 
-  # Ensure web build
-  if [[ ! -d "${ARIADNE_ROOT}/apps/web/dist" ]]; then
-    info "apps/web/dist missing — building web…"
+  # Ensure a FRESH web build. Rebuild when dist is missing OR any web/shared
+  # source is newer than the built index.html. Otherwise a stale dist (e.g.
+  # after `git pull`, or a manual rebuild while the server ran) gets served and
+  # @fastify/static is registered against it at boot — producing 404 assets /
+  # a white screen until the next rebuild. Building here, before the supervisor
+  # launches the server, keeps the served dist and the static handler in sync.
+  local dist_index="${ARIADNE_ROOT}/apps/web/dist/index.html"
+  if [[ ! -f "${dist_index}" ]] || \
+     [[ -n "$(find "${ARIADNE_ROOT}/apps/web/src" "${ARIADNE_ROOT}/packages/shared/src" -type f -newer "${dist_index}" -print -quit 2>/dev/null)" ]]; then
+    info "Building web (dist missing or stale)…"
     (cd "${ARIADNE_ROOT}" && npm run build:web)
   fi
 
