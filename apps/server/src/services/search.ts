@@ -197,3 +197,70 @@ function stripTags(html: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * Fetch a web page and reduce it to readable text — no html-parser dependency.
+ * Turns snippet-only search into page-reading search: the model can extract
+ * tables, rankings, and detail it could never see from a 150-char snippet.
+ * Crude (regex strip) but robust + dependency-free; best-effort, returns "" on
+ * any failure. SSRF-guarded: http(s) only, never loopback/private hosts.
+ */
+export async function fetchUrlText(url: string, signal?: AbortSignal): Promise<string> {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return "";
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+  const host = u.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "::1" ||
+    host.endsWith(".local") ||
+    /^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  ) {
+    return "";
+  }
+  try {
+    const res = await fetch(u.toString(), {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Ariadne/1.0)",
+        Accept: "text/html,text/plain",
+      },
+      redirect: "follow",
+      signal: fetchSignal(signal),
+    });
+    if (!res.ok) return "";
+    const ct = res.headers.get("content-type") ?? "";
+    if (!/text\/(html|plain)/i.test(ct)) return "";
+    const raw = (await res.text()).slice(0, 800_000);
+    return htmlToText(raw);
+  } catch {
+    return "";
+  }
+}
+
+/** Strip an HTML document to readable text: drop script/style/comments, turn
+ *  block-level closes into newlines, remove the remaining tags, decode common
+ *  entities, collapse whitespace. Heavier than stripTags (which is for inline
+ *  fragments) — this is for whole documents. */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style|noscript|svg|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|header|footer)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#0?39;|&apos;|&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

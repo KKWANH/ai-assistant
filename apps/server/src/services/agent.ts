@@ -21,7 +21,7 @@ import type { Chat, ChatMessage, ChatStreamEvent, AgentStep, AgentTrace, AgentTo
 import type { AiProvider } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { extractJson } from "../providers/index.js";
-import { performSearch } from "./search.js";
+import { performSearch, fetchUrlText } from "./search.js";
 import { appendUserProfile } from "./chatContext.js";
 import { focusedRead } from "../gasp/filter.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
@@ -287,10 +287,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         ? await Promise.all(batch.map((s) => executeStep(s)))
         : [await executeStep(batch[0]!)];
 
-    // Record results in plan order for synthesis and re-planning.
-    for (const s of batch) {
-      stepResults.push(`Step "${s.description}" (${s.tool}): ${s.result ?? ""}`);
-    }
+    // Record results in plan order for synthesis and re-planning. Use the FULL
+    // tool result (not step.result, which is truncated to 400 chars for the
+    // trace UI) so synthesis can actually read web-page / file content — capped
+    // so a long page can't blow the synthesis context.
+    batch.forEach((s, i) => {
+      const full = (results[i] ?? s.result ?? "").slice(0, 4000);
+      stepResults.push(`Step "${s.description}" (${s.tool}): ${full}`);
+    });
 
     // ── 3. Conditional re-plan ─────────────────────────────────────────────
     // Skip the re-planner LLM call unless something actually changed:
@@ -416,8 +420,18 @@ async function runTool(
       if (resp.results.length === 0) return "No results found.";
       const top = resp.results.slice(0, 5);
       sources.push(...top);
+      // Read the top pages, not just snippets — so the model can extract real
+      // content (tables, rankings, detail) a 150-char snippet can never hold.
+      // This is the difference between "couldn't find KLA in the list" and
+      // actually pulling the ranking. Concurrent + best-effort; a failed/empty
+      // fetch falls back to that result's snippet.
+      const pages = await Promise.all(top.slice(0, 3).map((r) => fetchUrlText(r.url, signal)));
       return top
-        .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
+        .map((r, i) => {
+          const body = (pages[i] ?? "").trim();
+          const content = body ? body.slice(0, 2500) : r.snippet;
+          return `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${content}`;
+        })
         .join("\n\n");
     }
 
