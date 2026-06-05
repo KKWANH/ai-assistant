@@ -466,19 +466,35 @@ function tokenize(text: string): string[] {
  * of the previous chunk into the next so a search term split across the
  * boundary still matches.
  */
-function chunkText(content: string, maxChars: number): string[] {
+function chunkText(content: string, maxChars: number, label?: string): string[] {
   const out: string[] = [];
   if (!content.trim()) return out;
+
+  // Cycle-2 P2 — structural contextual chunking. When `label` (the file path)
+  // is supplied, prepend a short "path › nearest-heading" header to each chunk
+  // BEFORE it is embedded / BM25-indexed, so the chunk's document identity and
+  // section survive into the index. A no-LLM approximation of Contextual
+  // Retrieval (Anthropic) — the document context is the single biggest thing a
+  // bare chunk loses. No-op when label is absent (the keyword fallback already
+  // carries a path-match bonus, so it doesn't need this).
+  let heading = "";
+  const withContext = (body: string): string => {
+    if (!label) return body;
+    const ctx = heading ? `${label} › ${heading}` : label;
+    return `${ctx}\n\n${body}`;
+  };
 
   const paragraphs = content.split(/\n{2,}/);
   let current = "";
   for (const p of paragraphs) {
+    const h = headingOf(p);
+    if (h) heading = h;
     if (current.length + p.length + 2 <= maxChars) {
       current += (current ? "\n\n" : "") + p;
       continue;
     }
     if (current) {
-      out.push(current);
+      out.push(withContext(current));
       // Carry the tail forward so context isn't lost at the seam.
       const tail = current.slice(-CHUNK_OVERLAP);
       current = tail.trim() ? tail + "\n\n" + p : p;
@@ -489,13 +505,21 @@ function chunkText(content: string, maxChars: number): string[] {
     while (current.length > maxChars) {
       // Prefer breaking at the last newline/period in the first maxChars.
       const cut = findSoftBreak(current, maxChars);
-      out.push(current.slice(0, cut));
+      out.push(withContext(current.slice(0, cut)));
       const tail = current.slice(cut - CHUNK_OVERLAP, cut);
       current = (tail.trim() ? tail : "") + current.slice(cut);
     }
   }
-  if (current.trim()) out.push(current);
+  if (current.trim()) out.push(withContext(current));
   return out;
+}
+
+/** The section a chunk sits under: a Markdown ATX heading's text, or "" when
+ *  the paragraph isn't a heading (code files rarely have one → path-only). */
+function headingOf(paragraph: string): string {
+  const first = (paragraph.split("\n", 1)[0] ?? "").trim();
+  const md = first.match(/^#{1,6}\s+(.{1,80}?)\s*#*$/);
+  return md ? md[1]!.trim() : "";
 }
 
 function findSoftBreak(text: string, near: number): number {
@@ -660,7 +684,7 @@ export async function indexWorkspaceEmbeddings(
   // Chunk the changed files + flatten so we can embed in one batch.
   const allChunks: { path: string; chunk: string; index: number; mtime: number; hash: string }[] = [];
   for (const p of pendingForEmbed) {
-    const chunks = chunkText(p.text, CHUNK_CHARS);
+    const chunks = chunkText(p.text, CHUNK_CHARS, p.path);
     chunks.forEach((chunk, idx) => {
       allChunks.push({ path: p.path, chunk, index: idx, mtime: p.mtime, hash: p.hash });
     });
