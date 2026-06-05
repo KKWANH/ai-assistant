@@ -332,9 +332,9 @@ export function AppShell({ children }: AppShellProps) {
   const accountMode: AccountMode = me?.account.mode ?? "standard";
   const isSimple = accountMode === "simple";
 
-  // Cmd+K — only in standard mode
+  // Cmd+K command palette — available in BOTH modes (search chats / workspaces /
+  // runs + quick actions). Easy mode previously disabled it entirely.
   useEffect(() => {
-    if (isSimple) return;
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
@@ -343,7 +343,7 @@ export function AppShell({ children }: AppShellProps) {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [setCommandMenuOpen, isSimple]);
+  }, [setCommandMenuOpen]);
 
   // Close the mobile drawer on any route change.
   useEffect(() => {
@@ -382,7 +382,7 @@ export function AppShell({ children }: AppShellProps) {
       ? activeWorkspaceId
       : activeChat?.workspaceId ?? null;
 
-  const commandItems: CommandItem[] = isSimple ? [] : [
+  const commandItems: CommandItem[] = [
     {
       id: "new-chat",
       label: t("commandMenu.newChat"),
@@ -918,7 +918,7 @@ export function AppShell({ children }: AppShellProps) {
       </div>
 
       {/* Command Menu overlay — standard mode only */}
-      {!isSimple && <CommandMenu items={commandItems} />}
+      <CommandMenu items={commandItems} />
     </div>
   );
 }
