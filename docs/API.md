@@ -201,8 +201,7 @@ The settings UI is for per-install choices — **API keys are env vars, not DB**
 ## Provider integration — bring your own keys
 
 Ariadne supports 6 providers. The active provider/model are stored in the
-`settings` table (one global pair, per install — see `docs/PRODUCT_PLAN.md`
-for the "per-account active provider" follow-up). API keys come from the
+`settings` table (one global pair, per install). API keys come from the
 process env, never from the DB.
 
 | Provider   | Env var                | Notes                                          |

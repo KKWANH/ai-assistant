@@ -302,11 +302,6 @@ body {
   from { opacity: 1; transform: translateX(0); }
   to   { opacity: 0; transform: translateX(16px); }
 }
-@keyframes ariadne-shimmer {
-  /* Used by Skeleton — a 1.5s sweep across the placeholder */
-  from { background-position: -200% 0; }
-  to   { background-position: 200% 0; }
-}
 @keyframes ariadne-pulse-soft {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.55; }
@@ -331,18 +326,6 @@ body {
 .animate-pulse-soft { animation: ariadne-pulse-soft 1.6s var(--ease-standard) infinite; }
 /* BA — modal content entrance: subtle scale + lift. Used by ui/Modal. */
 .animate-modal-in   { animation: ariadne-modal-in var(--motion-slow) var(--ease-out) both; }
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(var(--surface-3), 0.65) 0%,
-    rgba(var(--surface-3), 1)     50%,
-    rgba(var(--surface-3), 0.65) 100%
-  );
-  background-size: 200% 100%;
-  animation: ariadne-shimmer 1.4s linear infinite;
-  border-radius: var(--radius-sm);
-}
 
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {

@@ -7,8 +7,7 @@
  *   apps/server/src/eval/cases/user-promoted/<workspaceId>/<ts>-<hash>.yaml
  *
  * and is picked up by `npm run eval:retrieval:promoted`. This is the
- * promotion-style learning pattern described in docs/POSITIONING.md §4
- * — the model doesn't change, the surrounding system gets smarter.
+ * promotion-style learning pattern — the model doesn't change, the surrounding system gets smarter.
  *
  * Auth: requires a workspace the caller can modify (same gate as edits).
  * Mutation: write-only — never deletes existing cases. Removal is a

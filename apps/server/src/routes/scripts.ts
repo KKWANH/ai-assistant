@@ -1,7 +1,7 @@
 /**
  * Script execution routes.
  *
- * Security model (PRODUCT_PLAN §12 approved exception):
+ * Security model (approved exception):
  *   local  → list, read, create/edit, run
  *   remote → list, run only — create/edit return 403
  *

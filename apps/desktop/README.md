@@ -1,7 +1,7 @@
 # @ariadne/desktop — Tauri shell (Phase 0 spike)
 
 Double-click Ariadne instead of `git clone` + `npm` + provider keys. This is the
-**Phase 0 spike** from [`docs/DESKTOP_APP_PLAN.md`](../../docs/DESKTOP_APP_PLAN.md)
+**Phase 0 spike**
 §7: prove the sidecar architecture on the dev machine. No signing, no installer,
 no bundled Node yet.
 
@@ -39,7 +39,7 @@ npm run tauri:dev --workspace @ariadne/desktop
   `npm run tauri --workspace @ariadne/desktop -- icon apps/web/public/icon-512.png`
   (the spike ships a single `icons/icon.png` — enough for `tauri dev`).
 - Settings → API keys is already in the web app; keychain storage is Phase 1.
-- Code signing + notarization + auto-updater (DESKTOP_APP_PLAN §6).
+- Code signing + notarization + auto-updater.
 - ~~Bind loopback-only~~ **done**: the server now defaults to `ARIADNE_BIND=127.0.0.1`
   and the shell sets it explicitly; the `accessContext` socket check treats the
   webview (loopback) as local-admin, so no login screen in desktop mode.

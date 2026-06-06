@@ -166,7 +166,7 @@ export class OllamaProvider extends OpenAIProvider {
  *
  *  Mac mini caveat: stock vLLM is Linux + CUDA. Apple-Silicon plugins
  *  (vllm-metal, vllm-mlx) are sub-v1.0 + text-only as of May 2026.
- *  See docs/VLLM_PLAN.md — this provider exists for users with a
+ *  This provider exists for users with a
  *  Linux/GPU box reachable on the LAN. Mac-mini-only users should
  *  stay on Ollama.
  *

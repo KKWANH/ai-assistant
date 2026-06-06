@@ -399,7 +399,7 @@ run/                        # PID files
 | Ollama models list is empty | `ollama serve` not running | `ollama serve &` then `ariadne restart` |
 | Tunnel URL changes every restart | not using a named tunnel | `ops/setup-tunnel.sh <hostname>` once, then it's stable |
 | `useT() must be used inside <I18nProvider>` | stale browser cache | hard-refresh (⌘⇧R) |
-| Quote returns no data for a symbol | wrong format | `?detailed=1` to see why; check `docs/STOCK_API_AUDIT.md` |
+| Quote returns no data for a symbol | wrong format | `?detailed=1` to see why |
 | `eval:retrieval` fails gates | retrieval regression | inspect output, fix root cause; gate is intentional |
 
 ### Live logs
@@ -422,14 +422,10 @@ curl -X POST http://localhost:4319/api/workspaces/<workspace-id>/surface/build
 
 | If you want to… | Read |
 |---|---|
-| Understand the project's positioning + non-goals | [`docs/POSITIONING.md`](POSITIONING.md) |
-| See the planned roadmap | [`docs/PRODUCT_PLAN.md`](PRODUCT_PLAN.md) |
 | Understand the wire shape of the system | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Tune chat quality with agent + search | [`docs/INTELLIGENCE_TUNING.md`](INTELLIGENCE_TUNING.md) |
 | Keep the app fast as it grows | [`docs/PERFORMANCE_ARCHITECTURE.md`](PERFORMANCE_ARCHITECTURE.md) |
 | Build a brokerage-app-style surface | [`docs/PORTFOLIO_STARTER_V2.md`](PORTFOLIO_STARTER_V2.md) |
-| Ship Ariadne to public users | [`docs/LAUNCH_PLAN.md`](LAUNCH_PLAN.md) |
-| Self-host vLLM as a 4th local provider | [`docs/VLLM_PLAN.md`](VLLM_PLAN.md) |
 | Understand the security model | [`SECURITY.md`](../SECURITY.md) |
 | Contribute | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 
@@ -449,7 +445,7 @@ daemon to pick up `.env` changes.
 
 **Q. Can two people use Ariadne at the same time?**  
 A. Not designed for it — the local-first model is single-user. Multi-user
-team support is explicitly out of scope (see `docs/POSITIONING.md` §2.3).
+team support is explicitly out of scope.
 
 **Q. How do I update Ariadne?**  
 A. `git pull && npm install && ariadne restart`. SQLite migrations are
@@ -459,8 +455,7 @@ idempotent; no manual steps.
 A. **No.** It does not fine-tune any model. Quality improves through
 *promotion-learning* — bad answers you mark get promoted into the eval
 harness, which the next version has to pass. See
-[`docs/POSITIONING.md`](POSITIONING.md) §"Promotion-learning, not
-self-learning".
+our "promotion-learning, not self-learning" stance.
 
 ---
 

@@ -227,7 +227,7 @@ export const PORTS = {
   admin: Number(env("ARIADNE_ADMIN_PORT") ?? 7459),
 };
 
-/** Default file globs for a new workspace (PRODUCT_PLAN §14.1). */
+/** Default file globs for a new workspace. */
 export const DEFAULT_INCLUDE = [
   "**/*.md",
   "**/*.txt",
@@ -257,7 +257,7 @@ export function isBuiltinWorkspace(id: string): boolean {
   return id === TUTORIAL_WORKSPACE_ID || id === DEMO_WORKSPACE_ID;
 }
 
-/** Sensitive path patterns excluded by default (PRODUCT_PLAN §12). */
+/** Sensitive path patterns excluded by default. */
 export const SENSITIVE_PATTERNS = [
   "*.env",
   "*secret*",

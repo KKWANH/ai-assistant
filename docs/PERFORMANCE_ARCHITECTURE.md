@@ -150,7 +150,7 @@ top-N reranked by full cosine.
 
 **Not optimized yet**:
 - Embedding generation is N+1 over Ollama's `/api/embeddings` (4-way
-  concurrent, but still N round-trips). VLLM_PLAN §5 deferred this; only
+  concurrent, but still N round-trips). Deferred for now; only
   matters when fresh-index of 1000+ files is a complaint.
 - BM25 stopword list is hardcoded English. Korean / mixed-language
   workspaces have lower precision than they could.
@@ -162,8 +162,7 @@ re-plan → synthesize.
 
 - **3–10 sequential LLM calls** per agent message.
 - Each step is its own network round-trip to the active provider.
-- vLLM + prefix caching collapses identical system prompts — covered
-  in `docs/VLLM_PLAN.md`.
+- vLLM + prefix caching collapses identical system prompts.
 - Guided decoding (AC4.2) means the planner can't emit malformed JSON
   → no "silent agentic-mode-disabled" failures.
 
@@ -280,8 +279,6 @@ the workspace folders.
 
 - `docs/ARCHITECTURE.md` — the structural shape
 - `docs/RAG_HARNESS.md` — the retrieval + generation eval methodology
-- `docs/VLLM_PLAN.md` — local-batched-backend opportunity (Tier 1–3)
-- `docs/STOCK_API_AUDIT.md` — the surface-side market data SDK
   capacities + Tier-1 / Tier-2 / Tier-3 next steps
 - AC4.3 commit — the last full perf-pass on the chat hot path
 - AD4 commit — the last full bundle-pass on the web side

@@ -123,15 +123,13 @@ restarts, then `./ops/ariadne.sh restart` to pick them up.
 
 The settings UI inside Ariadne (top-right gear icon) lets you switch active
 provider/model per session, but the **keys themselves** must come from env vars —
-this is intentional, see `docs/PRODUCT_PLAN.md` for why.
+this is intentional.
 
 ### Optional: self-hosted vLLM on a Linux/GPU box
 
 If you have a Linux box with a CUDA GPU on the same LAN, you can point Ariadne
 at a `vllm serve …` process and let it do agentic bursts + eval concurrency
-against your own hardware. See [`docs/VLLM_PLAN.md`](VLLM_PLAN.md) for the
-"when this is worth it" analysis — short version: **not on your Mac mini**,
-yes on a Linux box you also own.
+against your own hardware — worth it on a Linux box you own, not on a Mac mini.
 
 ```bash
 # On the GPU box (Linux):

@@ -151,7 +151,7 @@ function AppContent() {
             route (ChatView, WorkspaceOverview, etc.) is contained here:
             the AppShell chrome (sidebar, header) survives and the user
             gets a Retry card instead of a blank screen — the
-            "never blank-screen" invariant (PRODUCT.md §4.4). The app
+            "never blank-screen" invariant. The app
             root has its own outer boundary; this inner one keeps the
             shell alive so navigation still works after a route crash. */}
         <Suspense fallback={<RouteFallback />}>

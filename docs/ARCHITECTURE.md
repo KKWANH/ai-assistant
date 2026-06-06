@@ -1,7 +1,7 @@
 # Ariadne — Architecture
 
-The current architecture of Ariadne. Pairs with `PRODUCT_PLAN.md` (the
-vision), `PERFORMANCE_ARCHITECTURE.md` (the speed contract), and
+The current architecture of Ariadne. Pairs with
+`PERFORMANCE_ARCHITECTURE.md` (the speed contract), and
 `DESIGN_GUIDELINE.md` (the visual language). `README.md` is the user-facing
 overview; this is the engineering reference.
 

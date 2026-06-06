@@ -10,7 +10,7 @@ Review every AI edit as a staged diff. Never train on your data.
 A batteries-included app today (the **Portfolio cockpit**), and a
 platform you can build on — ship your own dashboard as a sandboxed
 React surface the host feeds with files, live data, retrieval, and the
-model. [See what Ariadne is →](docs/PRODUCT.md)
+model.
 
 <img src="docs/diagrams/hero.svg" alt="Local files become evidence-backed work" width="520">
 
@@ -18,7 +18,7 @@ model. [See what Ariadne is →](docs/PRODUCT.md)
 [![node ≥22](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](docs/INSTALL.md)
 [![retrieval Hit@6 76.5%](https://img.shields.io/badge/retrieval%20Hit%406-76.5%25-success.svg)](docs/RAG_HARNESS.md)
 
-[**What is Ariadne? →**](docs/PRODUCT.md) · [How to use](docs/HOW_TO_USE.md) · [Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [API](docs/API.md)
+[How to use](docs/HOW_TO_USE.md) · [Install (5 min)](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [API](docs/API.md)
 
 </div>
 
@@ -31,8 +31,6 @@ model. [See what Ariadne is →](docs/PRODUCT.md)
 ## 30-second demo
 
 > Real screencasts replace these placeholders as they're captured.
-> See [`docs/screenshots/README.md`](docs/screenshots/README.md) for the
-> capture script (page, state, framing, caption).
 
 | | Demo | What it shows |
 |---|---|---|
@@ -61,8 +59,6 @@ IDE: research, analysis, recurring reports, document review, and the
 "AI touched my files, what changed?" question that every other tool
 asks you to trust on faith.
 
-See [`docs/POSITIONING.md`](docs/POSITIONING.md) for the full
-"what we are / are not" breakdown.
 
 ---
 
@@ -133,9 +129,7 @@ machine.
   and [`docs/PORTFOLIO_STARTER_V2.md`](docs/PORTFOLIO_STARTER_V2.md)
   for a real multi-file dashboard.
 
-Full feature index lives in
-[`docs/PRODUCT_PLAN.md`](docs/PRODUCT_PLAN.md);
-architecture is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
+Architecture is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
 the speed contract that keeps the app fast as it grows is in
 [`docs/PERFORMANCE_ARCHITECTURE.md`](docs/PERFORMANCE_ARCHITECTURE.md).
 
@@ -201,21 +195,10 @@ search, eval harness, and the ops layer are in place.
 
 What's pending lives in:
 
-- [`docs/PRODUCT_PLAN.md`](docs/PRODUCT_PLAN.md) — feature roadmap
-- [`docs/LAUNCH_PLAN.md`](docs/LAUNCH_PLAN.md) — the week-by-week
-  pre-public-launch checklist (we are deliberately not publicly
-  launched yet — the README, demos, fixtures, and security review
-  need to land first)
-- [`docs/PRODUCT_STRATEGY.md`](docs/PRODUCT_STRATEGY.md) — licensing,
-  IP, monetization, EU AI Act / GDPR / PIPA posture
 - [`docs/PERFORMANCE_ARCHITECTURE.md`](docs/PERFORMANCE_ARCHITECTURE.md) —
   speed contract (cold-load / TTFT / retrieval / bundle budgets)
 - [`docs/PORTFOLIO_STARTER_V2.md`](docs/PORTFOLIO_STARTER_V2.md) —
   brokerage-app workspace shape (multi-account + 3-tier analysis)
-- [`docs/STOCK_API_AUDIT.md`](docs/STOCK_API_AUDIT.md) — quote/FX SDK
-  capability + multi-market accuracy
-- [`docs/DESKTOP_APP_PLAN.md`](docs/DESKTOP_APP_PLAN.md) — Tauri
-  shell plan
 
 ## Contributing
 
@@ -234,5 +217,4 @@ the whole product, in one image.
 
 [AGPL-3.0-or-later](LICENSE) — a self-hosted modified version offered over a
 network must publish its source, which blocks proprietary hosted forks while
-keeping Ariadne fully open. See [`docs/PRODUCT_STRATEGY.md`](docs/PRODUCT_STRATEGY.md)
-§1 for the reasoning + alternatives considered.
+keeping Ariadne fully open.

@@ -517,8 +517,7 @@ flowchart LR
 ## 더 읽을거리 (이 레포 안 문서)
 
 - `docs/RAG_HARNESS.md` — 검색/평가 하네스의 설계 + 작업 기록(BATCH-NOTES).
-- `docs/HARNESS_SPEED_INTELLIGENCE.md` — 속도·지능 튜닝(컨텍스트 엔지니어링) 계획.
-- `docs/AGENT_INTERNALS.md` / `docs/AGENT_REFACTOR_PLAN.md` — 에이전트 내부.
+- `docs/AGENT_INTERNALS.md` — 에이전트 내부.
 - `docs/ARCHITECTURE.md` — 레포 전체 구조.
 - `docs/HOW_TO_USE.md` — 설치·사용법(로컬 ollama 튜닝 포함).
 

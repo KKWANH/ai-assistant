@@ -4,8 +4,7 @@
  * The `tree-sitter` runtime and the per-language grammars are declared
  * as `optionalDependencies` in apps/server/package.json. When a platform
  * (Alpine musl, exotic ARM, very new Node ABI without a prebuild) can't
- * load them, the chooser falls through to the regex provider — see
- * docs/SYMBOL_INDEX_PLAN.md §8 for the architecture choice.
+ * load them, the chooser falls through to the regex provider.
  *
  * The dynamic imports are wrapped in try/catch so module resolution
  * failures never crash the server. Type-check errors from the missing

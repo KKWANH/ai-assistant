@@ -182,7 +182,5 @@ When adding a new tool or a new agent path:
 
 - `apps/server/src/services/agent.ts` — the prompts live here
 - `docs/RAG_HARNESS.md` — measurement methodology
-- `docs/VLLM_PLAN.md` §C — guided decoding (already enforces planner
-  JSON shape — orthogonal but related)
 - `docs/PERFORMANCE_ARCHITECTURE.md` §2.4 — the latency budget that
   constrains how much we can do per message

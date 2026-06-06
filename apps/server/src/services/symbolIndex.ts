@@ -3,8 +3,7 @@
  *
  * Boot-time order:
  *   1. tree-sitter provider — accurate AST for TS/TSX/JS/JSX/Python,
- *      gated on optionalDependencies loading successfully (see
- *      docs/SYMBOL_INDEX_PLAN.md §8 for why we picked native bindings).
+ *      gated on optionalDependencies loading successfully (native bindings).
  *   2. regex provider — the patterns below, always ready. Floor for
  *      Go/Rust/Java and the fallback when tree-sitter is unavailable.
  *

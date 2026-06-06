@@ -48,7 +48,7 @@ We say **yes** to:
 
 We say **maybe** to:
 
-- New features outside the scope in [`docs/POSITIONING.md`](docs/POSITIONING.md).
+- New features outside the project's stated scope.
   Open an issue first so we can talk through it before you build.
 - Larger refactors. Same — talk first. Ariadne's surface is small enough that
   a refactor that's right in isolation can be wrong in the larger plan.
@@ -56,8 +56,7 @@ We say **maybe** to:
 We say **no** (or "not yet") to:
 
 - Telemetry, analytics, crash reporters. Local-first means local-only.
-- Multi-tenant SaaS plumbing. See [`docs/POSITIONING.md`](docs/POSITIONING.md)
-  §2.3 for why.
+- Multi-tenant SaaS plumbing.
 - Tight coupling to a single provider — the multi-provider abstraction in
   `apps/server/src/providers/` is load-bearing.
 

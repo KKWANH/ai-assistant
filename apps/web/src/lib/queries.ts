@@ -58,7 +58,7 @@ export function useSnapshot(workspaceId: string, enabled = true) {
   // (scan-complete / markdown-warmed / embedding-indexed) invalidate the
   // snapshot so the UI refetches without a manual rescan.
   //
-  // BD3 resilience (PRODUCT.md §4.4 — graceful degradation):
+  // BD3 resilience (graceful degradation):
   //   1. Refetch on every (re)open, not just on events. The native
   //      EventSource auto-reconnects on transient drops, but events that
   //      fired DURING the downtime are lost — a catch-up refetch on

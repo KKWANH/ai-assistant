@@ -15,8 +15,8 @@ labels: feature
 <!-- What alternatives did you consider? Why is this the right shape? -->
 
 ## Scope check
-- Does this fit the positioning in [`docs/POSITIONING.md`](../docs/POSITIONING.md)? (yes / no / partial)
-- Could this be a [custom action](../docs/PRODUCT_PLAN.md) or [MCP server](../docs/MCP_PLAN.md) instead of a core change?
+- Does this fit the project's positioning? (yes / no / partial)
+- Could this be a custom action or MCP server instead of a core change?
 - Would it require breaking change to a public API / config / DB schema?
 
 ## Anything else

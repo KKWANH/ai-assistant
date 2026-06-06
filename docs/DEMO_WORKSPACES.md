@@ -1,6 +1,6 @@
 # Demo workspaces — the three killer demos
 
-Per [`LAUNCH_PLAN.md`](LAUNCH_PLAN.md) and the launch-prep reviewer:
+Per the launch-prep checklist:
 the README leads with three demos because those are the three audience
 segments where Ariadne is unambiguously better than the alternatives.
 
@@ -130,7 +130,7 @@ surface area, not promo material.
 
 ## Where the demos live
 
-- README links to the GIFs in [`docs/screenshots/`](screenshots/) —
+- README links to the demo GIFs —
   filename convention: `demo-research.gif`, `demo-portfolio.gif`,
   `demo-code-safe-edit.gif`
 - Long-form MP4s eventually live wherever the launch blog ends up

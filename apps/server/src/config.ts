@@ -92,7 +92,7 @@ function buildSettings(provider: ProviderId, model: string): Settings {
  *
  * Interim storage: settings table, plaintext (local-first DB on the user's
  * own machine). The desktop build moves this to the OS keychain
- * (DESKTOP_APP_PLAN §4.4) — keep key reads going through here so that swap
+ * keep key reads going through here so that swap
  * stays local to this function.
  */
 export function resolveProviderKey(id: ProviderId): string | undefined {
