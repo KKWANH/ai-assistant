@@ -59,7 +59,6 @@ IDE: research, analysis, recurring reports, document review, and the
 "AI touched my files, what changed?" question that every other tool
 asks you to trust on faith.
 
-
 ---
 
 ## Install

@@ -91,9 +91,9 @@ function buildSettings(provider: ProviderId, model: string): Settings {
  * source is set.
  *
  * Interim storage: settings table, plaintext (local-first DB on the user's
- * own machine). The desktop build moves this to the OS keychain
- * keep key reads going through here so that swap
- * stays local to this function.
+ * own machine). A desktop build would later move key storage to the OS
+ * keychain; keeping all key reads behind this one function keeps that swap
+ * local.
  */
 export function resolveProviderKey(id: ProviderId): string | undefined {
   const envKey = PROVIDER_REGISTRY[id].envKey;
