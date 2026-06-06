@@ -178,8 +178,8 @@ repo root, `npx tsx <file>` works after `npm install`.
 `npm run build:web` and restart. The supervisor falls back to a placeholder when
 `apps/web/dist/index.html` is missing.
 
-**"Stuck on the login screen even with the right password"** — see
-`docs/QUICKSTART.md` § "Recovery". One-click reset link on the login form.
+**"Stuck on the login screen even with the right password"** — use the
+one-click reset link on the login form.
 
 **Ollama "no embedding provider reachable"** — `ollama serve` not running, OR
 the embedding model isn't pulled. `ollama pull nomic-embed-text`.
@@ -188,6 +188,6 @@ the embedding model isn't pulled. `ollama pull nomic-embed-text`.
 
 ## Next
 
-- **First chat** + **first workspace**: → `docs/QUICKSTART.md`
+- **First chat** + **first workspace**: → `docs/HOW_TO_USE.md`
 - **API + provider integration**: → `docs/API.md`
 - **Architecture overview**: → `docs/ARCHITECTURE.md`
