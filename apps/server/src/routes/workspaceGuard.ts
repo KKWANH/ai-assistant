@@ -39,6 +39,20 @@ export function canViewWorkspace(workspace: Workspace, account: Account): boolea
   return isOwnerOrAdmin(workspace.createdBy, account);
 }
 
+/**
+ * Boolean view-gate for a workspace *id* — for sites that reference a
+ * workspace by id without going through `requireWorkspace` (a chat carrying a
+ * `workspaceId`). A null/absent id is "nothing to gate" → true. An id that
+ * resolves to no workspace (dangling reference) → false, so a chat can never
+ * point at a workspace its owner can't see — or one that doesn't exist.
+ */
+export function canViewWorkspaceId(id: string | null | undefined, account: Account): boolean {
+  if (!id) return true;
+  const workspace = dbGetWorkspace(id);
+  if (!workspace) return false;
+  return canViewWorkspace(workspace, account);
+}
+
 /** Can `account` mutate this workspace (edit files, scan, delete, run, ...)? */
 export function canModifyWorkspace(workspace: Workspace, account: Account): boolean {
   // Guests are read + chat only — never mutate or run anything in a workspace.

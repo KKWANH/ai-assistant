@@ -46,7 +46,7 @@ import { runDeepAgent } from "../services/orchestrator.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
 import { generateChatTitle, triage, type TriageResult } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
-import { isOwnerOrAdmin } from "./workspaceGuard.js";
+import { isOwnerOrAdmin, canViewWorkspaceId } from "./workspaceGuard.js";
 import {
   beginGeneration,
   endGeneration,
@@ -469,6 +469,12 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "Invalid request body", detail: parsed.error.message });
     }
     const { title, workspaceId } = parsed.data;
+    // Don't let a chat be created against a workspace the account can't view
+    // (or one that doesn't exist) — that reference is what the answer path
+    // trusts when it loads workspace files.
+    if (!canViewWorkspaceId(workspaceId, req.account)) {
+      return reply.status(403).send({ error: "Forbidden", detail: "That workspace doesn't exist or isn't yours." });
+    }
     const ts = now();
     const chat: Chat = {
       id: newId(),
@@ -508,6 +514,10 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     const parsed = UpdateChatSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid request body", detail: parsed.error.message });
+    }
+    // Re-point only to a workspace the account can view (undefined = no change).
+    if (!canViewWorkspaceId(parsed.data.workspaceId, req.account)) {
+      return reply.status(403).send({ error: "Forbidden", detail: "That workspace doesn't exist or isn't yours." });
     }
 
     const updated = dbUpdateChat(req.params.id, {
@@ -553,6 +563,16 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       if (!chat) return reply.status(404).send({ error: "Chat not found" });
       if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
         return reply.status(403).send({ error: "Forbidden" });
+      }
+      // A chat may only carry a workspace its owner can view. The context
+      // builder and triage load the workspace by id (dbGetWorkspace) with no
+      // gate of their own, so without this check anyone who can set a chat's
+      // workspaceId (POST/PATCH below) could point their own chat at someone
+      // else's private workspace and read its files through the answer.
+      // Re-checked every message so a workspace flipped public→private after
+      // the chat was created stops leaking on the next turn.
+      if (!canViewWorkspaceId(chat.workspaceId, req.account)) {
+        return reply.status(403).send({ error: "Forbidden", detail: "This chat's workspace isn't accessible to you." });
       }
 
       const parsed = PostMessageSchema.safeParse(req.body);
