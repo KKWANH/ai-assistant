@@ -176,6 +176,7 @@ export async function generateChatTitle(
         "no quotes, no surrounding punctuation, no explanation.",
       prompt: trimmed.slice(0, 800),
       signal,
+      noThink: true,
     });
     const firstLine =
       text

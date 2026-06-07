@@ -38,6 +38,13 @@ export interface CompleteRequest {
   jsonSchema?: { name: string; schema: Record<string, unknown> };
   /** Abort signal — cancels the underlying provider call when triggered. */
   signal?: AbortSignal;
+  /**
+   * Hint that the caller wants the answer directly, with no chain-of-thought.
+   * Reasoning models (qwen3 etc.) otherwise emit a long `<think>` block first —
+   * 15–60s even for a trivial prompt. Honored by OllamaProvider (switches to the
+   * native `/api/chat` with `think: false`); other providers ignore it.
+   */
+  noThink?: boolean;
 }
 
 export interface CompleteWithImagesRequest extends CompleteRequest {

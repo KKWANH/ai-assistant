@@ -152,6 +152,7 @@ export class MoonshotProvider extends OpenAIProvider {
 /** Ollama local — OpenAI-compatible, local base URL. */
 export class OllamaProvider extends OpenAIProvider {
   override readonly id: ProviderId = "ollama";
+  private readonly nativeBase: string;
 
   constructor(model: string) {
     const base = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
@@ -159,6 +160,117 @@ export class OllamaProvider extends OpenAIProvider {
       apiKey: "ollama", // Ollama doesn't check the key
       baseURL: `${base}/v1`,
     });
+    this.nativeBase = base;
+  }
+
+  /**
+   * Reasoning models (qwen3 etc.) emit a long `<think>` block before the answer
+   * — 15–60s even for "say ok". The OpenAI-compatible `/v1` endpoint can't turn
+   * it off (every documented knob — `/no_think`, a system message,
+   * `chat_template_kwargs.enable_thinking`, `think` — is ignored there), but
+   * Ollama's native `/api/chat` honors `think: false`. Callers that want a
+   * direct answer (instant mode, title generation) set `req.noThink` to get a
+   * sub-2s reply; every other call — and anything needing JSON/guided decoding
+   * — keeps the `/v1` path (image support, `<think>` interception, schema).
+   */
+  private nativeThinkOff(req: CompleteRequest): boolean {
+    return !!req.noThink && !req.json && !req.jsonSchema;
+  }
+
+  /** POST the native `/api/chat` with thinking disabled. Shared by both paths. */
+  private nativeChat(req: CompleteRequest, stream: boolean): Promise<Response> {
+    return fetch(`${this.nativeBase}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: req.system },
+          { role: "user", content: req.prompt },
+        ],
+        think: false,
+        stream,
+      }),
+      signal: req.signal,
+    });
+  }
+
+  override async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {
+    if (!this.nativeThinkOff(req)) return super.complete(req);
+    try {
+      const res = await this.nativeChat(req, false);
+      if (!res.ok) throw new Error(`ollama /api/chat → ${res.status}`);
+      const obj = (await res.json()) as {
+        message?: { content?: string };
+        prompt_eval_count?: number;
+        eval_count?: number;
+      };
+      return {
+        text: obj.message?.content ?? "",
+        usage: { inputTokens: obj.prompt_eval_count ?? 0, outputTokens: obj.eval_count ?? 0 },
+      };
+    } catch (err) {
+      if (req.signal?.aborted) throw err;
+      return super.complete(req);
+    }
+  }
+
+  override async completeStream(
+    req: CompleteRequest,
+    onDelta: (delta: string) => void,
+    onStatus?: (status: string) => void,
+  ): Promise<{ text: string; usage?: ProviderUsage }> {
+    if (!this.nativeThinkOff(req)) return super.completeStream(req, onDelta, onStatus);
+    try {
+      const res = await this.nativeChat(req, true);
+      if (!res.ok || !res.body) throw new Error(`ollama /api/chat → ${res.status}`);
+
+      let text = "";
+      let usage: ProviderUsage | undefined;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let obj: {
+            message?: { content?: string };
+            done?: boolean;
+            prompt_eval_count?: number;
+            eval_count?: number;
+          };
+          try {
+            obj = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const delta = obj.message?.content ?? "";
+          if (delta) {
+            text += delta;
+            onDelta(delta);
+          }
+          if (obj.done) {
+            usage = {
+              inputTokens: obj.prompt_eval_count ?? 0,
+              outputTokens: obj.eval_count ?? 0,
+            };
+          }
+        }
+      }
+      return { text, usage };
+    } catch (err) {
+      // A genuine cancellation propagates; any other failure (Ollama too old to
+      // accept `think`, network blip) degrades to the /v1 path so instant still
+      // answers — just with thinking on.
+      if (req.signal?.aborted) throw err;
+      return super.completeStream(req, onDelta, onStatus);
+    }
   }
 }
 

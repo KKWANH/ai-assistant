@@ -229,7 +229,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     }, 3_000);
     try {
       await provider.completeStream(
-        { system, prompt, signal: controller.signal },
+        { system, prompt, signal: controller.signal, noThink: true },
         (delta) => {
           if (!firstDeltaSeen) {
             firstDeltaSeen = true;
