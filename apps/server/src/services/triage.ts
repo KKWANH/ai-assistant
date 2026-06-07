@@ -144,6 +144,7 @@ export async function triage(
       prompt: trimmed.slice(0, 800),
       json: true,
       signal,
+      noThink: true,
     });
     const parsed = JSON.parse(extractJson(text)) as Record<string, unknown>;
     const result: TriageResult = { ...TRIAGE_DEFAULTS };

@@ -168,17 +168,21 @@ export class OllamaProvider extends OpenAIProvider {
    * — 15–60s even for "say ok". The OpenAI-compatible `/v1` endpoint can't turn
    * it off (every documented knob — `/no_think`, a system message,
    * `chat_template_kwargs.enable_thinking`, `think` — is ignored there), but
-   * Ollama's native `/api/chat` honors `think: false`. Callers that want a
-   * direct answer (instant mode, title generation) set `req.noThink` to get a
-   * sub-2s reply; every other call — and anything needing JSON/guided decoding
-   * — keeps the `/v1` path (image support, `<think>` interception, schema).
+   * Ollama's native `/api/chat` honors `think: false` (and still enforces a JSON
+   * schema through its own `format` field). Callers that want a direct answer —
+   * instant mode, title generation, triage classification — set `req.noThink`
+   * for a sub-2s reply; every other call keeps the `/v1` path (image support,
+   * streamed `<think>` interception, planner guided decoding).
    */
   private nativeThinkOff(req: CompleteRequest): boolean {
-    return !!req.noThink && !req.json && !req.jsonSchema;
+    return !!req.noThink;
   }
 
-  /** POST the native `/api/chat` with thinking disabled. Shared by both paths. */
+  /** POST the native `/api/chat` with thinking disabled. Shared by both paths.
+   *  Native `format` keeps JSON output guided: a schema object when the caller
+   *  passed one, else `"json"` for free-form JSON mode. */
   private nativeChat(req: CompleteRequest, stream: boolean): Promise<Response> {
+    const format = req.jsonSchema?.schema ?? (req.json ? "json" : undefined);
     return fetch(`${this.nativeBase}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -190,6 +194,7 @@ export class OllamaProvider extends OpenAIProvider {
         ],
         think: false,
         stream,
+        ...(format ? { format } : {}),
       }),
       signal: req.signal,
     });
