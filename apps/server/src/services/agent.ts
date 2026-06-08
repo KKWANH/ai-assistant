@@ -128,6 +128,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       workspaceHint = {
         attached: true,
         fileCount: snapshot?.files.length ?? 0,
+        files: (snapshot?.files ?? []).slice(0, 50).map((f) => f.path),
         mcpServers: mcpInventory,
       };
       // Memory rides on the planner AND the synthesis system so both the
@@ -319,7 +320,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     if (shouldConsiderReplan) {
       const remaining = steps.slice(lastIdx + 1);
       const revisedRaw = await safeComplete(provider, {
-        system: buildReplannerSystem(customActions),
+        system: buildReplannerSystem(customActions, workspaceHint),
         prompt: buildReplannerPrompt(userMessage, stepResults, remaining),
         json: true,
         jsonSchema: plannerSchema,
@@ -843,6 +844,13 @@ interface McpInventoryEntry {
 interface WorkspaceHint {
   attached: boolean;
   fileCount: number;
+  /** A sample of the actual indexed file paths. Without this the planner
+   *  only knows *how many* files exist, not *what* they are, so it plans
+   *  around a guessed generic project (`README.md`, `main.py`, `tests/`,
+   *  a `/workspace` root) that doesn't match the real workspace — the first
+   *  read/list step then fails. Feeding the real manifest makes the plan
+   *  cite files that exist. Capped to keep the prompt small. */
+  files?: string[];
   /** Enabled MCP servers visible to this account, each carrying its
    *  current tool list. The planner system prompt renders these so
    *  the model picks REAL tool names (e.g. `list_directory`) instead
@@ -899,6 +907,22 @@ function buildPlannerSchema(customActions: WorkspaceAction[] = []) {
   };
 }
 
+/** A compact list of the workspace's real files for a planner/replanner
+ *  prompt ("" when none). Grounds the plan in files that exist — read_file
+ *  takes these exact relative paths — and steers away from an external fs MCP
+ *  server whose root differs from the workspace. Shared by plan + re-plan so a
+ *  recovery plan is just as grounded as the first one. */
+function workspaceManifestBlock(workspace: WorkspaceHint): string {
+  if (!workspace.files || workspace.files.length === 0) return "";
+  const more =
+    workspace.fileCount > workspace.files.length
+      ? `\n  … and ${(workspace.fileCount - workspace.files.length).toString()} more`
+      : "";
+  return `\nIndexed files — plan around THESE; pass these exact relative paths to read_file, and prefer the built-in read_file / list_files over any external fs MCP tool for workspace files:\n${workspace.files
+    .map((p) => `  - ${p}`)
+    .join("\n")}${more}`;
+}
+
 function buildPlannerSystem(
   customActions: WorkspaceAction[] = [],
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
@@ -937,8 +961,9 @@ function buildPlannerSystem(
   // A short, structured fact block beats burying these in prose — the
   // planner respects it more reliably and avoids picking `read_file` when
   // there is nothing to read.
+  const manifest = workspaceManifestBlock(workspace);
   const wsLine = workspace.attached
-    ? `Workspace attached: yes (${workspace.fileCount.toString()} indexed files). You may use read_file / list_files / run_template.`
+    ? `Workspace attached: yes (${workspace.fileCount.toString()} indexed files). You may use read_file / list_files / run_template.${manifest}`
     : `Workspace attached: no. Do NOT pick read_file, list_files, or run_template — they will return errors. Use web_search or reason instead.`;
   return `You are an agent planner for the Ariadne AI workspace tool.
 ${wsLine}
@@ -1001,12 +1026,15 @@ function buildPlannerPrompt(history: ChatMessage[], userMessage: string): string
   return `${historyStr ? `Recent conversation:\n${historyStr}\n\n` : ""}Task: ${userMessage}`;
 }
 
-function buildReplannerSystem(customActions: WorkspaceAction[] = []): string {
+function buildReplannerSystem(
+  customActions: WorkspaceAction[] = [],
+  workspace: WorkspaceHint = { attached: false, fileCount: 0 },
+): string {
   const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate | mcp_call";
   const customSection = customActions.length > 0
     ? ` | ${customActions.map((a) => a.id).join(" | ")}`
     : "";
-  return `You are an agent replanner for the Ariadne AI workspace tool.
+  return `You are an agent replanner for the Ariadne AI workspace tool.${workspaceManifestBlock(workspace)}
 You are called only when something went off-track — the previous step failed,
 returned little information, or revealed the plan was wrong. Given the user
 task, completed step results so far, and the remaining planned steps, decide
