@@ -21,7 +21,7 @@ import type { AiProvider, ProviderImage } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
-import { performSearch } from "./search.js";
+import { performSearch, fetchUrlText } from "./search.js";
 import { readUpload } from "./uploads.js";
 import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
@@ -240,8 +240,18 @@ export async function buildChatContext(
   const searchResp = await searchPromise;
   if (searchResp && searchResp.results.length > 0) {
     searchResults = searchResp.results;
-    const resultText = searchResp.results
-      .map((r, i) => `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${r.snippet}`)
+    const top = searchResp.results.slice(0, 6);
+    // Read the top pages, not just snippets — a 150-char snippet can't hold the
+    // table/detail the question often needs. The agent web_search path already
+    // does this; chat web search was still snippet-only. Concurrent + best-
+    // effort; a failed/blocked fetch falls back to that result's snippet.
+    const pages = await Promise.all(top.slice(0, 3).map((r) => fetchUrlText(r.url).catch(() => "")));
+    const resultText = top
+      .map((r, i) => {
+        const body = (pages[i] ?? "").trim();
+        const content = body.length > r.snippet.length ? body.slice(0, 2500) : r.snippet;
+        return `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${content}`;
+      })
       .join("\n\n");
     webBlock = `--- Web search results (${searchResp.provider}) ---\n${resultText}`;
   }
