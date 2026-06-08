@@ -31,6 +31,7 @@ import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
 import { evalCaseRoutes } from "./routes/evalCases.js";
 import { memoryRoutes } from "./routes/memory.js";
+import { lectureRoutes } from "./routes/lecture.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { hooksRoutes } from "./routes/hooks.js";
 import { shutdownAll as shutdownMcp } from "./services/mcpClient.js";
@@ -205,6 +206,7 @@ async function bootstrap(): Promise<void> {
       await api.register(reportRoutes);
       await api.register(evalCaseRoutes);
       await api.register(memoryRoutes);
+      await api.register(lectureRoutes);
       await api.register(mcpRoutes);
       await api.register(hooksRoutes);
       await api.register(marketDataRoutes);
