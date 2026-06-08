@@ -152,6 +152,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     prompt: buildPlannerPrompt(history, userMessage),
     json: true,
     jsonSchema: plannerSchema,
+    // Planning is structured selection, not prose — pick which real files to
+    // read and in what order. With the manifest grounding it, chain-of-thought
+    // adds ~40s of <think> on a local reasoning model for little gain. Ollama
+    // honors this via native /api/chat (think:false + the schema as `format`),
+    // so the plan is still guided-decoded; other providers ignore it.
+    noThink: true,
     signal,
   });
 
@@ -324,6 +330,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         prompt: buildReplannerPrompt(userMessage, stepResults, remaining),
         json: true,
         jsonSchema: plannerSchema,
+        noThink: true,
         signal,
       }).catch(() => null);
 
