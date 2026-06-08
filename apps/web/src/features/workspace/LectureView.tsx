@@ -4,11 +4,14 @@
  * or week (scaffolds folders) and to open a week's chat. Reads the live
  * folder structure from GET /api/workspaces/:id/lecture.
  */
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, FileText, Plus, MessageSquarePlus } from "lucide-react";
+import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2 } from "lucide-react";
+import type { Deck } from "@ariadne/shared";
 import * as api from "../../lib/api";
 import { useCreateChat } from "../../lib/queries";
+import { DeckPreview } from "./DeckPreview";
 
 export function LectureView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
@@ -45,6 +48,16 @@ export function LectureView() {
       { workspaceId, title: `${course} · ${week}` },
       { onSuccess: (chat) => navigate(`/chat/${chat.id}`) },
     );
+  };
+
+  const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string } | null>(null);
+  const genDeck = useMutation({
+    mutationFn: (topic: string) => api.generateDeck(workspaceId, topic),
+    onSuccess: (r) => setDeckResult(r),
+  });
+  const makeSlides = (course: string, week: string) => {
+    const topic = window.prompt(`"${course} · ${week}" 슬라이드 주제 (예: 바로크 조각)`)?.trim();
+    if (topic) genDeck.mutate(topic);
   };
 
   return (
@@ -125,12 +138,20 @@ export function LectureView() {
                         </span>
                       )}
                     </div>
-                    <button
-                      onClick={() => openWeekChat(c.name, w.name)}
-                      className="inline-flex shrink-0 items-center gap-1 text-xs text-accent hover:underline"
-                    >
-                      <MessageSquarePlus className="h-3.5 w-3.5" /> 자료 만들기
-                    </button>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <button
+                        onClick={() => makeSlides(c.name, w.name)}
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <Presentation className="h-3.5 w-3.5" /> 슬라이드
+                      </button>
+                      <button
+                        onClick={() => openWeekChat(c.name, w.name)}
+                        className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+                      >
+                        <MessageSquarePlus className="h-3.5 w-3.5" /> 자료 만들기
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -138,6 +159,24 @@ export function LectureView() {
           ))}
         </div>
       </div>
+
+      {genDeck.isPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-accent" />
+            슬라이드 생성 중… (자료를 근거로 덱을 만들고 있어요 · 1–2분)
+          </div>
+        </div>
+      )}
+
+      {deckResult && (
+        <DeckPreview
+          workspaceId={workspaceId}
+          deck={deckResult.deck}
+          fileName={deckResult.fileName}
+          onClose={() => setDeckResult(null)}
+        />
+      )}
     </div>
   );
 }

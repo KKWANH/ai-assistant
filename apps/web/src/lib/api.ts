@@ -84,6 +84,16 @@ export const getLectureStructure = (id: string) =>
 export const scaffoldLectureFolder = (id: string, course: string, week?: string) =>
   request<{ path: string }>("POST", `/workspaces/${id}/lecture/folder`, { course, week });
 
+export const generateDeck = (id: string, topic: string) =>
+  request<{ deck: import("@ariadne/shared").Deck; fileName: string }>(
+    "POST",
+    `/workspaces/${id}/deck`,
+    { topic },
+  );
+
+export const deckFileUrl = (id: string, fileName: string) =>
+  `/api/workspaces/${id}/deck-file?name=${encodeURIComponent(fileName)}`;
+
 export const getSnapshot = (id: string) =>
   request<Snapshot>("GET", `/workspaces/${id}/snapshot`);
 

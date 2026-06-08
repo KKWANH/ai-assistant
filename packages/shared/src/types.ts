@@ -498,6 +498,21 @@ export interface SearchResponse {
   error?: string;
 }
 
+/** A generated lecture slide deck (outline form — backs both the .pptx and
+ *  the in-app preview). */
+export interface DeckSlide {
+  title: string;
+  bullets: string[];
+  notes?: string;
+  /** English image-search terms for one supporting image (or empty). */
+  imageQuery?: string;
+}
+export interface Deck {
+  title: string;
+  subtitle?: string;
+  slides: DeckSlide[];
+}
+
 /** Lecture-prep folder structure (semester → course → week → materials). */
 export interface LectureMaterial {
   name: string;

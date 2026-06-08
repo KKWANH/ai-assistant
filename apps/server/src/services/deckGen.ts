@@ -6,6 +6,7 @@
  * the in-app HTML preview, so one structure drives both.
  */
 import * as PptxNS from "pptxgenjs";
+import type { Deck } from "@ariadne/shared";
 import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
 
@@ -33,19 +34,6 @@ interface PptxInstance {
   readonly ShapeType: { line: unknown };
   addSlide(): PptxSlide;
   write(opts: { outputType: "nodebuffer" }): Promise<Buffer>;
-}
-
-export interface DeckSlide {
-  title: string;
-  bullets: string[];
-  notes?: string;
-  /** English image-search terms for one supporting image (or empty). */
-  imageQuery?: string;
-}
-export interface Deck {
-  title: string;
-  subtitle?: string;
-  slides: DeckSlide[];
 }
 
 const DECK_SCHEMA = {
