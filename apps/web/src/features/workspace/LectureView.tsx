@@ -50,10 +50,10 @@ export function LectureView() {
     );
   };
 
-  const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string } | null>(null);
+  const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string; course: string } | null>(null);
   const genDeck = useMutation({
     mutationFn: (v: { topic: string; course: string }) => api.generateDeck(workspaceId, v.topic, v.course),
-    onSuccess: (r) => setDeckResult(r),
+    onSuccess: (r, v) => setDeckResult({ ...r, course: v.course }),
   });
   const makeSlides = (course: string, week: string) => {
     const topic = window.prompt(`"${course} · ${week}" 슬라이드 주제 (예: 바로크 조각)`)?.trim();
@@ -228,6 +228,7 @@ export function LectureView() {
           workspaceId={workspaceId}
           deck={deckResult.deck}
           fileName={deckResult.fileName}
+          course={deckResult.course}
           onClose={() => setDeckResult(null)}
         />
       )}

@@ -13,7 +13,9 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { requireWorkspace } from "./workspaceGuard.js";
 import { getLectureStructure, scaffoldLectureFolder, getCourseMemo, setCourseMemo } from "../services/lecturePrep.js";
+import type { Deck } from "@ariadne/shared";
 import { generateDeckOutline, buildPptx } from "../services/deckGen.js";
+import { generateScript, buildScriptDocx } from "../services/scriptGen.js";
 import { retrieveRelevantChunks, formatChunksForPrompt } from "../services/retrieval.js";
 import { dbGetLatestSnapshot } from "../db/repo.js";
 import { getActiveSettings } from "../config.js";
@@ -114,7 +116,36 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Download a generated deck from the workspace root.
+  // Generate a lecturer's spoken script (.docx) from a deck.
+  app.post<{ Params: { id: string }; Body: { deck?: Deck; course?: string } }>(
+    "/workspaces/:id/script",
+    async (req, reply) => {
+      const ws = await requireWorkspace(req.params.id, req, reply, "write");
+      if (!ws) return;
+      const deck = req.body?.deck;
+      if (!deck || !Array.isArray(deck.slides) || deck.slides.length === 0) {
+        return reply.status(400).send({ error: "deck is required" });
+      }
+      const courseMemo = req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "";
+      const settings = getActiveSettings();
+      const model =
+        settings.provider === "ollama" ? await resolveOllamaModel(settings.model) : settings.model;
+      const provider = await getProvider({ provider: settings.provider, model });
+      try {
+        const script = await generateScript(deck, courseMemo, provider);
+        const docx = await buildScriptDocx(deck.title, script);
+        const fileName = `${deckFileName(deck.title).replace(/\.pptx$/, "")} 스크립트.docx`;
+        const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
+        if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
+        fs.writeFileSync(dest, docx);
+        return reply.send({ script, fileName });
+      } catch (err) {
+        return reply.status(500).send({ error: "Script generation failed", detail: String(err) });
+      }
+    },
+  );
+
+  // Download a generated file (deck .pptx or script .docx) from the root.
   app.get<{ Params: { id: string }; Querystring: { name?: string } }>(
     "/workspaces/:id/deck-file",
     async (req, reply) => {
@@ -123,9 +154,12 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       const name = req.query.name?.trim();
       if (!name) return reply.status(400).send({ error: "name is required" });
       const abs = safeResolveUnderRoot(path.resolve(ws.rootPath), name);
-      if (!abs || !fs.existsSync(abs)) return reply.status(404).send({ error: "Deck not found" });
+      if (!abs || !fs.existsSync(abs)) return reply.status(404).send({ error: "File not found" });
+      const mime = abs.endsWith(".docx")
+        ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        : "application/vnd.openxmlformats-officedocument.presentationml.presentation";
       return reply
-        .type("application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        .type(mime)
         .header(
           "Content-Disposition",
           `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(abs))}`,

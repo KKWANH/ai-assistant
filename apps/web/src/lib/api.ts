@@ -94,6 +94,9 @@ export const generateDeck = (id: string, topic: string, course?: string) =>
 export const setCourseMemo = (id: string, course: string, memo: string) =>
   request<{ ok: true }>("POST", `/workspaces/${id}/lecture/memo`, { course, memo });
 
+export const generateScript = (id: string, deck: import("@ariadne/shared").Deck, course?: string) =>
+  request<{ fileName: string }>("POST", `/workspaces/${id}/script`, { deck, course });
+
 export const deckFileUrl = (id: string, fileName: string) =>
   `/api/workspaces/${id}/deck-file?name=${encodeURIComponent(fileName)}`;
 

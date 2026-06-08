@@ -5,21 +5,27 @@
  * A download button serves the real .pptx.
  */
 import type { ReactNode } from "react";
-import { X, Download, Image as ImageIcon } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { X, Download, FileText, Loader2, Image as ImageIcon } from "lucide-react";
 import type { Deck } from "@ariadne/shared";
-import { deckFileUrl } from "../../lib/api";
+import { deckFileUrl, generateScript } from "../../lib/api";
 
 export function DeckPreview({
   workspaceId,
   deck,
   fileName,
+  course,
   onClose,
 }: {
   workspaceId: string;
   deck: Deck;
   fileName: string;
+  course?: string;
   onClose: () => void;
 }) {
+  const genScript = useMutation({
+    mutationFn: () => generateScript(workspaceId, deck, course),
+  });
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="mx-auto flex h-full w-full max-w-3xl flex-col" onClick={(e) => e.stopPropagation()}>
@@ -28,6 +34,31 @@ export function DeckPreview({
             {deck.title} · {(deck.slides.length + 1).toString()} 슬라이드
           </span>
           <div className="flex shrink-0 items-center gap-2">
+            {genScript.data ? (
+              <a
+                href={deckFileUrl(workspaceId, genScript.data.fileName)}
+                download
+                className="inline-flex items-center gap-1 rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25"
+              >
+                <FileText className="h-4 w-4" /> 스크립트 다운로드
+              </a>
+            ) : (
+              <button
+                onClick={() => genScript.mutate()}
+                disabled={genScript.isPending}
+                className="inline-flex items-center gap-1 rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25 disabled:opacity-60"
+              >
+                {genScript.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> 스크립트 생성 중…
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" /> 스크립트 (.docx)
+                  </>
+                )}
+              </button>
+            )}
             <a
               href={deckFileUrl(workspaceId, fileName)}
               download

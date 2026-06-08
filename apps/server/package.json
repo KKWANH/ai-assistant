@@ -15,6 +15,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/canvas": "^0.1.67",
     "csv-parse": "^5.6.0",
+    "docx": "^9.7.1",
     "esbuild": "^0.24.0",
     "fastify": "^5.3.2",
     "gray-matter": "^4.0.3",
