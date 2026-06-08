@@ -350,6 +350,9 @@ function runMigrations(db: DatabaseSync): void {
   // metadata was tracked.
   chatMessages("provider", "TEXT");
   chatMessages("model", "TEXT");
+  // images_json — image-search results rendered as a thumbnail grid, when the
+  // message asked to find images. Null on every other message.
+  chatMessages("images_json", "TEXT");
 
   const workspaces = addColumnIfMissing(db, "workspaces");
   workspaces("created_by", "TEXT");

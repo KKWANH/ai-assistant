@@ -22,6 +22,8 @@ export interface TriageNeeds {
   webSearch: boolean;
   /** Write a short title for a new chat (first message only). */
   title: boolean;
+  /** Decide whether the message asks to FIND images (direct-answer path). */
+  images: boolean;
   /** Workspace actions to match the message against (empty = skip). */
   actions: ActionDef[];
 }
@@ -30,6 +32,11 @@ export interface TriageResult {
   agentMode: boolean;
   webSearch: boolean;
   title: string;
+  /** True when the message asks to find/search images. */
+  images: boolean;
+  /** English search terms for the image database (artist + work + medium),
+   *  extracted/translated from the message. Empty when images is false. */
+  imageQuery: string;
   actionIntent: { actionId: string; actionName: string; reason: string } | null;
 }
 
@@ -37,6 +44,8 @@ const TRIAGE_DEFAULTS: TriageResult = {
   agentMode: false,
   webSearch: false,
   title: "",
+  images: false,
+  imageQuery: "",
   actionIntent: null,
 };
 
@@ -89,7 +98,8 @@ export async function triage(
   const wantWeb = needs.webSearch && trimmed.length >= 8;
   const wantTitle = needs.title && trimmed.length >= 2;
   const wantAction = needs.actions.length > 0 && trimmed.length >= 8;
-  if (!wantAgent && !wantWeb && !wantTitle && !wantAction) return { ...TRIAGE_DEFAULTS };
+  const wantImages = needs.images && trimmed.length >= 6;
+  if (!wantAgent && !wantWeb && !wantTitle && !wantAction && !wantImages) return { ...TRIAGE_DEFAULTS };
 
   const questions: string[] = [];
   const keys: string[] = [];
@@ -135,6 +145,17 @@ export async function triage(
         "actionId is set. Actions:\n" + list,
     );
   }
+  if (wantImages) {
+    keys.push("images", "imageQuery");
+    questions.push(
+      '- "images" (boolean): true ONLY when the message asks to FIND / SEARCH / GET ' +
+        "images / pictures / photos / 그림 / 사진 / 도판 OF something (e.g. to put on a slide). " +
+        "false for everything else — including questions ABOUT an image, or asking to analyze / " +
+        'describe / generate one. "imageQuery" (string): when images is true, the best ENGLISH ' +
+        "search terms for an art/image database — artist + work + medium/subject " +
+        '(e.g. "Bernini Apollo and Daphne marble sculpture"). Empty string when images is false.',
+    );
+  }
 
   try {
     const { text } = await provider.complete({
@@ -155,6 +176,13 @@ export async function triage(
     if (wantWeb) result.webSearch = truthy(parsed["webSearch"]);
     if (wantTitle) result.title = cleanJsonTitle(parsed["title"]);
     if (wantAction) result.actionIntent = matchAction(needs.actions, parsed["actionId"], parsed["actionReason"]);
+    if (wantImages) {
+      result.images = truthy(parsed["images"]);
+      result.imageQuery =
+        result.images && typeof parsed["imageQuery"] === "string"
+          ? (parsed["imageQuery"] as string).trim().slice(0, 200)
+          : "";
+    }
     return result;
   } catch {
     return { ...TRIAGE_DEFAULTS };

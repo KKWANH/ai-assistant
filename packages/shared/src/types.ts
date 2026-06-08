@@ -498,6 +498,23 @@ export interface SearchResponse {
   error?: string;
 }
 
+/** One image hit from the image-search service (art/museum collections),
+ *  with everything a lecture slide needs to attribute it. */
+export interface ImageResult {
+  title: string;
+  /** Small preview URL for a grid. */
+  thumbUrl: string;
+  /** Full-resolution image URL (for the fullscreen viewer). */
+  imageUrl: string;
+  /** Human-facing page to cite/link (NOT the raw image). */
+  sourceUrl: string;
+  /** Which collection it came from. */
+  source: string;
+  creator?: string;
+  date?: string;
+  license?: string;
+}
+
 /* ------------------------------------------------------------------ *
  * Chat
  * ------------------------------------------------------------------ */
@@ -531,6 +548,9 @@ export interface ChatMessage {
   webSearch: boolean;
   /** Search results that grounded an assistant reply, if any. */
   searchResults: SearchResult[] | null;
+  /** Image-search results to render as a thumbnail grid, if the message asked
+   *  for images. Null on every other message. */
+  images: ImageResult[] | null;
   /** Plan-and-execute trace, when the message was produced in agent mode. */
   agent: AgentTrace | null;
   /** Provider that generated this message ("anthropic", "openai", "gemini",
@@ -614,6 +634,9 @@ export type ChatStreamEvent =
   | { type: "agent_plan"; steps: AgentStep[] }
   | { type: "agent_step"; step: AgentStep }
   | { type: "intent_suggestion"; actionId: string; actionName: string; reason: string }
+  /** Image-search results for a "find images" message — the web UI renders a
+   *  thumbnail grid the user picks from. */
+  | { type: "images"; images: ImageResult[] }
   | { type: "done"; message: ChatMessage }
   /** Emitted AFTER `done` when the post-stream title generation lands.
    *  The sidebar listens for this and patches the chat row in-place

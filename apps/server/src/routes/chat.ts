@@ -15,7 +15,8 @@
 
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult } from "@ariadne/shared";
+import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult, ImageResult } from "@ariadne/shared";
+import { searchImages } from "../services/imageSearch.js";
 import { CreateChatSchema, UpdateChatSchema, PostMessageSchema, PROVIDER_LABELS } from "@ariadne/shared";
 import type { PostAttachmentInput, ProviderId, ActionDef } from "@ariadne/shared";
 import {
@@ -155,6 +156,8 @@ interface StreamReplyResult {
    *  from the no-key notice path (no provider was actually called). */
   provider: string | null;
   model: string | null;
+  /** Image-search results when the message asked to find images. */
+  images?: ImageResult[] | null;
 }
 
 /**
@@ -283,10 +286,11 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     agent: rawAgentMode === "auto" && hasContent,
     webSearch: webSearchMode === "auto" && hasContent && mayAnswerDirectly,
     title: shouldGenerateTitle && hasContent,
+    images: hasContent && mayAnswerDirectly,
     actions: triageActions,
   };
   let triagePromise: Promise<TriageResult | null> | null = null;
-  if (triageNeeds.agent || triageNeeds.webSearch || triageNeeds.title || triageNeeds.actions.length > 0) {
+  if (triageNeeds.agent || triageNeeds.webSearch || triageNeeds.title || triageNeeds.images || triageNeeds.actions.length > 0) {
     const triageSettings = getTriageSettings();
     const triageModelName =
       triageSettings.provider === "ollama"
@@ -326,6 +330,35 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   // to the chat row after the answer streams (see StreamReplyResult.titlePromise).
   const chatTitlePromise: Promise<string> | null =
     triageNeeds.title && triagePromise ? triagePromise.then((t) => t?.title ?? "") : null;
+
+  // Image-search short-circuit — the message asked to FIND images. Return a
+  // thumbnail grid (each with source/creator/license) instead of a prose
+  // answer; the web UI renders it as a picker to drop into a slide. Direct-
+  // answer path only (agent mode runs its own flow).
+  if (!agentMode && triagePromise) {
+    const t = await triagePromise;
+    if (t?.images && t.imageQuery) {
+      emit({ type: "status", text: "Finding images…" });
+      const found = await searchImages(t.imageQuery, controller.signal).catch(() => null);
+      if (found && found.results.length > 0) {
+        const intro = accountLocale?.startsWith("ko")
+          ? `“${t.imageQuery}” 이미지 ${found.results.length.toString()}장을 ${found.sources.join(", ")}에서 찾았어요. 슬라이드에 쓸 이미지를 고르세요 — 각 이미지에 출처·작가·라이선스가 있습니다.`
+          : `Found ${found.results.length.toString()} images for “${t.imageQuery}” across ${found.sources.join(", ")}. Pick the ones for your slide — each carries its source, creator, and license.`;
+        assistantContent = intro;
+        emit({ type: "delta", text: intro });
+        emit({ type: "images", images: found.results });
+        return {
+          assistantContent,
+          agentTrace: null,
+          searchResults: null,
+          images: found.results,
+          titlePromise: chatTitlePromise,
+          provider: settings.provider,
+          model,
+        };
+      }
+    }
+  }
 
   // Best-effort: surface a relevant workspace action as a chat suggestion.
   if (triageNeeds.actions.length > 0 && triagePromise) {
@@ -684,6 +717,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           attachments: chatAttachments,
           webSearch: webSearch === "on",
           searchResults: null,
+          images: null,
           agent: null,
           createdAt: now(),
         };
@@ -766,6 +800,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           attachments: [],
           webSearch: false,
           searchResults,
+          images: replyResult.images ?? null,
           agent: agentTrace,
           provider: replyProvider,
           model: replyModel,
@@ -958,6 +993,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           attachments: [],
           webSearch: false,
           searchResults: result.searchResults,
+          images: result.images ?? null,
           agent: result.agentTrace,
           provider: result.provider,
           model: result.model,

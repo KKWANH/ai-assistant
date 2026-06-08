@@ -14,22 +14,8 @@
  * are interleaved for source diversity and de-duplicated by image URL.
  */
 
+import type { ImageResult } from "@ariadne/shared";
 import logger from "../logger.js";
-
-export interface ImageResult {
-  title: string;
-  /** Small preview URL for a grid. */
-  thumbUrl: string;
-  /** Full-resolution image URL. */
-  imageUrl: string;
-  /** Human-facing page to cite/link (NOT the raw image). */
-  sourceUrl: string;
-  /** Which collection it came from. */
-  source: string;
-  creator?: string;
-  date?: string;
-  license?: string;
-}
 
 export interface ImageSearchResponse {
   results: ImageResult[];

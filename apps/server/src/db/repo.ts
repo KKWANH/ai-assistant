@@ -581,8 +581,8 @@ export function dbInsertMessage(m: ChatMessage): void {
   db.prepare(
     `INSERT INTO chat_messages
        (id, chat_id, role, content, attachments_json, web_search, search_results_json,
-        agent_json, revisions_json, provider, model, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        agent_json, revisions_json, provider, model, images_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     m.id,
     m.chatId,
@@ -595,6 +595,7 @@ export function dbInsertMessage(m: ChatMessage): void {
     m.revisions && m.revisions.length > 0 ? JSON.stringify(m.revisions) : null,
     m.provider ?? null,
     m.model ?? null,
+    m.images && m.images.length > 0 ? JSON.stringify(m.images) : null,
     m.createdAt
   );
 }
@@ -668,6 +669,7 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
     attachments: j<ChatAttachment[]>(row["attachments_json"] as string | null, []),
     webSearch: Boolean(row["web_search"]),
     searchResults: j<SearchResult[] | null>(row["search_results_json"] as string | null, null),
+    images: j<import("@ariadne/shared").ImageResult[] | null>(row["images_json"] as string | null, null),
     agent: j<AgentTrace | null>(row["agent_json"] as string | null, null),
     provider: (row["provider"] as string | null) ?? null,
     model: (row["model"] as string | null) ?? null,
