@@ -74,7 +74,7 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
   // Generate a .pptx deck for a topic, grounded in the workspace's materials,
   // saved to the workspace root. Returns the outline (for the preview) + the
   // file name (for download). Write-gated — it both generates and saves.
-  app.post<{ Params: { id: string }; Body: { topic?: string; course?: string } }>(
+  app.post<{ Params: { id: string }; Body: { topic?: string; course?: string; week?: string } }>(
     "/workspaces/:id/deck",
     async (req, reply) => {
       const ws = await requireWorkspace(req.params.id, req, reply, "write");
@@ -87,11 +87,18 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       const snapshot = dbGetLatestSnapshot(req.params.id);
       if (snapshot && snapshot.files.length > 0) {
         try {
+          // Pull a wide set, then — when a week is given — prefer that week's
+          // own materials (scope the deck to the week the lecturer is on),
+          // falling back to the workspace-wide hits if the week isn't indexed.
           const chunks = await retrieveRelevantChunks(ws.rootPath, snapshot.files, topic, {
             workspaceId: ws.id,
-            topK: 8,
+            topK: req.body?.week ? 25 : 8,
           });
-          grounding = formatChunksForPrompt(chunks);
+          const week = req.body?.week;
+          const scoped = week
+            ? chunks.filter((c) => c.path.startsWith(`${week.replace(/\/$/, "")}/`))
+            : chunks;
+          grounding = formatChunksForPrompt((scoped.length > 0 ? scoped : chunks).slice(0, 8));
         } catch {
           /* fall back to topic-only generation */
         }

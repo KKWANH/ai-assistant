@@ -52,12 +52,18 @@ export function LectureView() {
 
   const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string; course: string } | null>(null);
   const genDeck = useMutation({
-    mutationFn: (v: { topic: string; course: string }) => api.generateDeck(workspaceId, v.topic, v.course),
+    mutationFn: (v: { topic: string; course: string; week: string }) =>
+      api.generateDeck(workspaceId, v.topic, v.course, v.week),
     onSuccess: (r, v) => setDeckResult({ ...r, course: v.course }),
   });
-  const makeSlides = (course: string, week: string) => {
-    const topic = window.prompt(`"${course} · ${week}" 슬라이드 주제 (예: 바로크 조각)`)?.trim();
-    if (topic) genDeck.mutate({ topic, course });
+  const [slidePrompt, setSlidePrompt] = useState<{ course: string; week: string; topic: string } | null>(null);
+  const makeSlides = (course: string, week: string) => setSlidePrompt({ course, week, topic: "" });
+  const submitSlides = () => {
+    const topic = slidePrompt?.topic.trim();
+    if (slidePrompt && topic) {
+      genDeck.mutate({ topic, course: slidePrompt.course, week: slidePrompt.week });
+      setSlidePrompt(null);
+    }
   };
 
   const [memoEdit, setMemoEdit] = useState<{ course: string; memo: string } | null>(null);
@@ -177,6 +183,45 @@ export function LectureView() {
           ))}
         </div>
       </div>
+
+      {slidePrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setSlidePrompt(null)}
+        >
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-1 text-sm font-semibold">슬라이드 만들기</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {slidePrompt.course} · {slidePrompt.week} — 이 주차 자료를 근거로 덱을 생성합니다.
+            </p>
+            <input
+              autoFocus
+              value={slidePrompt.topic}
+              onChange={(e) => setSlidePrompt({ ...slidePrompt, topic: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitSlides();
+              }}
+              placeholder="슬라이드 주제 (예: 바로크 조각 — 베르니니)"
+              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setSlidePrompt(null)}
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
+              >
+                취소
+              </button>
+              <button
+                onClick={submitSlides}
+                disabled={!slidePrompt.topic.trim()}
+                className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
+              >
+                생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {memoEdit && (
         <div

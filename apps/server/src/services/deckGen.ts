@@ -80,16 +80,27 @@ export async function generateDeckOutline(
     "content slides. Each content slide has a short title, 3–5 concise bullet points (not full " +
     "sentences), speaker notes of 2–4 sentences the lecturer will read aloud, and an imageQuery: " +
     "ENGLISH search terms for ONE supporting image (artist + work + medium for art topics), or an " +
-    "empty string. Write titles, bullets, and notes in the SAME language as the topic. When " +
-    "materials are provided, ground the content STRICTLY in them — never invent facts, dates, or " +
-    "names. Reply with ONLY the JSON deck." +
+    "empty string. Write titles, bullets, and notes in the SAME language as the topic. Be strictly " +
+    "factual: never invent dates, names, or attributions — if unsure, keep a bullet general rather " +
+    "than state something that may be wrong. When materials are provided, ground the content " +
+    "STRICTLY in them. Reply with ONLY the JSON deck." +
     courseContext;
   const prompt =
     `Topic: ${topic}\n\n` +
     (grounding.trim()
       ? `Materials to ground in:\n${grounding.slice(0, 8000)}`
       : "(No materials provided — use general knowledge and stay factual.)");
-  const { text } = await provider.complete({ system, prompt, json: true, jsonSchema: DECK_SCHEMA, signal });
+  const { text } = await provider.complete({
+    system,
+    prompt,
+    json: true,
+    jsonSchema: DECK_SCHEMA,
+    signal,
+    // The outline is structured selection grounded in the materials, not open
+    // reasoning — chain-of-thought roughly doubled the wall time for little
+    // gain. Ollama honors this via native /api/chat + the schema as `format`.
+    noThink: true,
+  });
   const parsed = JSON.parse(extractJson(text)) as Partial<Deck>;
   return {
     title: (parsed.title || topic).slice(0, 200),

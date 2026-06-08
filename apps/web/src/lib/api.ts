@@ -84,11 +84,11 @@ export const getLectureStructure = (id: string) =>
 export const scaffoldLectureFolder = (id: string, course: string, week?: string) =>
   request<{ path: string }>("POST", `/workspaces/${id}/lecture/folder`, { course, week });
 
-export const generateDeck = (id: string, topic: string, course?: string) =>
+export const generateDeck = (id: string, topic: string, course?: string, week?: string) =>
   request<{ deck: import("@ariadne/shared").Deck; fileName: string }>(
     "POST",
     `/workspaces/${id}/deck`,
-    { topic, course },
+    { topic, course, week },
   );
 
 export const setCourseMemo = (id: string, course: string, memo: string) =>
