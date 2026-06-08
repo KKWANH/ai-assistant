@@ -203,7 +203,13 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   // Title generation still runs in parallel (cheap, valuable). What
   // mom needs: "ask question, get answer fast" — no warm-up status
   // lines, no multi-stage spinner.
-  if (mode === "instant" && hasContent) {
+  // Attachments are the one thing instant can't shortcut: this path never
+  // reads the uploaded files (no buildChatContext) and streams without vision,
+  // so an instant message with a file would silently answer "I can't see it".
+  // A new no-workspace chat defaults to instant, and pasted long text becomes a
+  // file — so this is easy to hit. Fall through to the standard path, which
+  // parses text attachments and routes images through the vision call.
+  if (mode === "instant" && hasContent && attachmentRefs.length === 0) {
     const chatTitlePromise: Promise<string> | null = shouldGenerateTitle
       ? generateChatTitle(provider, userContent, controller.signal).catch(() => "")
       : null;
