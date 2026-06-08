@@ -263,6 +263,7 @@ const en = {
   "workspace.list.files": "{n} files",
 
   "workspace.scanFiles": "Scan files",
+  "workspace.lecturePrep": "Lecture prep",
   "workspace.scanComplete": "Scan complete",
   "workspace.scanFailed": "Scan failed",
   "workspace.search.title": "Search this workspace",

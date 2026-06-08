@@ -498,6 +498,29 @@ export interface SearchResponse {
   error?: string;
 }
 
+/** Lecture-prep folder structure (semester → course → week → materials). */
+export interface LectureMaterial {
+  name: string;
+  /** Path relative to the workspace root. */
+  path: string;
+  ext: string;
+}
+export interface LectureWeek {
+  name: string;
+  path: string;
+  materials: LectureMaterial[];
+}
+export interface LectureCourse {
+  name: string;
+  path: string;
+  /** Loose files at the course root (syllabus, course memo, …). */
+  files: LectureMaterial[];
+  weeks: LectureWeek[];
+}
+export interface LectureStructure {
+  courses: LectureCourse[];
+}
+
 /** One image hit from the image-search service (art/museum collections),
  *  with everything a lecture slide needs to attribute it. */
 export interface ImageResult {

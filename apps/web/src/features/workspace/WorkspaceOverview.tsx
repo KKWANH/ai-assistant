@@ -40,6 +40,7 @@ import {
   Pencil,
   Trash2,
   GitCommit,
+  GraduationCap,
   Undo2,
   BrainCircuit,
   Workflow,
@@ -1117,6 +1118,14 @@ export function WorkspaceOverview() {
                 {ws.visibility === "public"
                   ? t("workspace.visibility.makePrivate")
                   : t("workspace.visibility.makePublic")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<GraduationCap className="h-3.5 w-3.5" />}
+                onClick={() => navigate(`/workspaces/${ws.id}/lecture`)}
+              >
+                {t("workspace.lecturePrep")}
               </Button>
               <Button
                 variant="ghost"

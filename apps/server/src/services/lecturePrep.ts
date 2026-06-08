@@ -13,32 +13,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import type { LectureStructure, LectureCourse, LectureWeek, LectureMaterial } from "@ariadne/shared";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
-
-export interface LectureMaterial {
-  name: string;
-  /** Path relative to the workspace root. */
-  path: string;
-  ext: string;
-}
-
-export interface LectureWeek {
-  name: string;
-  path: string;
-  materials: LectureMaterial[];
-}
-
-export interface LectureCourse {
-  name: string;
-  path: string;
-  /** Loose files at the course root (syllabus, course memo, …). */
-  files: LectureMaterial[];
-  weeks: LectureWeek[];
-}
-
-export interface LectureStructure {
-  courses: LectureCourse[];
-}
 
 /** Folders that are never a course (app/system dirs). */
 const SKIP_DIRS = new Set([".ariadne", ".git", "node_modules", "__pycache__"]);

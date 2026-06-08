@@ -78,6 +78,12 @@ export const deleteWorkspace = (id: string) =>
 export const scanWorkspace = (id: string) =>
   request<Snapshot>("POST", `/workspaces/${id}/scan`);
 
+export const getLectureStructure = (id: string) =>
+  request<import("@ariadne/shared").LectureStructure>("GET", `/workspaces/${id}/lecture`);
+
+export const scaffoldLectureFolder = (id: string, course: string, week?: string) =>
+  request<{ path: string }>("POST", `/workspaces/${id}/lecture/folder`, { course, week });
+
 export const getSnapshot = (id: string) =>
   request<Snapshot>("GET", `/workspaces/${id}/snapshot`);
 

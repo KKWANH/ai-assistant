@@ -256,6 +256,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.list.files": "{n}개 파일",
 
   "workspace.scanFiles": "파일 스캔",
+  "workspace.lecturePrep": "강의 준비",
   "workspace.scanComplete": "스캔 완료",
   "workspace.scanFailed": "스캔 실패",
   "workspace.search.title": "이 워크스페이스 검색",
