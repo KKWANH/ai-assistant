@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { requireWorkspace } from "./workspaceGuard.js";
-import { getLectureStructure, scaffoldLectureFolder } from "../services/lecturePrep.js";
+import { getLectureStructure, scaffoldLectureFolder, getCourseMemo, setCourseMemo } from "../services/lecturePrep.js";
 import { generateDeckOutline, buildPptx } from "../services/deckGen.js";
 import { retrieveRelevantChunks, formatChunksForPrompt } from "../services/retrieval.js";
 import { dbGetLatestSnapshot } from "../db/repo.js";
@@ -51,16 +51,35 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Set a course's memo (its fixed thread + teaching style + student level),
+  // injected into every deck generated for that course.
+  app.post<{ Params: { id: string }; Body: { course?: string; memo?: string } }>(
+    "/workspaces/:id/lecture/memo",
+    async (req, reply) => {
+      const ws = await requireWorkspace(req.params.id, req, reply, "write");
+      if (!ws) return;
+      const course = req.body?.course?.trim();
+      if (!course) return reply.status(400).send({ error: "course is required" });
+      try {
+        setCourseMemo(ws.rootPath, course, req.body?.memo ?? "");
+        return reply.send({ ok: true as const });
+      } catch (err) {
+        return reply.status(400).send({ error: "Could not save memo", detail: String(err) });
+      }
+    },
+  );
+
   // Generate a .pptx deck for a topic, grounded in the workspace's materials,
   // saved to the workspace root. Returns the outline (for the preview) + the
   // file name (for download). Write-gated — it both generates and saves.
-  app.post<{ Params: { id: string }; Body: { topic?: string } }>(
+  app.post<{ Params: { id: string }; Body: { topic?: string; course?: string } }>(
     "/workspaces/:id/deck",
     async (req, reply) => {
       const ws = await requireWorkspace(req.params.id, req, reply, "write");
       if (!ws) return;
       const topic = req.body?.topic?.trim();
       if (!topic) return reply.status(400).send({ error: "topic is required" });
+      const courseMemo = req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "";
 
       let grounding = "";
       const snapshot = dbGetLatestSnapshot(req.params.id);
@@ -82,7 +101,7 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       const provider = await getProvider({ provider: settings.provider, model });
 
       try {
-        const deck = await generateDeckOutline(topic, grounding, provider);
+        const deck = await generateDeckOutline(topic, grounding, provider, undefined, courseMemo);
         const pptx = await buildPptx(deck);
         const fileName = deckFileName(deck.title);
         const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);

@@ -52,13 +52,22 @@ export function LectureView() {
 
   const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string } | null>(null);
   const genDeck = useMutation({
-    mutationFn: (topic: string) => api.generateDeck(workspaceId, topic),
+    mutationFn: (v: { topic: string; course: string }) => api.generateDeck(workspaceId, v.topic, v.course),
     onSuccess: (r) => setDeckResult(r),
   });
   const makeSlides = (course: string, week: string) => {
     const topic = window.prompt(`"${course} · ${week}" 슬라이드 주제 (예: 바로크 조각)`)?.trim();
-    if (topic) genDeck.mutate(topic);
+    if (topic) genDeck.mutate({ topic, course });
   };
+
+  const [memoEdit, setMemoEdit] = useState<{ course: string; memo: string } | null>(null);
+  const saveMemo = useMutation({
+    mutationFn: (v: { course: string; memo: string }) => api.setCourseMemo(workspaceId, v.course, v.memo),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["lecture", workspaceId] });
+      setMemoEdit(null);
+    },
+  });
 
   return (
     <div className="h-full overflow-y-auto">
@@ -99,12 +108,21 @@ export function LectureView() {
                   <span className="truncate">{c.name}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">· {c.weeks.length}주차</span>
                 </div>
-                <button
-                  onClick={() => addWeek(c.name)}
-                  className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Plus className="h-3 w-3" /> 주차
-                </button>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    onClick={() => setMemoEdit({ course: c.name, memo: c.memo })}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    title="과목 메모 — 줄기·교수 스타일·수강생 수준 (슬라이드에 자동 반영)"
+                  >
+                    <FileText className="h-3 w-3" /> 메모{c.memo.trim() ? " ●" : ""}
+                  </button>
+                  <button
+                    onClick={() => addWeek(c.name)}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="h-3 w-3" /> 주차
+                  </button>
+                </div>
               </div>
 
               {c.files.length > 0 && (
@@ -159,6 +177,42 @@ export function LectureView() {
           ))}
         </div>
       </div>
+
+      {memoEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setMemoEdit(null)}
+        >
+          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-1 text-sm font-semibold">{memoEdit.course} · 과목 메모</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              이 과목의 줄기·교수 스타일·수강생 수준을 적어두면, 이 과목 슬라이드 생성에 자동 반영됩니다.
+            </p>
+            <textarea
+              value={memoEdit.memo}
+              onChange={(e) => setMemoEdit({ ...memoEdit, memo: e.target.value })}
+              rows={8}
+              placeholder="예: 학부 2학년 대상. 작품 분석 중심, 미술사 맥락을 곁들임. 어려운 용어는 쉽게 풀어 설명. 매 강의 도판 3–4점."
+              className="w-full resize-y rounded-md border border-border bg-surface-2 p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setMemoEdit(null)}
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => saveMemo.mutate(memoEdit)}
+                disabled={saveMemo.isPending}
+                className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
+              >
+                {saveMemo.isPending ? "저장 중…" : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {genDeck.isPending && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

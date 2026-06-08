@@ -531,6 +531,9 @@ export interface LectureCourse {
   /** Loose files at the course root (syllabus, course memo, …). */
   files: LectureMaterial[];
   weeks: LectureWeek[];
+  /** The course's fixed thread + teaching style + student level. Injected
+   *  into every deck generated for this course so they stay consistent. */
+  memo: string;
 }
 export interface LectureStructure {
   courses: LectureCourse[];

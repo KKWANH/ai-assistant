@@ -69,7 +69,12 @@ export async function generateDeckOutline(
   grounding: string,
   provider: AiProvider,
   signal?: AbortSignal,
+  courseMemo = "",
 ): Promise<Deck> {
+  const courseContext = courseMemo.trim()
+    ? `\n\nCourse context — keep EVERY slide consistent with the course's thread, teaching ` +
+      `style, and student level described here:\n${courseMemo.trim().slice(0, 2000)}`
+    : "";
   const system =
     "You are a lecture-slide author. Produce a clear, academic slide deck: a title plus 8–12 " +
     "content slides. Each content slide has a short title, 3–5 concise bullet points (not full " +
@@ -77,7 +82,8 @@ export async function generateDeckOutline(
     "ENGLISH search terms for ONE supporting image (artist + work + medium for art topics), or an " +
     "empty string. Write titles, bullets, and notes in the SAME language as the topic. When " +
     "materials are provided, ground the content STRICTLY in them — never invent facts, dates, or " +
-    "names. Reply with ONLY the JSON deck.";
+    "names. Reply with ONLY the JSON deck." +
+    courseContext;
   const prompt =
     `Topic: ${topic}\n\n` +
     (grounding.trim()
