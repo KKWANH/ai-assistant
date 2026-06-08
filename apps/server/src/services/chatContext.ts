@@ -37,6 +37,11 @@ export interface ChatContextResult {
   prompt: string;
   images: ProviderImage[];
   searchResults: SearchResult[] | null;
+  /** Distinct workspace files whose excerpts were fed to the model this turn —
+   *  surfaced to the user as a "referenced files" footer so a chat answer over
+   *  a folder shows what it drew on (the web-search path already exposes its
+   *  sources via searchResults; this is the symmetric workspace-file signal). */
+  contextSources: string[];
 }
 
 /** Append the user's saved profile to a system prompt (no-op when empty). */
@@ -87,6 +92,7 @@ export async function buildChatContext(
   let workspaceBlock: string | undefined;
   let historyBlock: string | undefined;
   let searchResults: SearchResult[] | null = null;
+  let contextSources: string[] = [];
 
   // 1. Attached files / images
   if (userMessage.attachments && userMessage.attachments.length > 0) {
@@ -202,6 +208,8 @@ export async function buildChatContext(
         const rendered = formatChunksForPrompt(ranked);
         if (rendered) {
           contentPart = `--- Workspace excerpts (most relevant to the question) ---\n${rendered}`;
+          // Distinct files behind those excerpts — the answer's evidence trail.
+          contextSources = [...new Set(ranked.map((c) => c.path))];
         }
       }
       // Fall back to the legacy "smallest files inline" pass when the
@@ -287,7 +295,7 @@ export async function buildChatContext(
     dynamicBlocks.length > 0 ? dynamicBlocks.join("\n\n") + "\n\n" : "";
   const prompt = `${contextBlock}User: ${userMessage.content}`;
 
-  return { system, prompt, images, searchResults };
+  return { system, prompt, images, searchResults, contextSources };
 }
 
 // ---------------------------------------------------------------------------

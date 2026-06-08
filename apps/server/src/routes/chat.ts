@@ -403,6 +403,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         prompt: `User: ${userContent}`,
         images: [],
         searchResults: null,
+        contextSources: [],
       };
     }
     contextSearchResults = contextResult.searchResults;
@@ -425,6 +426,15 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
           (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
           (status) => { emit({ type: "status", text: status }); },
         );
+      }
+      // Surface the workspace files behind the answer — symmetric with the web
+      // search sources the UI already shows. Only when retrieval actually fed
+      // excerpts and a real answer streamed (abort/error throw past this point).
+      if (contextResult.contextSources.length > 0 && assistantContent.trim()) {
+        const label = accountLocale?.startsWith("ko") ? "참고한 파일" : "Sources";
+        const footer = `\n\n*${label}: ${contextResult.contextSources.join(", ")}*`;
+        assistantContent += footer;
+        emit({ type: "delta", text: footer });
       }
     } catch (err) {
       if (controller.signal.aborted) {
