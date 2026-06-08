@@ -39,6 +39,7 @@ import * as api from "../../lib/api";
 import { useEditMessage } from "../../lib/queries";
 import { parseCsv } from "../../lib/tableData";
 import { TableSheet } from "./TableSheet";
+import { ImageGrid } from "./ImageGrid";
 import { PromoteCaseModal } from "../eval/PromoteCaseModal";
 import { SaveToMemoryModal } from "../memory/SaveToMemoryModal";
 
@@ -720,6 +721,10 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
             {/* Search sources */}
             {message.searchResults && message.searchResults.length > 0 && (
               <SearchSources results={message.searchResults} />
+            )}
+
+            {message.images && message.images.length > 0 && (
+              <ImageGrid images={message.images} />
             )}
 
             {/* Attachments */}

@@ -511,6 +511,7 @@ export interface StreamHandlers {
   onAgentPlan?: (steps: import("@ariadne/shared").AgentStep[]) => void;
   onAgentStep?: (step: import("@ariadne/shared").AgentStep) => void;
   onIntentSuggestion?: (s: { actionId: string; actionName: string; reason: string }) => void;
+  onImages?: (images: import("@ariadne/shared").ImageResult[]) => void;
   onDone?: (msg: ChatMessage) => void;
   /** Fired after `done` when an auto-title resolves. Lets the sidebar
    *  patch the chat row in-place without a refetch. */
@@ -611,6 +612,9 @@ async function consumeMessageStream(
               actionName: event.actionName,
               reason: event.reason,
             });
+            break;
+          case "images":
+            handlers.onImages?.(event.images);
             break;
           case "done":
             receivedTerminal = true;

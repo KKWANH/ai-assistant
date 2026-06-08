@@ -70,6 +70,8 @@ const ko: Record<TranslationKey, string> = {
   "nav.toggleInspector.desc": "오른쪽 상세 패널 보이기·숨기기",
   "nav.openMenu": "메뉴 열기",
   "nav.closeMenu": "메뉴 닫기",
+  "nav.hideSidebar": "사이드바 숨기기",
+  "nav.showSidebar": "사이드바 보이기",
   "nav.home": "홈",
 
   // Command menu

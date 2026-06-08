@@ -47,6 +47,8 @@ import {
   Pencil,
   Globe,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
 } from "lucide-react";
 import { useUIStore } from "../../lib/store";
@@ -327,6 +329,9 @@ export function AppShell({ children }: AppShellProps) {
 
   const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Desktop sidebar collapse — a focus/reading mode that hides the left nav
+  // (mobile already has the off-canvas drawer). Toggled from the top bar.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
   const accountMode: AccountMode = me?.account.mode ?? "standard";
@@ -503,6 +508,16 @@ export function AppShell({ children }: AppShellProps) {
               <Menu className="h-4 w-4" />
             </IconButton>
           </span>
+          {/* Desktop sidebar collapse toggle */}
+          <span className="hidden md:flex">
+            <IconButton
+              label={sidebarCollapsed ? t("nav.showSidebar") : t("nav.hideSidebar")}
+              size="sm"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </IconButton>
+          </span>
           {/* Brand — links to home */}
           <Link
             to="/"
@@ -662,6 +677,8 @@ export function AppShell({ children }: AppShellProps) {
             "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:w-64 max-md:shadow-2xl",
             "max-md:transition-transform max-md:duration-200 max-md:ease-out",
             mobileNavOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
+            // Desktop collapse — hide the static column (mobile keeps its drawer).
+            sidebarCollapsed ? "md:hidden" : "",
           ].join(" ")}
           aria-label={t("nav.ariaLabel")}
         >

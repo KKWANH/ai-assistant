@@ -624,6 +624,7 @@ export function useEditMessage() {
               attachments: [],
               webSearch: false,
               searchResults: null,
+              images: null,
               agent: null,
               createdAt: new Date().toISOString(),
             };
@@ -664,6 +665,9 @@ export function useEditMessage() {
               : [...cur, step];
             return { ...m, agent: { steps: updated } };
           });
+        },
+        onImages: (images) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({ ...m, images }));
         },
         onDone: (finalMsg) => {
           setCachedChat(qc, chatId, (old) => {
@@ -825,6 +829,7 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
             attachments: [],
             webSearch: false,
             searchResults: null,
+            images: null,
             agent: null,
             createdAt: new Date().toISOString(),
           };
@@ -863,6 +868,10 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
 
         onIntentSuggestion: (s) => {
           opts?.onIntentSuggestion?.(s);
+        },
+
+        onImages: (images) => {
+          patchCachedMessage(qc, chatId, streamingId, (m) => ({ ...m, images }));
         },
 
         onAgentStep: (step) => {

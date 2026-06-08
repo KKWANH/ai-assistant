@@ -77,6 +77,8 @@ const en = {
   "nav.toggleInspector.desc": "Show or hide the right-side details panel",
   "nav.openMenu": "Open menu",
   "nav.closeMenu": "Close menu",
+  "nav.hideSidebar": "Hide sidebar",
+  "nav.showSidebar": "Show sidebar",
   "nav.home": "Home",
 
   // Command menu

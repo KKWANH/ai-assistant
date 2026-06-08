@@ -209,6 +209,7 @@ function MessageList({
         attachments: [],
         webSearch: false,
         searchResults: null,
+        images: null,
         agent:
           reconnectGen.agentSteps.length > 0
             ? { steps: reconnectGen.agentSteps }
