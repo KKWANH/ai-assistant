@@ -96,11 +96,14 @@ export async function triage(
   if (wantAgent) {
     keys.push("agent");
     questions.push(
-      '- "agent" (boolean): true ONLY when the task plainly requires multi-step work or external ' +
-        'lookups to do well — e.g. "compare X and Y across these files", "research recent news on Z ' +
-        'and summarise", "go through holdings.csv and flag anomalies". false for anything one direct ' +
-        "response handles well: questions, opinions, small talk, coding, writing, translation, " +
-        "general-knowledge lookups.",
+      '- "agent" (boolean): true ONLY when the task needs ITERATIVE tool use a single ' +
+        'answer cannot give — e.g. "compare X and Y across these files", "research recent news on Z ' +
+        'and summarise", "go through holdings.csv and flag anomalies", running code/tests, or editing ' +
+        'files. false for anything one direct response handles well: questions, opinions, small talk, ' +
+        "coding, writing, translation, general-knowledge lookups. IMPORTANT: a plain summary, " +
+        'overview, or "explain/what does this do" over the attached or workspace files is FALSE — ' +
+        "those files are already retrieved into context, so a direct answer covers it without the " +
+        "slower agent loop.",
     );
   }
   if (wantWeb) {
