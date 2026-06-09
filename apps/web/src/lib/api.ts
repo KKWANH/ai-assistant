@@ -97,6 +97,18 @@ export const setCourseMemo = (id: string, course: string, memo: string) =>
 export const generateScript = (id: string, deck: import("@ariadne/shared").Deck, course?: string) =>
   request<{ fileName: string }>("POST", `/workspaces/${id}/script`, { deck, course });
 
+// Rebuild a deck's .pptx after picking per-slide images (embeds them).
+export const rebuildDeck = (id: string, deck: import("@ariadne/shared").Deck) =>
+  request<{ fileName: string }>("POST", `/workspaces/${id}/deck-rebuild`, { deck });
+
+// Image search for a slide's imageQuery — real images with citable sources.
+export const searchImages = (query: string) =>
+  request<{ results: import("@ariadne/shared").ImageResult[]; sources: string[] }>(
+    "POST",
+    `/images/search`,
+    { query },
+  );
+
 export const deckFileUrl = (id: string, fileName: string) =>
   `/api/workspaces/${id}/deck-file?name=${encodeURIComponent(fileName)}`;
 

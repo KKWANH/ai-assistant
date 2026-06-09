@@ -199,20 +199,19 @@ function stripTags(html: string): string {
 }
 
 /**
- * Fetch a web page and reduce it to readable text — no html-parser dependency.
- * Turns snippet-only search into page-reading search: the model can extract
- * tables, rankings, and detail it could never see from a 150-char snippet.
- * Crude (regex strip) but robust + dependency-free; best-effort, returns "" on
- * any failure. SSRF-guarded: http(s) only, never loopback/private hosts.
+ * Shared SSRF guard: parse a URL and return it only when it is safe to fetch
+ * server-side — http(s) scheme and not a loopback/private/link-local host.
+ * Returns null otherwise. Used anywhere the server fetches a caller-influenced
+ * URL (page reading, slide-image embedding).
  */
-export async function fetchUrlText(url: string, signal?: AbortSignal): Promise<string> {
+export function parsePublicHttpUrl(url: string): URL | null {
   let u: URL;
   try {
     u = new URL(url);
   } catch {
-    return "";
+    return null;
   }
-  if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
   const host = u.hostname.toLowerCase();
   if (
     host === "localhost" ||
@@ -221,8 +220,21 @@ export async function fetchUrlText(url: string, signal?: AbortSignal): Promise<s
     /^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host) ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(host)
   ) {
-    return "";
+    return null;
   }
+  return u;
+}
+
+/**
+ * Fetch a web page and reduce it to readable text — no html-parser dependency.
+ * Turns snippet-only search into page-reading search: the model can extract
+ * tables, rankings, and detail it could never see from a 150-char snippet.
+ * Crude (regex strip) but robust + dependency-free; best-effort, returns "" on
+ * any failure. SSRF-guarded: http(s) only, never loopback/private hosts.
+ */
+export async function fetchUrlText(url: string, signal?: AbortSignal): Promise<string> {
+  const u = parsePublicHttpUrl(url);
+  if (!u) return "";
   try {
     const res = await fetch(u.toString(), {
       headers: {

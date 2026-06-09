@@ -506,6 +506,11 @@ export interface DeckSlide {
   notes?: string;
   /** English image-search terms for one supporting image (or empty). */
   imageQuery?: string;
+  /** Full-resolution URL of an image the lecturer picked for this slide —
+   *  embedded into the .pptx on rebuild. */
+  imageUrl?: string;
+  /** Attribution shown under a picked image (source · creator). */
+  imageCredit?: string;
 }
 export interface Deck {
   title: string;

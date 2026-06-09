@@ -123,6 +123,32 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Rebuild a deck's .pptx from an edited outline — used after the lecturer
+  // picks per-slide images, so the saved file embeds them. Write-gated; it
+  // overwrites the same-named .pptx. buildPptx fetches each picked image
+  // (SSRF-guarded, size-capped) and embeds it beside the bullets.
+  app.post<{ Params: { id: string }; Body: { deck?: Deck } }>(
+    "/workspaces/:id/deck-rebuild",
+    async (req, reply) => {
+      const ws = await requireWorkspace(req.params.id, req, reply, "write");
+      if (!ws) return;
+      const deck = req.body?.deck;
+      if (!deck || !Array.isArray(deck.slides) || deck.slides.length === 0) {
+        return reply.status(400).send({ error: "deck is required" });
+      }
+      try {
+        const pptx = await buildPptx(deck);
+        const fileName = deckFileName(deck.title);
+        const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
+        if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
+        fs.writeFileSync(dest, pptx);
+        return reply.send({ fileName });
+      } catch (err) {
+        return reply.status(500).send({ error: "Deck rebuild failed", detail: String(err) });
+      }
+    },
+  );
+
   // Generate a lecturer's spoken script (.docx) from a deck.
   app.post<{ Params: { id: string }; Body: { deck?: Deck; course?: string } }>(
     "/workspaces/:id/script",

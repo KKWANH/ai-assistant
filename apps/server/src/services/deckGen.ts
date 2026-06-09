@@ -9,6 +9,7 @@ import * as PptxNS from "pptxgenjs";
 import type { Deck } from "@ariadne/shared";
 import type { AiProvider } from "../providers/index.js";
 import { extractJson } from "../providers/index.js";
+import { parsePublicHttpUrl } from "./search.js";
 
 // pptxgenjs is CJS; under tsx/esbuild the constructor ends up one or two
 // `.default` hops deep. Walk down until we hit the actual function.
@@ -27,6 +28,7 @@ interface PptxSlide {
   background?: { color: string };
   addText(text: string | PptxText[], opts: Record<string, unknown>): void;
   addShape(type: unknown, opts: Record<string, unknown>): void;
+  addImage(opts: Record<string, unknown>): void;
   addNotes(notes: string): void;
 }
 interface PptxInstance {
@@ -114,12 +116,43 @@ export async function generateDeckOutline(
   };
 }
 
-/** Render step — a clean academic .pptx (16:9) from the outline. */
+/**
+ * Fetch a picked slide image and return it as a base64 data URI that pptxgenjs
+ * can embed (PowerPoint reads jpeg/png/gif). SSRF-guarded and size-capped;
+ * best-effort — returns null on any failure so a deck still builds without it.
+ */
+async function fetchSlideImage(url: string): Promise<string | null> {
+  const u = parsePublicHttpUrl(url);
+  if (!u) return null;
+  try {
+    const res = await fetch(u.toString(), {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Ariadne/1.0)", Accept: "image/*" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return null;
+    const ct = (res.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+    if (!/^image\/(jpeg|png|gif)$/.test(ct)) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 8_000_000) return null;
+    return `data:${ct};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Render step — a clean academic .pptx (16:9) from the outline. Slides that
+ *  carry a picked imageUrl get the image embedded on the right, bullets left. */
 export async function buildPptx(deck: Deck): Promise<Buffer> {
   const p = new PptxGenJS();
   p.layout = "LAYOUT_WIDE"; // 13.33 × 7.5 in (16:9)
   const ACCENT = "C0392B";
   const INK = "1A1A1A";
+
+  // Embed any picked images up front (parallel fetch), then build synchronously.
+  const images = await Promise.all(
+    deck.slides.map((s) => (s.imageUrl ? fetchSlideImage(s.imageUrl) : Promise.resolve(null))),
+  );
 
   // Title slide.
   const title = p.addSlide();
@@ -131,19 +164,31 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
   }
 
   // Content slides.
-  for (const s of deck.slides) {
+  deck.slides.forEach((s, i) => {
+    const img = images[i];
     const sl = p.addSlide();
     sl.background = { color: "FFFFFF" };
     sl.addText(s.title, { x: 0.6, y: 0.4, w: 12.1, h: 0.9, fontSize: 28, bold: true, color: INK });
     sl.addShape(p.ShapeType.line, { x: 0.6, y: 1.32, w: 12.1, h: 0, line: { color: "E0E0E0", width: 1 } });
+    // With an image, bullets take the left ~55%; otherwise full width.
+    const bulletW = img ? 6.6 : 11.7;
     if (s.bullets.length > 0) {
       sl.addText(
         s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 18 }, fontSize: 18, color: "333333", paraSpaceAfter: 10 } })),
-        { x: 0.8, y: 1.6, w: 11.7, h: 5.2, valign: "top" },
+        { x: 0.8, y: 1.6, w: bulletW, h: 5.2, valign: "top" },
       );
     }
+    if (img) {
+      // Right column: contained image + a small attribution caption.
+      sl.addImage({ data: img, x: 7.7, y: 1.6, w: 5.0, h: 4.5, sizing: { type: "contain", w: 5.0, h: 4.5 } });
+      if (s.imageCredit) {
+        sl.addText(s.imageCredit.slice(0, 160), {
+          x: 7.7, y: 6.15, w: 5.0, h: 0.5, fontSize: 9, italic: true, color: "999999", valign: "top",
+        });
+      }
+    }
     if (s.notes) sl.addNotes(s.notes);
-  }
+  });
 
   return p.write({ outputType: "nodebuffer" });
 }
