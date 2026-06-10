@@ -24,6 +24,22 @@ export function listBuiltinSkills(): Skill[] {
 
 const BUILTINS: Skill[] = [
   {
+    // A "function" skill: picking it RUNS web search for the next message
+    // (the composer arms web mode) instead of inserting text. `prompt` is a
+    // fallback only for clients that don't understand `action`.
+    id: "builtin:search",
+    accountId: null,
+    name: "검색",
+    description: "웹을 검색해 답합니다 — 스니펫이 아니라 상위 페이지 본문까지 읽어 종합.",
+    category: "research",
+    prompt: "",
+    action: "web_search",
+    variables: [],
+    builtin: true,
+    createdAt: FIXED_TIMESTAMP,
+    updatedAt: FIXED_TIMESTAMP,
+  },
+  {
     id: "builtin:translate",
     accountId: null,
     name: "translate",

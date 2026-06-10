@@ -829,6 +829,11 @@ export interface SkillVariable {
   default?: string;
 }
 
+/** A built-in slash command that runs a capability instead of inserting text.
+ *  `web_search` arms web search for the next message. Extensible — add more
+ *  as the composer learns to trigger them. */
+export type SkillAction = "web_search";
+
 export interface Skill {
   id: string;
   /** null for built-in skills shipped server-side; user id otherwise. */
@@ -838,6 +843,10 @@ export interface Skill {
   /** The text inserted into the composer when this skill fires.
    *  Variable placeholders use {key} syntax — e.g. "Review {file_path}". */
   prompt: string;
+  /** Built-in "function" skills set this to RUN a capability (e.g. web
+   *  search) on pick instead of inserting `prompt`. User skills leave it
+   *  unset (they insert text). */
+  action?: SkillAction;
   /** Optional one-line description shown in the picker beneath the name. */
   description?: string;
   /** Optional category to group built-in skills (`code`, `writing`,

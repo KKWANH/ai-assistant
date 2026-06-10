@@ -255,12 +255,16 @@ function SkillsDropdown({
   skills,
   filter,
   onPick,
+  onAction,
   onClose,
 }: {
   skills: import("@ariadne/shared").Skill[];
   filter: string;
   /** Called with the FINAL prompt text (variables already substituted). */
   onPick: (finalPrompt: string) => void;
+  /** Called when a "function" skill (one with an `action`) is picked — it
+   *  runs a capability instead of inserting text. */
+  onAction: (action: import("@ariadne/shared").SkillAction) => void;
   onClose: () => void;
 }) {
   const { t } = useT();
@@ -281,7 +285,9 @@ function SkillsDropdown({
                   <button
                     type="button"
                     onClick={() => {
-                      if (hasVars) {
+                      if (s.action) {
+                        onAction(s.action);
+                      } else if (hasVars) {
                         setFillFor(s);
                       } else {
                         onPick(s.prompt);
@@ -1081,6 +1087,15 @@ export function ChatComposer({
                       ? finalPrompt
                       : (cur ? cur + (cur.endsWith("\n") ? "" : "\n") : "") + finalPrompt,
                   );
+                  setSkillsOpenMode(null);
+                  setTimeout(() => textareaRef.current?.focus(), 0);
+                }}
+                onAction={(action) => {
+                  // "Function" skills run a capability instead of inserting
+                  // text. /검색 arms web search; consume the "/cmd" trigger so
+                  // the box is empty for the query, then it runs on send.
+                  if (action === "web_search") setWebMode("on");
+                  setContent((cur) => (/^\/[a-z0-9가-힣_-]*$/i.test(cur) ? "" : cur));
                   setSkillsOpenMode(null);
                   setTimeout(() => textareaRef.current?.focus(), 0);
                 }}
