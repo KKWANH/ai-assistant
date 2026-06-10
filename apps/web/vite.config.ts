@@ -10,6 +10,7 @@ export default defineConfig({
       "@ariadne/shared": fileURLToPath(
         new URL("../../packages/shared/src/index.ts", import.meta.url)
       ),
+      "@projects": fileURLToPath(new URL("../../projects", import.meta.url)),
     },
   },
   build: {

@@ -7,8 +7,10 @@ export const CreateWorkspaceSchema = z.object({
   rootPath: z.string().min(1),
   include: z.array(z.string()).optional(),
   exclude: z.array(z.string()).optional(),
-  /** Optional template that scaffolds example files + a custom surface. */
-  starter: z.enum(["blank", "portfolio", "budget", "reading", "chefbook", "code", "decisions", "papers", "lecture"]).optional(),
+  /** Optional template id that scaffolds example files + a custom surface.
+   *  Open string: ids come from the project registry (`projects/`) plus the
+   *  core "blank"/"portfolio"/"lecture"; the create handler ignores unknowns. */
+  starter: z.string().min(1).max(60).optional(),
   visibility: z.enum(["private", "public"]).optional(),
 });
 export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceSchema>;

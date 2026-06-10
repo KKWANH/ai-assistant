@@ -21,26 +21,23 @@ import { retrieveWithMeta } from "../services/retrieval.js";
 import { getWorkspaceContext, setWorkspaceContext } from "../services/workspaceContext.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
 import { seedPortfolioV2Surface } from "../surface/portfolioV2Template.js";
-import * as budgetStarter from "../surface/budgetStarter.js";
-import * as readingStarter from "../surface/readingStarter.js";
-import * as chefbookStarter from "../surface/chefbookStarter.js";
-import * as codeStarter from "../surface/codeStarter.js";
-import * as decisionsStarter from "../surface/decisionsStarter.js";
-import * as papersStarter from "../surface/papersStarter.js";
+import type { ProjectStarter } from "@ariadne/shared";
+import { projectStarters } from "../projects/index.js";
 import logger from "../logger.js";
 import { canViewWorkspace, requireWorkspace, rejectRemoteAccess, rejectGuest } from "./workspaceGuard.js";
 
 /**
- * Sample files + custom surface scaffolded for each non-blank workspace
- * template. Optional `actions` is a YAML string that lands at
- * `.ariadne/actions.yaml` so the workspace ships with usable actions
- * the user can run from the 'Create & Run' tab immediately.
+ * The full starter set for the create flow. The example projects come from
+ * the registry (`projects/<name>/`); portfolio still lives in core because a
+ * dedicated session owns it (see projects/README.md — Phase 3 moves it). Each
+ * entry is a ProjectStarter: files + surface (+ actions) scaffolded into the
+ * new workspace, and a category that scopes its templates.
  */
-const STARTERS: Record<
-  string,
-  { files: Record<string, string>; surface: string; actions?: string }
-> = {
+const STARTERS: Record<string, ProjectStarter> = {
+  ...projectStarters(),
   portfolio: {
+    id: "portfolio",
+    category: "finance",
     files: {
       // v1 compatibility — the current surface still reads these.
       "holdings.csv": portfolioStarter.HOLDINGS_CSV,
@@ -62,55 +59,6 @@ const STARTERS: Record<
     },
     surface: portfolioStarter.SURFACE_TSX,
     actions: portfolioStarter.ACTIONS_YAML,
-  },
-  budget: {
-    files: { "budget.csv": budgetStarter.BUDGET_CSV },
-    surface: budgetStarter.SURFACE_TSX,
-  },
-  reading: {
-    files: { "library.csv": readingStarter.LIBRARY_CSV },
-    surface: readingStarter.SURFACE_TSX,
-  },
-  chefbook: {
-    files: {
-      "ingredients.csv": chefbookStarter.INGREDIENTS_CSV,
-      "tools.csv": chefbookStarter.TOOLS_CSV,
-      "recipes.csv": chefbookStarter.RECIPES_CSV,
-    },
-    surface: chefbookStarter.SURFACE_TSX,
-  },
-  code: {
-    files: {
-      "README.md": codeStarter.README_MD,
-      "package.json": codeStarter.PACKAGE_JSON,
-      "src/index.ts": codeStarter.INDEX_TS,
-      "src/utils.ts": codeStarter.UTILS_TS,
-    },
-    surface: codeStarter.SURFACE_TSX,
-    actions: codeStarter.ACTIONS_YAML,
-  },
-  decisions: {
-    files: {
-      "README.md": decisionsStarter.DECISIONS_README,
-      "prd/workspace-search.md": decisionsStarter.PRD_SAMPLE,
-      "decisions/ADR-001-sqlite.md": decisionsStarter.ADR_001,
-      "decisions/ADR-002-tree-sitter.md": decisionsStarter.ADR_002,
-      "open-questions.md": decisionsStarter.OPEN_QUESTIONS,
-    },
-    surface: decisionsStarter.SURFACE_TSX,
-    actions: decisionsStarter.ACTIONS_YAML,
-  },
-  papers: {
-    files: {
-      "README.md": papersStarter.PAPERS_README,
-      "papers/notes/Smith24-rag-survey.md": papersStarter.NOTES_SMITH24,
-      "papers/notes/Park23-hybrid-retrieval.md": papersStarter.NOTES_PARK23,
-      "papers/notes/Lee24-graph-rag.md": papersStarter.NOTES_LEE24,
-      "references.bib": papersStarter.REFERENCES_BIB,
-      "reading-queue.md": papersStarter.READING_QUEUE,
-    },
-    surface: papersStarter.SURFACE_TSX,
-    actions: papersStarter.ACTIONS_YAML,
   },
 };
 
@@ -141,20 +89,15 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "rootPath is not a directory", detail: rootPath });
     }
 
-    // Category scopes which templates the workspace surfaces — derived from the
-    // starter so a portfolio/budget workspace shows finance templates, etc.
-    const categoryByStarter: Record<string, string | null> = {
-      portfolio: "finance",
-      budget: "finance",
-      reading: "research",
-      chefbook: "cooking",
-      code: "code",
-      decisions: "decisions",
-      papers: "research",
-      lecture: "lecture",
-      blank: null,
-    };
-    const category = starter ? categoryByStarter[starter] ?? null : null;
+    // Category scopes which templates the workspace surfaces — taken from the
+    // starter's own definition (registry project or core portfolio). Lecture
+    // has no scaffold, only a category (until Phase 2 moves it to projects/).
+    const category =
+      !starter || starter === "blank"
+        ? null
+        : starter === "lecture"
+          ? "lecture"
+          : STARTERS[starter]?.category ?? null;
 
     const workspace: Workspace = {
       id: crypto.randomUUID(),
@@ -179,7 +122,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const starterDef = starter && starter !== "blank" ? STARTERS[starter] : undefined;
     if (starterDef) {
       try {
-        for (const [filename, content] of Object.entries(starterDef.files)) {
+        for (const [filename, content] of Object.entries(starterDef.files ?? {})) {
           const filePath = path.join(rootPath, filename);
           // mkdirp the parent so starters can ship nested paths
           // (e.g. the code starter's src/index.ts).
@@ -191,7 +134,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         // now — they're smaller and don't need the split.
         if (starter === "portfolio") {
           seedPortfolioV2Surface(rootPath);
-        } else {
+        } else if (starterDef.surface) {
           writeSurface(rootPath, starterDef.surface);
         }
         if (starterDef.actions) {

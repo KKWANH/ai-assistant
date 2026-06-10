@@ -13,9 +13,10 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "paths": {
-      "@ariadne/shared": ["../../packages/shared/src/index.ts"]
+      "@ariadne/shared": ["../../packages/shared/src/index.ts"],
+      "@projects/*": ["../../projects/*"]
     }
   },
-  "include": ["src", "vite.config.ts"],
+  "include": ["src", "vite.config.ts", "../../projects/**/web.ts"],
   "exclude": ["node_modules", "dist"]
 }

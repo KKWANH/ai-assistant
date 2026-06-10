@@ -6,9 +6,10 @@
     "lib": ["ES2023", "DOM"],
     "paths": {
       "@ariadne/shared": ["../../packages/shared/src/index.ts"],
-      "@ariadne/surface": ["./src/surface/runtime.js"]
+      "@ariadne/surface": ["./src/surface/runtime.js"],
+      "@projects/*": ["../../projects/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../projects/**/server.ts", "../../projects/**/template.ts"],
   "exclude": ["src/surface-templates/**"]
 }

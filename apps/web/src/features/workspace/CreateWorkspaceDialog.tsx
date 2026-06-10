@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock, ChefHat, Code2, ClipboardList, Microscope, GraduationCap } from "lucide-react";
+import { FolderOpen, FileText, BarChart2, Globe, Lock, GraduationCap } from "lucide-react";
+import { projectStarterCards, resolveProjectIcon } from "../../projects";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
@@ -13,9 +14,14 @@ import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import { FolderPicker } from "./FolderPicker";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
-type Starter = "blank" | "portfolio" | "budget" | "reading" | "chefbook" | "code" | "decisions" | "papers" | "lecture";
+type Starter = string;
 
-/** Workspace templates shown in the picker — Blank plus ready-made example projects. */
+/**
+ * Workspace templates shown in the picker. The core options (blank + the two
+ * verticals still living in core) bookend the example projects contributed by
+ * the registry (`projects/`), so adding a project example adds a card here
+ * with no change to this file.
+ */
 const TEMPLATE_OPTIONS = [
   {
     id: "blank",
@@ -29,49 +35,19 @@ const TEMPLATE_OPTIONS = [
     labelKey: "workspace.dialog.starterPortfolio",
     descKey: "workspace.dialog.starterPortfolioDesc",
   },
-  {
-    id: "budget",
-    icon: Wallet,
-    labelKey: "workspace.dialog.starterBudget",
-    descKey: "workspace.dialog.starterBudgetDesc",
-  },
-  {
-    id: "reading",
-    icon: BookOpen,
-    labelKey: "workspace.dialog.starterReading",
-    descKey: "workspace.dialog.starterReadingDesc",
-  },
-  {
-    id: "chefbook",
-    icon: ChefHat,
-    labelKey: "workspace.dialog.starterChefbook",
-    descKey: "workspace.dialog.starterChefbookDesc",
-  },
-  {
-    id: "code",
-    icon: Code2,
-    labelKey: "workspace.dialog.starterCode",
-    descKey: "workspace.dialog.starterCodeDesc",
-  },
-  {
-    id: "decisions",
-    icon: ClipboardList,
-    labelKey: "workspace.dialog.starterDecisions",
-    descKey: "workspace.dialog.starterDecisionsDesc",
-  },
-  {
-    id: "papers",
-    icon: Microscope,
-    labelKey: "workspace.dialog.starterPapers",
-    descKey: "workspace.dialog.starterPapersDesc",
-  },
+  ...projectStarterCards().map((c) => ({
+    id: c.id,
+    icon: resolveProjectIcon(c.icon),
+    labelKey: c.labelKey,
+    descKey: c.descKey,
+  })),
   {
     id: "lecture",
     icon: GraduationCap,
     labelKey: "workspace.dialog.starterLecture",
     descKey: "workspace.dialog.starterLectureDesc",
   },
-] as const;
+];
 
 export function CreateWorkspaceDialog() {
   const { createWorkspaceOpen, setCreateWorkspaceOpen, setActiveWorkspaceId } =
@@ -195,8 +171,8 @@ export function CreateWorkspaceDialog() {
                     ].join(" ")}
                   />
                   <div>
-                    <p className="text-xs font-medium text-foreground">{t(tpl.labelKey)}</p>
-                    <p className="text-2xs text-muted-foreground mt-0.5">{t(tpl.descKey)}</p>
+                    <p className="text-xs font-medium text-foreground">{t(tpl.labelKey as Parameters<typeof t>[0])}</p>
+                    <p className="text-2xs text-muted-foreground mt-0.5">{t(tpl.descKey as Parameters<typeof t>[0])}</p>
                   </div>
                 </Card>
               );
