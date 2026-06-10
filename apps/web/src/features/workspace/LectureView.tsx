@@ -7,11 +7,12 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid } from "lucide-react";
+import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText } from "lucide-react";
 import type { Deck } from "@ariadne/shared";
 import * as api from "../../lib/api";
 import { useCreateChat } from "../../lib/queries";
 import { DeckPreview } from "./DeckPreview";
+import { ContextEditor } from "./ContextEditor";
 
 export function LectureView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
@@ -75,6 +76,8 @@ export function LectureView() {
     },
   });
 
+  const [contextOpen, setContextOpen] = useState(false);
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl p-4 sm:p-6">
@@ -88,6 +91,13 @@ export function LectureView() {
             >
               <LayoutGrid className="h-3.5 w-3.5" /> 개요
             </Link>
+            <button
+              onClick={() => setContextOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+              title="이 학기 배경·강의 스타일·수강생 수준 — 모든 답변·생성물에 반영"
+            >
+              <BookText className="h-3.5 w-3.5" /> 지침
+            </button>
             <button
               onClick={addCourse}
               className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-surface-3"
@@ -286,6 +296,8 @@ export function LectureView() {
           onClose={() => setDeckResult(null)}
         />
       )}
+
+      {contextOpen && <ContextEditor workspaceId={workspaceId} onClose={() => setContextOpen(false)} />}
     </div>
   );
 }

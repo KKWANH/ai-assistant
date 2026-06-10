@@ -13,6 +13,7 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { requireWorkspace } from "./workspaceGuard.js";
 import { getLectureStructure, scaffoldLectureFolder, getCourseMemo, setCourseMemo } from "../services/lecturePrep.js";
+import { getWorkspaceContext } from "../services/workspaceContext.js";
 import type { Deck } from "@ariadne/shared";
 import { generateDeckOutline, buildPptx } from "../services/deckGen.js";
 import { generateScript, buildScriptDocx } from "../services/scriptGen.js";
@@ -81,7 +82,15 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       if (!ws) return;
       const topic = req.body?.topic?.trim();
       if (!topic) return reply.status(400).send({ error: "topic is required" });
-      const courseMemo = req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "";
+      // Project context (general, all workspaces) + the course's own memo —
+      // both steer generation so the deck/script stays consistent with the
+      // user's standing brief and the course's thread.
+      const courseMemo = [
+        getWorkspaceContext(ws.rootPath),
+        req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "",
+      ]
+        .filter((s) => s.trim())
+        .join("\n\n");
 
       let grounding = "";
       const snapshot = dbGetLatestSnapshot(req.params.id);
@@ -159,7 +168,15 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       if (!deck || !Array.isArray(deck.slides) || deck.slides.length === 0) {
         return reply.status(400).send({ error: "deck is required" });
       }
-      const courseMemo = req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "";
+      // Project context (general, all workspaces) + the course's own memo —
+      // both steer generation so the deck/script stays consistent with the
+      // user's standing brief and the course's thread.
+      const courseMemo = [
+        getWorkspaceContext(ws.rootPath),
+        req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "",
+      ]
+        .filter((s) => s.trim())
+        .join("\n\n");
       const settings = getActiveSettings();
       const model =
         settings.provider === "ollama" ? await resolveOllamaModel(settings.model) : settings.model;

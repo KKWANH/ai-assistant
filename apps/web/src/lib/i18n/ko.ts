@@ -257,6 +257,11 @@ const ko: Record<TranslationKey, string> = {
 
   "workspace.scanFiles": "파일 스캔",
   "workspace.lecturePrep": "강의 준비",
+  "workspace.context.button": "지침",
+  "workspace.context.title": "사전 컨텍스트 · 프로젝트 지침",
+  "workspace.context.desc": "이 프로젝트의 배경·목표·원하는 작업 방식·대상을 적어두면, 모든 채팅 답변과 슬라이드·대본 생성에 자동 반영됩니다.",
+  "workspace.context.placeholder": "예: 미술사 학부 강의용 워크스페이스. 작품 분석 중심, 쉬운 용어로 설명. 답변에 도판·출처를 곁들이고 과장 없이 사실 위주로.",
+  "workspace.context.saving": "저장 중…",
   "workspace.scanComplete": "스캔 완료",
   "workspace.scanFailed": "스캔 실패",
   "workspace.search.title": "이 워크스페이스 검색",

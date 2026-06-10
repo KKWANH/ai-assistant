@@ -25,6 +25,7 @@ import { performSearch, fetchUrlText } from "./search.js";
 import { readUpload } from "./uploads.js";
 import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
+import { getWorkspaceContext, renderContextForPrompt } from "./workspaceContext.js";
 import { loadWorkspaceActions } from "./actions.js";
 import { loadHooks } from "./hooks.js";
 
@@ -88,6 +89,7 @@ export async function buildChatContext(
   let attachmentBlock: string | undefined;
   let webBlock: string | undefined;
   let memoryBlock: string | undefined;
+  let projectContextBlock: string | undefined;
   let workspaceMetaBlock: string | undefined;
   let workspaceBlock: string | undefined;
   let historyBlock: string | undefined;
@@ -146,6 +148,9 @@ export async function buildChatContext(
       // message.
       const wsMemories = listMemories(ws.rootPath);
       memoryBlock = renderMemoryForPrompt(wsMemories) ?? undefined;
+      // User-authored project context — their standing brief for this
+      // workspace. Sits above memory: instructions first, then facts.
+      projectContextBlock = renderContextForPrompt(getWorkspaceContext(ws.rootPath)) ?? undefined;
       // Workspace meta — answers "이 프로젝트 설정 알려줘" / "이 폴더에
       // 메모리 몇 개 있어?" type questions without needing a tool call.
       // Cheap to compute (all local DB / .ariadne reads) so always
@@ -286,7 +291,7 @@ export async function buildChatContext(
     "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
     "and do not add bracketed citation markers like [1].";
 
-  const stableBlocks = [workspaceMetaBlock, memoryBlock].filter(
+  const stableBlocks = [workspaceMetaBlock, projectContextBlock, memoryBlock].filter(
     (s): s is string => !!s,
   );
   const systemWithProfile = appendUserProfile(baseSystem, accountContext);

@@ -18,6 +18,7 @@ import { fireHooksDetached } from "../services/hooks.js";
 import { buildSurface } from "../services/surfaceBuild.js";
 import { exportWorkspaceTemplate } from "../services/workspaceTemplate.js";
 import { retrieveWithMeta } from "../services/retrieval.js";
+import { getWorkspaceContext, setWorkspaceContext } from "../services/workspaceContext.js";
 import * as portfolioStarter from "../surface/portfolioStarter.js";
 import { seedPortfolioV2Surface } from "../surface/portfolioV2Template.js";
 import * as budgetStarter from "../surface/budgetStarter.js";
@@ -217,6 +218,27 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     if (!workspace) return;
     return reply.send(workspace);
   });
+
+  // GET/PUT the project context — user-authored standing instructions for the
+  // workspace (`.ariadne/context.md`), injected into every chat + generation.
+  app.get<{ Params: { id: string } }>("/workspaces/:id/context", async (req, reply) => {
+    const ws = await requireWorkspace(req.params.id, req, reply, "read");
+    if (!ws) return;
+    return reply.send({ context: getWorkspaceContext(ws.rootPath) });
+  });
+  app.put<{ Params: { id: string }; Body: { context?: string } }>(
+    "/workspaces/:id/context",
+    async (req, reply) => {
+      const ws = await requireWorkspace(req.params.id, req, reply, "write");
+      if (!ws) return;
+      try {
+        setWorkspaceContext(ws.rootPath, req.body?.context ?? "");
+        return reply.send({ ok: true as const });
+      } catch (err) {
+        return reply.status(400).send({ error: "Could not save context", detail: String(err) });
+      }
+    },
+  );
 
   // GET /api/workspaces/:id/export — download the workspace as a portable
   // .ariadne.tar template (BL1): manifest + surface + actions + any

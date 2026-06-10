@@ -41,6 +41,7 @@ import {
   Trash2,
   GitCommit,
   GraduationCap,
+  BookText,
   Undo2,
   BrainCircuit,
   Workflow,
@@ -84,6 +85,7 @@ import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
+import { ContextEditor } from "./ContextEditor";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { HooksPanel } from "../hooks/HooksPanel";
 import { templateName, templateDescription } from "../../lib/templateLabels";
@@ -662,6 +664,7 @@ export function WorkspaceOverview() {
   const surfaceExists = surfaceData?.state?.exists ?? false;
   const [activeTab, setActiveTab] = useState<string>("chats");
   const [userPickedTab, setUserPickedTab] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   useEffect(() => {
     if (userPickedTab) return;
     if (surfaceData === undefined) return;
@@ -1130,6 +1133,15 @@ export function WorkspaceOverview() {
               <Button
                 variant="ghost"
                 size="sm"
+                leftIcon={<BookText className="h-3.5 w-3.5" />}
+                onClick={() => setContextOpen(true)}
+                title={t("workspace.context.desc")}
+              >
+                {t("workspace.context.button")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 leftIcon={<Search className="h-3.5 w-3.5" />}
                 onClick={() => navigate(`/workspaces/${ws.id}/search`)}
               >
@@ -1367,6 +1379,8 @@ export function WorkspaceOverview() {
           </TabsContent>
         )}
       </Tabs>
+
+      {contextOpen && <ContextEditor workspaceId={ws.id} onClose={() => setContextOpen(false)} />}
     </div>
   );
 }
