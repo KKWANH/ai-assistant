@@ -144,6 +144,11 @@ async function handleBridgeRequest(
       return api.createRun({ workspaceId, templateId, input: input ?? {} });
     }
 
+    case "runAction": {
+      const [actionId, input] = args as [string, Record<string, string>];
+      return api.runAction(workspaceId, actionId, input ?? {});
+    }
+
     case "stageFile": {
       // Stage a data-file edit from inside a surface. Same shape as the
       // Data tab's Save → stage flow; returns { runId, added, removed }
