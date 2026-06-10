@@ -269,6 +269,8 @@ const en = {
   "workspace.context.desc": "Write this project's background, goals, the way you want me to work, and who it's for — it's applied to every chat reply and to slide/script generation.",
   "workspace.context.placeholder": "e.g. Undergraduate art-history course. Focus on analyzing the works in plain terms; include plates + sources, and stay factual without overstating.",
   "workspace.context.saving": "Saving…",
+  "workspace.advanced.label": "Advanced",
+  "workspace.advanced.tip": "Reveal power features — actions, schedules, memory, hooks, edit — and secondary actions.",
   "workspace.scanComplete": "Scan complete",
   "workspace.scanFailed": "Scan failed",
   "workspace.search.title": "Search this workspace",

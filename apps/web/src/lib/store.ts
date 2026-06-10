@@ -32,6 +32,11 @@ export interface UIStore {
   setInspectorOpen: (open: boolean) => void;
   toggleInspector: () => void;
 
+  // Workspace overview: show power tabs/actions. Off by default (clean),
+  // persists while navigating between workspaces in a session.
+  workspaceAdvanced: boolean;
+  setWorkspaceAdvanced: (on: boolean) => void;
+
   // Command menu
   commandMenuOpen: boolean;
   setCommandMenuOpen: (open: boolean) => void;
@@ -92,6 +97,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   activeRunId: null,
   setActiveRunId: (id) => set({ activeRunId: id }),
+
+  workspaceAdvanced: false,
+  setWorkspaceAdvanced: (on) => set({ workspaceAdvanced: on }),
 
   inspectorOpen: true,
   setInspectorOpen: (open) => set({ inspectorOpen: open }),

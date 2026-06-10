@@ -42,6 +42,7 @@ import {
   GitCommit,
   GraduationCap,
   BookText,
+  SlidersHorizontal,
   Undo2,
   BrainCircuit,
   Workflow,
@@ -639,7 +640,7 @@ export function WorkspaceOverview() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useT();
-  const { setActiveRunId } = useUIStore();
+  const { setActiveRunId, workspaceAdvanced, setWorkspaceAdvanced } = useUIStore();
   const scan = useScanWorkspace();
   const updateWorkspace = useUpdateWorkspace();
 
@@ -670,6 +671,13 @@ export function WorkspaceOverview() {
     if (surfaceData === undefined) return;
     if (surfaceExists && activeTab !== "surface") setActiveTab("surface");
   }, [surfaceData, surfaceExists, userPickedTab, activeTab]);
+  // Turning Advanced off while on a power tab → fall back to chats so the
+  // user isn't stranded on a now-hidden tab.
+  useEffect(() => {
+    if (!workspaceAdvanced && ["standard", "edit", "actions", "schedules", "memory", "hooks"].includes(activeTab)) {
+      setActiveTab("chats");
+    }
+  }, [workspaceAdvanced, activeTab]);
 
   if (wsLoading) {
     return (
@@ -1107,46 +1115,65 @@ export function WorkspaceOverview() {
           }
           action={
             <div className="flex items-center gap-2">
-              {/* Visibility toggle — owner/admin only; flips between public
-                  (read-shared) and private. */}
+              {/* Advanced toggle — reveals power tabs + secondary actions.
+                  Off by default for a clean view; the power user flips it on
+                  (persists across workspaces this session). */}
               <Button
-                variant="ghost"
+                variant={workspaceAdvanced ? "secondary" : "ghost"}
                 size="sm"
-                leftIcon={ws.visibility === "public"
-                  ? <Globe className="h-3.5 w-3.5" />
-                  : <Lock className="h-3.5 w-3.5" />}
-                loading={updateWorkspace.isPending}
-                onClick={() => void handleVisibilityToggle()}
+                leftIcon={<SlidersHorizontal className="h-3.5 w-3.5" />}
+                onClick={() => setWorkspaceAdvanced(!workspaceAdvanced)}
+                title={t("workspace.advanced.tip")}
               >
-                {ws.visibility === "public"
-                  ? t("workspace.visibility.makePrivate")
-                  : t("workspace.visibility.makePublic")}
+                {t("workspace.advanced.label")}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={<GraduationCap className="h-3.5 w-3.5" />}
-                onClick={() => navigate(`/workspaces/${ws.id}/lecture`)}
-              >
-                {t("workspace.lecturePrep")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={<BookText className="h-3.5 w-3.5" />}
-                onClick={() => setContextOpen(true)}
-                title={t("workspace.context.desc")}
-              >
-                {t("workspace.context.button")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={<Search className="h-3.5 w-3.5" />}
-                onClick={() => navigate(`/workspaces/${ws.id}/search`)}
-              >
-                {t("workspace.search.button")}
-              </Button>
+              {/* Lecture-prep projects: the way back to their lecture home.
+                  Only here — never on non-lecture workspaces. */}
+              {ws.category === "lecture" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<GraduationCap className="h-3.5 w-3.5" />}
+                  onClick={() => navigate(`/workspaces/${ws.id}/lecture`)}
+                >
+                  {t("workspace.lecturePrep")}
+                </Button>
+              )}
+              {workspaceAdvanced && (
+                <>
+                  {/* Visibility toggle — owner/admin only. */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={ws.visibility === "public"
+                      ? <Globe className="h-3.5 w-3.5" />
+                      : <Lock className="h-3.5 w-3.5" />}
+                    loading={updateWorkspace.isPending}
+                    onClick={() => void handleVisibilityToggle()}
+                  >
+                    {ws.visibility === "public"
+                      ? t("workspace.visibility.makePrivate")
+                      : t("workspace.visibility.makePublic")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<BookText className="h-3.5 w-3.5" />}
+                    onClick={() => setContextOpen(true)}
+                    title={t("workspace.context.desc")}
+                  >
+                    {t("workspace.context.button")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<Search className="h-3.5 w-3.5" />}
+                    onClick={() => navigate(`/workspaces/${ws.id}/search`)}
+                  >
+                    {t("workspace.search.button")}
+                  </Button>
+                </>
+              )}
               <Button
                 variant="secondary"
                 size="sm"
@@ -1196,47 +1223,53 @@ export function WorkspaceOverview() {
                 {t("workspace.data.tab")}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="standard">
-              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.templates")}>
-                <Play className="h-3.5 w-3.5" />
-                {t("workspace.surface.createRuns")}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="edit">
-              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.editScreen")}>
-                <Code2 className="h-3.5 w-3.5" />
-                {t("workspace.surface.editScreen")}
-              </span>
-            </TabsTrigger>
-            {!isSimple && (
-              <TabsTrigger value="actions">
-                <span className="flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5" />
-                  {t("workspace.actions.tab")}
-                </span>
-              </TabsTrigger>
-            )}
-            {!isSimple && (
-              <TabsTrigger value="schedules">
-                <span className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  {t("workspace.schedules.tab")}
-                </span>
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="memory">
-              <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.memory")}>
-                <BrainCircuit className="h-3.5 w-3.5" />
-                {t("memory.tab")}
-              </span>
-            </TabsTrigger>
-            {!isSimple && (
-              <TabsTrigger value="hooks">
-                <span className="flex items-center gap-1.5">
-                  <Workflow className="h-3.5 w-3.5" />
-                  {t("hooks.tab")}
-                </span>
-              </TabsTrigger>
+            {/* Power tabs — hidden until "Advanced" is on, so the default
+                view is just talk / dashboard / files. */}
+            {workspaceAdvanced && (
+              <>
+                <TabsTrigger value="standard">
+                  <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.templates")}>
+                    <Play className="h-3.5 w-3.5" />
+                    {t("workspace.surface.createRuns")}
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger value="edit">
+                  <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.editScreen")}>
+                    <Code2 className="h-3.5 w-3.5" />
+                    {t("workspace.surface.editScreen")}
+                  </span>
+                </TabsTrigger>
+                {!isSimple && (
+                  <TabsTrigger value="actions">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="h-3.5 w-3.5" />
+                      {t("workspace.actions.tab")}
+                    </span>
+                  </TabsTrigger>
+                )}
+                {!isSimple && (
+                  <TabsTrigger value="schedules">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      {t("workspace.schedules.tab")}
+                    </span>
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="memory">
+                  <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.memory")}>
+                    <BrainCircuit className="h-3.5 w-3.5" />
+                    {t("memory.tab")}
+                  </span>
+                </TabsTrigger>
+                {!isSimple && (
+                  <TabsTrigger value="hooks">
+                    <span className="flex items-center gap-1.5">
+                      <Workflow className="h-3.5 w-3.5" />
+                      {t("hooks.tab")}
+                    </span>
+                  </TabsTrigger>
+                )}
+              </>
             )}
           </TabsList>
         </div>
