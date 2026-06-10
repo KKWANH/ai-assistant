@@ -763,12 +763,15 @@ export function AppShell({ children }: AppShellProps) {
                           activeWorkspaceId === ws.id &&
                           location.pathname.startsWith("/workspaces/")
                         }
-                        // Lecture-prep projects open to their lecture view (home);
-                        // the overview/tabs stay reachable from inside it.
+                        // Projects with an immersive home open straight to it
+                        // (lecture view, or a custom screen set as main); the
+                        // overview/tabs stay reachable from inside it.
                         to={
                           ws.category === "lecture"
                             ? `/workspaces/${ws.id}/lecture`
-                            : `/workspaces/${ws.id}`
+                            : ws.homeView === "surface"
+                              ? `/workspaces/${ws.id}/screen`
+                              : `/workspaces/${ws.id}`
                         }
                         onClick={() => {
                           setActiveWorkspaceId(ws.id);

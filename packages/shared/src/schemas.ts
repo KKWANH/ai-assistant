@@ -31,6 +31,7 @@ export const UpdateWorkspaceSchema = z.object({
   include: z.array(z.string()).optional(),
   exclude: z.array(z.string()).optional(),
   visibility: z.enum(["private", "public"]).optional(),
+  homeView: z.enum(["overview", "surface"]).nullable().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 

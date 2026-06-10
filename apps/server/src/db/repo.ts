@@ -96,8 +96,8 @@ const WORKSPACE_SELECT = `
 export function dbInsertWorkspace(w: Workspace): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category,home_view)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     w.id,
     w.name,
@@ -109,7 +109,8 @@ export function dbInsertWorkspace(w: Workspace): void {
     w.fileCount,
     w.createdBy ?? null,
     w.visibility ?? "private",
-    w.category ?? null
+    w.category ?? null,
+    w.homeView ?? null
   );
 }
 
@@ -140,6 +141,7 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   if (fields.fileCount !== undefined) { sets.push("file_count = ?"); vals.push(fields.fileCount); }
   if (fields.visibility !== undefined) { sets.push("visibility = ?"); vals.push(fields.visibility); }
   if (fields.category !== undefined) { sets.push("category = ?"); vals.push(fields.category); }
+  if (fields.homeView !== undefined) { sets.push("home_view = ?"); vals.push(fields.homeView); }
   // rootPath is intentionally NOT exposed via the public PATCH route
   // (UpdateWorkspaceSchema doesn't list it) — repointing has snapshot/
   // index implications and shouldn't be a casual user action. It IS
@@ -177,6 +179,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     createdByName: (row["created_by_name"] as string | null) ?? null,
     visibility: ((row["visibility"] as string | null) ?? "private") as WorkspaceVisibility,
     category: (row["category"] as string | null) ?? null,
+    homeView: (row["home_view"] as string | null ?? null) as Workspace["homeView"],
   };
 }
 

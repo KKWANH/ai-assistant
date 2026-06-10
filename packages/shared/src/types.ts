@@ -21,7 +21,13 @@ export interface Workspace {
   visibility: WorkspaceVisibility;
   /** Scopes which templates this workspace surfaces; null = show all. */
   category: string | null;
+  /** Where entering the workspace lands. null/"overview" = the tabbed
+   *  overview (default); "surface" = the custom screen as an immersive home
+   *  (no tabs), like lecture prep. General to all workspaces. */
+  homeView: WorkspaceHomeView;
 }
+
+export type WorkspaceHomeView = "overview" | "surface" | null;
 
 /* ------------------------------------------------------------------ *
  * Custom workspace actions (tools the agent planner may use)

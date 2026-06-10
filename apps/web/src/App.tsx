@@ -67,6 +67,11 @@ const LectureView = lazyWithReload(() =>
     default: m.LectureView,
   }))
 );
+const ImmersiveSurfaceHome = lazyWithReload(() =>
+  import("./features/workspace/ImmersiveSurfaceHome").then((m) => ({
+    default: m.ImmersiveSurfaceHome,
+  }))
+);
 const SurfaceEditor = lazyWithReload(() =>
   import("./features/surface/SurfaceEditor").then((m) => ({
     default: m.SurfaceEditor,
@@ -172,6 +177,7 @@ function AppContent() {
             <Route path="/workspaces/:id" element={<WorkspaceOverview />} />
             <Route path="/workspaces/:id/scripts" element={<ScriptsView />} />
             <Route path="/workspaces/:id/lecture" element={<LectureView />} />
+            <Route path="/workspaces/:id/screen" element={<ImmersiveSurfaceHome />} />
             <Route path="/workspaces/:id/surface/edit" element={<SurfaceEditorRoute />} />
             <Route path="/workspaces/:id/history" element={<HistoryView />} />
             <Route path="/workspaces/:id/search" element={<WorkspaceSearchView />} />

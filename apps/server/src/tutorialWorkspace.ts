@@ -84,6 +84,7 @@ export function ensureTutorialWorkspace(): void {
       createdByName: null,
       visibility: "public",
       category: null,
+      homeView: null,
     };
     dbInsertWorkspace(workspace);
     logger.info({ rootPath }, "Seeded the built-in tutorial workspace");

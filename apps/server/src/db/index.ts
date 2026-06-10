@@ -359,6 +359,8 @@ function runMigrations(db: DatabaseSync): void {
   // visibility (NULL → "private"), category (NULL → all templates)
   workspaces("visibility", "TEXT");
   workspaces("category", "TEXT");
+  // home_view (NULL → tabbed overview; "surface" → immersive custom screen)
+  workspaces("home_view", "TEXT");
 
   const runs = addColumnIfMissing(db, "runs");
   runs("created_by", "TEXT");

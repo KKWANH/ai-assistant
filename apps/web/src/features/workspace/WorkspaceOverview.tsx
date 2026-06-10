@@ -1139,6 +1139,16 @@ export function WorkspaceOverview() {
                   {t("workspace.lecturePrep")}
                 </Button>
               )}
+              {ws.category !== "lecture" && ws.homeView === "surface" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Layout className="h-3.5 w-3.5" />}
+                  onClick={() => navigate(`/workspaces/${ws.id}/screen`)}
+                >
+                  {t("workspace.homeView.mainScreen")}
+                </Button>
+              )}
               {workspaceAdvanced && (
                 <>
                   {/* Visibility toggle — owner/admin only. */}
@@ -1287,6 +1297,29 @@ export function WorkspaceOverview() {
         <TabsContent value="surface" className="flex-1 flex flex-col min-h-0 p-0">
           {hasSurface ? (
             <div className="flex-1 flex flex-col min-h-0 p-4">
+              {/* Set this custom screen as the workspace's immersive main
+                  home (the general version of the lecture-prep pattern). */}
+              <div className="mb-2 flex items-center justify-end gap-2">
+                <span className="mr-auto text-2xs text-muted-foreground">
+                  {t("workspace.homeView.tip")}
+                </span>
+                <Button
+                  variant={ws.homeView === "surface" ? "secondary" : "ghost"}
+                  size="sm"
+                  leftIcon={<Layout className="h-3.5 w-3.5" />}
+                  loading={updateWorkspace.isPending}
+                  onClick={() =>
+                    void updateWorkspace.mutateAsync({
+                      id: ws.id,
+                      input: { homeView: ws.homeView === "surface" ? "overview" : "surface" },
+                    })
+                  }
+                >
+                  {ws.homeView === "surface"
+                    ? t("workspace.homeView.isMain")
+                    : t("workspace.homeView.setMain")}
+                </Button>
+              </div>
               {/* BD2 — surfaces are user-authored React bundles (the
                   highest crash risk in the app). Its own boundary so a
                   broken surface shows a Retry card in THIS tab while the
