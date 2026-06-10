@@ -17,6 +17,6 @@
       "@projects/*": ["../../projects/*"]
     }
   },
-  "include": ["src", "vite.config.ts", "../../projects/**/web.ts"],
+  "include": ["src", "vite.config.ts", "../../projects/**/web.ts", "../../projects/**/types.ts", "../../projects/**/web/**/*.ts", "../../projects/**/web/**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }

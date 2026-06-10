@@ -40,7 +40,6 @@ import {
   Pencil,
   Trash2,
   GitCommit,
-  GraduationCap,
   BookText,
   SlidersHorizontal,
   Undo2,
@@ -87,6 +86,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Ta
 import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
 import { ContextEditor } from "./ContextEditor";
+import { resolveProjectHome } from "../../projects";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { HooksPanel } from "../hooks/HooksPanel";
 import { templateName, templateDescription } from "../../lib/templateLabels";
@@ -1127,28 +1127,24 @@ export function WorkspaceOverview() {
               >
                 {t("workspace.advanced.label")}
               </Button>
-              {/* Lecture-prep projects: the way back to their lecture home.
-                  Only here — never on non-lecture workspaces. */}
-              {ws.category === "lecture" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  leftIcon={<GraduationCap className="h-3.5 w-3.5" />}
-                  onClick={() => navigate(`/workspaces/${ws.id}/lecture`)}
-                >
-                  {t("workspace.lecturePrep")}
-                </Button>
-              )}
-              {ws.category !== "lecture" && ws.homeView === "surface" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  leftIcon={<Layout className="h-3.5 w-3.5" />}
-                  onClick={() => navigate(`/workspaces/${ws.id}/screen`)}
-                >
-                  {t("workspace.homeView.mainScreen")}
-                </Button>
-              )}
+              {/* A way back to this workspace's home view, if it has one —
+                  a project's (e.g. lecture → /lecture) or a custom screen set
+                  as main. Generic, registry-driven; no vertical hardcoded. */}
+              {(() => {
+                const home =
+                  resolveProjectHome(ws) ??
+                  (ws.homeView === "surface" ? `/workspaces/${ws.id}/screen` : null);
+                return home ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<Layout className="h-3.5 w-3.5" />}
+                    onClick={() => navigate(home)}
+                  >
+                    {t("workspace.homeView.mainScreen")}
+                  </Button>
+                ) : null;
+              })()}
               {workspaceAdvanced && (
                 <>
                   {/* Visibility toggle — owner/admin only. */}

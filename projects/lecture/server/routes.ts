@@ -11,18 +11,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import { requireWorkspace } from "./workspaceGuard.js";
-import { getLectureStructure, scaffoldLectureFolder, getCourseMemo, setCourseMemo } from "../services/lecturePrep.js";
-import { getWorkspaceContext } from "../services/workspaceContext.js";
-import type { Deck } from "@ariadne/shared";
-import { generateDeckOutline, buildPptx } from "../services/deckGen.js";
-import { generateScript, buildScriptDocx } from "../services/scriptGen.js";
-import { retrieveRelevantChunks, formatChunksForPrompt } from "../services/retrieval.js";
-import { dbGetLatestSnapshot } from "../db/repo.js";
-import { getActiveSettings } from "../config.js";
-import { getProvider } from "../providers/index.js";
-import { resolveOllamaModel } from "../services/ollamaModels.js";
-import { safeResolveUnderRoot } from "../security/pathGuard.js";
+import { requireWorkspace } from "@ariadne/server/src/routes/workspaceGuard.js";
+import { getLectureStructure, scaffoldLectureFolder, getCourseMemo, setCourseMemo } from "./lecturePrep.js";
+import { getWorkspaceContext } from "@ariadne/server/src/services/workspaceContext.js";
+import type { Deck } from "../types.js";
+import { generateDeckOutline, buildPptx } from "./deckGen.js";
+import { generateScript, buildScriptDocx } from "./scriptGen.js";
+import { retrieveRelevantChunks, formatChunksForPrompt } from "@ariadne/server/src/services/retrieval.js";
+import { dbGetLatestSnapshot } from "@ariadne/server/src/db/repo.js";
+import { getActiveSettings } from "@ariadne/server/src/config.js";
+import { getProvider } from "@ariadne/server/src/providers/index.js";
+import { resolveOllamaModel } from "@ariadne/server/src/services/ollamaModels.js";
+import { safeResolveUnderRoot } from "@ariadne/server/src/security/pathGuard.js";
 
 /** A filesystem-safe .pptx filename derived from a deck title. */
 function deckFileName(title: string): string {

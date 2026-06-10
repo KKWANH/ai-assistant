@@ -13,8 +13,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { LectureStructure, LectureCourse, LectureWeek, LectureMaterial } from "@ariadne/shared";
-import { safeResolveUnderRoot } from "../security/pathGuard.js";
+import type { LectureStructure, LectureCourse, LectureWeek, LectureMaterial } from "../types.js";
+import { safeResolveUnderRoot } from "@ariadne/server/src/security/pathGuard.js";
 
 /** Folders that are never a course (app/system dirs). */
 const SKIP_DIRS = new Set([".ariadne", ".git", "node_modules", "__pycache__"]);

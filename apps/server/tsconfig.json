@@ -10,6 +10,12 @@
       "@projects/*": ["../../projects/*"]
     }
   },
-  "include": ["src/**/*", "../../projects/**/server.ts", "../../projects/**/template.ts"],
+  "include": [
+    "src/**/*",
+    "../../projects/**/server.ts",
+    "../../projects/**/template.ts",
+    "../../projects/**/types.ts",
+    "../../projects/**/server/**/*.ts"
+  ],
   "exclude": ["src/surface-templates/**"]
 }

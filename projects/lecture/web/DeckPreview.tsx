@@ -11,8 +11,10 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { X, Download, FileText, Loader2, Image as ImageIcon, Search, Check } from "lucide-react";
-import type { Deck, ImageResult } from "@ariadne/shared";
-import { deckFileUrl, generateScript, rebuildDeck, searchImages } from "../../lib/api";
+import type { ImageResult } from "@ariadne/shared";
+import type { Deck } from "../types.js";
+import { deckFileUrl, generateScript, rebuildDeck } from "./api";
+import { searchImages } from "@ariadne/web/src/lib/api";
 
 export function DeckPreview({
   workspaceId,

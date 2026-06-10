@@ -6,10 +6,10 @@
  * the in-app HTML preview, so one structure drives both.
  */
 import * as PptxNS from "pptxgenjs";
-import type { Deck } from "@ariadne/shared";
-import type { AiProvider } from "../providers/index.js";
-import { extractJson } from "../providers/index.js";
-import { parsePublicHttpUrl } from "./search.js";
+import type { Deck } from "../types.js";
+import type { AiProvider } from "@ariadne/server/src/providers/index.js";
+import { extractJson } from "@ariadne/server/src/providers/index.js";
+import { parsePublicHttpUrl } from "@ariadne/server/src/services/search.js";
 
 // pptxgenjs is CJS; under tsx/esbuild the constructor ends up one or two
 // `.default` hops deep. Walk down until we hit the actual function.

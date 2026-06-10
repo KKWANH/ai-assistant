@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ComponentType } from "react";
 import { Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
+import { PROJECT_ROUTES } from "./projects";
 import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialog";
 import { ReportDialog } from "./features/reports/ReportDialog";
 import { TutorialOverlay } from "./components/tutorial/TutorialOverlay";
@@ -60,11 +61,6 @@ const WorkspaceFileEditor = lazyWithReload(() =>
 const ScriptsView = lazyWithReload(() =>
   import("./features/workspace/ScriptsView").then((m) => ({
     default: m.ScriptsView,
-  }))
-);
-const LectureView = lazyWithReload(() =>
-  import("./features/workspace/LectureView").then((m) => ({
-    default: m.LectureView,
   }))
 );
 const ImmersiveSurfaceHome = lazyWithReload(() =>
@@ -176,7 +172,10 @@ function AppContent() {
             <Route path="/workspaces" element={<WorkspaceList />} />
             <Route path="/workspaces/:id" element={<WorkspaceOverview />} />
             <Route path="/workspaces/:id/scripts" element={<ScriptsView />} />
-            <Route path="/workspaces/:id/lecture" element={<LectureView />} />
+            {/* Routes contributed by example projects (e.g. lecture's view). */}
+            {PROJECT_ROUTES.map((r) => (
+              <Route key={r.path} path={r.path} element={r.element} />
+            ))}
             <Route path="/workspaces/:id/screen" element={<ImmersiveSurfaceHome />} />
             <Route path="/workspaces/:id/surface/edit" element={<SurfaceEditorRoute />} />
             <Route path="/workspaces/:id/history" element={<HistoryView />} />

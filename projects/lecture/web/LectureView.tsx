@@ -8,11 +8,12 @@ import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText } from "lucide-react";
-import type { Deck } from "@ariadne/shared";
-import * as api from "../../lib/api";
-import { useCreateChat } from "../../lib/queries";
+import type { Deck } from "../types.js";
+import * as api from "./api";
+import { getWorkspace } from "@ariadne/web/src/lib/api";
+import { useCreateChat } from "@ariadne/web/src/lib/queries";
 import { DeckPreview } from "./DeckPreview";
-import { ContextEditor } from "./ContextEditor";
+import { ContextEditor } from "@ariadne/web/src/features/workspace/ContextEditor";
 
 export function LectureView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
@@ -22,7 +23,7 @@ export function LectureView() {
 
   const { data: ws } = useQuery({
     queryKey: ["workspace", workspaceId],
-    queryFn: () => api.getWorkspace(workspaceId),
+    queryFn: () => getWorkspace(workspaceId),
     enabled: !!workspaceId,
   });
   const { data, isLoading } = useQuery({

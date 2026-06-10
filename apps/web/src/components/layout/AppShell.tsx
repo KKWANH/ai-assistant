@@ -25,7 +25,6 @@ import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import { NotificationsBell } from "../../features/alerts/NotificationsBell";
 import {
   FolderOpen,
-  GraduationCap,
   Play,
   Settings,
   PanelRight,
@@ -66,6 +65,7 @@ import {
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { SidebarItem } from "../ui/SidebarItem";
+import { resolveProjectHome } from "../../projects";
 import { IconButton } from "../ui/IconButton";
 import { Badge } from "../ui/Badge";
 import { CommandMenu } from "../ui/CommandMenu";
@@ -752,26 +752,20 @@ export function AppShell({ children }: AppShellProps) {
                     >
                       <SidebarItem
                         label={ws.name}
-                        icon={
-                          ws.category === "lecture" ? (
-                            <GraduationCap className="h-3.5 w-3.5" />
-                          ) : (
-                            <FolderOpen className="h-3.5 w-3.5" />
-                          )
-                        }
+                        icon={<FolderOpen className="h-3.5 w-3.5" />}
                         active={
                           activeWorkspaceId === ws.id &&
                           location.pathname.startsWith("/workspaces/")
                         }
-                        // Projects with an immersive home open straight to it
-                        // (lecture view, or a custom screen set as main); the
-                        // overview/tabs stay reachable from inside it.
+                        // Projects with an immersive home open straight to it:
+                        // a project's resolveHome (e.g. lecture → /lecture), or
+                        // a custom screen set as main; else the overview. The
+                        // tabs stay reachable from inside either home.
                         to={
-                          ws.category === "lecture"
-                            ? `/workspaces/${ws.id}/lecture`
-                            : ws.homeView === "surface"
-                              ? `/workspaces/${ws.id}/screen`
-                              : `/workspaces/${ws.id}`
+                          resolveProjectHome(ws) ??
+                          (ws.homeView === "surface"
+                            ? `/workspaces/${ws.id}/screen`
+                            : `/workspaces/${ws.id}`)
                         }
                         onClick={() => {
                           setActiveWorkspaceId(ws.id);

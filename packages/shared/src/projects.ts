@@ -44,4 +44,9 @@ export interface ProjectStarterCard {
 export interface ProjectWebModule {
   name: string;
   starterCard?: ProjectStarterCard;
+  /** Where this project's workspaces open on entry — generalizes the lecture
+   *  "open to /lecture" home routing. Returns a path, or null to fall through
+   *  to the default overview. (Rich React routes are wired separately via the
+   *  web registry's route list.) */
+  resolveHome?: (ws: import("./types.js").Workspace) => string | null;
 }

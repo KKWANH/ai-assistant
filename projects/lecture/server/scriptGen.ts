@@ -5,9 +5,9 @@
  * lib renders it as a titled document with a section per slide.
  */
 import { Document, Packer, Paragraph, HeadingLevel, TextRun } from "docx";
-import type { Deck } from "@ariadne/shared";
-import type { AiProvider } from "../providers/index.js";
-import { extractJson } from "../providers/index.js";
+import type { Deck } from "../types.js";
+import type { AiProvider } from "@ariadne/server/src/providers/index.js";
+import { extractJson } from "@ariadne/server/src/providers/index.js";
 
 export interface ScriptSection {
   slideTitle: string;

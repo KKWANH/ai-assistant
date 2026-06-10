@@ -32,7 +32,7 @@ import type {
 
 const BASE = "/api";
 
-async function request<T>(
+export async function request<T>(
   method: string,
   path: string,
   body?: unknown
@@ -85,39 +85,14 @@ export const setWorkspaceContext = (id: string, context: string) =>
 export const scanWorkspace = (id: string) =>
   request<Snapshot>("POST", `/workspaces/${id}/scan`);
 
-export const getLectureStructure = (id: string) =>
-  request<import("@ariadne/shared").LectureStructure>("GET", `/workspaces/${id}/lecture`);
-
-export const scaffoldLectureFolder = (id: string, course: string, week?: string) =>
-  request<{ path: string }>("POST", `/workspaces/${id}/lecture/folder`, { course, week });
-
-export const generateDeck = (id: string, topic: string, course?: string, week?: string) =>
-  request<{ deck: import("@ariadne/shared").Deck; fileName: string }>(
-    "POST",
-    `/workspaces/${id}/deck`,
-    { topic, course, week },
-  );
-
-export const setCourseMemo = (id: string, course: string, memo: string) =>
-  request<{ ok: true }>("POST", `/workspaces/${id}/lecture/memo`, { course, memo });
-
-export const generateScript = (id: string, deck: import("@ariadne/shared").Deck, course?: string) =>
-  request<{ fileName: string }>("POST", `/workspaces/${id}/script`, { deck, course });
-
-// Rebuild a deck's .pptx after picking per-slide images (embeds them).
-export const rebuildDeck = (id: string, deck: import("@ariadne/shared").Deck) =>
-  request<{ fileName: string }>("POST", `/workspaces/${id}/deck-rebuild`, { deck });
-
-// Image search for a slide's imageQuery — real images with citable sources.
+// Image search — real images with citable sources (general; used by chat and
+// by the lecture project's slide picker).
 export const searchImages = (query: string) =>
   request<{ results: import("@ariadne/shared").ImageResult[]; sources: string[] }>(
     "POST",
     `/images/search`,
     { query },
   );
-
-export const deckFileUrl = (id: string, fileName: string) =>
-  `/api/workspaces/${id}/deck-file?name=${encodeURIComponent(fileName)}`;
 
 export const getSnapshot = (id: string) =>
   request<Snapshot>("GET", `/workspaces/${id}/snapshot`);

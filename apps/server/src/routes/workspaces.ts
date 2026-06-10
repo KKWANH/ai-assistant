@@ -90,14 +90,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Category scopes which templates the workspace surfaces — taken from the
-    // starter's own definition (registry project or core portfolio). Lecture
-    // has no scaffold, only a category (until Phase 2 moves it to projects/).
+    // starter's own definition (a registry project, or core portfolio).
     const category =
-      !starter || starter === "blank"
-        ? null
-        : starter === "lecture"
-          ? "lecture"
-          : STARTERS[starter]?.category ?? null;
+      !starter || starter === "blank" ? null : STARTERS[starter]?.category ?? null;
 
     const workspace: Workspace = {
       id: crypto.randomUUID(),

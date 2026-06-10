@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, FileText, BarChart2, Globe, Lock, GraduationCap } from "lucide-react";
-import { projectStarterCards, resolveProjectIcon } from "../../projects";
+import { FolderOpen, FileText, BarChart2, Globe, Lock } from "lucide-react";
+import { projectStarterCards, resolveProjectIcon, resolveProjectHome } from "../../projects";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
@@ -41,12 +41,6 @@ const TEMPLATE_OPTIONS = [
     labelKey: c.labelKey,
     descKey: c.descKey,
   })),
-  {
-    id: "lecture",
-    icon: GraduationCap,
-    labelKey: "workspace.dialog.starterLecture",
-    descKey: "workspace.dialog.starterLectureDesc",
-  },
 ];
 
 export function CreateWorkspaceDialog() {
@@ -84,8 +78,8 @@ export function CreateWorkspaceDialog() {
       });
       setCreateWorkspaceOpen(false);
       setActiveWorkspaceId(ws.id);
-      // Lecture-prep projects open straight to the lecture view (their home).
-      navigate(starter === "lecture" ? `/workspaces/${ws.id}/lecture` : `/workspaces/${ws.id}`);
+      // Open to a project's home if it claims one (e.g. lecture → /lecture).
+      navigate(resolveProjectHome(ws) ?? `/workspaces/${ws.id}`);
       toast({ title: t("workspace.dialog.created"), variant: "success" });
       setName("");
       setRootPath("");
