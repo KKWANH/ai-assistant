@@ -44,11 +44,16 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
     html, body {
       margin: 0;
       padding: 0;
+      /* Full height so a surface root using height/min-height:100% has a
+         height to resolve against — without this it collapses (blank) on
+         narrow viewports where the content alone can't give it height. */
+      height: 100%;
       font-family: system-ui, sans-serif;
       background: rgb(var(--background));
       color: rgb(var(--foreground));
     }
-    #surface-root { padding: 0; }
+    body { overflow: auto; }
+    #surface-root { padding: 0; min-height: 100%; }
     /* Themed scrollbars — match the main app, no default light bars. */
     * { scrollbar-width: thin; scrollbar-color: rgb(var(--border-strong)) transparent; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
