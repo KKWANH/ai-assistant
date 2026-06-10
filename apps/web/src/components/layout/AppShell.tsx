@@ -333,6 +333,10 @@ export function AppShell({ children }: AppShellProps) {
   // Desktop sidebar collapse — a focus/reading mode that hides the left nav
   // (mobile already has the off-canvas drawer). Toggled from the top bar.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Recent Runs is collapsed by default — it's a secondary log, and three
+  // always-open scrolling lists (workspaces + chats + runs) made the sidebar
+  // too busy. The header stays as a one-tap toggle.
+  const [runsExpanded, setRunsExpanded] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
   const accountMode: AccountMode = me?.account.mode ?? "standard";
@@ -868,32 +872,38 @@ export function AppShell({ children }: AppShellProps) {
           )}
           {!isSimple && (
             <div className="shrink-0 px-2 pt-1 pb-1">
-              <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider px-1 block mb-1">
+              <button
+                onClick={() => setRunsExpanded((v) => !v)}
+                className="w-full flex items-center gap-1 px-1 mb-1 text-2xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight className={`h-3 w-3 shrink-0 transition-transform ${runsExpanded ? "rotate-90" : ""}`} />
                 {t("nav.recentRuns")}
-              </span>
-              {allRuns && allRuns.length > 0 ? (
-                allRuns.slice(0, 6).map((run) => (
-                  <Link
-                    key={run.id}
-                    to={`/runs/${run.id}`}
-                    className="w-full flex flex-col px-2 py-1.5 rounded-md text-left text-xs transition-colors duration-100 text-sidebar-foreground hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => {
-                      setActiveRunId(run.id);
-                      setMobileNavOpen(false);
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="flex-1 truncate">{run.templateName}</span>
-                      <Badge variant={run.status} dot />
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="px-2 py-1 text-xs text-muted-foreground">
-                  {t("nav.noRunsYet")}
-                </p>
-              )}
+                {!runsExpanded && allRuns && allRuns.length > 0 && (
+                  <span className="ml-1 normal-case font-normal text-muted-foreground/60">{allRuns.length}</span>
+                )}
+              </button>
+              {runsExpanded &&
+                (allRuns && allRuns.length > 0 ? (
+                  allRuns.slice(0, 6).map((run) => (
+                    <Link
+                      key={run.id}
+                      to={`/runs/${run.id}`}
+                      className="w-full flex flex-col px-2 py-1.5 rounded-md text-left text-xs transition-colors duration-100 text-sidebar-foreground hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => {
+                        setActiveRunId(run.id);
+                        setMobileNavOpen(false);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate">{run.templateName}</span>
+                        <Badge variant={run.status} dot />
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">{t("nav.noRunsYet")}</p>
+                ))}
             </div>
           )}
 

@@ -157,7 +157,7 @@ function EvidenceTab({ runId }: { runId: string }) {
   const selectedClaim = pack.claims.find((c) => c.id === selectedClaimId);
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-18rem)] overflow-hidden">
+    <div className="flex gap-4 h-[calc(100dvh-18rem)] overflow-hidden">
       {/* Claims list */}
       <div className="w-72 shrink-0 overflow-y-auto flex flex-col gap-1">
         {pack.claims.map((claim) => (

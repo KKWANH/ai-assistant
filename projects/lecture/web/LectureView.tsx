@@ -37,13 +37,18 @@ export function LectureView() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["lecture", workspaceId] }),
   });
 
-  const addCourse = () => {
-    const name = window.prompt("새 과목 이름 (예: 조형예술론)")?.trim();
-    if (name) scaffold.mutate({ course: name });
-  };
-  const addWeek = (course: string) => {
-    const name = window.prompt(`"${course}" 주차 이름 (예: 03주차)`)?.trim();
-    if (name) scaffold.mutate({ course, week: name });
+  // Inline name input — works on mobile (window.prompt does not on phones).
+  const [namePrompt, setNamePrompt] = useState<
+    { mode: "course"; value: string } | { mode: "week"; course: string; value: string } | null
+  >(null);
+  const addCourse = () => setNamePrompt({ mode: "course", value: "" });
+  const addWeek = (course: string) => setNamePrompt({ mode: "week", course, value: "" });
+  const submitName = () => {
+    const name = namePrompt?.value.trim();
+    if (!namePrompt || !name) return;
+    if (namePrompt.mode === "course") scaffold.mutate({ course: name });
+    else scaffold.mutate({ course: namePrompt.course, week: name });
+    setNamePrompt(null);
   };
   const openWeekChat = (course: string, week: string) => {
     createChat.mutate(
@@ -82,9 +87,9 @@ export function LectureView() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl p-4 sm:p-6">
-        <div className="mb-1 flex items-center justify-between">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-y-2">
           <h1 className="text-lg font-semibold">강의 준비</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Link
               to={`/workspaces/${workspaceId}`}
               className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm text-muted-foreground hover:bg-surface-3 hover:text-foreground"
@@ -171,7 +176,7 @@ export function LectureView() {
                 {c.weeks.map((w) => (
                   <div
                     key={w.path}
-                    className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2"
+                    className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex min-w-0 items-center gap-2 text-sm">
                       <span className="shrink-0 font-medium">{w.name}</span>
@@ -182,7 +187,7 @@ export function LectureView() {
                         </span>
                       )}
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-4 sm:gap-3">
                       <button
                         onClick={() => makeSlides(c.name, w.name)}
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -237,6 +242,44 @@ export function LectureView() {
                 className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
               >
                 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {namePrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setNamePrompt(null)}
+        >
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-3 text-sm font-semibold">
+              {namePrompt.mode === "course" ? "새 과목" : `주차 추가 · ${namePrompt.course}`}
+            </h3>
+            <input
+              autoFocus
+              value={namePrompt.value}
+              onChange={(e) => setNamePrompt({ ...namePrompt, value: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitName();
+              }}
+              placeholder={namePrompt.mode === "course" ? "과목 이름 (예: 조형예술론)" : "주차 이름 (예: 03주차)"}
+              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setNamePrompt(null)}
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
+              >
+                취소
+              </button>
+              <button
+                onClick={submitName}
+                disabled={!namePrompt.value.trim() || scaffold.isPending}
+                className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
+              >
+                추가
               </button>
             </div>
           </div>

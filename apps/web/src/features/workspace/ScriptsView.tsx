@@ -145,7 +145,7 @@ export function ScriptsView() {
         }
       />
 
-      <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[400px]">
+      <div className="flex gap-4 h-[calc(100dvh-220px)] min-h-[400px]">
         {/* Script list */}
         <div className="w-48 shrink-0 flex flex-col gap-1">
           {isLoading ? (
