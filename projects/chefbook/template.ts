@@ -340,7 +340,7 @@ export default function ChefbookDashboard() {
       </section>
 
       {/* Two-column: expiring + categories */}
-      <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "12px", marginBottom: "20px" }}>
         <div style={cardStyle}>
           <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "rgb(var(--muted-foreground))", marginBottom: "10px" }}>
             만료 임박

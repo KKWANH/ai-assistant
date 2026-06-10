@@ -209,7 +209,7 @@ export default function CodeDashboard() {
         </p>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "12px" }}>
         {/* File tree */}
         <section style={{ ...cardStyle, padding: "10px 12px" }}>
           <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: "rgb(var(--muted-foreground))", marginBottom: "8px" }}>

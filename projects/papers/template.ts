@@ -372,7 +372,7 @@ export default function PapersDashboard() {
         </p>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "12px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "12px", marginBottom: "16px" }}>
         {/* Notes — ranked by inbound citations */}
         <section style={cardStyle}>
           <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: "rgb(var(--muted-foreground))", marginBottom: "8px" }}>
