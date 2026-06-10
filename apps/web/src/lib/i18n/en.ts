@@ -375,6 +375,8 @@ const en = {
   "workspace.dialog.starterDecisionsDesc": "PRD + ADR + open-questions in one folder. Ships a weekly-digest schedule and an agent-stage-an-ADR action.",
   "workspace.dialog.starterPapers": "Research papers",
   "workspace.dialog.starterPapersDesc": "Personal paper library with notes + .bib + reading queue. Surface shows inbound-citation count + dangling-citation audit.",
+  "workspace.dialog.starterLecture": "Lecture prep",
+  "workspace.dialog.starterLectureDesc": "A semester organized as courses → weeks → materials. Opens to the lecture view: research, generate slide decks (.pptx) and scripts (.docx), find sourced images.",
   "workspace.dialog.patternsToggle": "Advanced — which files Ariadne reads",
   "workspace.dialog.includeLabel": "Files to include",
   "workspace.dialog.includeHelp": "Name patterns Ariadne is allowed to read — one per line. Example: **/*.pdf reads every PDF.",

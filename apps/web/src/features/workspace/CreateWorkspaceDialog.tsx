@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock, ChefHat, Code2, ClipboardList, Microscope } from "lucide-react";
+import { FolderOpen, FileText, BarChart2, Wallet, BookOpen, Globe, Lock, ChefHat, Code2, ClipboardList, Microscope, GraduationCap } from "lucide-react";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
@@ -13,7 +13,7 @@ import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import { FolderPicker } from "./FolderPicker";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
-type Starter = "blank" | "portfolio" | "budget" | "reading" | "chefbook" | "code" | "decisions" | "papers";
+type Starter = "blank" | "portfolio" | "budget" | "reading" | "chefbook" | "code" | "decisions" | "papers" | "lecture";
 
 /** Workspace templates shown in the picker — Blank plus ready-made example projects. */
 const TEMPLATE_OPTIONS = [
@@ -65,6 +65,12 @@ const TEMPLATE_OPTIONS = [
     labelKey: "workspace.dialog.starterPapers",
     descKey: "workspace.dialog.starterPapersDesc",
   },
+  {
+    id: "lecture",
+    icon: GraduationCap,
+    labelKey: "workspace.dialog.starterLecture",
+    descKey: "workspace.dialog.starterLectureDesc",
+  },
 ] as const;
 
 export function CreateWorkspaceDialog() {
@@ -102,7 +108,8 @@ export function CreateWorkspaceDialog() {
       });
       setCreateWorkspaceOpen(false);
       setActiveWorkspaceId(ws.id);
-      navigate(`/workspaces/${ws.id}`);
+      // Lecture-prep projects open straight to the lecture view (their home).
+      navigate(starter === "lecture" ? `/workspaces/${ws.id}/lecture` : `/workspaces/${ws.id}`);
       toast({ title: t("workspace.dialog.created"), variant: "success" });
       setName("");
       setRootPath("");

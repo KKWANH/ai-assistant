@@ -5,9 +5,9 @@
  * folder structure from GET /api/workspaces/:id/lecture.
  */
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2 } from "lucide-react";
+import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid } from "lucide-react";
 import type { Deck } from "@ariadne/shared";
 import * as api from "../../lib/api";
 import { useCreateChat } from "../../lib/queries";
@@ -80,12 +80,21 @@ export function LectureView() {
       <div className="mx-auto max-w-4xl p-4 sm:p-6">
         <div className="mb-1 flex items-center justify-between">
           <h1 className="text-lg font-semibold">강의 준비</h1>
-          <button
-            onClick={addCourse}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-surface-3"
-          >
-            <Plus className="h-3.5 w-3.5" /> 과목 추가
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/workspaces/${workspaceId}`}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+              title="채팅·자료·파일 등 워크스페이스 전체 보기"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> 개요
+            </Link>
+            <button
+              onClick={addCourse}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-surface-3"
+            >
+              <Plus className="h-3.5 w-3.5" /> 과목 추가
+            </button>
+          </div>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
           {ws?.name ?? "한 학기"} · 과목별 주차 자료를 한 곳에서 관리합니다.

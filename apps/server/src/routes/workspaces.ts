@@ -150,6 +150,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       code: "code",
       decisions: "decisions",
       papers: "research",
+      lecture: "lecture",
       blank: null,
     };
     const category = starter ? categoryByStarter[starter] ?? null : null;

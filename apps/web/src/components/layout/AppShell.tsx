@@ -25,6 +25,7 @@ import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import { NotificationsBell } from "../../features/alerts/NotificationsBell";
 import {
   FolderOpen,
+  GraduationCap,
   Play,
   Settings,
   PanelRight,
@@ -751,12 +752,24 @@ export function AppShell({ children }: AppShellProps) {
                     >
                       <SidebarItem
                         label={ws.name}
-                        icon={<FolderOpen className="h-3.5 w-3.5" />}
+                        icon={
+                          ws.category === "lecture" ? (
+                            <GraduationCap className="h-3.5 w-3.5" />
+                          ) : (
+                            <FolderOpen className="h-3.5 w-3.5" />
+                          )
+                        }
                         active={
                           activeWorkspaceId === ws.id &&
                           location.pathname.startsWith("/workspaces/")
                         }
-                        to={`/workspaces/${ws.id}`}
+                        // Lecture-prep projects open to their lecture view (home);
+                        // the overview/tabs stay reachable from inside it.
+                        to={
+                          ws.category === "lecture"
+                            ? `/workspaces/${ws.id}/lecture`
+                            : `/workspaces/${ws.id}`
+                        }
                         onClick={() => {
                           setActiveWorkspaceId(ws.id);
                           setSidebarSection("workspaces");

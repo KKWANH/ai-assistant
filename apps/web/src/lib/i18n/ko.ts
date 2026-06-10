@@ -370,6 +370,8 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.starterDecisionsDesc": "PRD + ADR + 미해결 질문을 한 폴더에. 주간 요약 스케줄과 agent ADR 초안 액션 포함.",
   "workspace.dialog.starterPapers": "연구 논문",
   "workspace.dialog.starterPapersDesc": "개인 논문 라이브러리 — 노트 + .bib + 읽기 큐. 대시보드에 inbound 인용 수와 결락 인용 점검 포함.",
+  "workspace.dialog.starterLecture": "강의 준비",
+  "workspace.dialog.starterLectureDesc": "한 학기를 과목 → 주차 → 자료로 정리. 열면 강의 준비 화면 — 리서치, 슬라이드(.pptx)·대본(.docx) 생성, 출처 포함 이미지 검색.",
   "workspace.dialog.patternsToggle": "고급 — Ariadne가 읽을 파일 범위",
   "workspace.dialog.includeLabel": "포함할 파일",
   "workspace.dialog.includeHelp": "Ariadne가 읽을 수 있는 이름 패턴 — 한 줄에 하나씩. 예: `**/*.pdf`는 모든 PDF를 의미합니다.",
