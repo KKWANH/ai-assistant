@@ -97,7 +97,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-8 py-12 max-w-2xl mx-auto w-full">
+    <div className="flex flex-col items-center justify-start sm:justify-center flex-1 min-h-0 overflow-y-auto px-8 py-12 max-w-2xl mx-auto w-full">
       <div className="mb-8 text-center">
         <h1 className="text-xl font-semibold text-foreground mb-2">
           {t("chat.empty.title")}

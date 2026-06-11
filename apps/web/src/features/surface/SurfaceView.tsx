@@ -380,8 +380,7 @@ export function SurfaceView({ workspaceId, reloadKey }: SurfaceViewProps) {
         src={`/surface/${workspaceId}/host?theme=${theme}`}
         sandbox="allow-scripts"
         title={t("surface.view.iframeTitle")}
-        className="w-full h-full border-0 bg-background"
-        style={{ minHeight: "480px" }}
+        className="w-full h-full border-0 bg-background min-h-0 sm:min-h-[480px]"
       />
     </div>
   );

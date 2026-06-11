@@ -32,7 +32,7 @@ export function ImmersiveSurfaceHome() {
           <LayoutGrid className="h-3.5 w-3.5" /> {t("workspace.overviewLink")}
         </Link>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 flex flex-col">
         <SurfaceView workspaceId={workspaceId} />
       </div>
     </div>
