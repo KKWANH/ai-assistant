@@ -52,56 +52,6 @@ export const BUILTIN_TEMPLATES: Template[] = [
   },
 
   {
-    id: "lecture-brief",
-    name: "강의 브리프",
-    description: "강의 노트와 자료를 근거로, 출처가 연결된 강의 준비 브리프를 생성합니다.",
-    builtin: true,
-    category: "research",
-    inputs: [
-      {
-        key: "topic",
-        type: "string",
-        label: "강의 주제",
-        required: true,
-        placeholder: "예: 뉴미디어 조각과 장소 특정성",
-      },
-      {
-        key: "duration",
-        type: "string",
-        label: "강의 시간",
-        required: false,
-        default: "90분",
-        placeholder: "예: 60분",
-      },
-      {
-        key: "audience",
-        type: "string",
-        label: "대상",
-        required: false,
-        default: "학부생",
-        placeholder: "예: 대학원 세미나",
-      },
-    ],
-    outputContract: {
-      sections: [
-        "요약",
-        "학습 목표",
-        "핵심 개념",
-        "강의 흐름",
-        "근거 있는 주장",
-        "근거 없는 주장",
-        "누락된 정보",
-        "다음 할 일",
-      ],
-    },
-    evidenceRequired: true,
-    unsupportedClaimsRequired: true,
-    rerunDiffRequired: true,
-    promptHint:
-      "Structure the output as a lecture plan. Identify concepts that lack source support. Write the brief in Korean.",
-  },
-
-  {
     id: "investment-decision-memo",
     name: "투자 결정 메모",
     description:
@@ -235,6 +185,24 @@ export const BUILTIN_TEMPLATES: Template[] = [
   },
 ];
 
+/**
+ * Templates contributed by example projects — registered at boot from the
+ * project registry (see apps/server/src/index.ts). Kept out of
+ * BUILTIN_TEMPLATES so core ships no vertical-specific template; injected via
+ * this hook (mirroring registerProjectRoutes) so this file imports nothing
+ * project-side and there's no import cycle.
+ */
+const PROJECT_TEMPLATES: Template[] = [];
+
+export function registerProjectTemplates(templates: Template[]): void {
+  PROJECT_TEMPLATES.push(...templates);
+}
+
+/** Core built-ins + every project-contributed template. */
+export function getAllTemplates(): Template[] {
+  return [...BUILTIN_TEMPLATES, ...PROJECT_TEMPLATES];
+}
+
 export function getTemplate(id: string): Template | undefined {
-  return BUILTIN_TEMPLATES.find((t) => t.id === id);
+  return getAllTemplates().find((t) => t.id === id);
 }

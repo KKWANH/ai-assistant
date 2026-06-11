@@ -1,43 +1,34 @@
 /**
- * Localized name + description for the 5 built-in templates.
+ * Locale-aware name + description for built-in run templates.
  *
- * The server ships templates with Korean copy hardcoded in
- * apps/server/src/runs/templates.ts. Doing locale-aware response
- * generation on the server would be more invasive (need to look up
- * the account's locale on every templates call) than just mapping
- * the stable template id → an i18n key on the web. So that's what
- * this helper does.
+ * The server ships each built-in template with one hardcoded (Korean)
+ * name/description; doing locale-aware copy server-side would mean threading
+ * the account locale through every templates call. Instead the web maps a
+ * built-in template's stable id to an i18n key (`template.<id>.name`). This
+ * also covers project-contributed templates — their keys arrive via the project
+ * i18n registry — so this helper keeps no per-template id list.
  *
- * Falls through to template.name / template.description for user-
- * defined or custom templates that don't have an i18n key.
+ * Falls through to the template's own name/description for custom templates, or
+ * any built-in whose i18n key has no translation.
  */
 import type { Template } from "@ariadne/shared";
 import type { TranslationKey } from "./i18n/en";
 
-const KNOWN_IDS = new Set<string>([
-  "research-brief",
-  "lecture-brief",
-  "investment-decision-memo",
-  "job-search-review",
-  "source-audit",
-]);
+type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
-export function templateName(
-  template: Template,
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
-): string {
-  if (KNOWN_IDS.has(template.id)) {
-    return t(`template.${template.id}.name` as TranslationKey);
-  }
-  return template.name;
+/** The translation for `key`, or null on a miss (t() echoes the key back when
+ *  there's no entry). */
+function localized(t: T, key: string): string | null {
+  const value = t(key as TranslationKey);
+  return value === key ? null : value;
 }
 
-export function templateDescription(
-  template: Template,
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
-): string {
-  if (KNOWN_IDS.has(template.id)) {
-    return t(`template.${template.id}.description` as TranslationKey);
-  }
-  return template.description ?? "";
+export function templateName(template: Template, t: T): string {
+  const label = template.builtin ? localized(t, `template.${template.id}.name`) : null;
+  return label ?? template.name;
+}
+
+export function templateDescription(template: Template, t: T): string {
+  const label = template.builtin ? localized(t, `template.${template.id}.description`) : null;
+  return label ?? template.description ?? "";
 }

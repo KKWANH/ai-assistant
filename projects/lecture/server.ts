@@ -1,4 +1,5 @@
 import type { ProjectServerModule } from "@ariadne/shared";
+import { lectureBriefTemplate } from "./server/templates.js";
 
 /** Lecture prep — an example project (not a core feature) demonstrating the
  *  platform: a semester organized as courses → weeks → materials, with deck
@@ -11,6 +12,9 @@ export const project: ProjectServerModule = {
   // the lecturer fills it with course/week folders. The category routes its
   // create-flow + opens it to the lecture view (see web.ts resolveHome).
   starter: { id: "lecture", category: "lecture" },
+  // The lecture-brief run template (the create-&-run brief generator), merged
+  // into core's template list at boot via the registry.
+  templates: [lectureBriefTemplate],
 };
 
 export { lectureRoutes } from "./server/routes.js";

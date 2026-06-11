@@ -267,7 +267,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.homeView.mainScreen": "메인 화면",
   "workspace.homeView.setMain": "이 화면을 메인 홈으로",
   "workspace.homeView.isMain": "메인 홈으로 사용 중",
-  "workspace.homeView.tip": "켜면 이 워크스페이스에 들어올 때 탭 없이 이 커스텀 화면이 메인으로 열립니다 (강의 준비처럼). 개요는 언제든 다시 열 수 있어요.",
+  "workspace.homeView.tip": "켜면 이 워크스페이스에 들어올 때 탭 없이 이 커스텀 화면이 메인으로 열립니다. 개요는 언제든 다시 열 수 있어요.",
   "workspace.scanComplete": "스캔 완료",
   "workspace.scanFailed": "스캔 실패",
   "workspace.search.title": "이 워크스페이스 검색",

@@ -12,7 +12,7 @@ import type { FastifyInstance } from "fastify";
 import { ActionsPutSchema, CreateActionRunSchema } from "@ariadne/shared";
 import { ensureAriadneFolder, writeActionsYaml } from "../ariadneFolder.js";
 import { loadWorkspaceActions, loadActionDefs } from "../services/actions.js";
-import { BUILTIN_TEMPLATES } from "../runs/templates.js";
+import { getAllTemplates } from "../runs/templates.js";
 import { createActionRun } from "../runs/actionEngine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 import { accountOverLimit } from "../services/limits.js";
@@ -67,9 +67,10 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     if (!workspace) return;
 
     ensureAriadneFolder(workspace.rootPath);
+    const all = getAllTemplates();
     const templates = workspace.category
-      ? BUILTIN_TEMPLATES.filter((tmpl) => tmpl.category === workspace.category)
-      : BUILTIN_TEMPLATES;
+      ? all.filter((tmpl) => tmpl.category === workspace.category)
+      : all;
     const { actions, error } = loadActionDefs(workspace.rootPath);
     return reply.send({ templates, actions, error });
   });

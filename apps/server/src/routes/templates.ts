@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { BUILTIN_TEMPLATES, getTemplate } from "../runs/templates.js";
+import { getAllTemplates, getTemplate } from "../runs/templates.js";
 
 export async function templateRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/templates
   app.get("/templates", async (_req, reply) => {
-    return reply.send(BUILTIN_TEMPLATES);
+    return reply.send(getAllTemplates());
   });
 
   // GET /api/templates/:id

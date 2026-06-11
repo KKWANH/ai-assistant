@@ -274,7 +274,7 @@ const en = {
   "workspace.homeView.mainScreen": "Main screen",
   "workspace.homeView.setMain": "Set this as the main home",
   "workspace.homeView.isMain": "Used as main home",
-  "workspace.homeView.tip": "When on, entering this workspace opens straight to this custom screen as the main view — no tabs (like lecture prep). The overview is always one click away.",
+  "workspace.homeView.tip": "When on, entering this workspace opens straight to this custom screen as the main view — no tabs. The overview is always one click away.",
   "workspace.scanComplete": "Scan complete",
   "workspace.scanFailed": "Scan failed",
   "workspace.search.title": "Search this workspace",

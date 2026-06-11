@@ -114,7 +114,7 @@ async function searchCommons(query: string, limit: number, signal?: AbortSignal)
     `&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&gsrlimit=${limit.toString()}` +
     "&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=400&format=json&origin=*";
   const res = await fetch(url, {
-    headers: { "User-Agent": "Ariadne/1.0 (lecture-prep image search)" },
+    headers: { "User-Agent": "Ariadne/1.0 (image search)" },
     signal: fetchSignal(signal),
   });
   if (!res.ok) throw new Error(`Commons ${res.status}`);
@@ -168,7 +168,7 @@ async function searchAic(query: string, limit: number, signal?: AbortSignal): Pr
     `?q=${encodeURIComponent(query)}&limit=${limit.toString()}` +
     "&fields=id,title,image_id,artist_display,date_display,is_public_domain";
   const res = await fetch(url, {
-    headers: { "User-Agent": "Ariadne/1.0 (lecture-prep image search)" },
+    headers: { "User-Agent": "Ariadne/1.0 (image search)" },
     signal: fetchSignal(signal),
   });
   if (!res.ok) throw new Error(`AIC ${res.status}`);
@@ -213,7 +213,7 @@ async function searchCleveland(query: string, limit: number, signal?: AbortSigna
     `?q=${encodeURIComponent(query)}&has_image=1&limit=${limit.toString()}` +
     "&fields=id,title,creators,creation_date,images,url,share_license_status";
   const res = await fetch(url, {
-    headers: { "User-Agent": "Ariadne/1.0 (lecture-prep image search)" },
+    headers: { "User-Agent": "Ariadne/1.0 (image search)" },
     signal: fetchSignal(signal),
   });
   if (!res.ok) throw new Error(`Cleveland ${res.status}`);

@@ -10,6 +10,7 @@
  * route hooks, and the web registry extends `ProjectWebModule` with React
  * routes — each on its own side.
  */
+import type { Template } from "./types.js";
 
 /** A workspace template a project contributes to the create flow. */
 export interface ProjectStarter {
@@ -29,6 +30,9 @@ export interface ProjectStarter {
 export interface ProjectServerModule {
   name: string;
   starter?: ProjectStarter;
+  /** Run templates this project adds to the "create & run" list. Merged into
+   *  the available templates at boot — see registerProjectTemplates. */
+  templates?: Template[];
 }
 
 /** The create-dialog card a project contributes. */

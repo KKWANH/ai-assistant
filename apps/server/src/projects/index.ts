@@ -13,7 +13,7 @@
  * package, which tsx does resolve.)
  */
 import type { FastifyInstance } from "fastify";
-import type { ProjectServerModule, ProjectStarter } from "@ariadne/shared";
+import type { ProjectServerModule, ProjectStarter, Template } from "@ariadne/shared";
 import { project as budget } from "../../../../projects/budget/server.js";
 import { project as reading } from "../../../../projects/reading/server.js";
 import { project as chefbook } from "../../../../projects/chefbook/server.js";
@@ -37,6 +37,11 @@ export function projectStarters(): Record<string, ProjectStarter> {
   const out: Record<string, ProjectStarter> = {};
   for (const p of PROJECTS) if (p.starter) out[p.starter.id] = p.starter;
   return out;
+}
+
+/** Every project-contributed run template, merged into core's list at boot. */
+export function projectTemplates(): Template[] {
+  return PROJECTS.flatMap((p) => p.templates ?? []);
 }
 
 /** Mount every project's Fastify routes. Core calls this once at boot instead
