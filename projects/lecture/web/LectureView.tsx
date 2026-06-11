@@ -7,12 +7,13 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText } from "lucide-react";
-import type { Deck } from "../types.js";
+import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText, ClipboardList } from "lucide-react";
+import type { Deck, Exam, CoverageReport } from "../types.js";
 import * as api from "./api";
 import { getWorkspace } from "@ariadne/web/src/lib/api";
 import { useCreateChat } from "@ariadne/web/src/lib/queries";
 import { DeckPreview } from "./DeckPreview";
+import { ExamPreview } from "./ExamPreview";
 import { ContextEditor } from "@ariadne/web/src/features/workspace/ContextEditor";
 
 export function LectureView() {
@@ -70,6 +71,23 @@ export function LectureView() {
     if (slidePrompt && topic) {
       genDeck.mutate({ topic, course: slidePrompt.course, week: slidePrompt.week });
       setSlidePrompt(null);
+    }
+  };
+
+  const [examResult, setExamResult] = useState<{ exam: Exam; coverage: CoverageReport; fileName: string } | null>(
+    null,
+  );
+  const genExam = useMutation({
+    mutationFn: (v: { course: string; week: string; count: number }) =>
+      api.generateExam(workspaceId, v.course, v.week, v.count),
+    onSuccess: (r) => setExamResult(r),
+  });
+  const [examPrompt, setExamPrompt] = useState<{ course: string; week: string; count: number } | null>(null);
+  const makeExam = (course: string, week: string) => setExamPrompt({ course, week, count: 8 });
+  const submitExam = () => {
+    if (examPrompt) {
+      genExam.mutate(examPrompt);
+      setExamPrompt(null);
     }
   };
 
@@ -195,6 +213,12 @@ export function LectureView() {
                         <Presentation className="h-3.5 w-3.5" /> 슬라이드
                       </button>
                       <button
+                        onClick={() => makeExam(c.name, w.name)}
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <ClipboardList className="h-3.5 w-3.5" /> 시험
+                      </button>
+                      <button
                         onClick={() => openWeekChat(c.name, w.name)}
                         className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
                       >
@@ -241,6 +265,47 @@ export function LectureView() {
                 disabled={!slidePrompt.topic.trim()}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
               >
+                생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {examPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setExamPrompt(null)}
+        >
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-1 text-sm font-semibold">시험 만들기</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {examPrompt.course} · {examPrompt.week} — 이 주차 자료를 근거로 문항을 생성하고, 출제 커버리지를 점검합니다.
+            </p>
+            <label className="flex items-center gap-2 text-sm">
+              문항 수
+              <input
+                type="number"
+                min={3}
+                max={20}
+                value={examPrompt.count}
+                onChange={(e) =>
+                  setExamPrompt({ ...examPrompt, count: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitExam();
+                }}
+                className="w-20 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setExamPrompt(null)}
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
+              >
+                취소
+              </button>
+              <button onClick={submitExam} className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground">
                 생성
               </button>
             </div>
@@ -331,6 +396,15 @@ export function LectureView() {
         </div>
       )}
 
+      {genExam.isPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-accent" />
+            시험 생성 중… (문항 생성 + 커버리지 점검 · 1–2분)
+          </div>
+        </div>
+      )}
+
       {deckResult && (
         <DeckPreview
           workspaceId={workspaceId}
@@ -338,6 +412,16 @@ export function LectureView() {
           fileName={deckResult.fileName}
           course={deckResult.course}
           onClose={() => setDeckResult(null)}
+        />
+      )}
+
+      {examResult && (
+        <ExamPreview
+          workspaceId={workspaceId}
+          exam={examResult.exam}
+          coverage={examResult.coverage}
+          fileName={examResult.fileName}
+          onClose={() => setExamResult(null)}
         />
       )}
 

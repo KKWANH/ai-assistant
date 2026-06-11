@@ -16,6 +16,19 @@ import type { Deck } from "../types.js";
 import { deckFileUrl, generateScript, rebuildDeck } from "./api";
 import { searchImages } from "@ariadne/web/src/lib/api";
 
+/** A scholarly 도판 caption (positional, no field labels) in the standard
+ *  Korean order: 작가, 〈제목〉, 연도, 재료, 크기, 소장처. Blank fields drop out, so
+ *  a sparse Commons hit still yields a sensible line. (Swap medium/dimensions
+ *  here if a department style lists 크기 before 재료.) */
+function buildCaption(img: ImageResult): string {
+  const title = img.title ? `〈${img.title}〉` : "";
+  return [img.creator, title, img.date, img.medium, img.dimensions, img.source]
+    .map((s) => s?.trim())
+    .filter(Boolean)
+    .join(", ")
+    .slice(0, 200);
+}
+
 export function DeckPreview({
   workspaceId,
   deck,
@@ -49,9 +62,7 @@ export function DeckPreview({
           ? {
               ...s,
               imageUrl: img?.imageUrl,
-              imageCredit: img
-                ? [img.title, img.creator, img.source].filter(Boolean).join(" · ").slice(0, 160)
-                : undefined,
+              imageCredit: img ? buildCaption(img) : undefined,
             }
           : s,
       ),

@@ -4,7 +4,7 @@
  * types module.
  */
 import { request } from "@ariadne/web/src/lib/api";
-import type { Deck, LectureStructure } from "../types.js";
+import type { Deck, Exam, CoverageReport, LectureStructure } from "../types.js";
 
 export const getLectureStructure = (id: string) =>
   request<LectureStructure>("GET", `/workspaces/${id}/lecture`);
@@ -18,6 +18,14 @@ export const generateDeck = (id: string, topic: string, course?: string, week?: 
     course,
     week,
   });
+
+/** Generate an exam from a course/week's materials + audit its coverage. */
+export const generateExam = (id: string, course?: string, week?: string, count?: number) =>
+  request<{ exam: Exam; coverage: CoverageReport; fileName: string }>(
+    "POST",
+    `/workspaces/${id}/exam`,
+    { course, week, count },
+  );
 
 export const setCourseMemo = (id: string, course: string, memo: string) =>
   request<{ ok: true }>("POST", `/workspaces/${id}/lecture/memo`, { course, memo });

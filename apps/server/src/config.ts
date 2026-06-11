@@ -66,6 +66,81 @@ export function getTriageSettings(): Settings {
   return getActiveSettings();
 }
 
+/**
+ * Model tiers (MW0 — the routing scaffold the heavy lecture actions ride on).
+ *
+ * Three rungs, cheapest-capable first:
+ *   - "local"           → the machine's own model (qwen3:8b via Ollama). Free,
+ *                         private, always available; the default for chat.
+ *   - "frontier"        → a cheap cloud workhorse (Gemini 2.5 Flash). The quality
+ *                         floor for deliverables — deck outlines, scripts — where
+ *                         the local model's scholarship runs thin.
+ *   - "frontier-strong" → a strong cloud model (Gemini 2.5 Pro), reserved for the
+ *                         few steps that need real reasoning (exam coverage
+ *                         checks, a "정밀" escalation). Used sparingly — it's an
+ *                         order of magnitude pricier than the workhorse.
+ *
+ * The point is cost control: send each action to the cheapest rung that clears
+ * its quality bar, not everything to the strong model. Resolution is provider-
+ * agnostic — the first CONFIGURED cloud provider (Gemini preferred) backs the
+ * frontier rungs, and with NO cloud key at all every tier degrades to local, so
+ * the features keep working key-less (just on the weaker model).
+ */
+export type ModelTier = "local" | "frontier" | "frontier-strong";
+
+// Which cloud provider backs the frontier rungs: the first configured one wins,
+// so adding only a Gemini key routes all heavy work to Gemini. (Order is the
+// project's house preference, not a quality ranking.)
+const FRONTIER_PROVIDER_ORDER: ProviderId[] = ["gemini", "anthropic", "openai", "moonshot", "minimax"];
+
+// Explicit model per rung for providers where we've picked specific ids. Gemini
+// is the configured choice: 2.5 Flash as the workhorse, 2.5 Pro for escalation.
+// An id absent from the provider's MODEL_CHOICES is ignored (see pickTierModel),
+// so a registry rename degrades gracefully instead of 400ing the vendor API.
+const TIER_MODELS: Partial<Record<ProviderId, { frontier: string; strong: string }>> = {
+  gemini: { frontier: "gemini-2.5-flash", strong: "gemini-2.5-pro" },
+};
+
+/**
+ * The model id for a provider's frontier rung: the explicit pick if it's still a
+ * valid choice, else a metadata fallback — strong → the provider's own default,
+ * frontier → its cheapest non-hidden model (so an unmapped provider still lands
+ * on a sane workhorse rather than its premium model).
+ */
+function pickTierModel(id: ProviderId, rung: "frontier" | "strong"): string {
+  // Validate against the full registry (which includes `hidden` models) — the
+  // explicit Gemini 2.5 ids are off-menu but still valid for API calls.
+  const models = PROVIDER_REGISTRY[id].models;
+  const pref = TIER_MODELS[id]?.[rung];
+  if (pref && models.some((m) => m.id === pref)) return pref;
+  if (rung === "strong") return DEFAULT_MODELS[id];
+  const rank: Record<string, number> = { low: 0, mid: 1, premium: 2 };
+  const cheapest = [...models]
+    .filter((m) => !m.hidden)
+    .sort((a, b) => (rank[a.costTier] ?? 9) - (rank[b.costTier] ?? 9) || (a.pricing?.inUsd ?? 9) - (b.pricing?.inUsd ?? 9))[0];
+  return cheapest?.id ?? DEFAULT_MODELS[id];
+}
+
+/**
+ * Resolve a tier to concrete provider/model settings. Heavy actions call this
+ * instead of getActiveSettings() so they ride the right rung regardless of the
+ * user's chat default. Falls back to local when no cloud provider is configured,
+ * so nothing breaks key-less — it just runs on the local model.
+ */
+export function resolveTierSettings(tier: ModelTier): Settings {
+  if (tier === "local") {
+    const active = getActiveSettings();
+    return PROVIDER_REGISTRY[active.provider].local
+      ? active
+      : buildSettings("ollama", DEFAULT_MODELS.ollama);
+  }
+  const provider = FRONTIER_PROVIDER_ORDER.find(
+    (id) => !PROVIDER_REGISTRY[id].local && isProviderConfigured(id),
+  );
+  if (!provider) return resolveTierSettings("local");
+  return buildSettings(provider, pickTierModel(provider, tier === "frontier-strong" ? "strong" : "frontier"));
+}
+
 export function saveSettings(provider: ProviderId, model: string): Settings {
   dbSetSetting("provider", provider);
   dbSetSetting("model", model);

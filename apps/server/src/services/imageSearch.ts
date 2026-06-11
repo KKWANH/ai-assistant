@@ -40,6 +40,28 @@ function stripTags(s: string): string {
   return s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
 }
 
+/** Trim a museum dimensions string to one clean clause for a caption: drop a
+ *  leading "Overall:"/"Sheet:"/"Framed:" label, anything after the first ";"
+ *  (extra framed/sheet sizes), and a trailing imperial "(… in.)" — so
+ *  "Overall: 92.1 x 73 cm" and "89.9 × 94.1 cm (35 3/8 in.); Framed: …" both
+ *  collapse to just the metric size. */
+function cleanDim(s: string | undefined): string | undefined {
+  if (!s) return undefined;
+  const v = s.split(";")[0]!.replace(/^[A-Za-z][A-Za-z .]*:\s*/, "").split("(")[0]!.trim();
+  return v || undefined;
+}
+
+/** Clean a Commons date for a caption. Commons `DateTimeOriginal` often carries
+ *  a machine-readable tail — "1916date QS:P571,+1916-19-00T00:00:00Z/10" — so we
+ *  cut the QS/ISO-timestamp part, drop a glued "date" artifact, and collapse a
+ *  bare ISO datetime to its date. Museum sources have clean dates and skip this. */
+function cleanDate(s: string | undefined): string | undefined {
+  if (!s) return undefined;
+  const head = s.split(/\s*QS:|\s*\+\d{4}-/)[0]!.replace(/date$/i, "").trim();
+  const iso = head.match(/^\d{4}-\d{2}-\d{2}/);
+  return (iso ? iso[0] : head) || undefined;
+}
+
 /**
  * Search for images across the art/museum sources. `perSource` caps each
  * source so the combined list stays slide-pickable. Always resolves (never
@@ -136,8 +158,10 @@ async function searchCommons(query: string, limit: number, signal?: AbortSignal)
       sourceUrl: info.descriptionurl ?? info.url,
       source: "Wikimedia Commons",
       creator: meta.Artist?.value ? stripTags(meta.Artist.value) : undefined,
-      date: meta.DateTimeOriginal?.value ? stripTags(meta.DateTimeOriginal.value) : undefined,
+      date: cleanDate(meta.DateTimeOriginal?.value ? stripTags(meta.DateTimeOriginal.value) : undefined),
       license: meta.LicenseShortName?.value ? stripTags(meta.LicenseShortName.value) : undefined,
+      medium: meta.Medium?.value ? stripTags(meta.Medium.value) : undefined,
+      dimensions: cleanDim(meta.Dimensions?.value ? stripTags(meta.Dimensions.value) : undefined),
     });
   }
   return out;
@@ -166,7 +190,7 @@ async function searchAic(query: string, limit: number, signal?: AbortSignal): Pr
   const url =
     "https://api.artic.edu/api/v1/artworks/search" +
     `?q=${encodeURIComponent(query)}&limit=${limit.toString()}` +
-    "&fields=id,title,image_id,artist_display,date_display,is_public_domain";
+    "&fields=id,title,image_id,artist_display,date_display,is_public_domain,medium_display,dimensions";
   const res = await fetch(url, {
     headers: { "User-Agent": "Ariadne/1.0 (image search)" },
     signal: fetchSignal(signal),
@@ -189,6 +213,8 @@ async function searchAic(query: string, limit: number, signal?: AbortSignal): Pr
       creator: a.artist_display || undefined,
       date: a.date_display || undefined,
       license: a.is_public_domain ? "Public Domain (CC0)" : "© Art Institute of Chicago",
+      medium: a.medium_display || undefined,
+      dimensions: cleanDim(a.dimensions),
     });
   }
   return out;
@@ -201,6 +227,8 @@ interface AicArtwork {
   artist_display?: string;
   date_display?: string;
   is_public_domain?: boolean;
+  medium_display?: string;
+  dimensions?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +239,7 @@ async function searchCleveland(query: string, limit: number, signal?: AbortSigna
   const url =
     "https://openaccess-api.clevelandart.org/api/artworks/" +
     `?q=${encodeURIComponent(query)}&has_image=1&limit=${limit.toString()}` +
-    "&fields=id,title,creators,creation_date,images,url,share_license_status";
+    "&fields=id,title,creators,creation_date,images,url,share_license_status,technique,measurements";
   const res = await fetch(url, {
     headers: { "User-Agent": "Ariadne/1.0 (image search)" },
     signal: fetchSignal(signal),
@@ -233,6 +261,8 @@ async function searchCleveland(query: string, limit: number, signal?: AbortSigna
       creator: a.creators?.[0]?.description || undefined,
       date: a.creation_date || undefined,
       license: a.share_license_status === "CC0" ? "Public Domain (CC0)" : a.share_license_status || undefined,
+      medium: a.technique || undefined,
+      dimensions: cleanDim(a.measurements),
     });
   }
   return out;
@@ -246,4 +276,6 @@ interface ClevelandArt {
   url?: string;
   share_license_status?: string;
   images?: { web?: { url?: string }; print?: { url?: string } };
+  technique?: string;
+  measurements?: string;
 }

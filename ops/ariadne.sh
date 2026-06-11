@@ -100,15 +100,19 @@ cmd_start() {
     (cd "${ARIADNE_ROOT}" && npm install)
   fi
 
-  # Ensure a FRESH web build. Rebuild when dist is missing OR any web/shared
-  # source is newer than the built index.html. Otherwise a stale dist (e.g.
-  # after `git pull`, or a manual rebuild while the server ran) gets served and
-  # @fastify/static is registered against it at boot — producing 404 assets /
+  # Ensure a FRESH web build. Rebuild when dist is missing OR any web / shared /
+  # project-web source is newer than the built index.html. Otherwise a stale dist
+  # (e.g. after `git pull`, or a manual rebuild while the server ran) gets served
+  # and @fastify/static is registered against it at boot — producing 404 assets /
   # a white screen until the next rebuild. Building here, before the supervisor
   # launches the server, keeps the served dist and the static handler in sync.
+  # projects/*/web is included because the web bundle pulls in each project's
+  # client code (e.g. lecture's LectureView) — editing only a project web file
+  # must still trigger a rebuild. The -path filter keeps project *server* edits
+  # (which don't touch the web bundle) from forcing a needless rebuild.
   local dist_index="${ARIADNE_ROOT}/apps/web/dist/index.html"
   if [[ ! -f "${dist_index}" ]] || \
-     [[ -n "$(find "${ARIADNE_ROOT}/apps/web/src" "${ARIADNE_ROOT}/packages/shared/src" -type f -newer "${dist_index}" -print -quit 2>/dev/null)" ]]; then
+     [[ -n "$(find "${ARIADNE_ROOT}/apps/web/src" "${ARIADNE_ROOT}/packages/shared/src" "${ARIADNE_ROOT}/projects" -type f -newer "${dist_index}" \( -path '*/apps/web/src/*' -o -path '*/packages/shared/src/*' -o -path '*/projects/*/web/*' \) -print -quit 2>/dev/null)" ]]; then
     info "Building web (dist missing or stale)…"
     (cd "${ARIADNE_ROOT}" && npm run build:web)
   fi

@@ -182,8 +182,10 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
       // Right column: contained image + a small attribution caption.
       sl.addImage({ data: img, x: 7.7, y: 1.6, w: 5.0, h: 4.5, sizing: { type: "contain", w: 5.0, h: 4.5 } });
       if (s.imageCredit) {
-        sl.addText(s.imageCredit.slice(0, 160), {
-          x: 7.7, y: 6.15, w: 5.0, h: 0.5, fontSize: 9, italic: true, color: "999999", valign: "top",
+        // Scholarly caption (작가, 〈제목〉, 연도, 재료, 크기, 소장처) — longer than a
+        // bare title, so allow two lines under the image.
+        sl.addText(s.imageCredit.slice(0, 200), {
+          x: 7.7, y: 6.15, w: 5.0, h: 0.6, fontSize: 9, italic: true, color: "999999", valign: "top",
         });
       }
     }

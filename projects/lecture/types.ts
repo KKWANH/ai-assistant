@@ -24,6 +24,48 @@ export interface Deck {
   slides: DeckSlide[];
 }
 
+/* ------------------------------------------------------------------ *
+ * Exam — a generated test plus a coverage audit (MW2). The two are
+ * produced on different model tiers: items on the workhorse (F), the
+ * audit on the strong model (F+), since auditing the whole exam against
+ * the corpus is the reasoning-heavy step.
+ * ------------------------------------------------------------------ */
+
+export type ExamItemType = "객관식" | "단답" | "서술";
+export type ExamDifficulty = "기초" | "심화" | "응용";
+
+export interface ExamItem {
+  type: ExamItemType;
+  question: string;
+  /** Options for 객관식 items; absent for 단답/서술. */
+  choices?: string[];
+  /** Correct answer, or a model-answer outline for 서술. */
+  answer: string;
+  difficulty: ExamDifficulty;
+  /** The single concept this item tests — links it to the coverage map. */
+  concept: string;
+}
+
+export interface Exam {
+  title: string;
+  items: ExamItem[];
+}
+
+/** One concept the materials teach, and whether the exam tests it. */
+export interface CoverageConcept {
+  concept: string;
+  tested: boolean;
+  itemCount: number;
+}
+
+/** The strong-tier audit of an exam against the materials it came from. */
+export interface CoverageReport {
+  concepts: CoverageConcept[];
+  /** Items testing something the materials don't actually cover (미설명 개념). */
+  untaught: { question: string; reason: string }[];
+  summary: string;
+}
+
 export interface LectureMaterial {
   name: string;
   /** Path relative to the workspace root. */

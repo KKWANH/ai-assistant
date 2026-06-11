@@ -522,6 +522,10 @@ export interface ImageResult {
   creator?: string;
   date?: string;
   license?: string;
+  /** Medium/technique, e.g. "Oil on canvas" — for a scholarly slide caption. */
+  medium?: string;
+  /** Physical dimensions, cleaned to one clause, e.g. "89.9 × 94.1 cm". */
+  dimensions?: string;
 }
 
 /* ------------------------------------------------------------------ *
