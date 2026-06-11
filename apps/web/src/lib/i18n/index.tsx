@@ -21,14 +21,17 @@ import {
 import type { TranslationKey } from "./en";
 import en from "./en";
 import ko from "./ko";
+import { PROJECT_MESSAGES } from "../../projects/i18n";
 
 // ── Supported locales ─────────────────────────────────────────────────────────
 export const LOCALES = ["en", "ko"] as const;
 export type Locale = (typeof LOCALES)[number];
 
-const DICTIONARIES: Record<Locale, Record<TranslationKey, string>> = {
-  en,
-  ko,
+// Core dictionaries, each merged with every example project's owned strings
+// (see ../../projects/i18n) so no vertical-specific copy lives in en.ts/ko.ts.
+const DICTIONARIES: Record<Locale, Record<string, string>> = {
+  en: { ...en, ...PROJECT_MESSAGES.en },
+  ko: { ...ko, ...PROJECT_MESSAGES.ko },
 };
 
 const STORAGE_KEY = "ariadne.locale";

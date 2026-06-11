@@ -256,7 +256,6 @@ const ko: Record<TranslationKey, string> = {
   "workspace.list.files": "{n}개 파일",
 
   "workspace.scanFiles": "파일 스캔",
-  "workspace.lecturePrep": "강의 준비",
   "workspace.context.button": "지침",
   "workspace.context.title": "사전 컨텍스트 · 프로젝트 지침",
   "workspace.context.desc": "이 프로젝트의 배경·목표·원하는 작업 방식·대상을 적어두면, 모든 채팅 답변과 슬라이드·대본 생성에 자동 반영됩니다.",
@@ -382,8 +381,6 @@ const ko: Record<TranslationKey, string> = {
   "workspace.dialog.starterDecisionsDesc": "PRD + ADR + 미해결 질문을 한 폴더에. 주간 요약 스케줄과 agent ADR 초안 액션 포함.",
   "workspace.dialog.starterPapers": "연구 논문",
   "workspace.dialog.starterPapersDesc": "개인 논문 라이브러리 — 노트 + .bib + 읽기 큐. 대시보드에 inbound 인용 수와 결락 인용 점검 포함.",
-  "workspace.dialog.starterLecture": "강의 준비",
-  "workspace.dialog.starterLectureDesc": "한 학기를 과목 → 주차 → 자료로 정리. 열면 강의 준비 화면 — 리서치, 슬라이드(.pptx)·대본(.docx) 생성, 출처 포함 이미지 검색.",
   "workspace.dialog.patternsToggle": "고급 — Ariadne가 읽을 파일 범위",
   "workspace.dialog.includeLabel": "포함할 파일",
   "workspace.dialog.includeHelp": "Ariadne가 읽을 수 있는 이름 패턴 — 한 줄에 하나씩. 예: `**/*.pdf`는 모든 PDF를 의미합니다.",
@@ -1182,8 +1179,6 @@ const ko: Record<TranslationKey, string> = {
   // 다른 모든 곳이 "브리핑"인데 템플릿 이름만 "브리프"였음)
   "template.research-brief.name": "리서치 브리핑",
   "template.research-brief.description": "내 자료 폴더의 메모·논문·파일을 근거로, 출처 연결된 리서치 브리핑 생성.",
-  "template.lecture-brief.name": "강의 브리핑",
-  "template.lecture-brief.description": "강의 노트와 자료를 근거로, 출처 연결된 강의 준비 브리핑 생성.",
   "template.investment-decision-memo.name": "투자 결정 메모",
   "template.investment-decision-memo.description": "리서치 노트·재무 자료·시장 데이터를 근거로, 구조화된 투자 결정 메모 생성.",
   "template.job-search-review.name": "구직 활동 점검",

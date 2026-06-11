@@ -263,7 +263,6 @@ const en = {
   "workspace.list.files": "{n} files",
 
   "workspace.scanFiles": "Scan files",
-  "workspace.lecturePrep": "Lecture prep",
   "workspace.context.button": "Context",
   "workspace.context.title": "Project context · instructions",
   "workspace.context.desc": "Write this project's background, goals, the way you want me to work, and who it's for — it's applied to every chat reply and to slide/script generation.",
@@ -387,8 +386,6 @@ const en = {
   "workspace.dialog.starterDecisionsDesc": "PRD + ADR + open-questions in one folder. Ships a weekly-digest schedule and an agent-stage-an-ADR action.",
   "workspace.dialog.starterPapers": "Research papers",
   "workspace.dialog.starterPapersDesc": "Personal paper library with notes + .bib + reading queue. Surface shows inbound-citation count + dangling-citation audit.",
-  "workspace.dialog.starterLecture": "Lecture prep",
-  "workspace.dialog.starterLectureDesc": "A semester organized as courses → weeks → materials. Opens to the lecture view: research, generate slide decks (.pptx) and scripts (.docx), find sourced images.",
   "workspace.dialog.patternsToggle": "Advanced — which files Ariadne reads",
   "workspace.dialog.includeLabel": "Files to include",
   "workspace.dialog.includeHelp": "Name patterns Ariadne is allowed to read — one per line. Example: **/*.pdf reads every PDF.",
@@ -1181,8 +1178,6 @@ const en = {
   // apps/server/src/runs/templates.ts.
   "template.research-brief.name": "Research brief",
   "template.research-brief.description": "Generate a sources-linked research brief grounded in the notes, papers, and files in your folder.",
-  "template.lecture-brief.name": "Lecture brief",
-  "template.lecture-brief.description": "Turn lecture notes + materials into a sources-linked study brief.",
   "template.investment-decision-memo.name": "Investment decision memo",
   "template.investment-decision-memo.description": "Structured investment memo grounded in research notes, financials, and market data.",
   "template.job-search-review.name": "Job search check-in",
