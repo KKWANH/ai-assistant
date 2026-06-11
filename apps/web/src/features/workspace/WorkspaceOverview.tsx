@@ -1307,7 +1307,13 @@ export function WorkspaceOverview() {
                 <Button
                   variant={ws.homeView === "surface" ? "secondary" : "ghost"}
                   size="sm"
-                  leftIcon={<Layout className="h-3.5 w-3.5" />}
+                  leftIcon={
+                    ws.homeView === "surface" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <Layout className="h-3.5 w-3.5" />
+                    )
+                  }
                   loading={updateWorkspace.isPending}
                   onClick={() =>
                     void updateWorkspace.mutateAsync({
