@@ -14,10 +14,11 @@ import type { FastifyInstance } from "fastify";
 import { requireWorkspace } from "@ariadne/server/src/routes/workspaceGuard.js";
 import { getLectureStructure, scaffoldLectureFolder, getCourseMemo, setCourseMemo } from "./lecturePrep.js";
 import { getWorkspaceContext } from "@ariadne/server/src/services/workspaceContext.js";
-import type { Deck } from "../types.js";
+import type { Deck, DocType } from "../types.js";
 import { generateDeckOutline, buildPptx } from "./deckGen.js";
 import { generateScript, buildScriptDocx } from "./scriptGen.js";
 import { generateExam, checkCoverage, buildExamDocx } from "./examGen.js";
+import { generateDoc, buildDocDocx, DOC_SPECS } from "./docGen.js";
 import { retrieveRelevantChunks, formatChunksForPrompt } from "@ariadne/server/src/services/retrieval.js";
 import { dbGetLatestSnapshot } from "@ariadne/server/src/db/repo.js";
 import { resolveTierSettings } from "@ariadne/server/src/config.js";
@@ -270,6 +271,67 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
         return reply.send({ exam, coverage, fileName });
       } catch (err) {
         return reply.status(500).send({ error: "Exam generation failed", detail: String(err) });
+      }
+    },
+  );
+
+  // Generate a course deliverable (handout / worksheet / reading list / syllabus
+  // entry) from a week's materials — the MW3 fan-out: one engine, type-selected.
+  // Workhorse tier (F). Writes a .docx; download reuses /deck-file.
+  app.post<{ Params: { id: string }; Body: { type?: DocType; course?: string; week?: string } }>(
+    "/workspaces/:id/document",
+    async (req, reply) => {
+      const ws = await requireWorkspace(req.params.id, req, reply, "write");
+      if (!ws) return;
+      const type = req.body?.type;
+      if (!type || !(type in DOC_SPECS)) return reply.status(400).send({ error: "type is required" });
+      const scope =
+        [req.body?.course, req.body?.week].map((s) => s?.trim()).filter(Boolean).join(" · ") || DOC_SPECS[type].label;
+      const courseMemo = [
+        getWorkspaceContext(ws.rootPath),
+        req.body?.course ? getCourseMemo(ws.rootPath, req.body.course) : "",
+      ]
+        .filter((s) => s.trim())
+        .join("\n\n");
+
+      let grounding = "";
+      const snapshot = dbGetLatestSnapshot(req.params.id);
+      if (snapshot && snapshot.files.length > 0) {
+        try {
+          const chunks = await retrieveRelevantChunks(ws.rootPath, snapshot.files, scope, {
+            workspaceId: ws.id,
+            topK: req.body?.week ? 25 : 12,
+          });
+          const week = req.body?.week;
+          const scoped = week
+            ? chunks.filter((c) => c.path.startsWith(`${week.replace(/\/$/, "")}/`))
+            : chunks;
+          grounding = formatChunksForPrompt((scoped.length > 0 ? scoped : chunks).slice(0, 10));
+        } catch {
+          /* fall through to the no-materials guard below */
+        }
+      }
+      if (!grounding.trim()) {
+        return reply.status(400).send({ error: "No indexed materials to build a document from" });
+      }
+
+      try {
+        const settings = resolveTierSettings("frontier");
+        const model =
+          settings.provider === "ollama" ? await resolveOllamaModel(settings.model) : settings.model;
+        const provider = await getProvider({ provider: settings.provider, model });
+        const doc = await generateDoc(type, scope, grounding, courseMemo, provider);
+        if (doc.sections.length === 0) {
+          return reply.status(422).send({ error: "Materials were too thin to generate this document" });
+        }
+        const docx = await buildDocDocx(doc);
+        const fileName = `${scope.replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 50) || "산출물"} ${DOC_SPECS[type].label}.docx`;
+        const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
+        if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
+        fs.writeFileSync(dest, docx);
+        return reply.send({ doc, fileName });
+      } catch (err) {
+        return reply.status(500).send({ error: "Document generation failed", detail: String(err) });
       }
     },
   );

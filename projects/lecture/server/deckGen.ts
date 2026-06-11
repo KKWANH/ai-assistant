@@ -7,6 +7,7 @@
  */
 import * as PptxNS from "pptxgenjs";
 import type { Deck } from "../types.js";
+import { isEmbeddableLicense } from "../types.js";
 import type { AiProvider } from "@ariadne/server/src/providers/index.js";
 import { extractJson } from "@ariadne/server/src/providers/index.js";
 import { parsePublicHttpUrl } from "@ariadne/server/src/services/search.js";
@@ -149,9 +150,13 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
   const ACCENT = "C0392B";
   const INK = "1A1A1A";
 
-  // Embed any picked images up front (parallel fetch), then build synchronously.
+  // Embed picked images up front (parallel fetch), then build synchronously.
+  // Only fetch images we may actually embed — open licenses. Copyrighted or
+  // unclear ones are cited by source link instead, so there's nothing to fetch.
   const images = await Promise.all(
-    deck.slides.map((s) => (s.imageUrl ? fetchSlideImage(s.imageUrl) : Promise.resolve(null))),
+    deck.slides.map((s) =>
+      s.imageUrl && isEmbeddableLicense(s.imageLicense) ? fetchSlideImage(s.imageUrl) : Promise.resolve(null),
+    ),
   );
 
   // Title slide.
@@ -170,8 +175,10 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
     sl.background = { color: "FFFFFF" };
     sl.addText(s.title, { x: 0.6, y: 0.4, w: 12.1, h: 0.9, fontSize: 28, bold: true, color: INK });
     sl.addShape(p.ShapeType.line, { x: 0.6, y: 1.32, w: 12.1, h: 0, line: { color: "E0E0E0", width: 1 } });
-    // With an image, bullets take the left ~55%; otherwise full width.
-    const bulletW = img ? 6.6 : 11.7;
+    // A right column holds either the embedded image or a source-link citation
+    // (for copyrighted/unclear images); bullets take the left ~55% when present.
+    const hasRightCol = !!img || !!s.imageUrl;
+    const bulletW = hasRightCol ? 6.6 : 11.7;
     if (s.bullets.length > 0) {
       sl.addText(
         s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 18 }, fontSize: 18, color: "333333", paraSpaceAfter: 10 } })),
@@ -179,7 +186,7 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
       );
     }
     if (img) {
-      // Right column: contained image + a small attribution caption.
+      // Open license → embed the image + a small attribution caption.
       sl.addImage({ data: img, x: 7.7, y: 1.6, w: 5.0, h: 4.5, sizing: { type: "contain", w: 5.0, h: 4.5 } });
       if (s.imageCredit) {
         // Scholarly caption (작가, 〈제목〉, 연도, 재료, 크기, 소장처) — longer than a
@@ -188,6 +195,19 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
           x: 7.7, y: 6.15, w: 5.0, h: 0.6, fontSize: 9, italic: true, color: "999999", valign: "top",
         });
       }
+    } else if (s.imageUrl) {
+      // Copyrighted / unclear license → don't embed; cite the source with a
+      // clickable link so the deck stays distributable and the lecturer can
+      // still pull the image up. (Contemporary art usually lands here.)
+      const url = s.imageSourceUrl || s.imageUrl;
+      sl.addText(
+        [
+          { text: (s.imageCredit || s.title).slice(0, 200), options: { fontSize: 12, color: "555555", breakLine: true } },
+          { text: url.slice(0, 240), options: { fontSize: 9, color: "2563EB", hyperlink: { url }, breakLine: true } },
+          { text: "저작권 보호 — 출처에서 이미지를 확인하세요.", options: { fontSize: 8, italic: true, color: "999999" } },
+        ],
+        { x: 7.7, y: 1.6, w: 5.0, h: 4.5, valign: "top" },
+      );
     }
     if (s.notes) sl.addNotes(s.notes);
   });

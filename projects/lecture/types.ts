@@ -12,16 +12,36 @@ export interface DeckSlide {
   /** English image-search terms for one supporting image (or empty). */
   imageQuery?: string;
   /** Full-resolution URL of an image the lecturer picked for this slide —
-   *  embedded into the .pptx on rebuild. */
+   *  embedded into the .pptx on rebuild (only when its license permits, see
+   *  isEmbeddableLicense). */
   imageUrl?: string;
-  /** Attribution shown under a picked image (source · creator). */
+  /** Attribution shown under a picked image (작가, 〈제목〉, 연도, …). */
   imageCredit?: string;
+  /** License of the picked image — decides whether the .pptx embeds the image
+   *  or only cites its source link (copyrighted / unclear → link only). */
+  imageLicense?: string;
+  /** Human page to cite/link for the picked image (used when not embedding). */
+  imageSourceUrl?: string;
 }
 
 export interface Deck {
   title: string;
   subtitle?: string;
   slides: DeckSlide[];
+}
+
+/**
+ * Whether an image's license permits embedding it into a distributed file.
+ * Open licenses — public domain, CC0, CC BY / BY-SA — embed; anything else
+ * ("©", all-rights-reserved, or an unknown/empty license) is cited by source
+ * link only. The conservative default (unknown → not embeddable) keeps
+ * copyrighted or unclear works (e.g. contemporary art) out of the .pptx.
+ * Shared by the deck renderer (server) and the picker badge (web) so the rule
+ * has one definition.
+ */
+export function isEmbeddableLicense(license: string | undefined): boolean {
+  if (!license) return false;
+  return /public domain|cc0|cc[\s-]?by/i.test(license);
 }
 
 /* ------------------------------------------------------------------ *
@@ -64,6 +84,23 @@ export interface CoverageReport {
   /** Items testing something the materials don't actually cover (미설명 개념). */
   untaught: { question: string; reason: string }[];
   summary: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Document fan-out (MW3) — one engine, many deliverables (handout,
+ * worksheet, reading list, syllabus entry). All share a generic
+ * title + sections shape so a single generator/renderer covers them.
+ * ------------------------------------------------------------------ */
+
+export type DocType = "handout" | "worksheet" | "reading" | "syllabus";
+
+export interface DocSection {
+  heading: string;
+  body: string;
+}
+export interface GeneratedDoc {
+  title: string;
+  sections: DocSection[];
 }
 
 export interface LectureMaterial {

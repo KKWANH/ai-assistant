@@ -7,14 +7,23 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText, ClipboardList } from "lucide-react";
-import type { Deck, Exam, CoverageReport } from "../types.js";
+import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText, ClipboardList, FileStack } from "lucide-react";
+import type { Deck, Exam, CoverageReport, DocType, GeneratedDoc } from "../types.js";
 import * as api from "./api";
 import { getWorkspace } from "@ariadne/web/src/lib/api";
 import { useCreateChat } from "@ariadne/web/src/lib/queries";
 import { DeckPreview } from "./DeckPreview";
 import { ExamPreview } from "./ExamPreview";
+import { DocPreview } from "./DocPreview";
 import { ContextEditor } from "@ariadne/web/src/features/workspace/ContextEditor";
+
+/** The deliverables the per-week "산출물" menu offers (MW3 fan-out). */
+const DOC_TYPES: { type: DocType; label: string }[] = [
+  { type: "handout", label: "유인물" },
+  { type: "worksheet", label: "워크시트" },
+  { type: "reading", label: "참고문헌" },
+  { type: "syllabus", label: "강의계획" },
+];
 
 export function LectureView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
@@ -88,6 +97,24 @@ export function LectureView() {
     if (examPrompt) {
       genExam.mutate(examPrompt);
       setExamPrompt(null);
+    }
+  };
+
+  const [docResult, setDocResult] = useState<
+    { doc: GeneratedDoc; fileName: string; type: DocType; label: string } | null
+  >(null);
+  const genDoc = useMutation({
+    mutationFn: (v: { type: DocType; course: string; week: string }) =>
+      api.generateDoc(workspaceId, v.type, v.course, v.week),
+    onSuccess: (r, v) =>
+      setDocResult({ ...r, type: v.type, label: DOC_TYPES.find((d) => d.type === v.type)?.label ?? "" }),
+  });
+  const [docPrompt, setDocPrompt] = useState<{ course: string; week: string } | null>(null);
+  const makeDoc = (course: string, week: string) => setDocPrompt({ course, week });
+  const submitDoc = (type: DocType) => {
+    if (docPrompt) {
+      genDoc.mutate({ ...docPrompt, type });
+      setDocPrompt(null);
     }
   };
 
@@ -205,7 +232,7 @@ export function LectureView() {
                         </span>
                       )}
                     </div>
-                    <div className="flex shrink-0 items-center gap-4 sm:gap-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 sm:gap-3">
                       <button
                         onClick={() => makeSlides(c.name, w.name)}
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
@@ -217,6 +244,12 @@ export function LectureView() {
                         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                       >
                         <ClipboardList className="h-3.5 w-3.5" /> 시험
+                      </button>
+                      <button
+                        onClick={() => makeDoc(c.name, w.name)}
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <FileStack className="h-3.5 w-3.5" /> 산출물
                       </button>
                       <button
                         onClick={() => openWeekChat(c.name, w.name)}
@@ -307,6 +340,39 @@ export function LectureView() {
               </button>
               <button onClick={submitExam} className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground">
                 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {docPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setDocPrompt(null)}
+        >
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-1 text-sm font-semibold">산출물 만들기</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {docPrompt.course} · {docPrompt.week} — 이 주차 자료를 근거로 생성할 산출물을 고르세요.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {DOC_TYPES.map((d) => (
+                <button
+                  key={d.type}
+                  onClick={() => submitDoc(d.type)}
+                  className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm hover:bg-surface-3"
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={() => setDocPrompt(null)}
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
+              >
+                취소
               </button>
             </div>
           </div>
@@ -405,6 +471,15 @@ export function LectureView() {
         </div>
       )}
 
+      {genDoc.isPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-accent" />
+            산출물 생성 중… (자료를 근거로 문서를 만드는 중 · 1분)
+          </div>
+        </div>
+      )}
+
       {deckResult && (
         <DeckPreview
           workspaceId={workspaceId}
@@ -422,6 +497,17 @@ export function LectureView() {
           coverage={examResult.coverage}
           fileName={examResult.fileName}
           onClose={() => setExamResult(null)}
+        />
+      )}
+
+      {docResult && (
+        <DocPreview
+          workspaceId={workspaceId}
+          type={docResult.type}
+          doc={docResult.doc}
+          fileName={docResult.fileName}
+          label={docResult.label}
+          onClose={() => setDocResult(null)}
         />
       )}
 

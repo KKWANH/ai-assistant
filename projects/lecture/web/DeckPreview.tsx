@@ -13,6 +13,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { X, Download, FileText, Loader2, Image as ImageIcon, Search, Check } from "lucide-react";
 import type { ImageResult } from "@ariadne/shared";
 import type { Deck } from "../types.js";
+import { isEmbeddableLicense } from "../types.js";
 import { deckFileUrl, generateScript, rebuildDeck } from "./api";
 import { searchImages } from "@ariadne/web/src/lib/api";
 
@@ -63,6 +64,8 @@ export function DeckPreview({
               ...s,
               imageUrl: img?.imageUrl,
               imageCredit: img ? buildCaption(img) : undefined,
+              imageLicense: img?.license,
+              imageSourceUrl: img?.sourceUrl,
             }
           : s,
       ),
@@ -178,6 +181,14 @@ export function DeckPreview({
                       {s.imageCredit && (
                         <p className="mt-1 truncate text-2xs text-gray-400" title={s.imageCredit}>
                           {s.imageCredit}
+                        </p>
+                      )}
+                      {!isEmbeddableLicense(s.imageLicense) && (
+                        <p
+                          className="mt-0.5 text-2xs text-amber-600"
+                          title="저작권 보호·라이선스 불명 이미지는 슬라이드에 직접 삽입하지 않고 출처 링크로 인용합니다."
+                        >
+                          ⚠ 출처만 삽입 (저작권)
                         </p>
                       )}
                       <div className="mt-1 flex gap-2 text-xs">
