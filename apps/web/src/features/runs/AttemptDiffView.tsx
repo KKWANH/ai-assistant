@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useT } from "../../lib/i18n";
 import { FileRow } from "./diffRender";
 
@@ -23,6 +24,7 @@ export function AttemptDiffView() {
   const { id: attemptId = "" } = useParams<{ id: string }>();
   const { t } = useT();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const { data, isLoading, isError } = useAttempt(attemptId);
   const applyMut = useApplyAttempt();
@@ -98,7 +100,7 @@ export function AttemptDiffView() {
   };
 
   const abandon = async () => {
-    if (!window.confirm(t("attempts.abandonConfirm"))) return;
+    if (!(await confirm({ message: t("attempts.abandonConfirm"), danger: true }))) return;
     try {
       await abandonMut.mutateAsync(attemptId);
       navigate(`/chat/${attempt.chatId}`);

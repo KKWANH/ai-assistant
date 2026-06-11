@@ -20,6 +20,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useT } from "../../lib/i18n";
 import { FileRow } from "./diffRender";
 
@@ -27,6 +28,7 @@ export function StagedDiffView() {
   const { id: runId = "" } = useParams<{ id: string }>();
   const { t } = useT();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const { data: manifest, isLoading, isError } = useStagedManifest(runId);
   const applyMut = useApplyStagedEdits();
@@ -129,7 +131,7 @@ export function StagedDiffView() {
   };
 
   const discard = async () => {
-    if (!window.confirm(t("diff.discardConfirm"))) return;
+    if (!(await confirm({ message: t("diff.discardConfirm"), danger: true }))) return;
     try {
       await discardMut.mutateAsync(runId);
       navigate(`/runs/${runId}`);

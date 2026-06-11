@@ -23,6 +23,7 @@ import {
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Card } from "../../components/ui/Card";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useT } from "../../lib/i18n";
 import { FileRow } from "../runs/diffRender";
 import type { CommitFileChange } from "../../lib/api";
@@ -33,6 +34,7 @@ export function HistoryView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
   const { t } = useT();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const { data: workspace } = useWorkspace(workspaceId);
   const { data: commits } = useWorkspaceHistory(workspaceId, FULL_HISTORY_LIMIT);
   const rewind = useRewindWorkspaceCommit();
@@ -42,7 +44,7 @@ export function HistoryView() {
     setExpanded((prev) => (prev === sha ? null : sha));
 
   const doRewind = async (sha: string) => {
-    if (!window.confirm(t("workspace.history.rewindConfirm"))) return;
+    if (!(await confirm({ message: t("workspace.history.rewindConfirm"), danger: true }))) return;
     try {
       const result = await rewind.mutateAsync({ workspaceId, sha });
       toast({

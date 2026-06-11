@@ -20,6 +20,7 @@ import { Card } from "../../components/ui/Card";
 import { useSurface, useSaveSurface, useBuildSurface } from "../../lib/queries";
 import * as api from "../../lib/api";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useT } from "../../lib/i18n";
 import { SurfaceView } from "./SurfaceView";
 
@@ -120,6 +121,7 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { toast } = useToast();
+  const { confirm, promptText } = useConfirm();
   const { t } = useT();
 
   const { data: surfaceData, isLoading } = useSurface(workspaceId);
@@ -458,7 +460,10 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
                     type="button"
                     onClick={async () => {
                       if (readOnly) return;
-                      const ok = window.confirm(t("surface.deleteFileConfirm", { path: f.path }));
+                      const ok = await confirm({
+                        message: t("surface.deleteFileConfirm", { path: f.path }),
+                        danger: true,
+                      });
                       if (!ok) return;
                       try {
                         await api.deleteSurfaceFolderFile(workspaceId, f.path);
@@ -492,7 +497,7 @@ export function SurfaceEditor({ workspaceId }: SurfaceEditorProps) {
             type="button"
             onClick={async () => {
               if (readOnly) return;
-              const raw = window.prompt(t("surface.newFilePrompt"));
+              const raw = await promptText({ message: t("surface.newFilePrompt"), placeholder: "components/Panel.tsx" });
               if (!raw) return;
               const rel = raw.trim();
               if (!rel) return;

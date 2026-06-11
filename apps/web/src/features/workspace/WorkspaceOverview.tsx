@@ -81,6 +81,7 @@ import { ErrorBoundary } from "../../components/ui/ErrorBoundary";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { NotFoundRedirect } from "../../components/NotFoundRedirect";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { SurfaceView } from "../surface/SurfaceView";
@@ -220,6 +221,7 @@ function SchedulesSection({
 }) {
   const { t } = useT();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const { data: schedules } = useSchedules(workspaceId);
   const createSchedule = useCreateSchedule();
   const updateSchedule = useUpdateSchedule();
@@ -396,14 +398,15 @@ function SchedulesSection({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm(t("schedules.confirmDelete"))) {
-                    void deleteSchedule.mutateAsync({
-                      id: s.id,
-                      workspaceId: s.workspaceId,
-                    });
-                  }
-                }}
+                onClick={() =>
+                  void confirm({ message: t("schedules.confirmDelete"), danger: true }).then((ok) => {
+                    if (ok)
+                      void deleteSchedule.mutateAsync({
+                        id: s.id,
+                        workspaceId: s.workspaceId,
+                      });
+                  })
+                }
                 aria-label={t("schedules.delete")}
                 title={t("schedules.delete")}
                 className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-surface-3 transition-colors shrink-0"
@@ -429,6 +432,7 @@ function TriggersSection({
 }) {
   const { t } = useT();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const { data: triggers } = useTriggers(workspaceId);
   const createTrigger = useCreateTrigger();
   const deleteTrigger = useDeleteTrigger();
@@ -533,11 +537,11 @@ function TriggersSection({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm(t("triggers.confirmDelete"))) {
-                    void deleteTrigger.mutateAsync({ id: tr.id, workspaceId });
-                  }
-                }}
+                onClick={() =>
+                  void confirm({ message: t("triggers.confirmDelete"), danger: true }).then((ok) => {
+                    if (ok) void deleteTrigger.mutateAsync({ id: tr.id, workspaceId });
+                  })
+                }
                 aria-label={t("triggers.delete")}
                 title={t("triggers.delete")}
                 className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-surface-3 transition-colors shrink-0"
@@ -556,6 +560,7 @@ function TriggersSection({
 function HistorySection({ workspaceId }: { workspaceId: string }) {
   const { t } = useT();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const { data: commits } = useWorkspaceHistory(workspaceId, 12);
   const rewind = useRewindWorkspaceCommit();
   // Hide entirely when there's nothing to show — keeps the overview
@@ -564,7 +569,7 @@ function HistorySection({ workspaceId }: { workspaceId: string }) {
   if (!commits || commits.length === 0) return null;
 
   const doRewind = async (sha: string) => {
-    if (!window.confirm(t("workspace.history.rewindConfirm"))) return;
+    if (!(await confirm({ message: t("workspace.history.rewindConfirm"), danger: true }))) return;
     try {
       const result = await rewind.mutateAsync({ workspaceId, sha });
       toast({

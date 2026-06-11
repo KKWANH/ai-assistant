@@ -9,6 +9,7 @@ import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
 import { ToastList } from "./components/ui/Toast";
+import { ConfirmProvider } from "./components/ui/ConfirmDialog";
 import { Spinner, PageSpinner } from "./components/ui/Spinner";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 
@@ -234,7 +235,12 @@ function AuthGate() {
 
   return (
     <I18nProvider initialLocale={data.account.locale}>
-      <AppContent />
+      {/* ConfirmProvider supplies the in-app confirm()/promptText() dialogs
+          (replacing window.confirm/prompt). Inside I18nProvider so its default
+          button labels can call useT(). */}
+      <ConfirmProvider>
+        <AppContent />
+      </ConfirmProvider>
       {/* ToastList must render INSIDE I18nProvider — its close-button
           aria-label calls useT(). ToastProvider lives above us in main.tsx
           but the list UI is mounted here. */}
