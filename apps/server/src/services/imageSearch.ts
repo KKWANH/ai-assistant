@@ -5,13 +5,18 @@
  * date, and license metadata, so a slide can attribute what it shows.
  *
  * Sources (all keyless, public APIs):
- *   1. Wikimedia Commons   — broadest; precise on named works/artists
- *   2. The Met (Open Access) — museum-grade, mostly public-domain
- *   3. Art Institute of Chicago — museum-grade, rich metadata
+ *   1. Wikimedia Commons        — broadest; precise on named works/artists
+ *   2. Art Institute of Chicago  — museum-grade, rich metadata
+ *   3. Cleveland Museum of Art   — Open Access (CC0), strong on non-Western too
+ * (The Met was dropped — it now blocks programmatic access behind a bot WAF.)
  *
  * Each source is queried in parallel and failures degrade to fewer results
- * rather than an error — one slow museum API can't sink the others. Results
- * are interleaved for source diversity and de-duplicated by image URL.
+ * rather than an error — one slow museum API can't sink the others. Within
+ * each source results are re-ranked by query-term overlap (so loose keyword
+ * matches sink), then interleaved for source diversity and de-duped by URL.
+ * Korean (and other non-Latin) queries are translated to English art terms
+ * upstream — see the /images/search route — since these catalogs index in
+ * English.
  */
 
 import type { ImageResult } from "@ariadne/shared";
@@ -50,10 +55,10 @@ export async function searchImages(
 
   const settled = await Promise.allSettled([
     searchCommons(q, perSource, signal),
-    searchMet(q, perSource, signal),
     searchAic(q, perSource, signal),
+    searchCleveland(q, perSource, signal),
   ]);
-  const names = ["Wikimedia Commons", "The Met", "Art Institute of Chicago"];
+  const names = ["Wikimedia Commons", "Art Institute of Chicago", "Cleveland Museum of Art"];
   const lists: ImageResult[][] = [];
   const sources: string[] = [];
   settled.forEach((r, i) => {
@@ -65,8 +70,25 @@ export async function searchImages(
     }
   });
 
+  // Relevance re-rank inside each source: score by how many query terms (≥3
+  // chars) appear in title + creator, so loose keyword hits (e.g. the PAINTING
+  // "American Gothic" for "gothic cathedral") sink below precise ones. Stable
+  // sort keeps the source's own order within equal scores.
+  const terms = q.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+  if (terms.length > 0) {
+    const score = (r: ImageResult): number => {
+      const hay = `${r.title} ${r.creator ?? ""}`.toLowerCase();
+      return terms.reduce((n, t) => n + (hay.includes(t) ? 1 : 0), 0);
+    };
+    for (const list of lists) {
+      const scored = list.map((r, i) => ({ r, s: score(r), i }));
+      scored.sort((a, b) => b.s - a.s || a.i - b.i);
+      list.splice(0, list.length, ...scored.map((x) => x.r));
+    }
+  }
+
   // Interleave (one from each source in turn) so the top of the list is
-  // diverse rather than 6 Commons hits then 6 Met hits, and de-dupe.
+  // diverse rather than 6 from one source then 6 from the next, and de-dupe.
   const seen = new Set<string>();
   const results: ImageResult[] = [];
   for (let row = 0; row < perSource; row++) {
@@ -131,53 +153,10 @@ interface CommonsPage {
   }[];
 }
 
-// ---------------------------------------------------------------------------
-// The Met — Open Access
-// ---------------------------------------------------------------------------
-
-async function searchMet(query: string, limit: number, signal?: AbortSignal): Promise<ImageResult[]> {
-  const base = "https://collectionapi.metmuseum.org/public/collection/v1";
-  const sres = await fetch(`${base}/search?hasImages=true&q=${encodeURIComponent(query)}`, {
-    signal: fetchSignal(signal),
-  });
-  if (!sres.ok) throw new Error(`Met search ${sres.status}`);
-  const ids = ((await sres.json()) as { objectIDs?: number[] }).objectIDs ?? [];
-  // Each object is a second round-trip, so fetch only the top few in parallel.
-  const top = ids.slice(0, limit);
-  const objects = await Promise.all(
-    top.map((id) =>
-      fetch(`${base}/objects/${id.toString()}`, { signal: fetchSignal(signal) })
-        .then((r) => (r.ok ? (r.json() as Promise<MetObject>) : null))
-        .catch(() => null),
-    ),
-  );
-  const out: ImageResult[] = [];
-  for (const o of objects) {
-    if (!o?.primaryImageSmall) continue;
-    out.push({
-      title: o.title || "Untitled",
-      thumbUrl: o.primaryImageSmall,
-      imageUrl: o.primaryImage || o.primaryImageSmall,
-      sourceUrl: o.objectURL ?? "https://www.metmuseum.org",
-      source: "The Met",
-      creator: o.artistDisplayName || undefined,
-      date: o.objectDate || undefined,
-      license: o.isPublicDomain ? "Public Domain (CC0)" : o.creditLine || undefined,
-    });
-  }
-  return out;
-}
-
-interface MetObject {
-  title?: string;
-  primaryImage?: string;
-  primaryImageSmall?: string;
-  objectURL?: string;
-  artistDisplayName?: string;
-  objectDate?: string;
-  isPublicDomain?: boolean;
-  creditLine?: string;
-}
+// Note: The Met Open Access API was dropped — it now sits behind a bot-
+// detection WAF that 403s all programmatic access (verified in isolation),
+// and bypassing bot-detection is off-limits. Cleveland (CC0) replaces its
+// museum-grade coverage.
 
 // ---------------------------------------------------------------------------
 // Art Institute of Chicago
@@ -222,4 +201,49 @@ interface AicArtwork {
   artist_display?: string;
   date_display?: string;
   is_public_domain?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Cleveland Museum of Art — Open Access (keyless, CC0)
+// ---------------------------------------------------------------------------
+
+async function searchCleveland(query: string, limit: number, signal?: AbortSignal): Promise<ImageResult[]> {
+  const url =
+    "https://openaccess-api.clevelandart.org/api/artworks/" +
+    `?q=${encodeURIComponent(query)}&has_image=1&limit=${limit.toString()}` +
+    "&fields=id,title,creators,creation_date,images,url,share_license_status";
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Ariadne/1.0 (lecture-prep image search)" },
+    signal: fetchSignal(signal),
+  });
+  if (!res.ok) throw new Error(`Cleveland ${res.status}`);
+  const data = (await res.json()) as { data?: ClevelandArt[] };
+  const out: ImageResult[] = [];
+  for (const a of data.data ?? []) {
+    const web = a.images?.web?.url;
+    const print = a.images?.print?.url;
+    const img = web ?? print;
+    if (!img) continue;
+    out.push({
+      title: a.title || "Untitled",
+      thumbUrl: web ?? img,
+      imageUrl: print ?? img,
+      sourceUrl: a.url || "https://www.clevelandart.org",
+      source: "Cleveland Museum of Art",
+      creator: a.creators?.[0]?.description || undefined,
+      date: a.creation_date || undefined,
+      license: a.share_license_status === "CC0" ? "Public Domain (CC0)" : a.share_license_status || undefined,
+    });
+  }
+  return out;
+}
+
+interface ClevelandArt {
+  id?: number;
+  title?: string;
+  creators?: { description?: string }[];
+  creation_date?: string;
+  url?: string;
+  share_license_status?: string;
+  images?: { web?: { url?: string }; print?: { url?: string } };
 }
