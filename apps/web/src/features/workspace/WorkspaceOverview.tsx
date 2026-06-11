@@ -1300,8 +1300,8 @@ export function WorkspaceOverview() {
             <div className="flex-1 flex flex-col min-h-0 p-4">
               {/* Set this custom screen as the workspace's immersive main
                   home (the general version of the lecture-prep pattern). */}
-              <div className="mb-2 flex items-center justify-end gap-2">
-                <span className="mr-auto text-2xs text-muted-foreground">
+              <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <span className="text-2xs text-muted-foreground sm:mr-auto">
                   {t("workspace.homeView.tip")}
                 </span>
                 <Button
