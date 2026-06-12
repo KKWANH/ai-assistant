@@ -141,6 +141,23 @@ async function handleBridgeRequest(
       return res.text;
     }
 
+    case "search": {
+      const [query] = args as [string];
+      const res = await api.surfaceSearch(workspaceId, String(query ?? ""));
+      return res.results;
+    }
+
+    case "getState": {
+      const res = await api.surfaceGetState(workspaceId);
+      return res.state;
+    }
+
+    case "setState": {
+      const [state] = args as [unknown];
+      await api.surfaceSetState(workspaceId, state);
+      return { ok: true };
+    }
+
     case "listRuns": {
       return api.getRuns(workspaceId);
     }

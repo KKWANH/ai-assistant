@@ -117,6 +117,12 @@ export interface AriadneSDK {
   /** One-shot AI completion on the workspace's active model. Compose the prompt
    *  yourself (e.g. include text you read via readText) — returns the reply. */
   ask(prompt: string): Promise<string>;
+  /** Semantic + keyword search over the workspace's files. Returns the most
+   *  relevant chunks ({ path, text }) — for a custom UI that surfaces context. */
+  search(query: string): Promise<Array<{ path: string; text: string }>>;
+  /** This surface's own persisted JSON state (null until first setState). */
+  getState(): Promise<unknown>;
+  setState(state: unknown): Promise<void>;
   /** Stage a data-file edit for review. Does not write to disk; the host
    *  creates a staged manifest under a new Run, returns its id so the
    *  caller can deep-link to /runs/:runId/diff for review + apply.
@@ -217,6 +223,9 @@ export function useAriadne(): AriadneSDK {
     runTemplate: (id: string, input: Record<string, string>) => callHost<unknown>("runTemplate", [id, input]),
     runAction: (actionId: string, input?: Record<string, string>) => callHost<unknown>("runAction", [actionId, input ?? {}]),
     ask: (prompt: string) => callHost<string>("ask", [prompt]),
+    search: (query: string) => callHost<Array<{ path: string; text: string }>>("search", [query]),
+    getState: () => callHost<unknown>("getState", []),
+    setState: (state: unknown) => callHost<void>("setState", [state]),
     stageFile: (p: string, content: string) =>
       callHost<StageFileResult>("stageFile", [p, content]),
     getRun: (runId: string) => callHost<unknown>("getRun", [runId]),

@@ -107,6 +107,12 @@ declare module "@ariadne/surface" {
     /** One-shot AI completion on the workspace's active model. Compose the prompt
      *  yourself (e.g. include text you read via readText) — returns the reply. */
     ask(prompt: string): Promise<string>;
+    /** Semantic + keyword search over the workspace's files. Returns the most
+     *  relevant chunks ({ path, text }). */
+    search(query: string): Promise<Array<{ path: string; text: string }>>;
+    /** This surface's own persisted JSON state (null until first setState). */
+    getState(): Promise<unknown>;
+    setState(state: unknown): Promise<void>;
     /** Stage a data-file edit for review (does NOT write to disk). Deep-link
      *  the user to /runs/:runId/diff to apply. */
     stageFile(path: string, content: string): Promise<StageFileResult>;

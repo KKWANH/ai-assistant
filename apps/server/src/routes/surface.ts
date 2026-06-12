@@ -26,7 +26,8 @@ import {
 } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
 import { stageEdit } from "../services/stagedEdits.js";
-import { dbInsertRun, dbListRuns } from "../db/repo.js";
+import { dbInsertRun, dbListRuns, dbGetLatestSnapshot } from "../db/repo.js";
+import { retrieveRelevantChunks } from "../services/retrieval.js";
 import { makeDateRunId } from "../runs/engine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
 import { getActiveSettings } from "../config.js";
@@ -91,6 +92,60 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         return reply.status(500).send({ error: "Completion failed", detail: String(err) });
       }
+    },
+  );
+
+  // POST /api/workspaces/:id/surface/search — RAG query for a surface's
+  // useAriadne().search(query). Read-gated; returns the top relevant chunks so a
+  // custom UI can surface what's relevant to its own query.
+  app.post<{ Params: { id: string }; Body: { query?: string } }>(
+    "/workspaces/:id/surface/search",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+      if (!workspace) return;
+      const query = req.body?.query;
+      if (!query || typeof query !== "string" || !query.trim()) {
+        return reply.status(400).send({ error: "query is required" });
+      }
+      const snapshot = dbGetLatestSnapshot(req.params.id);
+      if (!snapshot || snapshot.files.length === 0) return reply.send({ results: [] });
+      try {
+        const chunks = await retrieveRelevantChunks(workspace.rootPath, snapshot.files, query.slice(0, 1000), {
+          workspaceId: workspace.id,
+          topK: 8,
+        });
+        return reply.send({ results: chunks.map((c) => ({ path: c.path, text: c.chunk })) });
+      } catch (err) {
+        return reply.status(500).send({ error: "Search failed", detail: String(err) });
+      }
+    },
+  );
+
+  // GET/POST /api/workspaces/:id/surface/state — a surface's own persisted JSON
+  // state (useAriadne().getState / setState). Lets a custom UI remember its
+  // choices across reloads. Stored at .ariadne/surface-state.json.
+  app.get<{ Params: { id: string } }>("/workspaces/:id/surface/state", async (req, reply) => {
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+    if (!workspace) return;
+    const file = path.join(workspace.rootPath, ".ariadne", "surface-state.json");
+    if (!fs.existsSync(file)) return reply.send({ state: null });
+    try {
+      return reply.send({ state: JSON.parse(fs.readFileSync(file, "utf-8")) });
+    } catch {
+      return reply.send({ state: null });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { state?: unknown } }>(
+    "/workspaces/:id/surface/state",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply, "write");
+      if (!workspace) return;
+      const json = JSON.stringify(req.body?.state ?? null);
+      if (json.length > 256_000) return reply.status(413).send({ error: "State too large (256KB max)" });
+      ensureAriadneFolder(workspace.rootPath);
+      fs.writeFileSync(path.join(workspace.rootPath, ".ariadne", "surface-state.json"), json);
+      return reply.send({ ok: true as const });
     },
   );
 

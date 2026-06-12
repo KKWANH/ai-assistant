@@ -230,6 +230,20 @@ export const saveWorkspaceFile = (workspaceId: string, path: string, content: st
 export const surfaceAsk = (workspaceId: string, prompt: string) =>
   request<{ text: string }>("POST", `/workspaces/${workspaceId}/surface/ask`, { prompt });
 
+/** RAG search for a surface's useAriadne().search(query). */
+export const surfaceSearch = (workspaceId: string, query: string) =>
+  request<{ results: Array<{ path: string; text: string }> }>(
+    "POST",
+    `/workspaces/${workspaceId}/surface/search`,
+    { query },
+  );
+
+/** A surface's persisted JSON state (useAriadne().getState / setState). */
+export const surfaceGetState = (workspaceId: string) =>
+  request<{ state: unknown }>("GET", `/workspaces/${workspaceId}/surface/state`);
+export const surfaceSetState = (workspaceId: string, state: unknown) =>
+  request<{ ok: boolean }>("POST", `/workspaces/${workspaceId}/surface/state`, { state });
+
 // AK — multi-file surface editor support.
 export interface SurfaceFolderFile {
   path: string;          // relative to .ariadne/surface/
