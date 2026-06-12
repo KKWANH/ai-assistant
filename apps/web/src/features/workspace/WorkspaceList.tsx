@@ -6,12 +6,15 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useUIStore } from "../../lib/store";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 export function WorkspaceList() {
   const { data: workspaces, isLoading } = useWorkspaces();
   const navigate = useNavigate();
   const { setActiveWorkspaceId, setCreateWorkspaceOpen } = useUIStore();
   const { t } = useT();
+  // Smoothly animate cards in / out / reorder as workspaces change (motion).
+  const [cardsRef] = useAutoAnimate<HTMLDivElement>();
 
   if (isLoading) {
     return (
@@ -60,7 +63,7 @@ export function WorkspaceList() {
         }
       />
 
-      <div className="flex flex-col gap-2">
+      <div ref={cardsRef} className="flex flex-col gap-2">
         {workspaces.map((ws) => (
           <Card
             key={ws.id}
