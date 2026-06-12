@@ -5,6 +5,7 @@ import { PROJECT_ROUTES } from "./projects";
 import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialog";
 import { ReportDialog } from "./features/reports/ReportDialog";
 import { TutorialOverlay } from "./components/tutorial/TutorialOverlay";
+import { GlobalCommands } from "./components/GlobalCommands";
 import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
@@ -208,6 +209,7 @@ function AppContent() {
       <CreateWorkspaceDialog />
       <ReportDialog />
       <TutorialOverlay />
+      <GlobalCommands />
     </>
   );
 }

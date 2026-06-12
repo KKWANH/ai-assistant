@@ -1,16 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { useUIStore } from "../../lib/store";
 import { useT } from "../../lib/i18n";
+import { useRegisteredCommands, type CommandItem } from "../../lib/commands";
 
-export interface CommandItem {
-  id: string;
-  label: string;
-  description?: string;
-  icon?: ReactNode;
-  onSelect: () => void;
-  section?: string;
-}
+// Re-exported so existing imports (`import type { CommandItem } from ".../CommandMenu"`) keep working.
+export type { CommandItem };
 
 export interface CommandMenuProps {
   items: CommandItem[];
@@ -45,9 +40,12 @@ export function CommandMenu({ items }: CommandMenuProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { t } = useT();
 
-  // Fuzzy match + rank when there's a query; the full grouped list otherwise.
+  // Merge the shell's built-in commands with anything contributed via the
+  // registry (features / projects / surfaces), then fuzzy-rank on a query.
+  const registered = useRegisteredCommands();
+  const allItems = registered.length ? items.concat(registered) : items;
   const filtered = query
-    ? items
+    ? allItems
         .map((item) => ({
           item,
           score: Math.max(fuzzyScore(query, item.label), fuzzyScore(query, item.description ?? "") - 4),
@@ -55,7 +53,7 @@ export function CommandMenu({ items }: CommandMenuProps) {
         .filter((x) => x.score > -Infinity)
         .sort((a, b) => b.score - a.score)
         .map((x) => x.item)
-    : items;
+    : allItems;
 
   useEffect(() => {
     setSelectedIdx(0);
