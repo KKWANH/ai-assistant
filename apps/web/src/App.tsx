@@ -20,16 +20,24 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 
 // Route screens are code-split: each becomes its own chunk, loaded on demand.
 
-/** Wrap a lazy import so a stale chunk (after a redeploy) triggers one page
- *  reload instead of crashing with a chunk-load 404. */
+/** Wrap a lazy import so a stale chunk (after a redeploy) triggers a page reload
+ *  instead of crashing with a chunk-load 404.
+ *
+ *  Loop guard is a short TIME WINDOW, not a once-per-session flag: if we already
+ *  reloaded within the last few seconds the chunk is genuinely broken (a reload
+ *  won't help) so surface the error; otherwise reload to pick up the fresh index
+ *  + hashed chunks. The old once-per-session flag was never cleared, so a SECOND
+ *  redeploy in the same session (e.g. during active dev) left every later stale
+ *  chunk erroring instead of recovering. */
 function lazyWithReload<T extends ComponentType<any>>(
   factory: () => Promise<{ default: T }>,
 ) {
   const load = (): Promise<{ default: T }> =>
     factory().catch((err: unknown) => {
-      const KEY = "ariadne.chunkReloaded";
-      if (sessionStorage.getItem(KEY)) throw err;
-      sessionStorage.setItem(KEY, "1");
+      const KEY = "ariadne.chunkReloadAt";
+      const last = Number(sessionStorage.getItem(KEY) ?? "0");
+      if (Date.now() - last < 10_000) throw err; // just reloaded → genuinely broken
+      sessionStorage.setItem(KEY, String(Date.now()));
       window.location.reload();
       return new Promise<{ default: T }>(() => {});
     });
