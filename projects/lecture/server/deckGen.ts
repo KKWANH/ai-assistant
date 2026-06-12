@@ -149,6 +149,12 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
   p.layout = "LAYOUT_WIDE"; // 13.33 × 7.5 in (16:9)
   const ACCENT = "C0392B";
   const INK = "1A1A1A";
+  // Deck typography. Set to the lecturer's template fonts; PowerPoint substitutes
+  // gracefully when a font isn't installed on the machine that opens the file.
+  // Template fonts named so far: NanumSquare ExtraBold (titles) + ACBold — once a
+  // 견본 confirms where ACBold belongs, set FONT_BODY (or a FONT_HEADING) to it.
+  const FONT_TITLE = "NanumSquare ExtraBold";
+  const FONT_BODY = "NanumSquare";
 
   // Embed picked images up front (parallel fetch), then build synchronously.
   // Only fetch images we may actually embed — open licenses. Copyrighted or
@@ -163,9 +169,9 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
   const title = p.addSlide();
   title.background = { color: "FFFFFF" };
   title.addShape(p.ShapeType.line, { x: 0.7, y: 2.5, w: 3, h: 0, line: { color: ACCENT, width: 3 } });
-  title.addText(deck.title, { x: 0.7, y: 2.7, w: 11.9, h: 1.6, fontSize: 40, bold: true, color: INK });
+  title.addText(deck.title, { x: 0.7, y: 2.7, w: 11.9, h: 1.6, fontSize: 40, bold: true, color: INK, fontFace: FONT_TITLE });
   if (deck.subtitle) {
-    title.addText(deck.subtitle, { x: 0.7, y: 4.3, w: 11.9, h: 0.8, fontSize: 20, color: "666666" });
+    title.addText(deck.subtitle, { x: 0.7, y: 4.3, w: 11.9, h: 0.8, fontSize: 20, color: "666666", fontFace: FONT_BODY });
   }
 
   // Content slides.
@@ -173,7 +179,7 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
     const img = images[i];
     const sl = p.addSlide();
     sl.background = { color: "FFFFFF" };
-    sl.addText(s.title, { x: 0.6, y: 0.4, w: 12.1, h: 0.9, fontSize: 28, bold: true, color: INK });
+    sl.addText(s.title, { x: 0.6, y: 0.4, w: 12.1, h: 0.9, fontSize: 28, bold: true, color: INK, fontFace: FONT_TITLE });
     sl.addShape(p.ShapeType.line, { x: 0.6, y: 1.32, w: 12.1, h: 0, line: { color: "E0E0E0", width: 1 } });
     // A right column holds either the embedded image or a source-link citation
     // (for copyrighted/unclear images); bullets take the left ~55% when present.
@@ -182,7 +188,7 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
     if (s.bullets.length > 0) {
       sl.addText(
         s.bullets.map((b) => ({ text: b, options: { bullet: { indent: 18 }, fontSize: 18, color: "333333", paraSpaceAfter: 10 } })),
-        { x: 0.8, y: 1.6, w: bulletW, h: 5.2, valign: "top" },
+        { x: 0.8, y: 1.6, w: bulletW, h: 5.2, valign: "top", fontFace: FONT_BODY },
       );
     }
     if (img) {
@@ -192,7 +198,7 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
         // Scholarly caption (작가, 〈제목〉, 연도, 재료, 크기, 소장처) — longer than a
         // bare title, so allow two lines under the image.
         sl.addText(s.imageCredit.slice(0, 200), {
-          x: 7.7, y: 6.15, w: 5.0, h: 0.6, fontSize: 9, italic: true, color: "999999", valign: "top",
+          x: 7.7, y: 6.15, w: 5.0, h: 0.6, fontSize: 9, italic: true, color: "999999", valign: "top", fontFace: FONT_BODY,
         });
       }
     } else if (s.imageUrl) {
@@ -206,7 +212,7 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
           { text: url.slice(0, 240), options: { fontSize: 9, color: "2563EB", hyperlink: { url }, breakLine: true } },
           { text: "저작권 보호 — 출처에서 이미지를 확인하세요.", options: { fontSize: 8, italic: true, color: "999999" } },
         ],
-        { x: 7.7, y: 1.6, w: 5.0, h: 4.5, valign: "top" },
+        { x: 7.7, y: 1.6, w: 5.0, h: 4.5, valign: "top", fontFace: FONT_BODY },
       );
     }
     if (s.notes) sl.addNotes(s.notes);
