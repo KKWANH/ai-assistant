@@ -2,6 +2,27 @@ import { GoogleGenAI } from "@google/genai";
 import type { AiProvider, ProviderUsage, CompleteRequest, CompleteWithImagesRequest } from "./index.js";
 import { extractJson, processThinkBlocks } from "./index.js";
 
+/**
+ * Gemini's responseSchema is a SUBSET of JSON Schema and rejects some keys —
+ * notably `additionalProperties`, which OpenAI-style structured-output schemas
+ * set to `false`. Sending it back fails the whole request ("Unknown name
+ * 'additionalProperties'"). Recursively drop it (everything else — type,
+ * properties, required, items, enum — Gemini supports) so one shared schema can
+ * constrain Gemini and OpenAI alike instead of 400ing the moment a key is added.
+ */
+export function toGeminiSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toGeminiSchema);
+  if (schema && typeof schema === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+      if (key === "additionalProperties") continue;
+      out[key] = toGeminiSchema(value);
+    }
+    return out;
+  }
+  return schema;
+}
+
 export class GeminiProvider implements AiProvider {
   readonly id = "gemini" as const;
   private client: GoogleGenAI;
@@ -18,7 +39,7 @@ export class GeminiProvider implements AiProvider {
     // JSON when only `json: true` is set.
     const wantsJson = req.json || !!req.jsonSchema;
     const generationConfig = req.jsonSchema
-      ? { responseMimeType: "application/json", responseSchema: req.jsonSchema.schema }
+      ? { responseMimeType: "application/json", responseSchema: toGeminiSchema(req.jsonSchema.schema) }
       : req.json
         ? { responseMimeType: "application/json" }
         : undefined;
