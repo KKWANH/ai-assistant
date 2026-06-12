@@ -804,41 +804,65 @@ export function useSendMessage(opts?: UseSendMessageOptions) {
     { chatId: string; input: import("@ariadne/shared").PostMessageInput }
   >({
     mutationFn: async ({ chatId, input }) => {
-      // Streaming assistant placeholder id
       const streamingId = `__streaming_${Date.now()}`;
+      const optimisticUserId = `__optimistic_user_${streamingId}`;
+
+      // Optimistic: show the user's message + a "thinking" assistant placeholder
+      // INSTANTLY, before the request even starts. The server runs retrieval /
+      // context-building first (which can take a beat), and only then echoes the
+      // user message — so without this, your own message appears delayed. Both
+      // are reconciled to the server's real ids when user_message arrives.
+      const optimisticUser: ChatMessage = {
+        id: optimisticUserId,
+        chatId,
+        role: "user",
+        content: input.content,
+        attachments: (input.attachments ?? []).map((a, i) => ({
+          id: `${optimisticUserId}_att_${i}`,
+          name: a.name,
+          mediaType: a.mediaType,
+          kind: a.mediaType.startsWith("image/") ? "image" : "file",
+          size: Math.floor((a.dataBase64.length * 3) / 4),
+        })),
+        webSearch: input.webSearch === "on",
+        searchResults: null,
+        images: null,
+        agent: null,
+        createdAt: new Date().toISOString(),
+      };
+      const placeholder: ChatMessage = {
+        id: streamingId,
+        chatId,
+        role: "assistant",
+        content: "",
+        attachments: [],
+        webSearch: false,
+        searchResults: null,
+        images: null,
+        agent: null,
+        createdAt: new Date().toISOString(),
+      };
+      setCachedChat(qc, chatId, (old) =>
+        old ? { ...old, messages: [...(old.messages ?? []), optimisticUser, placeholder] } : old,
+      );
 
       await api.sendMessage(chatId, input, {
         onUserMessage: (userMsg) => {
-          // Optimistically add user message to cache
+          // Reconcile the optimistic user message with the server's real one.
+          // Three cases keep it safe (never lose or duplicate the message):
+          //  - real already present → drop the optimistic dupe
+          //  - optimistic present   → swap in place (stays before the placeholder)
+          //  - neither (cache wasn't ready at insert) → append
           setCachedChat(qc, chatId, (old) => {
             if (!old) return old;
-            const exists = (old.messages ?? []).some((m) => m.id === userMsg.id);
-            if (exists) return old;
-            return {
-              ...old,
-              messages: [...(old.messages ?? []), userMsg],
-            };
-          });
-
-          // Insert streaming assistant placeholder
-          const placeholder: ChatMessage = {
-            id: streamingId,
-            chatId,
-            role: "assistant",
-            content: "",
-            attachments: [],
-            webSearch: false,
-            searchResults: null,
-            images: null,
-            agent: null,
-            createdAt: new Date().toISOString(),
-          };
-          setCachedChat(qc, chatId, (old) => {
-            if (!old) return old;
-            return {
-              ...old,
-              messages: [...(old.messages ?? []), placeholder],
-            };
+            const msgs = old.messages ?? [];
+            if (msgs.some((m) => m.id === userMsg.id)) {
+              return { ...old, messages: msgs.filter((m) => m.id !== optimisticUserId) };
+            }
+            if (msgs.some((m) => m.id === optimisticUserId)) {
+              return { ...old, messages: msgs.map((m) => (m.id === optimisticUserId ? userMsg : m)) };
+            }
+            return { ...old, messages: [...msgs, userMsg] };
           });
         },
 
