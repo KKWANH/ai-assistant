@@ -1304,6 +1304,18 @@ export function WorkspaceOverview() {
                 <span className="text-2xs text-muted-foreground sm:mr-auto">
                   {t("workspace.homeView.tip")}
                 </span>
+                {/* Always-visible edit affordance — the "화면 편집" tab is gated
+                    behind the (default-off) Advanced toggle, and the empty-state
+                    "화면 추가" shortcut vanishes once a surface exists, so a
+                    populated custom screen otherwise has no discoverable editor. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Pencil className="h-3.5 w-3.5" />}
+                  onClick={() => navigate(`/workspaces/${ws.id}/surface/edit`)}
+                >
+                  {t("workspace.surface.editScreen")}
+                </Button>
                 <Button
                   variant={ws.homeView === "surface" ? "secondary" : "ghost"}
                   size="sm"
