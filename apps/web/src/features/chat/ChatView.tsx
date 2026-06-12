@@ -18,6 +18,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import type { Chat, ChatMessage, GenerationStatus } from "@ariadne/shared";
+import { ChatSkeleton } from "./ChatSkeleton";
 import {
   useChat,
   useCreateChat,
@@ -357,11 +358,7 @@ function ThreadView({ chatId }: { chatId: string }) {
   }, [activeGen, messages, chatId, qc]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center flex-1">
-        <div className="h-4 w-4 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-      </div>
-    );
+    return <ChatSkeleton />;
   }
 
   // Loading finished but no chat came back — it was deleted (or never existed).
