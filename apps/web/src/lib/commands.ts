@@ -22,6 +22,9 @@ export interface CommandItem {
   /** Only surface once the user types a query — for large dynamic sets (e.g.
    *  workspace file search) that would otherwise flood the empty palette. */
   queryOnly?: boolean;
+  /** Default keyboard shortcut (a combo like "Mod+Shift+D"); the user can
+   *  remap it. Fired globally by the Keybindings handler. Mod = ⌘ / Ctrl. */
+  keybinding?: string;
 }
 
 interface CommandStore {

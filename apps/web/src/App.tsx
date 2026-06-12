@@ -9,6 +9,7 @@ import { GlobalCommands } from "./components/GlobalCommands";
 import { WorkspaceCommands } from "./components/WorkspaceCommands";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
 import { GlobalSettings } from "./components/GlobalSettings";
+import { Keybindings } from "./components/Keybindings";
 import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
@@ -216,6 +217,7 @@ function AppContent() {
       <WorkspaceCommands />
       <ShortcutsHelp />
       <GlobalSettings />
+      <Keybindings />
     </>
   );
 }

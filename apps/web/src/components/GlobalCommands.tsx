@@ -23,6 +23,7 @@ export function GlobalCommands() {
         description: t("nav.toggleTheme.desc"),
         icon: theme === "dark" ? <SunMedium className="h-4 w-4" /> : <Moon className="h-4 w-4" />,
         section: t("commandMenu.sectionApp"),
+        keybinding: "Mod+Shift+Y",
         onSelect: () => toggleTheme(),
       },
     ],
