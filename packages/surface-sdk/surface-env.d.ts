@@ -160,6 +160,20 @@ declare module "@ariadne/surface" {
   export function LineChart(props: LineChartProps): any;
   export function BarChart(props: BarChartProps): any;
   export function PieChart(props: PieChartProps): any;
+
+  // ── UI kit ───────────────────────────────────────────────────────────────
+  // Themed building blocks (CSS-var colours, no stylesheet) for composing a
+  // clean surface layout without hand-rolling every element.
+  export interface CardProps { title?: string; children?: any; style?: any }
+  export function Card(props: CardProps): any;
+  export interface StatProps { label: string; value: string | number; delta?: number }
+  export function Stat(props: StatProps): any;
+  export interface ButtonProps { label: string; onClick?: () => void; variant?: "primary" | "ghost"; disabled?: boolean }
+  export function Button(props: ButtonProps): any;
+  export interface BadgeProps { label: string; tone?: "neutral" | "success" | "warning" | "danger" | "info" }
+  export function Badge(props: BadgeProps): any;
+  export interface GridProps { cols?: number; gap?: number; children?: any }
+  export function Grid(props: GridProps): any;
 }
 
 // ── Loose JSX so a bare workspace (no @types/react) still type-checks ──────────

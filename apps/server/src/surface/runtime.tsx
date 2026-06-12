@@ -634,6 +634,109 @@ export function PieChart({ data, width = 320, height = 280, title }: PieChartPro
 }
 
 // ---------------------------------------------------------------------------
+// UI kit (BK) — themed building blocks so a surface composes a clean layout
+// without hand-rolling every element. Self-contained like the charts: colours
+// are CSS custom properties (theme-aware), layout is inline flex/grid, no
+// external stylesheet. Additive — existing surfaces are unaffected.
+// ---------------------------------------------------------------------------
+
+export interface CardProps {
+  title?: string;
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}
+export function Card({ title, children, style }: CardProps) {
+  return (
+    <div style={{ border: `1px solid ${CV.border}`, borderRadius: 12, background: CV.card, padding: 16, ...style }}>
+      {title && <div style={{ fontSize: 13, fontWeight: 600, color: CV.foreground, marginBottom: 10 }}>{title}</div>}
+      {children}
+    </div>
+  );
+}
+
+export interface StatProps {
+  label: string;
+  value: string | number;
+  /** Signed percentage delta — coloured green/red with an arrow when set. */
+  delta?: number;
+}
+export function Stat({ label, value, delta }: StatProps) {
+  const deltaColor = delta == null ? CV.mutedFg : delta >= 0 ? "rgb(var(--success))" : "rgb(var(--destructive))";
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: CV.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: CV.foreground, lineHeight: 1.2 }}>{value}</div>
+      {delta != null && (
+        <div style={{ fontSize: 12, color: deltaColor, marginTop: 2 }}>
+          {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(2)}%
+        </div>
+      )}
+    </div>
+  );
+}
+
+export interface ButtonProps {
+  label: string;
+  onClick?: () => void;
+  variant?: "primary" | "ghost";
+  disabled?: boolean;
+}
+export function Button({ label, onClick, variant = "primary", disabled }: ButtonProps) {
+  const primary = variant === "primary";
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        font: "inherit", fontSize: 13, fontWeight: 500, padding: "7px 14px", borderRadius: 8,
+        cursor: disabled ? "default" : "pointer",
+        border: primary ? "none" : `1px solid ${CV.border}`,
+        background: primary ? CV.accent : "transparent",
+        color: primary ? "rgb(var(--accent-foreground))" : CV.foreground,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+export interface BadgeProps {
+  label: string;
+  tone?: "neutral" | "success" | "warning" | "danger" | "info";
+}
+export function Badge({ label, tone = "neutral" }: BadgeProps) {
+  const token =
+    tone === "success" ? "--success"
+    : tone === "warning" ? "--warning"
+    : tone === "danger" ? "--destructive"
+    : tone === "info" ? "--info"
+    : "--muted-foreground";
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 500,
+      padding: "2px 8px", borderRadius: 999, color: `rgb(var(${token}))`,
+      background: `color-mix(in srgb, rgb(var(${token})) 14%, transparent)`,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+export interface GridProps {
+  cols?: number;
+  gap?: number;
+  children?: React.ReactNode;
+}
+export function Grid({ cols = 2, gap = 12, children }: GridProps) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap }}>
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Crash isolation (BJ1)
 // ---------------------------------------------------------------------------
 // Without this, a surface that throws at render time unmounts React and leaves
