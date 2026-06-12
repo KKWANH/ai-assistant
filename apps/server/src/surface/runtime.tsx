@@ -114,6 +114,9 @@ export interface AriadneSDK {
   runTemplate(id: string, input: Record<string, string>): Promise<unknown>;
   /** Run an actions.yaml action by id (e.g. a brief generator). Returns the action run. */
   runAction(actionId: string, input?: Record<string, string>): Promise<unknown>;
+  /** One-shot AI completion on the workspace's active model. Compose the prompt
+   *  yourself (e.g. include text you read via readText) — returns the reply. */
+  ask(prompt: string): Promise<string>;
   /** Stage a data-file edit for review. Does not write to disk; the host
    *  creates a staged manifest under a new Run, returns its id so the
    *  caller can deep-link to /runs/:runId/diff for review + apply.
@@ -213,6 +216,7 @@ export function useAriadne(): AriadneSDK {
     listRuns: () => callHost<unknown[]>("listRuns", []),
     runTemplate: (id: string, input: Record<string, string>) => callHost<unknown>("runTemplate", [id, input]),
     runAction: (actionId: string, input?: Record<string, string>) => callHost<unknown>("runAction", [actionId, input ?? {}]),
+    ask: (prompt: string) => callHost<string>("ask", [prompt]),
     stageFile: (p: string, content: string) =>
       callHost<StageFileResult>("stageFile", [p, content]),
     getRun: (runId: string) => callHost<unknown>("getRun", [runId]),

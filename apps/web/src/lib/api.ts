@@ -226,6 +226,10 @@ export const getWorkspaceFile = (workspaceId: string, path: string) =>
 export const saveWorkspaceFile = (workspaceId: string, path: string, content: string) =>
   request<{ ok: boolean }>("PUT", `/workspaces/${workspaceId}/file`, { path, content });
 
+/** One-shot AI completion for a surface's useAriadne().ask(prompt). */
+export const surfaceAsk = (workspaceId: string, prompt: string) =>
+  request<{ text: string }>("POST", `/workspaces/${workspaceId}/surface/ask`, { prompt });
+
 // AK — multi-file surface editor support.
 export interface SurfaceFolderFile {
   path: string;          // relative to .ariadne/surface/

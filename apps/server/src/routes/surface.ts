@@ -29,6 +29,9 @@ import { stageEdit } from "../services/stagedEdits.js";
 import { dbInsertRun, dbListRuns } from "../db/repo.js";
 import { makeDateRunId } from "../runs/engine.js";
 import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+import { getActiveSettings } from "../config.js";
+import { getProvider } from "../providers/index.js";
+import { resolveOllamaModel } from "../services/ollamaModels.js";
 
 function getSurfaceState(workspaceRoot: string): SurfaceState {
   const tsxPath = surfaceTsxPath(workspaceRoot);
@@ -61,6 +64,35 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
     const source = readSurface(workspace.rootPath) ?? "";
     return reply.send({ state, source });
   });
+
+  // POST /api/workspaces/:id/surface/ask — one-shot completion for a surface's
+  // useAriadne().ask(prompt). Read-gated; runs on the account's active model so a
+  // custom UI can call the AI (composing its own prompt, e.g. from files it read).
+  app.post<{ Params: { id: string }; Body: { prompt?: string } }>(
+    "/workspaces/:id/surface/ask",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+      if (!workspace) return;
+      const prompt = req.body?.prompt;
+      if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+        return reply.status(400).send({ error: "prompt is required" });
+      }
+      try {
+        const settings = getActiveSettings();
+        const model =
+          settings.provider === "ollama" ? await resolveOllamaModel(settings.model) : settings.model;
+        const provider = await getProvider({ provider: settings.provider, model });
+        const { text } = await provider.complete({
+          system:
+            "You are a helpful assistant embedded in a workspace surface. Be concise and answer the prompt directly.",
+          prompt: prompt.slice(0, 8000),
+        });
+        return reply.send({ text });
+      } catch (err) {
+        return reply.status(500).send({ error: "Completion failed", detail: String(err) });
+      }
+    },
+  );
 
   // PUT /api/workspaces/:id/surface — LOCAL access only
   app.put<{ Params: { id: string } }>("/workspaces/:id/surface", async (req, reply) => {

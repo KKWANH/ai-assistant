@@ -102,6 +102,11 @@ declare module "@ariadne/surface" {
     listTemplates(): Promise<Array<{ id: string; name: string }>>;
     listRuns(): Promise<unknown[]>;
     runTemplate(id: string, input: Record<string, string>): Promise<unknown>;
+    /** Run an actions.yaml action by id (e.g. a brief generator). Returns the run. */
+    runAction(actionId: string, input?: Record<string, string>): Promise<unknown>;
+    /** One-shot AI completion on the workspace's active model. Compose the prompt
+     *  yourself (e.g. include text you read via readText) — returns the reply. */
+    ask(prompt: string): Promise<string>;
     /** Stage a data-file edit for review (does NOT write to disk). Deep-link
      *  the user to /runs/:runId/diff to apply. */
     stageFile(path: string, content: string): Promise<StageFileResult>;

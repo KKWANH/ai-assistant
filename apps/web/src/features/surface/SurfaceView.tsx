@@ -135,6 +135,12 @@ async function handleBridgeRequest(
       return api.getTemplates();
     }
 
+    case "ask": {
+      const [prompt] = args as [string];
+      const res = await api.surfaceAsk(workspaceId, String(prompt ?? ""));
+      return res.text;
+    }
+
     case "listRuns": {
       return api.getRuns(workspaceId);
     }
