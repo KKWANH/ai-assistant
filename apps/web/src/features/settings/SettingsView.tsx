@@ -33,6 +33,7 @@ import {
   useSetProviderKey,
   useAccountLimits,
 } from "../../lib/queries";
+import { RegisteredSettings } from "./RegisteredSettings";
 import type { Skill } from "@ariadne/shared";
 import { useT, LOCALES, type Locale } from "../../lib/i18n";
 import { Card } from "../../components/ui/Card";
@@ -502,6 +503,9 @@ export function SettingsView() {
           </p>
         </Card>
       )}
+
+      {/* Preferences contributed via the settings registry (P2 configurability). */}
+      <RegisteredSettings />
     </div>
   );
 }

@@ -115,6 +115,9 @@ const ko: Record<TranslationKey, string> = {
   "shortcuts.dismiss": "닫기",
   "shortcuts.send": "메시지 전송",
   "shortcuts.save": "파일 저장",
+  "settings.preferences": "환경설정",
+  "settings.pref.darkMode": "다크 모드",
+  "settings.pref.advanced.desc": "워크스페이스에서 고급 탭·액션 표시",
   "commandMenu.untitledChat": "제목 없는 대화",
   "commandMenu.runLabel": "실행 {id}",
 
