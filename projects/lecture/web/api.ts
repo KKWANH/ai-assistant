@@ -12,27 +12,29 @@ export const getLectureStructure = (id: string) =>
 export const scaffoldLectureFolder = (id: string, course: string, week?: string) =>
   request<{ path: string }>("POST", `/workspaces/${id}/lecture/folder`, { course, week });
 
-export const generateDeck = (id: string, topic: string, course?: string, week?: string) =>
+export const generateDeck = (id: string, topic: string, course?: string, week?: string, sources?: string[]) =>
   request<{ deck: Deck; fileName: string }>("POST", `/workspaces/${id}/deck`, {
     topic,
     course,
     week,
+    sources,
   });
 
 /** Generate an exam from a course/week's materials + audit its coverage. */
-export const generateExam = (id: string, course?: string, week?: string, count?: number) =>
+export const generateExam = (id: string, course?: string, week?: string, count?: number, sources?: string[]) =>
   request<{ exam: Exam; coverage: CoverageReport; fileName: string }>(
     "POST",
     `/workspaces/${id}/exam`,
-    { course, week, count },
+    { course, week, count, sources },
   );
 
 /** Generate one course deliverable (handout / worksheet / reading / syllabus). */
-export const generateDoc = (id: string, type: DocType, course?: string, week?: string) =>
+export const generateDoc = (id: string, type: DocType, course?: string, week?: string, sources?: string[]) =>
   request<{ doc: GeneratedDoc; fileName: string }>("POST", `/workspaces/${id}/document`, {
     type,
     course,
     week,
+    sources,
   });
 
 export const setCourseMemo = (id: string, course: string, memo: string) =>

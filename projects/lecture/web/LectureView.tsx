@@ -11,7 +11,7 @@ import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, L
 import type { Deck, Exam, CoverageReport, DocType, GeneratedDoc } from "../types.js";
 import * as api from "./api";
 import { getWorkspace } from "@ariadne/web/src/lib/api";
-import { useCreateChat } from "@ariadne/web/src/lib/queries";
+import { useCreateChat, useWorkspaces } from "@ariadne/web/src/lib/queries";
 import { DeckPreview } from "./DeckPreview";
 import { ExamPreview } from "./ExamPreview";
 import { DocPreview } from "./DocPreview";
@@ -24,6 +24,48 @@ const DOC_TYPES: { type: DocType; label: string }[] = [
   { type: "reading", label: "참고문헌" },
   { type: "syllabus", label: "강의계획" },
 ];
+
+/** Toggle an id within a string[] (immutable). */
+const toggleId = (arr: string[], id: string): string[] =>
+  arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
+
+/** Opt-in cross-workspace pull picker (MW5): a collapsible row of chips for the
+ *  other workspaces a deliverable can also be grounded in. Renders nothing when
+ *  there are none. */
+function PullSources({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: { id: string; name: string }[];
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  if (options.length === 0) return null;
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer select-none text-xs text-muted-foreground">
+        다른 워크스페이스에서도 가져오기{selected.length > 0 ? ` (${selected.length})` : ""}
+      </summary>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onToggle(o.id)}
+            className={`rounded px-2 py-1 text-2xs ${
+              selected.includes(o.id)
+                ? "bg-accent text-accent-foreground"
+                : "bg-surface-2 text-muted-foreground hover:bg-surface-3"
+            }`}
+          >
+            {o.name}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 export function LectureView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
@@ -67,10 +109,19 @@ export function LectureView() {
     );
   };
 
+  // Opt-in cross-workspace pull (MW5): other workspaces a deliverable can also
+  // be grounded in. Shared across the slide / exam / document modals.
+  const { data: allWorkspaces } = useWorkspaces();
+  const otherWorkspaces = (allWorkspaces ?? [])
+    .filter((w) => w.id !== workspaceId)
+    .map((w) => ({ id: w.id, name: w.name }));
+  const [pullSources, setPullSources] = useState<string[]>([]);
+  const togglePull = (id: string) => setPullSources((s) => toggleId(s, id));
+
   const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string; course: string } | null>(null);
   const genDeck = useMutation({
-    mutationFn: (v: { topic: string; course: string; week: string }) =>
-      api.generateDeck(workspaceId, v.topic, v.course, v.week),
+    mutationFn: (v: { topic: string; course: string; week: string; sources: string[] }) =>
+      api.generateDeck(workspaceId, v.topic, v.course, v.week, v.sources),
     onSuccess: (r, v) => setDeckResult({ ...r, course: v.course }),
   });
   const [slidePrompt, setSlidePrompt] = useState<{ course: string; week: string; topic: string } | null>(null);
@@ -78,7 +129,7 @@ export function LectureView() {
   const submitSlides = () => {
     const topic = slidePrompt?.topic.trim();
     if (slidePrompt && topic) {
-      genDeck.mutate({ topic, course: slidePrompt.course, week: slidePrompt.week });
+      genDeck.mutate({ topic, course: slidePrompt.course, week: slidePrompt.week, sources: pullSources });
       setSlidePrompt(null);
     }
   };
@@ -87,15 +138,15 @@ export function LectureView() {
     null,
   );
   const genExam = useMutation({
-    mutationFn: (v: { course: string; week: string; count: number }) =>
-      api.generateExam(workspaceId, v.course, v.week, v.count),
+    mutationFn: (v: { course: string; week: string; count: number; sources: string[] }) =>
+      api.generateExam(workspaceId, v.course, v.week, v.count, v.sources),
     onSuccess: (r) => setExamResult(r),
   });
   const [examPrompt, setExamPrompt] = useState<{ course: string; week: string; count: number } | null>(null);
   const makeExam = (course: string, week: string) => setExamPrompt({ course, week, count: 8 });
   const submitExam = () => {
     if (examPrompt) {
-      genExam.mutate(examPrompt);
+      genExam.mutate({ ...examPrompt, sources: pullSources });
       setExamPrompt(null);
     }
   };
@@ -104,8 +155,8 @@ export function LectureView() {
     { doc: GeneratedDoc; fileName: string; type: DocType; label: string } | null
   >(null);
   const genDoc = useMutation({
-    mutationFn: (v: { type: DocType; course: string; week: string }) =>
-      api.generateDoc(workspaceId, v.type, v.course, v.week),
+    mutationFn: (v: { type: DocType; course: string; week: string; sources: string[] }) =>
+      api.generateDoc(workspaceId, v.type, v.course, v.week, v.sources),
     onSuccess: (r, v) =>
       setDocResult({ ...r, type: v.type, label: DOC_TYPES.find((d) => d.type === v.type)?.label ?? "" }),
   });
@@ -113,7 +164,7 @@ export function LectureView() {
   const makeDoc = (course: string, week: string) => setDocPrompt({ course, week });
   const submitDoc = (type: DocType) => {
     if (docPrompt) {
-      genDoc.mutate({ ...docPrompt, type });
+      genDoc.mutate({ ...docPrompt, type, sources: pullSources });
       setDocPrompt(null);
     }
   };
@@ -286,6 +337,7 @@ export function LectureView() {
               placeholder="슬라이드 주제 (예: 바로크 조각 — 베르니니)"
               className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            <PullSources options={otherWorkspaces} selected={pullSources} onToggle={togglePull} />
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setSlidePrompt(null)}
@@ -331,6 +383,7 @@ export function LectureView() {
                 className="w-20 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
+            <PullSources options={otherWorkspaces} selected={pullSources} onToggle={togglePull} />
             <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setExamPrompt(null)}
@@ -367,6 +420,7 @@ export function LectureView() {
                 </button>
               ))}
             </div>
+            <PullSources options={otherWorkspaces} selected={pullSources} onToggle={togglePull} />
             <div className="mt-3 flex justify-end">
               <button
                 onClick={() => setDocPrompt(null)}
