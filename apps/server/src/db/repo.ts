@@ -499,6 +499,17 @@ export function dbGetChat(id: string): Chat | null {
   return chat;
 }
 
+/** Just the ownership fields — for guards that don't need the messages (the
+ *  /active endpoint is polled every 2s). Avoids the full message load +
+ *  per-row JSON.parse that dbGetChat does. */
+export function dbGetChatMeta(id: string): { id: string; createdBy: string | null } | null {
+  const db = getDb();
+  const row = db.prepare("SELECT id, created_by FROM chats WHERE id = ?").get(id) as
+    | { id: string; created_by: string | null }
+    | undefined;
+  return row ? { id: row.id, createdBy: row.created_by } : null;
+}
+
 export function dbUpdateChat(
   id: string,
   fields: { title?: string; workspaceId?: string | null; updatedAt: string }

@@ -149,6 +149,12 @@ function runMigrations(db: DatabaseSync): void {
       search_results_json TEXT,
       created_at          TEXT NOT NULL
     );
+
+    -- Hot path: load/poll a chat's messages in order. Without this, every chat
+    -- open and every 2s /active poll was a full table SCAN + temp-B-tree sort
+    -- over all messages in the DB.
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_chat
+      ON chat_messages(chat_id, created_at);
   `);
 
   // Reports table — user-submitted feedback awaiting triage + admin review (idempotent)

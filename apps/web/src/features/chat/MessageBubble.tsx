@@ -6,7 +6,7 @@
  * - Agent messages: live step checklist above the final markdown answer.
  * - Streaming state: live status line / token cursor while generating.
  */
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, memo } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronDown,
@@ -646,7 +646,7 @@ export interface MessageBubbleProps {
   queryHint?: string;
 }
 
-export function MessageBubble({ message, workspaceId, queryHint }: MessageBubbleProps) {
+function MessageBubbleImpl({ message, workspaceId, queryHint }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
   const { t, locale } = useT();
@@ -798,3 +798,8 @@ export function MessageBubble({ message, workspaceId, queryHint }: MessageBubble
 
   return null;
 }
+
+/** Memoized so the 2s /active poll (and every streaming token re-rendering the
+ *  parent MessageList) doesn't re-render every bubble — props are stable per
+ *  message. The assistant markdown is already memoized inside MarkdownContent. */
+export const MessageBubble = memo(MessageBubbleImpl);

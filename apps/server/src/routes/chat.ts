@@ -23,6 +23,7 @@ import {
   dbCreateChat,
   dbListChats,
   dbGetChat,
+  dbGetChatMeta,
   dbUpdateChat,
   dbDeleteChat,
   dbDeleteEmptyChats,
@@ -1034,9 +1035,12 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/chats/:id/active — status of an in-progress generation, if any
   // -------------------------------------------------------------------------
   app.get<{ Params: { id: string } }>("/chats/:id/active", async (req, reply) => {
-    const chat = dbGetChat(req.params.id);
-    if (!chat) return reply.status(404).send({ error: "Chat not found" });
-    if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+    // Polled every 2s — only the in-memory generation status is needed, so guard
+    // with metadata only instead of dbGetChat (which would re-load + JSON-parse
+    // the whole message list on every poll, competing with the streaming worker).
+    const meta = dbGetChatMeta(req.params.id);
+    if (!meta) return reply.status(404).send({ error: "Chat not found" });
+    if (!isOwnerOrAdmin(meta.createdBy, req.account)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
     return reply.send({ active: getGenerationStatus(req.params.id) });
