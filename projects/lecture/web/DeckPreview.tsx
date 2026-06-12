@@ -22,8 +22,12 @@ import { searchImages } from "@ariadne/web/src/lib/api";
  *  a sparse Commons hit still yields a sensible line. (Swap medium/dimensions
  *  here if a department style lists 크기 before 재료.) */
 function buildCaption(img: ImageResult): string {
+  // Drop a trailing "(nationality, dates)" from the artist — museum creator
+  // strings embed commas there ("Claude Monet (French, 1840–1926)"), which would
+  // blur the field boundaries of the comma-separated caption.
+  const creator = img.creator?.replace(/\s*\([^)]*\)\s*$/, "").trim();
   const title = img.title ? `〈${img.title}〉` : "";
-  return [img.creator, title, img.date, img.medium, img.dimensions, img.source]
+  return [creator, title, img.date, img.medium, img.dimensions, img.source]
     .map((s) => s?.trim())
     .filter(Boolean)
     .join(", ")

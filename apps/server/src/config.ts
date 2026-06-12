@@ -95,7 +95,7 @@ const FRONTIER_PROVIDER_ORDER: ProviderId[] = ["gemini", "anthropic", "openai", 
 
 // Explicit model per rung for providers where we've picked specific ids. Gemini
 // is the configured choice: 2.5 Flash as the workhorse, 2.5 Pro for escalation.
-// An id absent from the provider's MODEL_CHOICES is ignored (see pickTierModel),
+// An id absent from the provider's registry models is ignored (see pickTierModel),
 // so a registry rename degrades gracefully instead of 400ing the vendor API.
 const TIER_MODELS: Partial<Record<ProviderId, { frontier: string; strong: string }>> = {
   gemini: { frontier: "gemini-2.5-flash", strong: "gemini-2.5-pro" },

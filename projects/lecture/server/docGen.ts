@@ -96,7 +96,14 @@ export async function generateDoc(
     jsonSchema: DOC_SCHEMA,
     signal,
   });
-  const parsed = JSON.parse(extractJson(text)) as Partial<GeneratedDoc>;
+  // Guard the parse: malformed output yields an empty doc → the route's
+  // sections-empty check returns a clean 422 instead of an opaque 500.
+  let parsed: Partial<GeneratedDoc> = {};
+  try {
+    parsed = JSON.parse(extractJson(text)) as Partial<GeneratedDoc>;
+  } catch {
+    /* malformed JSON → empty document */
+  }
   return {
     title: (parsed.title || `${scope} ${spec.label}`).slice(0, 200),
     sections: (parsed.sections ?? []).slice(0, 30).map((s) => ({

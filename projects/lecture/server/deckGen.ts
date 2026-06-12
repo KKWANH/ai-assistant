@@ -202,15 +202,19 @@ export async function buildPptx(deck: Deck): Promise<Buffer> {
         });
       }
     } else if (s.imageUrl) {
-      // Copyrighted / unclear license → don't embed; cite the source with a
-      // clickable link so the deck stays distributable and the lecturer can
-      // still pull the image up. (Contemporary art usually lands here.)
+      // Two ways here: a non-embeddable license (cite by copyright), or an
+      // embeddable image whose fetch failed (cite because we couldn't embed).
+      // Either way the deck stays distributable and the lecturer can open the
+      // source. (Contemporary art usually lands here.)
       const url = s.imageSourceUrl || s.imageUrl;
+      const note = isEmbeddableLicense(s.imageLicense)
+        ? "이미지를 불러오지 못했습니다 — 아래 출처에서 확인하세요."
+        : "저작권 보호 — 출처에서 이미지를 확인하세요.";
       sl.addText(
         [
           { text: (s.imageCredit || s.title).slice(0, 200), options: { fontSize: 12, color: "555555", breakLine: true } },
           { text: url.slice(0, 240), options: { fontSize: 9, color: "2563EB", hyperlink: { url }, breakLine: true } },
-          { text: "저작권 보호 — 출처에서 이미지를 확인하세요.", options: { fontSize: 8, italic: true, color: "999999" } },
+          { text: note, options: { fontSize: 8, italic: true, color: "999999" } },
         ],
         { x: 7.7, y: 1.6, w: 5.0, h: 4.5, valign: "top", fontFace: FONT_BODY },
       );

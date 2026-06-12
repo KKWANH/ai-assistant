@@ -47,7 +47,11 @@ function stripTags(s: string): string {
  *  collapse to just the metric size. */
 function cleanDim(s: string | undefined): string | undefined {
   if (!s) return undefined;
-  const v = s.split(";")[0]!.replace(/^[A-Za-z][A-Za-z .]*:\s*/, "").split("(")[0]!.trim();
+  // Strip a leading label up to its colon (allowing parens in the label, e.g.
+  // "Overall (confirmed): …"), THEN drop a trailing imperial "(… in.)" clause —
+  // doing the colon-strip first so a parenthesized label doesn't truncate the
+  // dimensions at the "(".
+  const v = s.split(";")[0]!.replace(/^[^:]{1,40}:\s*/, "").split("(")[0]!.trim();
   return v || undefined;
 }
 

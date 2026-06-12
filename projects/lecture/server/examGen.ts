@@ -119,7 +119,14 @@ export async function generateExam(
     jsonSchema: EXAM_SCHEMA,
     signal,
   });
-  const parsed = JSON.parse(extractJson(text)) as Partial<Exam>;
+  // Guard the parse: a thin/garbled model reply yields an empty exam, which the
+  // route turns into a clean 422, rather than throwing into an opaque 500.
+  let parsed: Partial<Exam> = {};
+  try {
+    parsed = JSON.parse(extractJson(text)) as Partial<Exam>;
+  } catch {
+    /* malformed JSON → empty exam */
+  }
   return {
     title: (parsed.title || scope).slice(0, 200),
     items: (parsed.items ?? []).slice(0, 40).map((it) => ({
@@ -161,7 +168,12 @@ export async function checkCoverage(
     jsonSchema: COVERAGE_SCHEMA,
     signal,
   });
-  const parsed = JSON.parse(extractJson(text)) as Partial<CoverageReport>;
+  let parsed: Partial<CoverageReport> = {};
+  try {
+    parsed = JSON.parse(extractJson(text)) as Partial<CoverageReport>;
+  } catch {
+    /* malformed JSON → empty report */
+  }
   return {
     concepts: (parsed.concepts ?? []).slice(0, 40).map((c) => ({
       concept: String(c.concept || "").slice(0, 120),

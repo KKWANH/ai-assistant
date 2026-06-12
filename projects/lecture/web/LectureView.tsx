@@ -125,7 +125,10 @@ export function LectureView() {
     onSuccess: (r, v) => setDeckResult({ ...r, course: v.course }),
   });
   const [slidePrompt, setSlidePrompt] = useState<{ course: string; week: string; topic: string } | null>(null);
-  const makeSlides = (course: string, week: string) => setSlidePrompt({ course, week, topic: "" });
+  const makeSlides = (course: string, week: string) => {
+    setPullSources([]);
+    setSlidePrompt({ course, week, topic: "" });
+  };
   const submitSlides = () => {
     const topic = slidePrompt?.topic.trim();
     if (slidePrompt && topic) {
@@ -143,7 +146,10 @@ export function LectureView() {
     onSuccess: (r) => setExamResult(r),
   });
   const [examPrompt, setExamPrompt] = useState<{ course: string; week: string; count: number } | null>(null);
-  const makeExam = (course: string, week: string) => setExamPrompt({ course, week, count: 8 });
+  const makeExam = (course: string, week: string) => {
+    setPullSources([]);
+    setExamPrompt({ course, week, count: 8 });
+  };
   const submitExam = () => {
     if (examPrompt) {
       genExam.mutate({ ...examPrompt, sources: pullSources });
@@ -161,7 +167,10 @@ export function LectureView() {
       setDocResult({ ...r, type: v.type, label: DOC_TYPES.find((d) => d.type === v.type)?.label ?? "" }),
   });
   const [docPrompt, setDocPrompt] = useState<{ course: string; week: string } | null>(null);
-  const makeDoc = (course: string, week: string) => setDocPrompt({ course, week });
+  const makeDoc = (course: string, week: string) => {
+    setPullSources([]);
+    setDocPrompt({ course, week });
+  };
   const submitDoc = (type: DocType) => {
     if (docPrompt) {
       genDoc.mutate({ ...docPrompt, type, sources: pullSources });

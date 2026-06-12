@@ -41,7 +41,13 @@ export interface Deck {
  */
 export function isEmbeddableLicense(license: string | undefined): boolean {
   if (!license) return false;
-  return /public domain|cc0|cc[\s-]?by/i.test(license);
+  // Reject the non-free CC restrictions FIRST: NonCommercial forbids the
+  // institutional/distributed use of a class deck, and NoDerivs forbids the
+  // resize/crop a slide applies — neither may be embedded (cite by link instead).
+  if (/\bnc\b|non[\s-]?commercial|\bnd\b|no[\s-]?deriv/i.test(license)) return false;
+  // Embed only genuinely free licenses: public domain (incl. PD-* tags), CC0,
+  // and CC BY / BY-SA. Everything else falls through to link-only.
+  return /public domain|cc0|cc[\s-]?by|^pd[\s-]/i.test(license);
 }
 
 /* ------------------------------------------------------------------ *
