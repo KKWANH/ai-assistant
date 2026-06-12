@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import type { GenerateContentConfig } from "@google/genai";
 import type { AiProvider, ProviderUsage, CompleteRequest, CompleteWithImagesRequest } from "./index.js";
 import { extractJson, processThinkBlocks } from "./index.js";
 
@@ -34,21 +35,26 @@ export class GeminiProvider implements AiProvider {
   }
 
   async complete(req: CompleteRequest): Promise<{ text: string; usage?: ProviderUsage }> {
-    // Gemini supports schema-constrained JSON via responseSchema —
-    // server-side validation, no parse failures. Falls back to mime-type
-    // JSON when only `json: true` is set.
+    // @google/genai takes model params under `config` — the legacy
+    // `generationConfig` key is silently dropped by this SDK, so the schema must
+    // go here to actually constrain the output. Schema-constrained JSON via
+    // responseSchema, mime-type JSON when only `json` is set, plus the abort
+    // signal so a cancelled request actually stops the upstream call (+ billing).
     const wantsJson = req.json || !!req.jsonSchema;
-    const generationConfig = req.jsonSchema
-      ? { responseMimeType: "application/json", responseSchema: toGeminiSchema(req.jsonSchema.schema) }
-      : req.json
-        ? { responseMimeType: "application/json" }
-        : undefined;
+    const config: GenerateContentConfig = {};
+    if (req.jsonSchema) {
+      config.responseMimeType = "application/json";
+      config.responseSchema = toGeminiSchema(req.jsonSchema.schema) as GenerateContentConfig["responseSchema"];
+    } else if (req.json) {
+      config.responseMimeType = "application/json";
+    }
+    if (req.signal) config.abortSignal = req.signal;
     const result = await this.client.models.generateContent({
       model: this.model,
       contents: [
         { role: "user", parts: [{ text: `${req.system}\n\n${req.prompt}` }] },
       ],
-      ...(generationConfig ? { generationConfig } : {}),
+      config,
     });
     const raw = result.text ?? "";
     const meta = result.usageMetadata;
@@ -63,11 +69,14 @@ export class GeminiProvider implements AiProvider {
     onDelta: (delta: string) => void,
     onStatus?: (status: string) => void,
   ): Promise<{ text: string; usage?: ProviderUsage }> {
+    const config: GenerateContentConfig = {};
+    if (req.signal) config.abortSignal = req.signal;
     const response = await this.client.models.generateContentStream({
       model: this.model,
       contents: [
         { role: "user", parts: [{ text: `${req.system}\n\n${req.prompt}` }] },
       ],
+      config,
     });
 
     let fullText = "";
@@ -107,6 +116,8 @@ export class GeminiProvider implements AiProvider {
       },
     }));
 
+    const config: GenerateContentConfig = {};
+    if (req.signal) config.abortSignal = req.signal;
     const result = await this.client.models.generateContent({
       model: this.model,
       contents: [
@@ -118,6 +129,7 @@ export class GeminiProvider implements AiProvider {
           ],
         },
       ],
+      config,
     });
 
     const raw = result.text ?? "";
