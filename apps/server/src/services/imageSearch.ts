@@ -67,6 +67,23 @@ function cleanDate(s: string | undefined): string | undefined {
 }
 
 /**
+ * The Commons "Artist" field is the work's creator for catalogued artworks but
+ * the UPLOADER for user photos — and uploads tie the field to a User: page or a
+ * "Wikipedia Loves Art" / Flickr / "own work" credit. Those reliably mark an
+ * uploader, so drop them rather than misattribute a username as the artist (작가)
+ * in a caption; a plain artist name passes through. The raw HTML is checked
+ * BEFORE stripTags so the User:-link signal isn't lost. (Bare usernames with no
+ * such marker are ambiguous with real single-name artists and are left as-is.)
+ */
+function commonsCreator(rawArtist: string | undefined): string | undefined {
+  if (!rawArtist) return undefined;
+  if (/\bUser[:_]|\/wiki\/User:|User_talk:|Wikipedia Loves Art|flickr\.com|own work/i.test(rawArtist)) {
+    return undefined;
+  }
+  return stripTags(rawArtist) || undefined;
+}
+
+/**
  * Search for images across the art/museum sources. `perSource` caps each
  * source so the combined list stays slide-pickable. Always resolves (never
  * throws) — a failed source contributes nothing.
@@ -161,7 +178,7 @@ async function searchCommons(query: string, limit: number, signal?: AbortSignal)
       imageUrl: info.url,
       sourceUrl: info.descriptionurl ?? info.url,
       source: "Wikimedia Commons",
-      creator: meta.Artist?.value ? stripTags(meta.Artist.value) : undefined,
+      creator: commonsCreator(meta.Artist?.value),
       date: cleanDate(meta.DateTimeOriginal?.value ? stripTags(meta.DateTimeOriginal.value) : undefined),
       license: meta.LicenseShortName?.value ? stripTags(meta.LicenseShortName.value) : undefined,
       medium: meta.Medium?.value ? stripTags(meta.Medium.value) : undefined,
