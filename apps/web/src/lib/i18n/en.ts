@@ -111,6 +111,7 @@ const en = {
   "commandMenu.sectionApp": "App",
   "commandMenu.sectionWorkspaces": "Workspaces",
   "commandMenu.sectionRecentRuns": "Recent Runs",
+  "commandMenu.sectionFiles": "Files",
   "commandMenu.sectionChats": "Chats",
   "commandMenu.untitledChat": "Untitled chat",
   "commandMenu.runLabel": "Run {id}",

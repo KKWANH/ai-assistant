@@ -19,6 +19,9 @@ export interface CommandItem {
   onSelect: () => void;
   /** Group header in the palette (empty-query view); ranked views ignore it. */
   section?: string;
+  /** Only surface once the user types a query — for large dynamic sets (e.g.
+   *  workspace file search) that would otherwise flood the empty palette. */
+  queryOnly?: boolean;
 }
 
 interface CommandStore {

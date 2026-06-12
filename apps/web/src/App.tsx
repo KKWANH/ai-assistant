@@ -6,6 +6,7 @@ import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialo
 import { ReportDialog } from "./features/reports/ReportDialog";
 import { TutorialOverlay } from "./components/tutorial/TutorialOverlay";
 import { GlobalCommands } from "./components/GlobalCommands";
+import { WorkspaceCommands } from "./components/WorkspaceCommands";
 import { LoginView } from "./features/auth/LoginView";
 import { useMe } from "./lib/queries";
 import { I18nProvider } from "./lib/i18n";
@@ -210,6 +211,7 @@ function AppContent() {
       <ReportDialog />
       <TutorialOverlay />
       <GlobalCommands />
+      <WorkspaceCommands />
     </>
   );
 }

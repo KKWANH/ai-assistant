@@ -53,7 +53,7 @@ export function CommandMenu({ items }: CommandMenuProps) {
         .filter((x) => x.score > -Infinity)
         .sort((a, b) => b.score - a.score)
         .map((x) => x.item)
-    : allItems;
+    : allItems.filter((i) => !i.queryOnly);
 
   useEffect(() => {
     setSelectedIdx(0);

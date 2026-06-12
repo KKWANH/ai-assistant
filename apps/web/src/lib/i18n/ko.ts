@@ -105,6 +105,7 @@ const ko: Record<TranslationKey, string> = {
   "commandMenu.sectionWorkspaces": "워크스페이스 목록",
   "commandMenu.sectionRecentRuns": "최근 실행",
   "commandMenu.sectionChats": "대화 목록",
+  "commandMenu.sectionFiles": "파일",
   "commandMenu.untitledChat": "제목 없는 대화",
   "commandMenu.runLabel": "실행 {id}",
 
