@@ -51,7 +51,7 @@ function Overview() {
       <div className="grid sm:grid-cols-3 gap-3">
         {[
           { t: "Local-first", d: "The server binds to loopback; a loopback request IS the admin. Remote access (the tunnel) requires a cookie and loses local-only powers like the terminal." },
-          { t: "Register, don't hardcode", d: "Commands, settings, and surfaces are zustand registries. Features contribute via useRegisterX hooks — the shell never enumerates them." },
+          { t: "Register, don't hardcode", d: "Commands, settings, surfaces — and the server's API routes — are registries. Neither the web shell nor the server bootstrap enumerates them; you contribute a hook or a CORE_ROUTES entry." },
           { t: "Dual-use", d: "A power-user IDE (editor, git, terminal, surfaces) and an easy non-developer mode, toggled per account and per workspace." },
         ].map((x) => (
           <div key={x.t} className="rounded-lg border border-border bg-card p-3">
@@ -159,9 +159,11 @@ curl -s localhost:4319/api/workspaces/<id>/snapshot`}</Code>
           <GitBranch className="h-4 w-4 text-accent" /> Extend the backend — add a route
         </h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Every route file exports a plugin <code className="font-mono text-xs">(app) =&gt; {`{ … }`}</code> registered in{" "}
-          <code className="font-mono text-xs">index.ts</code> under the <code className="font-mono text-xs">/api</code>{" "}
-          scope (so the auth hook runs). Guards come from <code className="font-mono text-xs">workspaceGuard.ts</code>.
+          Every route file exports a plugin <code className="font-mono text-xs">(app) =&gt; {`{ … }`}</code>. You don't touch{" "}
+          <code className="font-mono text-xs">index.ts</code> — append ONE entry to the route registry (
+          <code className="font-mono text-xs">routes/registry.ts</code>), which the bootstrap iterates inside the{" "}
+          <code className="font-mono text-xs">/api</code> scope (so the auth hook runs). Guards come from{" "}
+          <code className="font-mono text-xs">workspaceGuard.ts</code>.
         </p>
         <Code>{`// apps/server/src/routes/notes.ts
 import type { FastifyInstance } from "fastify";
@@ -181,8 +183,8 @@ export async function noteRoutes(app: FastifyInstance) {
   );
 }
 
-// apps/server/src/index.ts — inside the /api register scope:
-await api.register(noteRoutes);`}</Code>
+// apps/server/src/routes/registry.ts — append ONE entry; index.ts iterates it:
+{ domain: "notes", description: "Workspace notes.", register: noteRoutes },`}</Code>
         <ul className="text-2xs text-muted-foreground space-y-1 list-disc pl-4 leading-snug">
           <li><code className="font-mono">requireWorkspace(id, req, reply, "read")</code> for reads; omit the 4th arg for owner/write.</li>
           <li><code className="font-mono">accessContext(req)</code> is <code className="font-mono">"local"</code> only on a real loopback connection — gate dangerous powers (shell, fs) on it.</li>
@@ -196,20 +198,25 @@ await api.register(noteRoutes);`}</Code>
           <Terminal className="h-4 w-4 text-accent" /> Add an AI provider
         </h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Providers derive from a single registry. A new OpenAI-compatible vendor is one descriptor + one line in the
-          providers list — no new class.
+          Providers derive from a single registry. An OpenAI-compatible vendor is one descriptor — no new class. A bespoke
+          transport (non-OpenAI wire format) adds a <code className="font-mono text-xs">create()</code> factory on the same
+          descriptor.
         </p>
         <Code>{`// packages/shared/src/config.ts — PROVIDER_REGISTRY
 {
-  id: "myvendor",
-  label: "My Vendor",
-  kind: "openai-compatible",
-  baseUrl: "https://api.myvendor.com/v1",
+  id: "myvendor", label: "My Vendor", kind: "openai-compatible",
+  envKey: "MYVENDOR_API_KEY",
+  baseURL: "https://api.myvendor.com/v1",
   defaultModel: "my-model-1",
-  models: ["my-model-1", "my-model-2"],
+  models: [
+    { id: "my-model-1", label: "My Model 1", traitKey: "model.trait.minimax",
+      speed: "normal", costTier: "mid", pricing: { inUsd: 0.5, outUsd: 1.5 } },
+  ],
+  // bespoke transport instead of openai-compatible? add:
+  // create: (model, key) => new MyVendorProvider(model, key),
 }
-// add "myvendor" to PROVIDERS — labels, default models, model choices,
-// pricing and vision flags all derive from the descriptor.`}</Code>
+// then add "myvendor" to PROVIDERS. Labels, defaults, model choices, pricing,
+// vision, key resolution, the settings UI + status route all derive from it.`}</Code>
       </section>
     </div>
   );

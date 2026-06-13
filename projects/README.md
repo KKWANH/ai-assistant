@@ -1,17 +1,20 @@
 # `projects/` — example verticals built on the Ariadne platform
 
-> **Status: DESIGN ONLY.** This document is the agreed architecture. No code
-> has been migrated yet. Implementation is phased (see *Migration*). Decided:
-> projects are wired into core via a **static registry** (build-time imports),
-> not a runtime plugin loader.
+> **Status: IMPLEMENTED.** Seven example projects ship (budget, reading,
+> chefbook, code, decisions, papers, lecture), wired into core via a **static
+> registry** (build-time imports), not a runtime plugin loader. The shipped
+> server contract is `ProjectServerModule` (`packages/shared/src/projects.ts`):
+> `{ name, starter?, templates?, routes? }`; the web contract is
+> `ProjectWebModule`. Register a project in BOTH `apps/server/src/projects/index.ts`
+> and `apps/web/src/projects/index.ts`.
 
 ## Why this exists
 
 The core platform — `apps/server`, `apps/web`, `packages/shared` — must be
 **domain-agnostic**. "Lecture prep" and "Portfolio" are **not** platform
-features; they are **examples** of what you can build on the platform. Today
-they are woven through ~24 (lecture) and ~5 (portfolio) core files. That is the
-mistake this restructure fixes.
+features; they are **examples** of what you can build on the platform. They
+used to be woven through ~24 (lecture) and ~5 (portfolio) core files; this
+restructure moved them into self-contained `projects/<name>/` folders.
 
 Each example lives in `projects/<name>/`, where it:
 
