@@ -5,7 +5,8 @@
  * same way. Renders nothing — it only registers while mounted.
  */
 import { useMemo } from "react";
-import { Moon, SunMedium, Sparkles, SlidersHorizontal } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Moon, SunMedium, Sparkles, SlidersHorizontal, Code2 } from "lucide-react";
 import { useUIStore } from "../lib/store";
 import { useMe, useUpdateMode } from "../lib/queries";
 import { useRegisterCommands, type CommandItem } from "../lib/commands";
@@ -17,6 +18,7 @@ export function GlobalCommands() {
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
   const isSimple = me?.account.mode === "simple";
+  const navigate = useNavigate();
   const { t } = useT();
 
   const items: CommandItem[] = useMemo(
@@ -39,8 +41,16 @@ export function GlobalCommands() {
         keybinding: "Mod+Shift+M",
         onSelect: () => updateMode.mutate(isSimple ? "standard" : "simple"),
       },
+      {
+        id: "global.developer-docs",
+        label: t("nav.developerDocs"),
+        description: t("nav.developerDocs.desc"),
+        icon: <Code2 className="h-4 w-4" />,
+        section: t("commandMenu.sectionApp"),
+        onSelect: () => navigate("/developers"),
+      },
     ],
-    [theme, toggleTheme, isSimple, updateMode, t],
+    [theme, toggleTheme, isSimple, updateMode, navigate, t],
   );
 
   useRegisterCommands("global", items);

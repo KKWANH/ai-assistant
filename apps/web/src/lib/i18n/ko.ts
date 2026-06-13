@@ -69,6 +69,8 @@ const ko: Record<TranslationKey, string> = {
   "nav.mode.toSimple": "간단 모드로 전환",
   "nav.mode.toStandard": "표준 모드로 전환",
   "nav.mode.toggle.desc": "간단·표준 UI 모드를 전환합니다",
+  "nav.developerDocs": "개발자 문서",
+  "nav.developerDocs.desc": "API 레퍼런스 · 아키텍처 · 확장 가이드",
   "nav.toggleInspector": "인스펙터 열기/닫기",
   "nav.toggleInspector.desc": "오른쪽 상세 패널 보이기·숨기기",
   "nav.openMenu": "메뉴 열기",

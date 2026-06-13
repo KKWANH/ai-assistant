@@ -76,6 +76,8 @@ const en = {
   "nav.mode.toSimple": "Switch to Simple mode",
   "nav.mode.toStandard": "Switch to Standard mode",
   "nav.mode.toggle.desc": "Switch between Simple and Standard UI",
+  "nav.developerDocs": "Developer docs",
+  "nav.developerDocs.desc": "API reference, architecture, and extension guides",
   "nav.toggleInspector": "Toggle inspector",
   "nav.toggleInspector.desc": "Show or hide the right-side details panel",
   "nav.openMenu": "Open menu",
