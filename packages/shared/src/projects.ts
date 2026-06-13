@@ -33,6 +33,10 @@ export interface ProjectServerModule {
   /** Run templates this project adds to the "create & run" list. Merged into
    *  the available templates at boot — see registerProjectTemplates. */
   templates?: Template[];
+  /** The project's Fastify routes, if any. Registered generically by the
+   *  server's project registry (no vertical named in core). Typed `unknown` to
+   *  keep this package framework-agnostic — the server casts it to a plugin. */
+  routes?: unknown;
 }
 
 /** The create-dialog card a project contributes. */

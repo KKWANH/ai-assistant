@@ -85,11 +85,25 @@ function parseFile(file) {
   return out;
 }
 
+/** Domain → description, from the route registry (the server's single source of
+ *  truth). Adding a CORE_ROUTES entry therefore documents its domain here too. */
+function parseRegistryDescriptions() {
+  const reg = path.join(ROUTES_DIR, "registry.ts");
+  const out = {};
+  if (!fs.existsSync(reg)) return out;
+  const src = fs.readFileSync(reg, "utf-8");
+  const re = /domain:\s*"([^"]+)",\s*description:\s*"([^"]+)"/g;
+  let m;
+  while ((m = re.exec(src))) out[m[1]] = m[2];
+  return out;
+}
+
 const all = [];
 for (const f of fs.readdirSync(ROUTES_DIR)) {
-  if (!f.endsWith(".ts")) continue;
+  if (!f.endsWith(".ts") || f === "registry.ts") continue;
   all.push(...parseFile(path.join(ROUTES_DIR, f)));
 }
+const descriptions = parseRegistryDescriptions();
 // stable sort: domain, then path, then method
 all.sort(
   (a, b) =>
@@ -113,6 +127,9 @@ export interface ApiEndpoint {
 }
 
 export const API_ENDPOINTS: ApiEndpoint[] = ${JSON.stringify(all, null, 2)};
+
+/** Domain → description, sourced from the route registry (routes/registry.ts). */
+export const DOMAIN_DESCRIPTIONS: Record<string, string> = ${JSON.stringify(descriptions, null, 2)};
 `;
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });

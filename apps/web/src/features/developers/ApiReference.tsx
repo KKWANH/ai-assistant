@@ -6,8 +6,12 @@
  */
 import { useMemo, useState } from "react";
 import { ChevronRight, Search, Copy, Check } from "lucide-react";
-import { API_ENDPOINTS, type ApiEndpoint } from "./apiInventory.generated";
+import { API_ENDPOINTS, DOMAIN_DESCRIPTIONS, type ApiEndpoint } from "./apiInventory.generated";
 import { API_CATEGORIES, DOMAIN_BLURBS, ENDPOINT_DETAILS } from "./apiMeta";
+
+/** Domain description — sourced from the route registry (single source of
+ *  truth), falling back to apiMeta for the few non-registry domains. */
+const domainBlurb = (domain: string) => DOMAIN_DESCRIPTIONS[domain] ?? DOMAIN_BLURBS[domain];
 
 const METHOD_CLS: Record<string, string> = {
   GET: "text-success border-success/40 bg-success/10",
@@ -121,7 +125,7 @@ export function ApiReference() {
           <h4 className="font-mono text-xs font-semibold text-accent">{domain}</h4>
           <span className="text-2xs text-muted-foreground">{eps.length}</span>
         </div>
-        {DOMAIN_BLURBS[domain] && <p className="text-2xs text-muted-foreground leading-snug">{DOMAIN_BLURBS[domain]}</p>}
+        {domainBlurb(domain) && <p className="text-2xs text-muted-foreground leading-snug">{domainBlurb(domain)}</p>}
         <div className="space-y-1">{eps.map((ep) => <EndpointCard key={`${ep.method} ${ep.path}`} ep={ep} />)}</div>
       </div>
     );

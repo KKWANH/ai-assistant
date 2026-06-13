@@ -17,39 +17,13 @@ export const API_CATEGORIES: { id: string; label: string; domains: string[] }[] 
   { id: "ops", label: "Operations", domains: ["health", "reports", "alerts", "marketData", "evalCases"] },
 ];
 
-/** One-line description per route-file domain. */
+/** Descriptions for route domains that AREN'T in the core route registry —
+ *  the two that register outside the /api scope. The 28 core domains' blurbs
+ *  live ONCE, in routes/registry.ts, and reach the docs via the generated
+ *  DOMAIN_DESCRIPTIONS (see ApiReference.domainBlurb). */
 export const DOMAIN_BLURBS: Record<string, string> = {
-  workspaces: "Create, scan, configure, and snapshot workspaces — the folder-rooted unit everything hangs off.",
-  chat: "Conversations + streaming assistant replies (SSE). The send pipeline: triage → retrieval → provider → metering.",
-  settings: "The active AI provider + model and other server-wide settings.",
-  account: "The signed-in account: profile, locale, UI mode (simple/standard), saved context.",
-  auth: "Login / logout / session — and the local-vs-remote access model (loopback = admin).",
-  files: "Read workspace files + binary-document previews (markdown cache, PDF page images).",
-  fs: "Browse the host filesystem (the folder picker when creating a workspace). Local-only.",
-  search: "RAG search over a workspace's indexed chunks; cross-workspace content search.",
-  git: "The workspace's own git repo: status, per-file diff, and selective commit. Local-only commit.",
-  runs: "Template/agent runs — context pick, brief, evidence, staged diff, apply, and history rewind.",
-  attempts: "Parallel attempts of a run (fan-out) + their diffs.",
-  templates: "Run templates — turn files into a structured output.",
-  providers: "Configured AI providers and their reachability (keys, local models).",
-  compare: "Run one prompt against N models concurrently (cross-vendor compare).",
-  usage: "Token usage + per-account limits.",
-  surface: "User-authored custom screens (`.ariadne/surface.tsx`) — bundle, build, RAG, ask, persisted state.",
-  surfaceHost: "Serves the sandboxed surface host page + esbuild bundle the iframe loads.",
-  actions: "Workspace `actions.yaml` — tools the agent planner may use (run_script, read_file, …).",
-  hooks: "Per-workspace commands that fire on events (staged_apply, post_scan, memory_added).",
-  schedules: "Scheduled runs (the scheduler ticks every 60s) — list, create, run-now.",
-  triggers: "Event webhooks — `POST /api/triggers/:secret` fires a run; secret IS the auth.",
-  scripts: "Workspace scripts in `.ariadne/scripts/` — list, read, run.",
-  terminal: "A real PTY shell in the workspace root over a WebSocket. Local-only.",
-  memory: "Per-workspace agent memory — facts injected into context.",
-  skills: "Reusable skill definitions surfaced to the agent + the composer.",
-  mcp: "Model Context Protocol servers — register external tools the agent can call.",
   health: "Liveness probe, outside the /api auth scope.",
-  reports: "User-filed problem reports + the admin review queue.",
-  alerts: "In-app notifications (the bell).",
-  marketData: "Market-data helpers used by the portfolio example project.",
-  evalCases: "RAG eval cases for the retrieval harness.",
+  surfaceHost: "Serves the sandboxed surface host page + esbuild bundle the iframe loads.",
 };
 
 /** Per-endpoint curated detail, keyed by `"METHOD /api/path"`. Optional — the

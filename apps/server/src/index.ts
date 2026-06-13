@@ -13,42 +13,14 @@ import { ensureDirs, PATHS, getActiveSettings } from "./config.js";
 import { openDb, getDb } from "./db/index.js";
 import { dbGetSetting, dbSetSetting } from "./db/repo.js";
 import { healthRoutes } from "./routes/health.js";
-import { workspaceRoutes } from "./routes/workspaces.js";
-import { templateRoutes } from "./routes/templates.js";
-import { runRoutes } from "./routes/runs.js";
-import { settingsRoutes } from "./routes/settings.js";
-import { fsRoutes } from "./routes/fs.js";
-import { authRoutes } from "./routes/auth.js";
-import { usageRoutes } from "./routes/usage.js";
-import { scriptRoutes } from "./routes/scripts.js";
-import { searchRoutes } from "./routes/search.js";
-import { chatRoutes } from "./routes/chat.js";
-import { compareRoutes } from "./routes/compare.js";
-import { providerRoutes } from "./routes/providers.js";
-import { accountRoutes } from "./routes/account.js";
-import { surfaceRoutes } from "./routes/surface.js";
-import { gitRoutes } from "./routes/git.js";
-import { terminalRoutes } from "./routes/terminal.js";
 import { surfaceHostRoutes } from "./routes/surfaceHost.js";
-import { actionRoutes } from "./routes/actions.js";
-import { reportRoutes } from "./routes/reports.js";
-import { evalCaseRoutes } from "./routes/evalCases.js";
-import { memoryRoutes } from "./routes/memory.js";
+import { CORE_ROUTES } from "./routes/registry.js";
 import { registerProjectRoutes, projectTemplates } from "./projects/index.js";
 import { registerProjectTemplates } from "./runs/templates.js";
-import { mcpRoutes } from "./routes/mcp.js";
-import { hooksRoutes } from "./routes/hooks.js";
 import { shutdownAll as shutdownMcp } from "./services/mcpClient.js";
-import { marketDataRoutes } from "./routes/marketData.js";
-import { filesRoutes } from "./routes/files.js";
 import { detectMarkitdown } from "./services/markitdown.js";
 import { detectLibreoffice } from "./services/libreoffice.js";
 import { detectPyMuPDF } from "./services/pymupdf.js";
-import { skillRoutes } from "./routes/skills.js";
-import { scheduleRoutes } from "./routes/schedules.js";
-import { triggerRoutes } from "./routes/triggers.js";
-import { alertRoutes } from "./routes/alerts.js";
-import { attemptRoutes } from "./routes/attempts.js";
 import { startScheduler } from "./services/scheduler.js";
 import { seedAdmin, seedGuest } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
@@ -194,38 +166,15 @@ async function bootstrap(): Promise<void> {
         req.account = account;
       });
 
-      await api.register(authRoutes);
-      await api.register(workspaceRoutes);
-      await api.register(templateRoutes);
-      await api.register(runRoutes);
-      await api.register(settingsRoutes);
-      await api.register(fsRoutes);
-      await api.register(usageRoutes);
-      await api.register(scriptRoutes);
-      await api.register(searchRoutes);
-      await api.register(chatRoutes);
-      await api.register(compareRoutes);
-      await api.register(providerRoutes);
-      await api.register(accountRoutes);
-      await api.register(surfaceRoutes);
-      await api.register(gitRoutes);
-      await api.register(terminalRoutes);
-      await api.register(actionRoutes);
-      await api.register(triggerRoutes);
-      await api.register(alertRoutes);
-      await api.register(reportRoutes);
-      await api.register(evalCaseRoutes);
-      await api.register(memoryRoutes);
-      // Merge example projects' run templates into core's template list.
+      // Register every core API route from the registry — index.ts no longer
+      // names them one by one. Add a route by writing routes/<domain>.ts and
+      // appending ONE entry to CORE_ROUTES (see routes/registry.ts).
+      for (const m of CORE_ROUTES) await api.register(m.register);
+
+      // Example projects (projects/<name>/) contribute run templates + routes
+      // through the project registry — generic, no vertical named here.
       registerProjectTemplates(projectTemplates());
       await registerProjectRoutes(api);
-      await api.register(mcpRoutes);
-      await api.register(hooksRoutes);
-      await api.register(marketDataRoutes);
-      await api.register(filesRoutes);
-      await api.register(skillRoutes);
-      await api.register(scheduleRoutes);
-      await api.register(attemptRoutes);
     },
     { prefix: "/api" }
   );

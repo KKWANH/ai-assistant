@@ -844,3 +844,36 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
     "params": "{id: string}"
   }
 ];
+
+/** Domain → description, sourced from the route registry (routes/registry.ts). */
+export const DOMAIN_DESCRIPTIONS: Record<string, string> = {
+  "auth": "Login / logout / session — and the local-vs-remote access model (loopback = admin).",
+  "workspaces": "Create, scan, configure, and snapshot workspaces — the folder-rooted unit everything hangs off.",
+  "templates": "Run templates — turn files into a structured output.",
+  "runs": "Template/agent runs — context pick, brief, evidence, staged diff, apply, and history rewind.",
+  "settings": "The active AI provider + model and other server-wide settings.",
+  "fs": "Browse the host filesystem (the folder picker when creating a workspace). Local-only.",
+  "usage": "Token usage + per-account limits.",
+  "scripts": "Workspace scripts in .ariadne/scripts/ — list, read, run.",
+  "search": "RAG search over a workspace's indexed chunks; cross-workspace content search.",
+  "chat": "Conversations + streaming assistant replies (SSE). The send pipeline: triage → retrieval → provider → metering.",
+  "compare": "Run one prompt against N models concurrently (cross-vendor compare).",
+  "providers": "Configured AI providers and their reachability (keys, local models).",
+  "account": "The signed-in account: profile, locale, UI mode (simple/standard), saved context.",
+  "surface": "User-authored custom screens (.ariadne/surface.tsx) — bundle, build, RAG, ask, persisted state.",
+  "git": "The workspace's own git repo: status, per-file diff, and selective commit. Local-only commit.",
+  "terminal": "A real PTY shell in the workspace root over a WebSocket. Local-only.",
+  "actions": "Workspace actions.yaml — tools the agent planner may use (run_script, read_file, …).",
+  "triggers": "Event webhooks — POST /api/triggers/:secret fires a run; the secret IS the auth.",
+  "alerts": "In-app notifications (the bell).",
+  "reports": "User-filed problem reports + the admin review queue.",
+  "evalCases": "RAG eval cases for the retrieval harness.",
+  "memory": "Per-workspace agent memory — facts injected into context.",
+  "mcp": "Model Context Protocol servers — register external tools the agent can call.",
+  "hooks": "Per-workspace commands that fire on events (staged_apply, post_scan, memory_added).",
+  "marketData": "Market-data helpers used by the portfolio example project.",
+  "files": "Read workspace files + binary-document previews (markdown cache, PDF page images).",
+  "skills": "Reusable skill definitions surfaced to the agent + the composer.",
+  "schedules": "Scheduled runs (the scheduler ticks every 60s) — list, create, run-now.",
+  "attempts": "Parallel attempts of a run (fan-out) + their diffs."
+};
