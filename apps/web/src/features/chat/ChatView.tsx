@@ -446,6 +446,7 @@ function ThreadView({ chatId }: { chatId: string }) {
           suggestion={suggestion}
           onRunSuggestion={() => void handleRunSuggestion()}
           onDismissSuggestion={() => setSuggestion(null)}
+          chatWorkspaceId={chat?.workspaceId ?? null}
         />
       </div>
     </div>

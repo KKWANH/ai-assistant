@@ -106,6 +106,10 @@ export interface ChatComposerProps {
   suggestion?: { actionId: string; actionName: string; reason: string } | null;
   onRunSuggestion?: () => void;
   onDismissSuggestion?: () => void;
+  /** The open chat's own workspace, if it's workspace-scoped. The model picker
+   *  scopes its override to this (the server applies the override by the chat's
+   *  workspaceId), falling back to the composer's selected target for new chats. */
+  chatWorkspaceId?: string | null;
 }
 
 const IMAGE_TYPES = [
@@ -357,6 +361,7 @@ export function ChatComposer({
   suggestion,
   onRunSuggestion,
   onDismissSuggestion,
+  chatWorkspaceId = null,
 }: ChatComposerProps) {
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -428,12 +433,19 @@ export function ChatComposer({
 
   const selectedWs = workspaces?.find((w) => w.id === chatComposerWorkspaceId);
 
-  // Per-workspace model override (P2): when sending to a workspace that pins its
-  // own provider+model, the picker reflects + edits THAT; otherwise the picker
-  // is the account-global default. The two fields are set/cleared together.
+  // The workspace a message actually lands in — an existing chat's own workspace
+  // (the server applies the model override by chat.workspaceId), else the
+  // composer's selected target for a brand-new chat. The model picker scopes to
+  // THIS, independent of the transient composer selector / reply mode.
+  const modelWsId = chatWorkspaceId ?? chatComposerWorkspaceId;
+  const modelWs = workspaces?.find((w) => w.id === modelWsId);
+
+  // Per-workspace model override (P2): when the chat lands in a workspace that
+  // pins its own provider+model, the picker reflects + edits THAT; otherwise the
+  // account-global default. The two fields are set/cleared together.
   const wsModelOverride =
-    selectedWs?.defaultProvider && selectedWs?.defaultModel
-      ? { provider: selectedWs.defaultProvider as ProviderId, model: selectedWs.defaultModel }
+    modelWs?.defaultProvider && modelWs?.defaultModel
+      ? { provider: modelWs.defaultProvider as ProviderId, model: modelWs.defaultModel }
       : null;
   const currentProvider = (wsModelOverride?.provider ?? settings?.provider ?? "mock") as ProviderId;
   const currentModel = wsModelOverride?.model ?? settings?.model ?? "mock";
@@ -456,9 +468,9 @@ export function ChatComposer({
     try {
       // Workspace-scoped → set this workspace's model override; otherwise the
       // account-global default. (See wsModelOverride above.)
-      if (chatComposerWorkspaceId) {
+      if (modelWsId) {
         await updateWorkspace.mutateAsync({
-          id: chatComposerWorkspaceId,
+          id: modelWsId,
           input: { defaultProvider: provider, defaultModel: model },
         });
       } else {
@@ -474,9 +486,9 @@ export function ChatComposer({
 
   const handleModelChange = async (model: string) => {
     try {
-      if (chatComposerWorkspaceId) {
+      if (modelWsId) {
         await updateWorkspace.mutateAsync({
-          id: chatComposerWorkspaceId,
+          id: modelWsId,
           input: { defaultProvider: currentProvider, defaultModel: model },
         });
       } else {
@@ -491,10 +503,10 @@ export function ChatComposer({
   // Clear a workspace's model override so its chats fall back to the account
   // default again. Only meaningful when an override is actually set.
   const handleInheritAccountModel = async () => {
-    if (!chatComposerWorkspaceId) return;
+    if (!modelWsId) return;
     try {
       await updateWorkspace.mutateAsync({
-        id: chatComposerWorkspaceId,
+        id: modelWsId,
         input: { defaultProvider: null, defaultModel: null },
       });
       setModelMenuOpen(false);
@@ -1238,7 +1250,7 @@ export function ChatComposer({
                   {/* Per-workspace model scope (P2): in a workspace chat the
                       picker edits THIS workspace's model, with a one-click
                       revert to the account default. */}
-                  {chatComposerWorkspaceId && (
+                  {modelWsId && (
                     <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border">
                       <span className="text-2xs text-muted-foreground">
                         {t("chat.composer.modelScopeWorkspace")}
