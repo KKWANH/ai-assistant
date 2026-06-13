@@ -124,7 +124,7 @@ const ko: Record<TranslationKey, string> = {
   "shortcuts.reset": "기본값으로",
   "settings.preferences": "환경설정",
   "settings.pref.darkMode": "다크 모드",
-  "settings.pref.advanced.desc": "워크스페이스에서 고급 탭·액션 표시",
+  "settings.pref.advanced.desc": "워크스페이스에서 고급 탭·액션 기본 표시 (워크스페이스별로 선택을 기억해요)",
   "commandMenu.untitledChat": "제목 없는 대화",
   "commandMenu.runLabel": "실행 {id}",
 

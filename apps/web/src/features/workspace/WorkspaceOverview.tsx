@@ -645,7 +645,13 @@ export function WorkspaceOverview() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useT();
-  const { setActiveRunId, workspaceAdvanced, setWorkspaceAdvanced } = useUIStore();
+  const { setActiveRunId } = useUIStore();
+  // Per-workspace "Advanced view": this workspace's saved override, falling back
+  // to the global default. Persisted, so the choice sticks per workspace.
+  const globalAdvanced = useUIStore((s) => s.workspaceAdvanced);
+  const advancedOverride = useUIStore((s) => s.workspaceAdvancedById[id ?? ""]);
+  const setWorkspaceAdvancedFor = useUIStore((s) => s.setWorkspaceAdvancedFor);
+  const workspaceAdvanced = advancedOverride ?? globalAdvanced;
   const scan = useScanWorkspace();
   const updateWorkspace = useUpdateWorkspace();
 
@@ -1127,7 +1133,7 @@ export function WorkspaceOverview() {
                 variant={workspaceAdvanced ? "secondary" : "ghost"}
                 size="sm"
                 leftIcon={<SlidersHorizontal className="h-3.5 w-3.5" />}
-                onClick={() => setWorkspaceAdvanced(!workspaceAdvanced)}
+                onClick={() => setWorkspaceAdvancedFor(id ?? "", !workspaceAdvanced)}
                 title={t("workspace.advanced.tip")}
               >
                 {t("workspace.advanced.label")}

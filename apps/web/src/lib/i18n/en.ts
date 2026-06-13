@@ -130,7 +130,7 @@ const en = {
   "shortcuts.reset": "Reset to default",
   "settings.preferences": "Preferences",
   "settings.pref.darkMode": "Dark mode",
-  "settings.pref.advanced.desc": "Show advanced tabs and actions in workspaces",
+  "settings.pref.advanced.desc": "Show advanced tabs and actions in workspaces by default (each workspace remembers its own choice)",
   "commandMenu.sectionChats": "Chats",
   "commandMenu.untitledChat": "Untitled chat",
   "commandMenu.runLabel": "Run {id}",

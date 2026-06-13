@@ -5,6 +5,27 @@
 import { create } from "zustand";
 import { applyTheme } from "./theme";
 
+// Per-workspace "Advanced view" memory — persisted to localStorage so a
+// workspace reopens in the view you left it in (a coding workspace stays
+// IDE-dense, a notes workspace stays clean), independent of the session.
+const WS_ADVANCED_KEY = "ariadne.workspaceAdvanced.v1";
+function loadWorkspaceAdvanced(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(WS_ADVANCED_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+function saveWorkspaceAdvanced(map: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(WS_ADVANCED_KEY, JSON.stringify(map));
+  } catch {
+    /* localStorage unavailable / over quota — fall back to in-memory only */
+  }
+}
+
 export type SidebarSection =
   | "chat"
   | "workspaces"
@@ -32,10 +53,14 @@ export interface UIStore {
   setInspectorOpen: (open: boolean) => void;
   toggleInspector: () => void;
 
-  // Workspace overview: show power tabs/actions. Off by default (clean),
-  // persists while navigating between workspaces in a session.
+  // Workspace overview: show power tabs/actions. `workspaceAdvanced` is the
+  // global default (toggled in Settings); `workspaceAdvancedById` holds
+  // per-workspace overrides, persisted so a workspace stays in the view you
+  // left it in — the "Standard = IDE / Simple = clean, per workspace" lever.
   workspaceAdvanced: boolean;
   setWorkspaceAdvanced: (on: boolean) => void;
+  workspaceAdvancedById: Record<string, boolean>;
+  setWorkspaceAdvancedFor: (id: string, on: boolean) => void;
 
   // Command menu
   commandMenuOpen: boolean;
@@ -100,6 +125,13 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   workspaceAdvanced: false,
   setWorkspaceAdvanced: (on) => set({ workspaceAdvanced: on }),
+  workspaceAdvancedById: loadWorkspaceAdvanced(),
+  setWorkspaceAdvancedFor: (id, on) =>
+    set((s) => {
+      const next = { ...s.workspaceAdvancedById, [id]: on };
+      saveWorkspaceAdvanced(next);
+      return { workspaceAdvancedById: next };
+    }),
 
   inspectorOpen: true,
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
