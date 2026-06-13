@@ -46,6 +46,7 @@ import {
   BrainCircuit,
   Workflow,
   GitBranch,
+  SquareTerminal,
   Webhook,
   Copy,
 } from "lucide-react";
@@ -101,6 +102,9 @@ const SurfaceEditor = lazy(() =>
 );
 const ActionsEditor = lazy(() =>
   import("./ActionsEditor").then((m) => ({ default: m.ActionsEditor }))
+);
+const TerminalPanel = lazy(() =>
+  import("./TerminalPanel").then((m) => ({ default: m.TerminalPanel }))
 );
 
 /** Centered spinner shown while an editor chunk loads. */
@@ -663,6 +667,9 @@ export function WorkspaceOverview() {
   // arbitrary shell, memory is fine to keep). Memory stays visible
   // because non-developers benefit from it too.
   const isSimple = me?.account.mode === "simple";
+  // The terminal is a LOCAL-only capability (the server refuses it over remote
+  // access), so its tab is hidden for remote sessions.
+  const isRemote = me?.accessContext === "remote";
   const { data: snapshot } = useSnapshot(id ?? "");
   const { data: runs } = useRuns(id ?? undefined);
   const { data: actionDefs } = useActionDefs(id ?? "");
@@ -687,7 +694,7 @@ export function WorkspaceOverview() {
   // Turning Advanced off while on a power tab → fall back to chats so the
   // user isn't stranded on a now-hidden tab.
   useEffect(() => {
-    if (!workspaceAdvanced && ["standard", "edit", "actions", "schedules", "memory", "hooks", "git"].includes(activeTab)) {
+    if (!workspaceAdvanced && ["standard", "edit", "actions", "schedules", "memory", "hooks", "git", "terminal"].includes(activeTab)) {
       setActiveTab("chats");
     }
   }, [workspaceAdvanced, activeTab]);
@@ -1296,6 +1303,14 @@ export function WorkspaceOverview() {
                     </span>
                   </TabsTrigger>
                 )}
+                {!isSimple && !isRemote && (
+                  <TabsTrigger value="terminal">
+                    <span className="flex items-center gap-1.5">
+                      <SquareTerminal className="h-3.5 w-3.5" />
+                      {t("terminal.tab")}
+                    </span>
+                  </TabsTrigger>
+                )}
               </>
             )}
           </TabsList>
@@ -1486,6 +1501,17 @@ export function WorkspaceOverview() {
             <WorkspacePanel>
               <GitPanel workspaceId={ws.id} />
             </WorkspacePanel>
+          </TabsContent>
+        )}
+        {/* Terminal — a real shell in the workspace root. Local-only (the server
+            refuses it remotely) + power-user, so gated on !isSimple && !isRemote.
+            xterm is heavy, hence lazy-loaded. Fills the tab (no WorkspacePanel
+            padding — the terminal manages its own chrome). */}
+        {!isSimple && !isRemote && (
+          <TabsContent value="terminal" className="flex-1 min-h-0">
+            <Suspense fallback={<EditorFallback />}>
+              <TerminalPanel workspaceId={ws.id} />
+            </Suspense>
           </TabsContent>
         )}
       </Tabs>

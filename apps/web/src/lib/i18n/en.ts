@@ -1184,6 +1184,8 @@ const en = {
   "git.commit": "Commit",
   "git.committed": "Committed {sha}",
   "git.commitFailed": "Commit failed",
+  "terminal.tab": "Terminal",
+  "terminal.disconnected": "Terminal disconnected — switch tabs to reconnect.",
   "hooks.panel.title": "Workspace hooks",
   "hooks.panel.subtitle": "Commands that fire on key events — apply a staged edit, finish a scan, add a memory. Editing happens locally; remote sessions can view but not change.",
   "hooks.panel.empty": "No hooks yet. Add YAML below — see the comment header for the supported events.",

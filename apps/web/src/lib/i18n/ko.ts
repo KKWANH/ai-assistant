@@ -1184,6 +1184,8 @@ const ko: Record<TranslationKey, string> = {
   "git.commit": "커밋",
   "git.committed": "커밋됨 {sha}",
   "git.commitFailed": "커밋 실패",
+  "terminal.tab": "터미널",
+  "terminal.disconnected": "터미널 연결이 끊겼어요 — 탭을 전환하면 다시 연결됩니다.",
   "hooks.panel.title": "워크스페이스 훅",
   "hooks.panel.subtitle": "주요 이벤트 발생 시 실행되는 명령어 — staged edit 적용, 스캔 완료, 메모리 추가 등. 편집은 로컬에서만 가능하며 원격 세션은 보기만 됩니다.",
   "hooks.panel.empty": "아직 훅이 없습니다. 아래 YAML을 편집해 추가하세요 — 지원 이벤트는 상단 주석을 참고.",
