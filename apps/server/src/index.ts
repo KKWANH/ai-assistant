@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyCookie from "@fastify/cookie";
+import fastifyWebsocket from "@fastify/websocket";
 import type { Account, AccessContext } from "@ariadne/shared";
 import { PORTS } from "@ariadne/shared";
 import logger from "./logger.js";
@@ -27,6 +28,7 @@ import { providerRoutes } from "./routes/providers.js";
 import { accountRoutes } from "./routes/account.js";
 import { surfaceRoutes } from "./routes/surface.js";
 import { gitRoutes } from "./routes/git.js";
+import { terminalRoutes } from "./routes/terminal.js";
 import { surfaceHostRoutes } from "./routes/surfaceHost.js";
 import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
@@ -121,6 +123,10 @@ async function bootstrap(): Promise<void> {
     parseOptions: {},
   });
 
+  // WebSocket support (the workspace terminal). Registered on the root app so
+  // the /api child scope inherits it; the terminal route itself is local-only.
+  await app.register(fastifyWebsocket);
+
   // --- Health (outside /api prefix) ---
   await app.register(healthRoutes);
 
@@ -203,6 +209,7 @@ async function bootstrap(): Promise<void> {
       await api.register(accountRoutes);
       await api.register(surfaceRoutes);
       await api.register(gitRoutes);
+      await api.register(terminalRoutes);
       await api.register(actionRoutes);
       await api.register(triggerRoutes);
       await api.register(alertRoutes);
