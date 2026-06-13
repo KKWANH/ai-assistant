@@ -231,6 +231,43 @@ export const saveWorkspaceFile = (workspaceId: string, path: string, content: st
 export const createWorkspaceFile = (workspaceId: string, path: string, content: string) =>
   request<{ ok: boolean }>("POST", `/workspaces/${workspaceId}/file/create`, { path, content });
 
+// ── Git (P3 IDE) — the workspace's own repo ──────────────────────────────────
+export type GitFileKind =
+  | "modified"
+  | "added"
+  | "deleted"
+  | "untracked"
+  | "renamed"
+  | "conflicted";
+export interface GitFileStatus {
+  path: string;
+  kind: GitFileKind;
+  staged: boolean;
+  unstaged: boolean;
+}
+export interface GitStatusResponse {
+  isRepo: boolean;
+  branch: string | null;
+  ahead: number;
+  behind: number;
+  files: GitFileStatus[];
+}
+
+export const getGitStatus = (workspaceId: string) =>
+  request<GitStatusResponse>("GET", `/workspaces/${workspaceId}/git/status`);
+
+export const getGitDiff = (workspaceId: string, path: string, staged = false) =>
+  request<{ diff: string }>(
+    "GET",
+    `/workspaces/${workspaceId}/git/diff?path=${encodeURIComponent(path)}&staged=${staged ? "1" : "0"}`,
+  );
+
+export const gitCommit = (workspaceId: string, message: string, paths: string[]) =>
+  request<{ ok: boolean; sha?: string }>("POST", `/workspaces/${workspaceId}/git/commit`, {
+    message,
+    paths,
+  });
+
 /** One-shot AI completion for a surface's useAriadne().ask(prompt). */
 export const surfaceAsk = (workspaceId: string, prompt: string) =>
   request<{ text: string }>("POST", `/workspaces/${workspaceId}/surface/ask`, { prompt });

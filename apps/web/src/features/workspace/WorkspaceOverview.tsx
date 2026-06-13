@@ -45,6 +45,7 @@ import {
   Undo2,
   BrainCircuit,
   Workflow,
+  GitBranch,
   Webhook,
   Copy,
 } from "lucide-react";
@@ -86,6 +87,7 @@ import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
+import { GitPanel } from "./GitPanel";
 import { ContextEditor } from "./ContextEditor";
 import { resolveProjectHome } from "../../projects";
 import { MemoryPanel } from "../memory/MemoryPanel";
@@ -685,7 +687,7 @@ export function WorkspaceOverview() {
   // Turning Advanced off while on a power tab → fall back to chats so the
   // user isn't stranded on a now-hidden tab.
   useEffect(() => {
-    if (!workspaceAdvanced && ["standard", "edit", "actions", "schedules", "memory", "hooks"].includes(activeTab)) {
+    if (!workspaceAdvanced && ["standard", "edit", "actions", "schedules", "memory", "hooks", "git"].includes(activeTab)) {
       setActiveTab("chats");
     }
   }, [workspaceAdvanced, activeTab]);
@@ -1286,6 +1288,14 @@ export function WorkspaceOverview() {
                     </span>
                   </TabsTrigger>
                 )}
+                {!isSimple && (
+                  <TabsTrigger value="git">
+                    <span className="flex items-center gap-1.5">
+                      <GitBranch className="h-3.5 w-3.5" />
+                      {t("git.tab")}
+                    </span>
+                  </TabsTrigger>
+                )}
               </>
             )}
           </TabsList>
@@ -1466,6 +1476,15 @@ export function WorkspaceOverview() {
           <TabsContent value="hooks" className="flex-1 overflow-y-auto min-h-0">
             <WorkspacePanel>
               <HooksPanel workspaceId={ws.id} />
+            </WorkspacePanel>
+          </TabsContent>
+        )}
+        {/* Git — the workspace's own repo: status, per-file diff, commit.
+            Power-user surface, hidden in Simple mode like Hooks. */}
+        {!isSimple && (
+          <TabsContent value="git" className="flex-1 overflow-y-auto min-h-0">
+            <WorkspacePanel>
+              <GitPanel workspaceId={ws.id} />
             </WorkspacePanel>
           </TabsContent>
         )}

@@ -1173,6 +1173,17 @@ const ko: Record<TranslationKey, string> = {
 
   // ── 훅 (.ariadne/hooks.yaml) ─────────────────────────────────────────────
   "hooks.tab": "훅",
+  "git.tab": "Git",
+  "git.notRepo": "이 워크스페이스는 git 저장소가 아니에요.",
+  "git.detached": "분리된 HEAD",
+  "git.refresh": "새로고침",
+  "git.clean": "변경 사항이 없어요 — 커밋할 게 없습니다.",
+  "git.noDiff": "표시할 변경 내용이 없어요.",
+  "git.messagePlaceholder": "커밋 메시지…",
+  "git.selectedN": "{n}개 선택됨",
+  "git.commit": "커밋",
+  "git.committed": "커밋됨 {sha}",
+  "git.commitFailed": "커밋 실패",
   "hooks.panel.title": "워크스페이스 훅",
   "hooks.panel.subtitle": "주요 이벤트 발생 시 실행되는 명령어 — staged edit 적용, 스캔 완료, 메모리 추가 등. 편집은 로컬에서만 가능하며 원격 세션은 보기만 됩니다.",
   "hooks.panel.empty": "아직 훅이 없습니다. 아래 YAML을 편집해 추가하세요 — 지원 이벤트는 상단 주석을 참고.",

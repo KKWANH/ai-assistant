@@ -458,6 +458,25 @@ export function useCreateWorkspaceFile(workspaceId: string) {
   });
 }
 
+export function useGitStatus(workspaceId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["git-status", workspaceId] as const,
+    queryFn: () => api.getGitStatus(workspaceId),
+    enabled: !!workspaceId && enabled,
+  });
+}
+
+export function useGitCommit(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ message, paths }: { message: string; paths: string[] }) =>
+      api.gitCommit(workspaceId, message, paths),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["git-status", workspaceId] });
+    },
+  });
+}
+
 export function useRunScript(workspaceId: string) {
   return useMutation({
     mutationFn: (name: string) => api.runScript(workspaceId, name),
