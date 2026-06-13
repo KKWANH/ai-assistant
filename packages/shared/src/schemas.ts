@@ -34,6 +34,9 @@ export const UpdateWorkspaceSchema = z.object({
   exclude: z.array(z.string()).optional(),
   visibility: z.enum(["private", "public"]).optional(),
   homeView: z.enum(["overview", "surface"]).nullable().optional(),
+  // Per-workspace model override; null clears it (inherit account default).
+  defaultProvider: z.enum(PROVIDERS).nullable().optional(),
+  defaultModel: z.string().min(1).max(120).nullable().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 

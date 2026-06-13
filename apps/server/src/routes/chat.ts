@@ -173,7 +173,15 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     shouldGenerateTitle,
   } = opts;
 
-  const settings = getActiveSettings();
+  // Per-workspace model override (P2 configurability): a workspace can pin its
+  // own provider + model for its chats. Both unset → inherit the account-global
+  // default. `providers` is provider-independent, so a shallow override is safe.
+  const baseSettings = getActiveSettings();
+  const wsOverride = chat.workspaceId ? dbGetWorkspace(chat.workspaceId) : null;
+  const settings =
+    wsOverride?.defaultProvider && wsOverride.defaultModel
+      ? { ...baseSettings, provider: wsOverride.defaultProvider, model: wsOverride.defaultModel }
+      : baseSettings;
   const hasContent = userContent.trim().length > 0;
 
   let assistantContent = "";

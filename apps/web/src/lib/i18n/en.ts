@@ -204,6 +204,8 @@ const en = {
   "chat.composer.noneGeneral": "None (general chat)",
   "chat.composer.provider": "Provider",
   "chat.composer.model": "Model",
+  "chat.composer.modelScopeWorkspace": "Model for this workspace",
+  "chat.composer.modelInherit": "Use account default",
   "chat.composer.ollamaNotRunning": "Ollama not running",
   "chat.composer.startOllama": "Start Ollama to see installed models",
   "chat.composer.noModels": "No models listed",

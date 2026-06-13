@@ -25,6 +25,11 @@ export interface Workspace {
    *  overview (default); "surface" = the custom screen as an immersive home
    *  (no tabs), like lecture prep. General to all workspaces. */
   homeView: WorkspaceHomeView;
+  /** Per-workspace AI model override for this workspace's chats. Both null =
+   *  inherit the account-global default; set together (a model implies its
+   *  provider). The "per-workspace config" lever (P2). */
+  defaultProvider: ProviderId | null;
+  defaultModel: string | null;
 }
 
 export type WorkspaceHomeView = "overview" | "surface" | null;

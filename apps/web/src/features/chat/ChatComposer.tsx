@@ -34,7 +34,7 @@ import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { Select } from "../../components/ui/Select";
-import { useWorkspaces, useSettings, useUpdateSettings, useProviderStatus, useMe, useSkills } from "../../lib/queries";
+import { useWorkspaces, useSettings, useUpdateSettings, useUpdateWorkspace, useProviderStatus, useMe, useSkills } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
 import { modelInfo, modelPrice } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
@@ -409,6 +409,7 @@ export function ChatComposer({
   const { data: settings } = useSettings();
   const { data: providerStatus } = useProviderStatus();
   const updateSettings = useUpdateSettings();
+  const updateWorkspace = useUpdateWorkspace();
   const { data: me } = useMe();
   // Easy mode shows friendly model names + a one-line trait instead of raw ids.
   const isSimple = me?.account.mode === "simple";
@@ -427,8 +428,15 @@ export function ChatComposer({
 
   const selectedWs = workspaces?.find((w) => w.id === chatComposerWorkspaceId);
 
-  const currentProvider = (settings?.provider ?? "mock") as ProviderId;
-  const currentModel = settings?.model ?? "mock";
+  // Per-workspace model override (P2): when sending to a workspace that pins its
+  // own provider+model, the picker reflects + edits THAT; otherwise the picker
+  // is the account-global default. The two fields are set/cleared together.
+  const wsModelOverride =
+    selectedWs?.defaultProvider && selectedWs?.defaultModel
+      ? { provider: selectedWs.defaultProvider as ProviderId, model: selectedWs.defaultModel }
+      : null;
+  const currentProvider = (wsModelOverride?.provider ?? settings?.provider ?? "mock") as ProviderId;
+  const currentModel = wsModelOverride?.model ?? settings?.model ?? "mock";
 
   // For ollama: use installed models if reachable, otherwise fall back to defaults
   const ollamaStatus = providerStatus?.find((p) => p.id === "ollama");
@@ -446,7 +454,16 @@ export function ChatComposer({
     const model = models[0] ?? DEFAULT_MODELS[provider] ?? provider;
     const configured = providerStatus?.find((s) => s.id === provider)?.configured ?? false;
     try {
-      await updateSettings.mutateAsync({ provider, model });
+      // Workspace-scoped → set this workspace's model override; otherwise the
+      // account-global default. (See wsModelOverride above.)
+      if (chatComposerWorkspaceId) {
+        await updateWorkspace.mutateAsync({
+          id: chatComposerWorkspaceId,
+          input: { defaultProvider: provider, defaultModel: model },
+        });
+      } else {
+        await updateSettings.mutateAsync({ provider, model });
+      }
       if (!configured) {
         toast({ title: t("chat.composer.providerNoKey"), variant: "warning" });
       }
@@ -457,7 +474,29 @@ export function ChatComposer({
 
   const handleModelChange = async (model: string) => {
     try {
-      await updateSettings.mutateAsync({ provider: currentProvider, model });
+      if (chatComposerWorkspaceId) {
+        await updateWorkspace.mutateAsync({
+          id: chatComposerWorkspaceId,
+          input: { defaultProvider: currentProvider, defaultModel: model },
+        });
+      } else {
+        await updateSettings.mutateAsync({ provider: currentProvider, model });
+      }
+      setModelMenuOpen(false);
+    } catch {
+      toast({ title: t("chat.composer.failedModel"), variant: "error" });
+    }
+  };
+
+  // Clear a workspace's model override so its chats fall back to the account
+  // default again. Only meaningful when an override is actually set.
+  const handleInheritAccountModel = async () => {
+    if (!chatComposerWorkspaceId) return;
+    try {
+      await updateWorkspace.mutateAsync({
+        id: chatComposerWorkspaceId,
+        input: { defaultProvider: null, defaultModel: null },
+      });
       setModelMenuOpen(false);
     } catch {
       toast({ title: t("chat.composer.failedModel"), variant: "error" });
@@ -1196,6 +1235,26 @@ export function ChatComposer({
                   onClick={() => setModelMenuOpen(false)}
                 />
                 <div className="absolute bottom-full left-0 mb-1 z-20 w-64 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                  {/* Per-workspace model scope (P2): in a workspace chat the
+                      picker edits THIS workspace's model, with a one-click
+                      revert to the account default. */}
+                  {chatComposerWorkspaceId && (
+                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border">
+                      <span className="text-2xs text-muted-foreground">
+                        {t("chat.composer.modelScopeWorkspace")}
+                      </span>
+                      {wsModelOverride && (
+                        <button
+                          type="button"
+                          className="shrink-0 text-2xs text-accent hover:underline"
+                          onClick={() => void handleInheritAccountModel()}
+                        >
+                          {t("chat.composer.modelInherit")}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Ollama reachability notice */}
                   {currentProvider === "ollama" && !ollamaReachable && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 text-warning border-b border-border">

@@ -108,6 +108,8 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       visibility: visibility ?? "private",
       category,
       homeView: null,
+      defaultProvider: null,
+      defaultModel: null,
     };
 
     dbInsertWorkspace(workspace);

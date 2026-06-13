@@ -136,6 +136,8 @@ export async function ensureDemoWorkspace(): Promise<void> {
         visibility: "public",
         category: "finance",
         homeView: null,
+        defaultProvider: null,
+        defaultModel: null,
       };
       dbInsertWorkspace(workspace);
       logger.info({ rootPath }, "Seeded the built-in Portfolio workspace");

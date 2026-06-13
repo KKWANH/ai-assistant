@@ -367,6 +367,9 @@ function runMigrations(db: DatabaseSync): void {
   workspaces("category", "TEXT");
   // home_view (NULL → tabbed overview; "surface" → immersive custom screen)
   workspaces("home_view", "TEXT");
+  // Per-workspace model override (NULL → inherit the account-global default)
+  workspaces("default_provider", "TEXT");
+  workspaces("default_model", "TEXT");
 
   const runs = addColumnIfMissing(db, "runs");
   runs("created_by", "TEXT");

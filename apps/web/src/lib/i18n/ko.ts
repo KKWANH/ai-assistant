@@ -197,6 +197,8 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.noneGeneral": "없음 (일반 대화)",
   "chat.composer.provider": "AI 공급자",
   "chat.composer.model": "모델",
+  "chat.composer.modelScopeWorkspace": "이 워크스페이스 전용 모델",
+  "chat.composer.modelInherit": "계정 기본값 따르기",
   "chat.composer.ollamaNotRunning": "Ollama가 실행되지 않음",
   "chat.composer.startOllama": "Ollama를 실행하면 설치된 모델이 표시됩니다",
   "chat.composer.noModels": "모델 목록 없음",
