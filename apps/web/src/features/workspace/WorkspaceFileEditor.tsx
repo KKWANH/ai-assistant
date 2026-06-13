@@ -26,6 +26,7 @@ import {
 import { HighlightStyle, syntaxHighlighting, bracketMatching, indentOnInput, foldGutter, foldKeymap } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { cpp } from "@codemirror/lang-cpp";
@@ -71,6 +72,31 @@ const editorTheme = EditorView.theme({
   ".cm-activeLineGutter": { backgroundColor: "rgb(var(--surface-3))" },
   ".cm-matchingBracket": { backgroundColor: "rgb(var(--accent) / 0.25)", outline: "1px solid rgb(var(--accent))" },
   ".cm-foldPlaceholder": { backgroundColor: "rgb(var(--surface-3))", color: "rgb(var(--muted-foreground))", border: "none", padding: "0 4px" },
+  // Find/replace panel — themed to Ariadne tokens so it isn't a light-mode
+  // island in the dark editor.
+  ".cm-panels": { backgroundColor: "rgb(var(--surface-2))", color: "rgb(var(--foreground))" },
+  ".cm-panels.cm-panels-top": { borderBottom: "1px solid rgb(var(--border))" },
+  ".cm-panel.cm-search": { padding: "6px 8px", fontFamily: "ui-sans-serif, system-ui, sans-serif" },
+  ".cm-panel.cm-search label": { fontSize: "11px", color: "rgb(var(--muted-foreground))" },
+  ".cm-panel.cm-search input[type=text]": {
+    backgroundColor: "rgb(var(--background))",
+    color: "rgb(var(--foreground))",
+    border: "1px solid rgb(var(--border))",
+    borderRadius: "4px",
+    padding: "2px 6px",
+    fontSize: "12px",
+  },
+  ".cm-panel.cm-search button": {
+    backgroundColor: "rgb(var(--surface-3))",
+    color: "rgb(var(--foreground))",
+    border: "1px solid rgb(var(--border))",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+  },
+  ".cm-panel.cm-search button:hover": { backgroundColor: "rgb(var(--surface-2))" },
+  ".cm-searchMatch": { backgroundColor: "rgb(var(--warning) / 0.3)" },
+  ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgb(var(--accent) / 0.45)" },
 });
 
 /**
@@ -170,7 +196,11 @@ export function WorkspaceFileEditor() {
       bracketMatching(),
       indentOnInput(),
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
+      // Find/replace (P3): ⌘F opens the search panel at the top; matches are
+      // highlighted, ⌘⌥F / the panel's Replace handle replace.
+      search({ top: true }),
+      highlightSelectionMatches(),
+      keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
       EditorView.lineWrapping,
       EditorView.updateListener.of((u) => {
         if (u.docChanged) {
