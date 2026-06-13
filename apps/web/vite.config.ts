@@ -84,6 +84,8 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:4319",
         changeOrigin: true,
+        // Forward WebSocket upgrades too (the workspace terminal speaks WS).
+        ws: true,
       },
       "/healthz": {
         target: "http://localhost:4319",
