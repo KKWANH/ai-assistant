@@ -882,10 +882,18 @@ function withMemory(system: string, memoryBlock: string | null): string {
  *  through parsePlan's catch block as `{steps:[]}` → agentic mode
  *  silently disables. With it, the model literally cannot emit
  *  invalid JSON in the first place. */
+/** The built-in agent tools — the single source. Both the planner JSON-schema
+ *  enum and parsePlan's validation set derive from this, so a new tool can't be
+ *  added to one and forgotten in the other (the model would emit a step that
+ *  parsePlan then silently drops). */
+const BUILTIN_AGENT_TOOLS = [
+  "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
+  "edit_file", "run_tests", "calculate", "mcp_call",
+] as const;
+
 function buildPlannerSchema(customActions: WorkspaceAction[] = []) {
   const toolEnum = [
-    "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
-    "edit_file", "run_tests", "calculate", "mcp_call",
+    ...BUILTIN_AGENT_TOOLS,
     ...customActions.map((a) => a.id),
   ];
   return {
@@ -1193,8 +1201,7 @@ function parsePlan(raw: string, customActions: WorkspaceAction[] = []): ParsedPl
     const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
     if (!Array.isArray(parsed.steps)) return { steps: [], summary };
     const validTools = new Set<string>([
-      "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
-      "edit_file", "run_tests", "calculate", "mcp_call",
+      ...BUILTIN_AGENT_TOOLS,
       ...customActions.map((a) => a.id),
     ]);
     const steps = parsed.steps

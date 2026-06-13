@@ -175,6 +175,43 @@ export function evictProviderCache(providerId?: ProviderId): void {
   }
 }
 
+/** Provider construction registry — "register, don't hardcode", for providers.
+ *  Adding a built-in OR bespoke provider is one entry here (plus its descriptor
+ *  in PROVIDER_REGISTRY). OpenAI-compatible vendors need NO entry at all: the
+ *  fallback below builds them from the descriptor's { baseURL, envKey } alone. */
+type ProviderFactory = (model: string, key: string | undefined) => Promise<AiProvider>;
+
+const PROVIDER_FACTORIES: Partial<Record<ProviderId, ProviderFactory>> = {
+  anthropic: async (model, key) => {
+    const { AnthropicProvider } = await import("./anthropic.js");
+    return new AnthropicProvider(model, key);
+  },
+  openai: async (model, key) => {
+    const { OpenAIProvider } = await import("./openai.js");
+    return new OpenAIProvider(model, { apiKey: key });
+  },
+  moonshot: async (model, key) => {
+    const { MoonshotProvider } = await import("./openai.js");
+    return new MoonshotProvider(model, key);
+  },
+  ollama: async (model) => {
+    const { OllamaProvider } = await import("./openai.js");
+    return new OllamaProvider(model);
+  },
+  vllm: async (model) => {
+    const { VllmProvider } = await import("./openai.js");
+    return new VllmProvider(model);
+  },
+  gemini: async (model, key) => {
+    const { GeminiProvider } = await import("./gemini.js");
+    return new GeminiProvider(model, key);
+  },
+  mock: async () => {
+    const { MockProvider } = await import("./mock.js");
+    return new MockProvider();
+  },
+};
+
 export async function getProvider(settings: Pick<Settings, "provider" | "model">): Promise<AiProvider> {
   const { provider, model } = settings;
   const key = `${provider}|${model}`;
@@ -182,55 +219,19 @@ export async function getProvider(settings: Pick<Settings, "provider" | "model">
   if (cached) return cached;
 
   let instance: AiProvider;
-  switch (provider) {
-    case "anthropic": {
-      const { AnthropicProvider } = await import("./anthropic.js");
-      instance = new AnthropicProvider(model, resolveProviderKey("anthropic"));
-      break;
-    }
-    case "openai": {
-      const { OpenAIProvider } = await import("./openai.js");
-      instance = new OpenAIProvider(model, { apiKey: resolveProviderKey("openai") });
-      break;
-    }
-    case "moonshot": {
-      const { MoonshotProvider } = await import("./openai.js");
-      instance = new MoonshotProvider(model, resolveProviderKey("moonshot"));
-      break;
-    }
-    case "ollama": {
-      const { OllamaProvider } = await import("./openai.js");
-      instance = new OllamaProvider(model);
-      break;
-    }
-    case "vllm": {
-      const { VllmProvider } = await import("./openai.js");
-      instance = new VllmProvider(model);
-      break;
-    }
-    case "gemini": {
-      const { GeminiProvider } = await import("./gemini.js");
-      instance = new GeminiProvider(model, resolveProviderKey("gemini"));
-      break;
-    }
-    case "mock": {
+  const factory = PROVIDER_FACTORIES[provider];
+  if (factory) {
+    instance = await factory(model, resolveProviderKey(provider));
+  } else {
+    // No factory → an openai-compatible vendor driven entirely by its
+    // descriptor (e.g. minimax). Falls back to mock for anything unrecognised.
+    const desc = PROVIDER_REGISTRY[provider];
+    if (desc?.kind === "openai-compatible" && desc.baseURL) {
+      const { OpenAICompatibleProvider } = await import("./openai.js");
+      instance = new OpenAICompatibleProvider(provider, model, desc.baseURL, resolveProviderKey(provider));
+    } else {
       const { MockProvider } = await import("./mock.js");
       instance = new MockProvider();
-      break;
-    }
-    default: {
-      // Registry-driven: any openai-compatible provider (e.g. minimax) needs
-      // no bespoke case — the generic client is driven by its descriptor's
-      // { baseURL, envKey }. Falls back to mock for anything unrecognised.
-      const desc = PROVIDER_REGISTRY[provider];
-      if (desc?.kind === "openai-compatible" && desc.baseURL) {
-        const { OpenAICompatibleProvider } = await import("./openai.js");
-        instance = new OpenAICompatibleProvider(provider, model, desc.baseURL, resolveProviderKey(provider));
-      } else {
-        const { MockProvider } = await import("./mock.js");
-        instance = new MockProvider();
-      }
-      break;
     }
   }
   providerCache.set(key, instance);
