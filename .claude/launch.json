@@ -6,6 +6,13 @@
       "runtimeExecutable": "tail",
       "runtimeArgs": ["-F", "/dev/null"],
       "port": 4319
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/web", "--", "--port", "5174", "--strictPort"],
+      "port": 5174,
+      "autoPort": false
     }
   ]
 }
