@@ -4,7 +4,7 @@
  * tree, remembers expanded dirs (and auto-expands the path to the active file),
  * highlights the active file, and calls onSelect(path) on a file click.
  */
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ChevronRight, ChevronDown, Folder } from "lucide-react";
 import { buildTree, countFiles, iconFor, type TreeNode } from "../../lib/fileTree";
 
@@ -19,14 +19,19 @@ export function FileTree({
 }) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set([""]));
+  const didInitTopLevel = useRef(false);
 
-  // Keep top-level dirs open, and expand every ancestor of the active file so
-  // the current file is always visible after navigation.
+  // Open top-level dirs ONCE on first load (the tree identity changes on every
+  // snapshot refetch, so re-running this would re-open dirs the user collapsed),
+  // and always expand the active file's ancestors so it stays visible.
   useEffect(() => {
     if (!tree.children) return;
     setOpenDirs((prev) => {
       const next = new Set(prev);
-      for (const c of tree.children!) if (c.kind === "dir") next.add(c.path);
+      if (!didInitTopLevel.current) {
+        for (const c of tree.children!) if (c.kind === "dir") next.add(c.path);
+        didInitTopLevel.current = true;
+      }
       if (activePath) {
         const parts = activePath.split("/").filter(Boolean);
         for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join("/"));

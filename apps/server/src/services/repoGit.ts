@@ -43,9 +43,25 @@ function isRepo(rootPath: string): boolean {
   return fs.existsSync(path.join(rootPath, ".git"));
 }
 
-/** A relative path that stays inside the repo — no absolute, no `..` escape. */
+/** Resolve a repo-relative path through symlinks and confirm it still lands
+ *  inside the repo root. Guards `git diff --no-index`, which (unlike git's
+ *  tracked-diff paths) will happily follow a symlinked subdir out of the repo. */
+function resolvesInsideRepo(rootPath: string, relPath: string): boolean {
+  try {
+    const real = fs.realpathSync(path.join(rootPath, relPath));
+    const realRoot = fs.realpathSync(rootPath);
+    return real === realRoot || real.startsWith(realRoot + path.sep);
+  } catch {
+    return false; // missing / unresolvable → don't read it
+  }
+}
+
+/** A relative path that stays inside the repo — no absolute, no `..` escape,
+ *  never flag-shaped (the `--` separators already neutralize flags; this is
+ *  defence in depth). */
 function isSafeRelPath(p: string): boolean {
   if (!p || path.isAbsolute(p)) return false;
+  if (p.trimStart().startsWith("-")) return false;
   return !p.split(/[\\/]/).includes("..");
 }
 
@@ -62,7 +78,9 @@ export async function gitStatus(rootPath: string): Promise<GitStatus> {
   const empty: GitStatus = { isRepo: false, branch: null, ahead: 0, behind: 0, files: [] };
   if (!(await isGitAvailable()) || !isRepo(rootPath)) return empty;
 
-  const res = await runGit(rootPath, ["status", "--porcelain", "--branch"], { ignoreFailure: true });
+  // `-z` → NUL-separated records with UNquoted paths (the default --porcelain
+  // C-quotes paths with spaces/unicode, which then don't round-trip to git/diff).
+  const res = await runGit(rootPath, ["status", "--porcelain", "-z", "--branch"], { ignoreFailure: true });
   if (!res.ok) return { ...empty, isRepo: true };
 
   let branch: string | null = null;
@@ -70,11 +88,13 @@ export async function gitStatus(rootPath: string): Promise<GitStatus> {
   let behind = 0;
   const files: GitFileStatus[] = [];
 
-  for (const line of res.stdout.split("\n")) {
-    if (!line) continue;
-    if (line.startsWith("## ")) {
+  const parts = res.stdout.split("\0");
+  for (let i = 0; i < parts.length; i++) {
+    const rec = parts[i];
+    if (!rec) continue;
+    if (rec.startsWith("## ")) {
       // "## main...origin/main [ahead 1, behind 2]" | "## main" | "## HEAD (no branch)"
-      const info = line.slice(3);
+      const info = rec.slice(3);
       const head = info.split("...")[0]?.split(" ")[0] ?? null;
       branch = head && head !== "HEAD" ? head : null;
       const am = info.match(/ahead (\d+)/);
@@ -83,11 +103,12 @@ export async function gitStatus(rootPath: string): Promise<GitStatus> {
       if (bm?.[1]) behind = parseInt(bm[1], 10);
       continue;
     }
-    // "XY <path>" (rename: "XY <old> -> <new>")
-    const x = line[0] ?? " ";
-    const y = line[1] ?? " ";
-    let p = line.slice(3);
-    if (p.includes(" -> ")) p = p.split(" -> ")[1] ?? p;
+    // "XY <path>"; a rename/copy record is followed by a separate NUL field
+    // holding the OLD path — consume it, we report the new path in the record.
+    const x = rec[0] ?? " ";
+    const y = rec[1] ?? " ";
+    const p = rec.slice(3);
+    if (x === "R" || x === "C" || y === "R" || y === "C") i++;
     files.push({
       path: p,
       kind: classify(x, y),
@@ -115,7 +136,10 @@ export async function gitDiff(
   const res = await runGit(rootPath, args, { ignoreFailure: true });
   let out = res.stdout;
   // Untracked / nothing-tracked → synthesize an add-diff against /dev/null.
-  if (!out.trim()) {
+  // Only after confirming the file really sits inside the repo (see
+  // resolvesInsideRepo) — `--no-index` would otherwise follow a symlinked
+  // subdir and leak a file from outside the workspace.
+  if (!out.trim() && resolvesInsideRepo(rootPath, filePath)) {
     const ni = await runGit(rootPath, ["diff", "--no-index", "--", "/dev/null", filePath], {
       ignoreFailure: true,
     });
@@ -148,7 +172,9 @@ export async function gitCommit(
   const add = await runGit(rootPath, ["add", "-A", "--", ...safe], { ignoreFailure: true });
   if (!add.ok) return { ok: false, error: add.stderr.trim() || "git add failed" };
 
-  const commit = await runGit(rootPath, ["commit", "-m", message], { ignoreFailure: true });
+  // Scope the commit to exactly the selected paths (a pathspec commit), so a
+  // file someone staged outside the panel isn't swept into this commit.
+  const commit = await runGit(rootPath, ["commit", "-m", message, "--", ...safe], { ignoreFailure: true });
   if (!commit.ok) {
     const err = (commit.stderr || commit.stdout).trim();
     return { ok: false, error: err || "git commit failed" };
