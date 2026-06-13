@@ -13,8 +13,7 @@ import { ensureDirs, PATHS, getActiveSettings } from "./config.js";
 import { openDb, getDb } from "./db/index.js";
 import { dbGetSetting, dbSetSetting } from "./db/repo.js";
 import { healthRoutes } from "./routes/health.js";
-import { surfaceHostRoutes } from "./routes/surfaceHost.js";
-import { CORE_ROUTES } from "./routes/registry.js";
+import { CORE_ROUTES, PUBLIC_ROUTES } from "./routes/registry.js";
 import { registerProjectRoutes, projectTemplates } from "./projects/index.js";
 import { registerProjectTemplates } from "./runs/templates.js";
 import { shutdownAll as shutdownMcp } from "./services/mcpClient.js";
@@ -179,8 +178,10 @@ async function bootstrap(): Promise<void> {
     { prefix: "/api" }
   );
 
-  // Surface host routes — OUTSIDE /api (unauthenticated, sandboxed iframe shell)
-  await app.register(surfaceHostRoutes);
+  // Unauthenticated routes — OUTSIDE the /api auth scope (e.g. the sandboxed
+  // surface-host shell). Registered from the registry; add one by appending to
+  // PUBLIC_ROUTES. Must run before the SPA static fallback below.
+  for (const m of PUBLIC_ROUTES) await app.register(m.register);
 
   // --- SPA / static files ---
   if (fs.existsSync(WEB_DIST)) {

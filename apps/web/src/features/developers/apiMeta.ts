@@ -17,13 +17,11 @@ export const API_CATEGORIES: { id: string; label: string; domains: string[] }[] 
   { id: "ops", label: "Operations", domains: ["health", "reports", "alerts", "marketData", "evalCases"] },
 ];
 
-/** Descriptions for route domains that AREN'T in the core route registry —
- *  the two that register outside the /api scope. The 28 core domains' blurbs
- *  live ONCE, in routes/registry.ts, and reach the docs via the generated
- *  DOMAIN_DESCRIPTIONS (see ApiReference.domainBlurb). */
+/** Description for the one route domain not in any registry. The core +
+ *  public route domains' blurbs live ONCE in routes/registry.ts and reach the
+ *  docs via the generated DOMAIN_DESCRIPTIONS (see ApiReference.domainBlurb). */
 export const DOMAIN_BLURBS: Record<string, string> = {
   health: "Liveness probe, outside the /api auth scope.",
-  surfaceHost: "Serves the sandboxed surface host page + esbuild bundle the iframe loads.",
 };
 
 /** Per-endpoint curated detail, keyed by `"METHOD /api/path"`. Optional — the

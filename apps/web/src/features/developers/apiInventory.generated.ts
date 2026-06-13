@@ -692,13 +692,13 @@ export const API_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     "method": "GET",
-    "path": "/api/surface/:workspaceId/bundle.js",
+    "path": "/surface/:workspaceId/bundle.js",
     "domain": "surfaceHost",
     "params": "{workspaceId: string}"
   },
   {
     "method": "GET",
-    "path": "/api/surface/:workspaceId/host",
+    "path": "/surface/:workspaceId/host",
     "domain": "surfaceHost",
     "params": "{workspaceId: string}",
     "query": "{theme?: string}"
@@ -875,5 +875,6 @@ export const DOMAIN_DESCRIPTIONS: Record<string, string> = {
   "files": "Read workspace files + binary-document previews (markdown cache, PDF page images).",
   "skills": "Reusable skill definitions surfaced to the agent + the composer.",
   "schedules": "Scheduled runs (the scheduler ticks every 60s) — list, create, run-now.",
-  "attempts": "Parallel attempts of a run (fan-out) + their diffs."
+  "attempts": "Parallel attempts of a run (fan-out) + their diffs.",
+  "surfaceHost": "Serves the sandboxed surface host page + esbuild bundle the iframe loads."
 };

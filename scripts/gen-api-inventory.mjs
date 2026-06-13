@@ -72,7 +72,8 @@ function parseFile(file) {
     if (!pathMatch) continue;
     const rawPath = pathMatch[1];
     if (!rawPath.startsWith("/")) continue;
-    const fullPath = domain === "health" ? rawPath : `/api${rawPath}`;
+    // health + surfaceHost register OUTSIDE the /api scope (see PUBLIC_ROUTES).
+    const fullPath = domain === "health" || domain === "surfaceHost" ? rawPath : `/api${rawPath}`;
     out.push({
       method,
       path: fullPath,

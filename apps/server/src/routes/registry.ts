@@ -42,6 +42,7 @@ import { filesRoutes } from "./files.js";
 import { skillRoutes } from "./skills.js";
 import { scheduleRoutes } from "./schedules.js";
 import { attemptRoutes } from "./attempts.js";
+import { surfaceHostRoutes } from "./surfaceHost.js";
 
 export interface RouteModule {
   /** The route-file domain, e.g. "workspaces" — also the API Reference group. */
@@ -82,4 +83,13 @@ export const CORE_ROUTES: RouteModule[] = [
   { domain: "skills", description: "Reusable skill definitions surfaced to the agent + the composer.", register: skillRoutes },
   { domain: "schedules", description: "Scheduled runs (the scheduler ticks every 60s) — list, create, run-now.", register: scheduleRoutes },
   { domain: "attempts", description: "Parallel attempts of a run (fan-out) + their diffs.", register: attemptRoutes },
+];
+
+/** Routes registered OUTSIDE the /api auth scope — no cookie, no auth hook. Add
+ *  an unauthenticated route (a webhook receiver, OAuth callback, a `.well-known`
+ *  endpoint, an embed host) by appending here; index.ts iterates this after the
+ *  /api scope and before the SPA static fallback. (`health` stays separate — it
+ *  registers first, before /api, as an always-up liveness probe.) */
+export const PUBLIC_ROUTES: RouteModule[] = [
+  { domain: "surfaceHost", description: "Serves the sandboxed surface host page + esbuild bundle the iframe loads.", register: surfaceHostRoutes },
 ];
