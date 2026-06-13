@@ -32,7 +32,7 @@ import { python } from "@codemirror/lang-python";
 import { cpp } from "@codemirror/lang-cpp";
 import { rust } from "@codemirror/lang-rust";
 import { go } from "@codemirror/lang-go";
-import { ArrowLeft, Save, FileDiff, FileText, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, FileDiff, FileText, AlertCircle, X } from "lucide-react";
 import { useWorkspace, useSnapshot } from "../../lib/queries";
 import { getWorkspaceFile, stageWorkspaceFile } from "../../lib/api";
 import { useT } from "../../lib/i18n";
@@ -166,6 +166,19 @@ export function WorkspaceFileEditor() {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
 
+  // Open tabs (P3 multi-tab) + a per-tab buffer cache. The cache holds each
+  // open file's current buffer + a dirty flag so switching tabs restores the
+  // exact unsaved buffer instead of reloading from disk.
+  const [openPaths, setOpenPaths] = useState<string[]>(filePath ? [filePath] : []);
+  const bufferCacheRef = useRef<Map<string, { buffer: string; dirty: boolean }>>(new Map());
+
+  // Whenever a new file becomes active (via tree click or a deep link), make
+  // sure it has a tab.
+  useEffect(() => {
+    if (!filePath) return;
+    setOpenPaths((prev) => (prev.includes(filePath) ? prev : [...prev, filePath]));
+  }, [filePath]);
+
   const { data: ws, isLoading: wsLoading } = useWorkspace(id ?? "");
   const fileQuery = useQuery({
     queryKey: ["workspace-file", id, filePath],
@@ -186,6 +199,13 @@ export function WorkspaceFileEditor() {
   useEffect(() => {
     if (!editorRef.current || !fileQuery.data) return;
 
+    // Restore this tab's cached buffer (preserving unsaved edits across tab
+    // switches); fall back to on-disk content the first time a file is opened.
+    const cached = bufferCacheRef.current.get(filePath);
+    const doc = cached?.buffer ?? fileQuery.data.content;
+    const initialDirty = cached?.dirty ?? false;
+    bufferCacheRef.current.set(filePath, { buffer: doc, dirty: initialDirty });
+
     const extensions: Extension[] = [
       editorTheme,
       syntaxHighlighting(highlightStyle),
@@ -204,6 +224,7 @@ export function WorkspaceFileEditor() {
       EditorView.lineWrapping,
       EditorView.updateListener.of((u) => {
         if (u.docChanged) {
+          bufferCacheRef.current.set(filePath, { buffer: u.state.doc.toString(), dirty: true });
           setDirty(true);
           // Stale CTA — a new edit invalidates the prior staged manifest's diff.
           setStaged(null);
@@ -212,11 +233,11 @@ export function WorkspaceFileEditor() {
     ];
     if (langExt) extensions.push(langExt);
 
-    const state = EditorState.create({ doc: fileQuery.data.content, extensions });
+    const state = EditorState.create({ doc, extensions });
 
     if (viewRef.current) viewRef.current.destroy();
     viewRef.current = new EditorView({ state, parent: editorRef.current });
-    setDirty(false);
+    setDirty(initialDirty);
     setStaged(null);
     setStageError(null);
 
@@ -234,6 +255,8 @@ export function WorkspaceFileEditor() {
     try {
       const content = viewRef.current.state.doc.toString();
       const result = await stageWorkspaceFile(id, filePath, content);
+      // The staged buffer is the new clean baseline for this tab.
+      bufferCacheRef.current.set(filePath, { buffer: content, dirty: false });
       setStaged({ runId: result.runId, added: result.added, removed: result.removed });
       setDirty(false);
       toast({
@@ -253,11 +276,17 @@ export function WorkspaceFileEditor() {
     }
   }
 
-  // Open another file from the tree. Guard unsaved edits so a stray click never
-  // silently discards the current buffer.
-  async function handleOpenFile(path: string) {
+  // Open / switch to a file (from the tree or a tab). Unsaved edits live in the
+  // per-tab buffer cache, so switching never loses work — no guard needed.
+  function handleOpenFile(path: string) {
     if (!path || path === filePath) return;
-    if (dirty) {
+    navigate(`/workspaces/${id}/edit?path=${encodeURIComponent(path)}`);
+  }
+
+  // Close a tab. Confirm if it has unsaved edits (closing drops its cached
+  // buffer). When closing the active tab, fall back to an adjacent one.
+  async function handleCloseTab(path: string) {
+    if (bufferCacheRef.current.get(path)?.dirty) {
       const ok = await confirm({
         message: t("workspace.fileEditor.discardConfirm"),
         confirmLabel: t("workspace.fileEditor.discardConfirmBtn"),
@@ -265,7 +294,18 @@ export function WorkspaceFileEditor() {
       });
       if (!ok) return;
     }
-    navigate(`/workspaces/${id}/edit?path=${encodeURIComponent(path)}`);
+    bufferCacheRef.current.delete(path);
+    const idx = openPaths.indexOf(path);
+    const next = openPaths.filter((p) => p !== path);
+    setOpenPaths(next);
+    if (path === filePath) {
+      const nextActive = next[idx] ?? next[idx - 1] ?? "";
+      navigate(
+        nextActive
+          ? `/workspaces/${id}/edit?path=${encodeURIComponent(nextActive)}`
+          : `/workspaces/${id}/edit`,
+      );
+    }
   }
 
   // Cmd/Ctrl+S → stage (without leaving the editor for File→Save reflex).
@@ -349,6 +389,44 @@ export function WorkspaceFileEditor() {
         </aside>
 
         <div className="flex-1 min-h-0 flex flex-col">
+        {/* Open-file tabs (P3 multi-tab). Per-tab buffers are preserved, so
+            switching is lossless; the dot marks unsaved edits. */}
+        {openPaths.length > 0 && (
+          <div className="shrink-0 flex items-stretch overflow-x-auto border-b border-border bg-surface-2/30">
+            {openPaths.map((path) => {
+              const isActive = path === filePath;
+              const name = path.split("/").pop() ?? path;
+              const tabDirty = bufferCacheRef.current.get(path)?.dirty ?? false;
+              return (
+                <div
+                  key={path}
+                  onClick={() => handleOpenFile(path)}
+                  title={path}
+                  className={[
+                    "group flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-xs border-r border-border cursor-pointer max-w-[180px] shrink-0",
+                    isActive
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:bg-surface-3",
+                  ].join(" ")}
+                >
+                  <span className="truncate font-mono">{name}</span>
+                  {tabDirty && <span className="text-accent text-[9px] leading-none">●</span>}
+                  <button
+                    type="button"
+                    aria-label={t("common.close")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleCloseTab(path);
+                    }}
+                    className="ml-0.5 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       {!filePath && (
         <Card className="m-5 p-6">
           <p className="text-sm text-muted-foreground flex items-center gap-2">
