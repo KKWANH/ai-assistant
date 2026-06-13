@@ -481,6 +481,61 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
+  // POST /api/workspaces/:id/file/create — create a NEW data file in the
+  // workspace root by pasting its content (the "긴 글을 파일로 저장" feature).
+  // Mirrors the PUT guards above but REFUSES to clobber an existing file (409),
+  // and creates any missing parent folders so a nested "notes/draft.md" works.
+  // LOCAL access only.
+  app.post<{ Params: { id: string }; Body: { path?: string; content?: string } }>(
+    "/workspaces/:id/file/create",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Creating workspace files is not permitted from remote access. Connect locally to edit.",
+          req,
+          reply,
+        )
+      )
+        return;
+
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
+
+      const relPath = req.body?.path;
+      const content = req.body?.content ?? "";
+      if (typeof relPath !== "string" || !relPath.trim() || typeof content !== "string") {
+        return reply.status(400).send({ error: "path and content are required" });
+      }
+      if (!/\.(csv|tsv|txt|json|md|ya?ml)$/i.test(relPath)) {
+        return reply
+          .status(400)
+          .send({ error: "Only data files (csv, tsv, txt, json, md, yaml) may be created" });
+      }
+
+      const resolved = safeResolveUnderRoot(workspace.rootPath, relPath);
+      if (!resolved) {
+        return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+      const ariadneDir = path.join(path.resolve(workspace.rootPath), ".ariadne");
+      if (resolved === ariadneDir || resolved.startsWith(ariadneDir + path.sep)) {
+        return reply.status(403).send({ error: "The .ariadne folder is managed and cannot be edited here" });
+      }
+      if (fs.existsSync(resolved)) {
+        return reply.status(409).send({ error: "A file with that name already exists" });
+      }
+
+      try {
+        fs.mkdirSync(path.dirname(resolved), { recursive: true });
+        fs.writeFileSync(resolved, content, "utf-8");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.status(500).send({ error: "Failed to create file", detail: msg });
+      }
+
+      return reply.send({ ok: true });
+    }
+  );
+
   // POST /api/workspaces/:id/file/stage — stage a data-file edit for review.
   // Same shape as the direct PUT above, but routes through stagedEdits +
   // creates a new Run so the change shows up at /runs/:runId/diff. The UI's

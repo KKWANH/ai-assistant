@@ -9,8 +9,9 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Database, FileSpreadsheet, Save, FileDiff, FileText, BadgeCheck } from "lucide-react";
+import { Database, FileSpreadsheet, Save, FileDiff, FileText, BadgeCheck, FilePlus } from "lucide-react";
 import { DocumentPreview } from "./DocumentPreview";
+import { CreateFileDialog } from "./CreateFileDialog";
 import {
   useSnapshot,
   useScanWorkspace,
@@ -55,6 +56,7 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
     [snapshot],
   );
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const [selected, setSelected] = useState("");
   const activePath = dataFiles.includes(selected) ? selected : "";
@@ -123,17 +125,30 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div>
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-0.5">
-          <Database className="h-4 w-4 text-accent" />
-          {t("workspace.data.heading")}
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          {t("workspace.data.description")}
-          {isRemote && (
-            <span className="ml-1 text-warning">— {t("workspace.data.readOnly")}</span>
-          )}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-0.5">
+            <Database className="h-4 w-4 text-accent" />
+            {t("workspace.data.heading")}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {t("workspace.data.description")}
+            {isRemote && (
+              <span className="ml-1 text-warning">— {t("workspace.data.readOnly")}</span>
+            )}
+          </p>
+        </div>
+        {!isRemote && (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<FilePlus className="h-3.5 w-3.5" />}
+            onClick={() => setCreateOpen(true)}
+            className="shrink-0"
+          >
+            {t("workspace.data.newFile")}
+          </Button>
+        )}
       </div>
 
       {!snapshot ? (
@@ -306,6 +321,12 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
           )}
         </>
       )}
+
+      <CreateFileDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        workspaceId={workspaceId}
+      />
     </section>
   );
 }

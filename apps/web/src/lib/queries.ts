@@ -451,6 +451,13 @@ export function useStageWorkspaceFile(workspaceId: string) {
   });
 }
 
+export function useCreateWorkspaceFile(workspaceId: string) {
+  return useMutation({
+    mutationFn: ({ path, content }: { path: string; content: string }) =>
+      api.createWorkspaceFile(workspaceId, path, content),
+  });
+}
+
 export function useRunScript(workspaceId: string) {
   return useMutation({
     mutationFn: (name: string) => api.runScript(workspaceId, name),

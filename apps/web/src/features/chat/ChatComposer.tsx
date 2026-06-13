@@ -1,6 +1,6 @@
 /**
  * ChatComposer — textarea + attach + web-search toggle + workspace selector.
- * Enter sends, Shift+Enter inserts newline.
+ * Cmd/Ctrl+Enter sends, Enter inserts newline.
  * Files are read to base64 before sending.
  */
 import { useRef, useState, useCallback, useEffect } from "react";
@@ -642,12 +642,10 @@ export function ChatComposer({
   const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending && !visionBlocked;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Cmd/Ctrl+Enter sends; a bare Enter inserts a newline so long, multi-line
+    // messages are easy to compose. Honors the same gates the Send button does.
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      // Honor the same gates the Send button enforces. Earlier this
-      // only checked `!disabled && !pending`, so Enter could send
-      // silently when the visible button was greyed out for
-      // vision-blocked attachments — felt broken.
       if (canSend) handleSend();
     }
   };

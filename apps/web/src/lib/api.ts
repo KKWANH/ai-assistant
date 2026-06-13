@@ -226,6 +226,11 @@ export const getWorkspaceFile = (workspaceId: string, path: string) =>
 export const saveWorkspaceFile = (workspaceId: string, path: string, content: string) =>
   request<{ ok: boolean }>("PUT", `/workspaces/${workspaceId}/file`, { path, content });
 
+/** Create a NEW data file in the workspace root by pasting its content.
+ *  Fails (409) if a file with that path already exists. */
+export const createWorkspaceFile = (workspaceId: string, path: string, content: string) =>
+  request<{ ok: boolean }>("POST", `/workspaces/${workspaceId}/file/create`, { path, content });
+
 /** One-shot AI completion for a surface's useAriadne().ask(prompt). */
 export const surfaceAsk = (workspaceId: string, prompt: string) =>
   request<{ text: string }>("POST", `/workspaces/${workspaceId}/surface/ask`, { prompt });
