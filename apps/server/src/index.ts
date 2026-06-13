@@ -26,6 +26,7 @@ import { compareRoutes } from "./routes/compare.js";
 import { providerRoutes } from "./routes/providers.js";
 import { accountRoutes } from "./routes/account.js";
 import { surfaceRoutes } from "./routes/surface.js";
+import { gitRoutes } from "./routes/git.js";
 import { surfaceHostRoutes } from "./routes/surfaceHost.js";
 import { actionRoutes } from "./routes/actions.js";
 import { reportRoutes } from "./routes/reports.js";
@@ -201,6 +202,7 @@ async function bootstrap(): Promise<void> {
       await api.register(providerRoutes);
       await api.register(accountRoutes);
       await api.register(surfaceRoutes);
+      await api.register(gitRoutes);
       await api.register(actionRoutes);
       await api.register(triggerRoutes);
       await api.register(alertRoutes);

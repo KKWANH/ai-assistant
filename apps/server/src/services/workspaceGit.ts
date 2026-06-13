@@ -26,7 +26,7 @@ import logger from "../logger.js";
 const GIT_TIMEOUT_MS = 10_000;
 let gitAvailable: boolean | null = null;
 
-async function runGit(
+export async function runGit(
   cwd: string,
   args: string[],
   opts: { ignoreFailure?: boolean } = {},
@@ -58,7 +58,7 @@ async function runGit(
 }
 
 /** Check the host actually has git. Cached for the process lifetime. */
-async function isGitAvailable(): Promise<boolean> {
+export async function isGitAvailable(): Promise<boolean> {
   if (gitAvailable !== null) return gitAvailable;
   const res = await runGit(process.cwd(), ["--version"], { ignoreFailure: true });
   gitAvailable = res.ok;
