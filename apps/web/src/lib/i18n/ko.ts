@@ -314,6 +314,8 @@ const ko: Record<TranslationKey, string> = {
   "workspace.fileEditor.stageFailed": "스테이지 실패",
   "workspace.fileEditor.loadFailed": "파일 로드 실패",
   "workspace.fileEditor.noPath": "선택된 파일이 없어요. 워크스페이스 Custom screen 또는 파일 트리에서 열어 주세요.",
+  "workspace.fileEditor.discardConfirm": "저장하지 않은 변경이 있어요. 다른 파일을 열면 변경 내용이 사라집니다. 계속할까요?",
+  "workspace.fileEditor.discardConfirmBtn": "변경 버리고 열기",
   "workspace.lastScan": "마지막 스캔",
   "workspace.neverScanned": "스캔한 적 없음",
   "workspace.files": "파일",

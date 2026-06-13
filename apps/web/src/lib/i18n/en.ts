@@ -319,6 +319,8 @@ const en = {
   "workspace.fileEditor.stageFailed": "Could not stage the edit",
   "workspace.fileEditor.loadFailed": "Could not load the file",
   "workspace.fileEditor.noPath": "No file selected. Open a file from the workspace's Custom screen or file tree.",
+  "workspace.fileEditor.discardConfirm": "You have unsaved changes. Opening another file will discard them. Continue?",
+  "workspace.fileEditor.discardConfirmBtn": "Discard & open",
   "workspace.lastScan": "Last scan",
   "workspace.neverScanned": "Never scanned",
   "workspace.files": "Files",

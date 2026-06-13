@@ -26,52 +26,8 @@ import { Dialog } from "../../components/ui/Dialog";
 import { Button } from "../../components/ui/Button";
 import { useSnapshot } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
-import { Search, FileText, FileSpreadsheet, FileCode, File as FileIcon, ChevronRight, ChevronDown, Folder } from "lucide-react";
-
-// AL2 — recursive file tree.
-interface TreeNode {
-  kind: "dir" | "file";
-  name: string;        // basename
-  path: string;        // full path
-  size?: number;
-  children?: TreeNode[];
-}
-
-function buildTree(files: Array<{ path: string; size?: number }>): TreeNode {
-  const root: TreeNode = { kind: "dir", name: "", path: "", children: [] };
-  for (const f of files) {
-    const parts = f.path.split("/").filter(Boolean);
-    let cur = root;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i]!;
-      const isLast = i === parts.length - 1;
-      const childPath = parts.slice(0, i + 1).join("/");
-      let child = cur.children!.find((c) => c.name === part);
-      if (!child) {
-        child = {
-          kind: isLast ? "file" : "dir",
-          name: part,
-          path: childPath,
-          size: isLast ? f.size : undefined,
-          children: isLast ? undefined : [],
-        };
-        cur.children!.push(child);
-      }
-      cur = child;
-    }
-  }
-  // Sort: dirs before files at each level, then alphabetical.
-  function sortRec(node: TreeNode) {
-    if (!node.children) return;
-    node.children.sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "dir" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-    for (const c of node.children) sortRec(c);
-  }
-  sortRec(root);
-  return root;
-}
+import { buildTree, countFiles, iconFor, type TreeNode } from "../../lib/fileTree";
+import { Search, ChevronRight, ChevronDown, Folder } from "lucide-react";
 
 // AL4 — search result weighting. Compute a score per file given a
 // query. Higher = more relevant. 0 = no match (filtered out).
@@ -98,11 +54,6 @@ function matchScore(path: string, basename: string, query: string, recentSet: Se
   return 0;
 }
 
-function countFiles(node: TreeNode): number {
-  if (node.kind === "file") return 1;
-  return (node.children ?? []).reduce((s, c) => s + countFiles(c), 0);
-}
-
 const RECENT_KEY = "ariadne:wsFilePicker:recent";
 function readRecent(workspaceId: string): string[] {
   try {
@@ -125,16 +76,6 @@ export interface WorkspaceFilePickerProps {
   onConfirm: (paths: string[]) => void;
   /** Already-selected paths (so users can re-open the modal to add more). */
   initialSelected?: string[];
-}
-
-/** Tiny extension → icon map. Keeps the picker scannable without
- *  pulling a bigger filetype lib. */
-function iconFor(path: string) {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  if (["md", "txt"].includes(ext)) return FileText;
-  if (["csv", "tsv", "xlsx"].includes(ext)) return FileSpreadsheet;
-  if (["ts", "tsx", "js", "jsx", "py", "rs", "go", "yaml", "yml", "json"].includes(ext)) return FileCode;
-  return FileIcon;
 }
 
 export function WorkspaceFilePicker({

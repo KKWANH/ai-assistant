@@ -32,14 +32,16 @@ import { cpp } from "@codemirror/lang-cpp";
 import { rust } from "@codemirror/lang-rust";
 import { go } from "@codemirror/lang-go";
 import { ArrowLeft, Save, FileDiff, FileText, AlertCircle } from "lucide-react";
-import { useWorkspace } from "../../lib/queries";
+import { useWorkspace, useSnapshot } from "../../lib/queries";
 import { getWorkspaceFile, stageWorkspaceFile } from "../../lib/api";
 import { useT } from "../../lib/i18n";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { NotFoundRedirect } from "../../components/NotFoundRedirect";
+import { FileTree } from "./FileTree";
 
 const editorTheme = EditorView.theme({
   "&": {
@@ -132,6 +134,8 @@ export function WorkspaceFileEditor() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useT();
+  const { confirm } = useConfirm();
+  const { data: snapshot } = useSnapshot(id ?? "");
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -219,6 +223,21 @@ export function WorkspaceFileEditor() {
     }
   }
 
+  // Open another file from the tree. Guard unsaved edits so a stray click never
+  // silently discards the current buffer.
+  async function handleOpenFile(path: string) {
+    if (!path || path === filePath) return;
+    if (dirty) {
+      const ok = await confirm({
+        message: t("workspace.fileEditor.discardConfirm"),
+        confirmLabel: t("workspace.fileEditor.discardConfirmBtn"),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    navigate(`/workspaces/${id}/edit?path=${encodeURIComponent(path)}`);
+  }
+
   // Cmd/Ctrl+S → stage (without leaving the editor for File→Save reflex).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -287,6 +306,19 @@ export function WorkspaceFileEditor() {
         />
       </div>
 
+      <div className="flex-1 min-h-0 flex">
+        {/* IDE file tree (P3 editing core) — browse + open the workspace's files
+            without leaving the editor. Reads the latest snapshot; a click loads
+            the file via ?path= (guarding unsaved edits first). */}
+        <aside className="w-56 shrink-0 overflow-y-auto border-r border-border bg-surface-2/40">
+          <FileTree
+            files={snapshot?.files ?? []}
+            activePath={filePath}
+            onSelect={(p) => void handleOpenFile(p)}
+          />
+        </aside>
+
+        <div className="flex-1 min-h-0 flex flex-col">
       {!filePath && (
         <Card className="m-5 p-6">
           <p className="text-sm text-muted-foreground flex items-center gap-2">
@@ -347,6 +379,8 @@ export function WorkspaceFileEditor() {
           <div ref={editorRef} className="flex-1 min-h-0 overflow-hidden" />
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }
