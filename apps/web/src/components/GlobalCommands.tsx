@@ -5,14 +5,18 @@
  * same way. Renders nothing — it only registers while mounted.
  */
 import { useMemo } from "react";
-import { Moon, SunMedium } from "lucide-react";
+import { Moon, SunMedium, Sparkles, SlidersHorizontal } from "lucide-react";
 import { useUIStore } from "../lib/store";
+import { useMe, useUpdateMode } from "../lib/queries";
 import { useRegisterCommands, type CommandItem } from "../lib/commands";
 import { useT } from "../lib/i18n";
 
 export function GlobalCommands() {
   const theme = useUIStore((s) => s.theme);
   const toggleTheme = useUIStore((s) => s.toggleTheme);
+  const { data: me } = useMe();
+  const updateMode = useUpdateMode();
+  const isSimple = me?.account.mode === "simple";
   const { t } = useT();
 
   const items: CommandItem[] = useMemo(
@@ -26,8 +30,17 @@ export function GlobalCommands() {
         keybinding: "Mod+Shift+Y",
         onSelect: () => toggleTheme(),
       },
+      {
+        id: "global.toggle-mode",
+        label: isSimple ? t("nav.mode.toStandard") : t("nav.mode.toSimple"),
+        description: t("nav.mode.toggle.desc"),
+        icon: isSimple ? <SlidersHorizontal className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />,
+        section: t("commandMenu.sectionApp"),
+        keybinding: "Mod+Shift+M",
+        onSelect: () => updateMode.mutate(isSimple ? "standard" : "simple"),
+      },
     ],
-    [theme, toggleTheme, t],
+    [theme, toggleTheme, isSimple, updateMode, t],
   );
 
   useRegisterCommands("global", items);

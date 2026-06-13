@@ -50,6 +50,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  Sparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useUIStore } from "../../lib/store";
 import {
@@ -62,6 +64,7 @@ import {
   useDeleteEmptyChats,
   useUpdateChat,
   useDeleteWorkspace,
+  useUpdateMode,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { SidebarItem } from "../ui/SidebarItem";
@@ -312,6 +315,7 @@ export function AppShell({ children }: AppShellProps) {
   const { data: allRuns } = useRuns();
   const { data: chats } = useChats();
   const { data: me } = useMe();
+  const updateMode = useUpdateMode();
   const logout = useLogout();
   const deleteWorkspace = useDeleteWorkspace();
   const deleteEmptyChats = useDeleteEmptyChats();
@@ -618,6 +622,21 @@ export function AppShell({ children }: AppShellProps) {
             <Flag className="h-3.5 w-3.5" />
           </IconButton>
           {me && <NotificationsBell />}
+          {/* Easy ↔ Standard mode toggle — the dual-use lever, now one tap from
+              anywhere (it used to be buried in Settings). The icon shows the
+              mode you'll switch TO. */}
+          <IconButton
+            label={isSimple ? t("nav.mode.toStandard") : t("nav.mode.toSimple")}
+            description={t("nav.mode.toggle.desc")}
+            size="sm"
+            onClick={() => updateMode.mutate(isSimple ? "standard" : "simple")}
+          >
+            {isSimple ? (
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+          </IconButton>
           <IconButton
             label={t("nav.toggleTheme")}
             description={t("nav.toggleTheme.desc")}
