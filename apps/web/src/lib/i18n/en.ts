@@ -50,6 +50,7 @@ const en = {
   "nav.recentRuns": "Recent Runs",
   "nav.search": "Search",
   "nav.search.desc": "Or press ⌘K to open from anywhere",
+  "nav.developers": "Developers",
   "nav.settings": "Settings",
   "nav.noConversations": "No conversations yet",
   "nav.chats": "Chats",

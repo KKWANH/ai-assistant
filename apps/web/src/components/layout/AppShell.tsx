@@ -941,6 +941,12 @@ export function AppShell({ children }: AppShellProps) {
               />
             )}
             <SidebarItem
+              label={t("nav.developers")}
+              icon={<BookOpen className="h-3.5 w-3.5" />}
+              to="/developers"
+              onClick={() => { setMobileNavOpen(false); }}
+            />
+            <SidebarItem
               label={t("nav.settings")}
               icon={<Settings className="h-3.5 w-3.5" />}
               active={sidebarSection === "settings"}

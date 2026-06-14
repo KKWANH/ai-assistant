@@ -236,8 +236,42 @@ function AppContent() {
   );
 }
 
+/** Standalone, PUBLIC docs site (/developers/*) — rendered outside the app shell
+ *  and the auth gate. The docs make zero /api calls, so anyone (logged in or
+ *  not, local or remote) gets a clean documentation experience, and the project
+ *  gains a public docs entry point for contributors. */
+function PublicDocs() {
+  return (
+    <div className="flex h-screen min-h-0 flex-col bg-background animate-fade-in">
+      <ErrorBoundary label="이 문서를 여는 중 문제가 발생했어요">
+        <Suspense fallback={<RouteFallback />}>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <Routes>
+              <Route path="/developers/*" element={<DevelopersView />} />
+              <Route path="*" element={<Navigate to="/developers" replace />} />
+            </Routes>
+          </div>
+        </Suspense>
+      </ErrorBoundary>
+    </div>
+  );
+}
+
 function AuthGate() {
+  const location = useLocation();
   const { data, isLoading, error } = useMe();
+
+  // The docs site is public + standalone — no app shell, no login, no /api call.
+  // Render it for everyone (checked before the auth branches) so /developers
+  // doubles as the project's public documentation.
+  if (location.pathname.startsWith("/developers")) {
+    return (
+      <I18nProvider initialLocale={data?.account.locale}>
+        <PublicDocs />
+        <ToastList />
+      </I18nProvider>
+    );
+  }
 
   if (isLoading) {
     return (

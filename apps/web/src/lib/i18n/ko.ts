@@ -43,6 +43,7 @@ const ko: Record<TranslationKey, string> = {
   "nav.recentRuns": "최근 실행",
   "nav.search": "검색",
   "nav.search.desc": "어디서든 ⌘K로 바로 열 수 있어요",
+  "nav.developers": "개발자 문서",
   "nav.settings": "설정",
   "nav.noConversations": "대화 내역 없음",
   "nav.chats": "채팅",
