@@ -103,7 +103,7 @@ apps/
 packages/
   shared/   zod schemas, types, theme, the provider registry — imported by both apps
   surface-sdk/  the typed runtime a custom surface is built against
-projects/   static example projects (lecture, portfolio), contributed via a registry
+projects/   self-contained example projects (lecture, papers, budget, …), each contributed via a registry
 \`\`\`
 
 ## Where things go
@@ -197,8 +197,10 @@ one entry.
   baseURL: "https://api.myvendor.com/v1",
   defaultModel: "my-model-1",
   models: [
-    { id: "my-model-1", label: "My Model 1", speed: "normal",
-      costTier: "mid", pricing: { inUsd: 0.5, outUsd: 1.5 } },
+    // traitKey is required — an i18n key for the one-line trait shown in the
+    // model picker (falls back to the key if you haven't added a translation).
+    { id: "my-model-1", label: "My Model 1", traitKey: "model.trait.myvendor",
+      speed: "normal", costTier: "mid", pricing: { inUsd: 0.5, outUsd: 1.5 } },
   ],
 }
 // then add "myvendor" to the PROVIDERS list.
@@ -351,8 +353,8 @@ pass a \`starter\` id that matches a [project](/developers/contribute-a-project)
 export const CONTRIBUTE_A_PROJECT = `
 A **project** under \`projects/<name>/\` is a self-contained example app that plugs
 into Ariadne through registries — it can contribute server routes, run templates,
-i18n strings, and a web view, without the core enumerating it. \`lecture\` and
-\`portfolio\` are the shipped examples.
+i18n strings, and a web view, without the core enumerating it. Seven ship today
+— \`budget\`, \`chefbook\`, \`code\`, \`decisions\`, \`lecture\`, \`papers\`, and \`reading\`.
 
 ## What a project can contribute
 
@@ -391,18 +393,20 @@ connection with no proxy headers, and \`"remote"\` otherwise.
 | | Local (loopback) | Remote (tunnel) |
 | --- | --- | --- |
 | Identity | the admin, implicitly | must carry a session cookie |
+| Chat, runs, read/edit workspace files, git status/diff | ✅ | ✅ (authenticated) |
 | Terminal / PTY | ✅ allowed | ❌ refused |
-| Host filesystem & git | ✅ allowed | ❌ refused |
-| Chat, workspaces, runs | ✅ | ✅ (when authenticated) |
+| Host-path file picker, scripts, git commit | ✅ allowed | ❌ refused |
 
 A loopback request *is* the admin — there's no separate login on your own
 machine. The same server reached through the Cloudflare tunnel is \`remote\`: it
-needs a cookie and loses the local-only powers, even for the same person.
+keeps the workspace-scoped API (reads, edits, git status/diff) once
+authenticated, but loses the **host-level** powers — the terminal, the host-path
+folder picker, running scripts, and git commit stay local-only for everyone.
 
 ## Applying it in a route
 
 \`\`\`ts
-// refuse remote callers outright (mutations, shell, fs):
+// refuse remote callers outright (shell, the host-path picker, git commit):
 if (await rejectRemoteAccess("Local only.", req, reply)) return;
 
 // or branch on it:
@@ -412,7 +416,8 @@ if (accessContext(req) === "local") {
 \`\`\`
 
 The \`/api\` scope runs an \`onRequest\` auth hook with a small allowlist of
-unauthenticated paths (login, logout, guest, and trigger-secret webhooks). Add
+unauthenticated paths (login, logout, reset, guest, and trigger-secret
+webhooks). Add
 genuinely public endpoints to \`PUBLIC_ROUTES\` so they register outside that
 scope — deliberately, and rarely.
 
@@ -637,13 +642,13 @@ budget; beyond that the oldest are truncated with a note.
 
 ## Manage it
 
-| Method | Path |
-| --- | --- |
-| GET | \`/api/workspaces/:id/memory\` |
-| POST | \`/api/workspaces/:id/memory\` |
-| DELETE | \`/api/workspaces/:id/memory/:memId\` |
+| Method | Path | Access |
+| --- | --- | --- |
+| GET | \`/api/workspaces/:id/memory\` | read |
+| POST | \`/api/workspaces/:id/memory\` | write |
+| DELETE | \`/api/workspaces/:id/memory/:memId\` | write |
 
-All three require workspace write access.
+Listing needs read access; adding and deleting need write.
 
 > [!TIP]
 > Because memory is just a YAML file in the workspace, it travels with the
@@ -995,7 +1000,7 @@ These default under the repo root; point them elsewhere to relocate state.
 | Variable | Default | Controls |
 | --- | --- | --- |
 | \`ARIADNE_PROVIDER\` | \`ollama\` | the default provider when none is set in Settings |
-| \`ANTHROPIC_API_KEY\`, \`OPENAI_API_KEY\`, \`GEMINI_API_KEY\`, \`MOONSHOT_API_KEY\`, … | — | provider keys (or paste them in **Settings → Providers**) |
+| \`ANTHROPIC_API_KEY\`, \`OPENAI_API_KEY\`, \`GEMINI_API_KEY\`, \`MOONSHOT_API_KEY\`, \`MINIMAX_API_KEY\`, … | — | provider keys (or paste them in **Settings → Providers**) |
 | \`OLLAMA_BASE_URL\` | \`http://localhost:11434\` | the local Ollama endpoint |
 | \`VLLM_BASE_URL\` | — | required for the vLLM provider |
 | \`TAVILY_API_KEY\`, \`BRAVE_API_KEY\` | — | web-search backends |
@@ -1059,14 +1064,15 @@ generated on first boot.
 
 | Capability | Local | Guest | User | Admin |
 | --- | --- | --- | --- | --- |
-| Read files, chat | ✅ | ✅ (capped) | ✅ | ✅ |
-| Write / edit files | ✅ | ❌ | ✅ (own) | ✅ |
-| Agent mode, runs, scripts | ✅ | ❌ | ✅ (own) | ✅ |
-| Terminal, host git / fs | ✅ | ❌ | ❌ | ❌ |
+| Read files, git status/diff, chat | ✅ | ✅ (capped) | ✅ | ✅ |
+| Write / edit workspace files | ✅ | ❌ | ✅ (own) | ✅ |
+| Agent mode, template runs | ✅ | ❌ | ✅ (own) | ✅ |
+| Terminal, host-path picker, scripts, git commit | ✅ | ❌ | ❌ | ❌ |
 
 Local is implicitly admin (no login). Guests are read-mostly with a daily token
-cap. The terminal and raw host access stay **local-only** for everyone — they
-never cross the tunnel.
+cap. The bottom row — the terminal, the host-path folder picker, running
+scripts, and git commit — touches the host machine directly, so it stays
+**local-only** for everyone and never crosses the tunnel.
 
 > [!WARNING]
 > Exposing Ariadne puts your workspaces and AI keys behind a login. Set a strong
