@@ -6,7 +6,7 @@
  * by DevelopersView for `hero` pages.
  */
 import { Link } from "react-router-dom";
-import { ArrowRight, MapPin, Eye, Plug, Layers, GitBranch } from "lucide-react";
+import { ArrowRight, MapPin, Eye, Plug, Layers, GitBranch, FileText } from "lucide-react";
 
 const REPO_URL = "https://github.com/KKWANH/ai-assistant";
 
@@ -55,6 +55,56 @@ const BUILDS = [
   "Decisions", "Recipes", "Code review",
 ];
 
+/** A stylized product shot — a window showing a cited answer. Illustrative (not
+ *  a real screenshot, so no personal data and no binary weight); reinforces the
+ *  "see into" pitch by making the source citations the visual focus. */
+function ProductFrame() {
+  return (
+    <div className="mt-12 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+      <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-4 py-2.5">
+        <span className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-border-strong" />
+          <span className="h-2.5 w-2.5 rounded-full bg-border-strong" />
+          <span className="h-2.5 w-2.5 rounded-full bg-border-strong" />
+        </span>
+        <span className="ml-2 rounded-md bg-card px-2 py-0.5 text-2xs text-muted-foreground">localhost:4319</span>
+      </div>
+      <div className="flex h-[264px] text-left">
+        <div className="hidden w-40 shrink-0 flex-col gap-1 border-r border-border bg-surface-1 p-3 sm:flex">
+          <div className="mb-2 flex items-center gap-1.5">
+            <span className="h-4 w-4 rounded bg-accent/30" />
+            <span className="text-xs font-semibold text-foreground">Ariadne</span>
+          </div>
+          {["Supplier review", "Q3 budget", "Reading list"].map((w, i) => (
+            <div key={w} className={`rounded-md px-2 py-1.5 text-2xs ${i === 0 ? "bg-accent/10 text-accent" : "text-muted-foreground"}`}>{w}</div>
+          ))}
+        </div>
+        <div className="flex-1 space-y-3 overflow-hidden p-4">
+          <div className="ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-sm bg-surface-3 px-3 py-2 text-xs text-foreground">
+            Which suppliers did we flag last quarter?
+          </div>
+          <div className="max-w-[92%] space-y-2">
+            <p className="text-xs leading-relaxed text-foreground/90">
+              Three suppliers were flagged for late delivery in Q3 —{" "}
+              <span className="font-medium text-foreground">Acme</span>,{" "}
+              <span className="font-medium text-foreground">Bolt</span>, and{" "}
+              <span className="font-medium text-foreground">Cirrus</span>. Acme slipped on 4 of 9 orders.
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-2xs text-muted-foreground">Sources</span>
+              {["q3-review.md", "suppliers.csv", "flags.md"].map((s) => (
+                <span key={s} className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-2xs text-muted-foreground">
+                  <FileText className="h-2.5 w-2.5" /> {s}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PrimaryCta({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <Link
@@ -97,6 +147,7 @@ export function DocsLanding() {
         <p className="mt-6 text-2xs text-muted-foreground">
           138 API endpoints · 7 example projects · runs entirely on your machine
         </p>
+        <ProductFrame />
       </section>
 
       {/* Value props */}
