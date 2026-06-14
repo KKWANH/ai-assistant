@@ -1,8 +1,12 @@
 # How to use Ariadne — step by step
 
-10-minute walkthrough for somebody who just cloned the repo. Read this
-before [`INSTALL.md`](INSTALL.md) for context, after it for the
-"what do I do now" follow-ups.
+10-minute walkthrough for somebody who just cloned the repo: install →
+providers → first workspace → first chat → first surface.
+
+> **Looking for reference docs?** Architecture, the (auto-generated) API
+> reference, and the extension guides now live in Ariadne's built-in
+> documentation — run the app and open **`/developers`**, also a public docs
+> site. This file is the hands-on *setup* guide; keep reading for the steps.
 
 ---
 
