@@ -13,7 +13,7 @@ import type {
   ActionBlock,
   BlockType,
 } from "@ariadne/shared";
-import { ACTION_TYPES } from "@ariadne/shared";
+import { ACTION_TYPES, BLOCK_TYPES } from "@ariadne/shared";
 import { readActionsYaml } from "../ariadneFolder.js";
 import logger from "../logger.js";
 
@@ -122,15 +122,7 @@ export interface ActionDefsLoadResult {
   error: string | null;
 }
 
-const BLOCK_TYPES: Set<BlockType> = new Set([
-  "ask_ai",
-  "web_analysis",
-  "run_script",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "run_tests",
-]);
+const VALID_BLOCK_TYPES: Set<BlockType> = new Set(BLOCK_TYPES);
 
 /** Synthesize a single block from an old flat action so it stays runnable. */
 function flatActionToBlock(type: ActionType, item: Record<string, unknown>): ActionBlock {
@@ -199,7 +191,7 @@ export function loadActionDefs(workspaceRoot: string): ActionDefsLoadResult {
         const bi = rawBlocks[b] as Record<string, unknown> | undefined;
         if (!bi || typeof bi !== "object") continue;
         const bt = bi["type"];
-        if (typeof bt !== "string" || !BLOCK_TYPES.has(bt as BlockType)) {
+        if (typeof bt !== "string" || !VALID_BLOCK_TYPES.has(bt as BlockType)) {
           errors.push(`actions[${i.toString()}] (${id}) block[${b.toString()}]: invalid 'type'`);
           continue;
         }

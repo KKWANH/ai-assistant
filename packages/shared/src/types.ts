@@ -66,31 +66,31 @@ export interface WorkspaceAction {
  * above (which the agent planner still consumes).
  * ------------------------------------------------------------------ */
 
-export type BlockType =
-  | "ask_ai"
-  | "web_analysis"
-  | "run_script"
-  | "read_file"
-  /**
-   * Write the prior block's output (or a configured constant) to a file in
-   * the workspace. Closes the loop for scheduled actions — the report a
-   * monthly macro brief produces lands back in `monthly-briefs/2026-05.md`
-   * instead of just streaming once to the screen.
-   */
-  | "write_file"
-  /**
-   * Propose a file change without touching the workspace. The diff lands
-   * in `.ariadne/staged/<run-id>/` and the user reviews & applies it from
-   * the run's diff view. Supports search/replace (with a required-match-
-   * count safety) and full-file content.
-   */
-  | "edit_file"
-  /**
-   * Run a workspace test command and capture pass/fail. Thin wrapper over
-   * shell execution shaped specifically so the agent can re-plan on
-   * failure ("tests failed → fix → run again").
-   */
-  | "run_tests";
+/**
+ * The run-pipeline block types — the steps a template/action RUN executes in
+ * order (output of one feeds the next). Distinct from `ActionType` above, which
+ * is the *agent's* flat tool vocabulary in chat; these are the *run engine's*
+ * (runs/actionEngine.ts) blocks. The runtime array is the single source — the
+ * BlockType union and the server's validation Set both derive from it (no drift).
+ *   write_file — write the prior block's output (or a constant) to a workspace
+ *     file; closes the loop for scheduled actions (a monthly brief lands back in
+ *     `monthly-briefs/2026-05.md` instead of just streaming once).
+ *   edit_file  — propose a file change staged to `.ariadne/staged/<run-id>/`
+ *     that the user reviews + applies; search/replace (match-count safety) or
+ *     full content.
+ *   run_tests  — run a workspace test command, capture pass/fail, so the agent
+ *     can re-plan on failure ("tests failed → fix → run again").
+ */
+export const BLOCK_TYPES = [
+  "ask_ai",
+  "web_analysis",
+  "run_script",
+  "read_file",
+  "write_file",
+  "edit_file",
+  "run_tests",
+] as const;
+export type BlockType = (typeof BLOCK_TYPES)[number];
 
 /**
  * Manifest of staged edits for a run, mirroring .ariadne/staged/<run-id>/.
