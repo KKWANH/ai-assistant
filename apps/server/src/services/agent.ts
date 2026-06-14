@@ -990,9 +990,12 @@ function buildPlannerSystem(
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
 ): string {
   const mcpAvailable = (workspace.mcpServers?.length ?? 0) > 0;
-  const builtinTools =
-    "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate" +
-    (mcpAvailable ? " | mcp_call" : "");
+  // Derive from the registry (single source) — mcp_call is only offered when the
+  // workspace actually has an enabled MCP server. Adding a tool to AGENT_TOOLS
+  // now surfaces it to the planner automatically.
+  const builtinTools = BUILTIN_AGENT_TOOLS
+    .filter((t) => t !== "mcp_call" || mcpAvailable)
+    .join(" | ");
   const customSection = customActions.length > 0
     ? `\n\nThis workspace also has custom actions you may use as tool names:\n${customActions
         .map((a) => `  - "${a.id}": ${a.name} — ${a.description}${a.constraints ? ` [constraints: ${a.constraints}]` : ""}`)

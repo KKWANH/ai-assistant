@@ -137,8 +137,14 @@ export function findPage(slug: string): { page: DocPage; section: DocSection } |
 export const DEFAULT_SLUG = ALL_PAGES[0]?.page.slug ?? "introduction";
 
 /** Headings for the "On this page" rail: parsed from markdown, or supplied by a
- *  node page (the API reference has none). */
+ *  node page (the API reference has none). Cached per page — DocPage objects are
+ *  stable, and search calls this for every page on every keystroke, so the
+ *  markdown is parsed once, not once per character. */
+const HEADINGS_CACHE = new WeakMap<DocPage, Heading[]>();
 export function pageHeadings(page: DocPage): Heading[] {
-  if (page.content.kind === "md") return extractHeadings(page.content.body);
-  return page.content.headings ?? [];
+  const cached = HEADINGS_CACHE.get(page);
+  if (cached) return cached;
+  const headings = page.content.kind === "md" ? extractHeadings(page.content.body) : (page.content.headings ?? []);
+  HEADINGS_CACHE.set(page, headings);
+  return headings;
 }

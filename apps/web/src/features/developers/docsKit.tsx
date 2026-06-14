@@ -175,15 +175,13 @@ function Callout({ kind, children }: { kind: CalloutKind; children: ReactNode })
   );
 }
 
-/** If a blockquote opens with a GitHub alert token (`[!NOTE]`), peel it off and
- *  return the kind plus the remaining children; else null. */
-function asCallout(children: ReactNode): { kind: CalloutKind; rest: ReactNode } | null {
+/** If a blockquote opens with a GitHub alert token (`[!NOTE]`), return its kind;
+ *  else null. The token itself is stripped at render time by stripAlertToken. */
+function calloutKind(children: ReactNode): CalloutKind | null {
   const arr = Array.isArray(children) ? children : [children];
   const firstEl = arr.find((c) => typeof c === "object" && c !== null);
-  const lead = textOf(firstEl).trimStart();
-  const m = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/.exec(lead);
-  if (!m) return null;
-  return { kind: m[1] as CalloutKind, rest: arr };
+  const m = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/.exec(textOf(firstEl).trimStart());
+  return m ? (m[1] as CalloutKind) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -265,10 +263,10 @@ const components: Components = {
   },
   pre: ({ children }) => <>{children}</>, // CodeBlock already renders its own <pre>
   blockquote: ({ children }) => {
-    const callout = asCallout(children);
-    if (callout) {
+    const kind = calloutKind(children);
+    if (kind) {
       // Strip the leading "[!KIND]" token from the first paragraph's text.
-      return <Callout kind={callout.kind}>{stripAlertToken(callout.rest)}</Callout>;
+      return <Callout kind={kind}>{stripAlertToken(children)}</Callout>;
     }
     return (
       <blockquote className="my-4 border-l-2 border-accent/50 pl-4 text-sm italic leading-7 text-muted-foreground">
