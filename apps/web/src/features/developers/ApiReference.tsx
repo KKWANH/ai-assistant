@@ -5,6 +5,7 @@
  * and examples from apiMeta).
  */
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ChevronRight, Search, Copy, Check } from "lucide-react";
 import { API_ENDPOINTS, DOMAIN_DESCRIPTIONS, type ApiEndpoint } from "./apiInventory.generated";
 import { API_CATEGORIES, DOMAIN_BLURBS, ENDPOINT_DETAILS } from "./apiMeta";
@@ -138,7 +139,8 @@ export function ApiReference() {
         <p className="text-sm text-muted-foreground mt-1">
           Every HTTP endpoint, scanned straight from <code className="font-mono text-xs">apps/server/src/routes</code> so it
           never drifts. All paths are under <code className="font-mono text-xs">/api</code> (cookie or local-admin auth);
-          exceptions are noted. {total} endpoints.
+          exceptions are noted. {total} endpoints. Calling it from another device?{" "}
+          <Link to="/developers/remote-access" className="text-accent hover:underline">Authenticate remotely →</Link>
         </p>
       </div>
 

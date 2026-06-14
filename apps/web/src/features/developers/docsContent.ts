@@ -1060,6 +1060,29 @@ A request arriving through the tunnel is detected as \`remote\` (Cloudflare's
 The cookie is \`httpOnly\`, \`sameSite=lax\`, \`secure\`, and signed with a secret
 generated on first boot.
 
+## Calling the API remotely
+
+On your own machine every \`/api\` call just works — a loopback request is the
+admin, so \`curl localhost:4319/api/workspaces\` needs no auth. Through the tunnel
+you log in once to get the session cookie, then send it with each call:
+
+\`\`\`bash
+BASE=https://your-tunnel.example.com   # your quick- or named-tunnel URL
+
+# 1. Log in — save the signed session cookie to a jar
+curl -s -c jar.txt -X POST "$BASE/api/auth/login" \\
+  -H 'content-type: application/json' \\
+  -d '{"username":"admin","password":"…"}'
+
+# 2. Call any endpoint, sending the cookie back
+curl -s -b jar.txt "$BASE/api/workspaces"
+\`\`\`
+
+The \`ariadne_session\` cookie is valid for 30 days. \`POST /api/auth/guest\` gets a
+passwordless (read-mostly) session the same way. Every curl example in these
+docs uses \`localhost:4319\` for brevity — swap in \`$BASE\` and add \`-b jar.txt\` to
+run it against a remote instance.
+
 ## Who can do what
 
 | Capability | Local | Guest | User | Admin |
