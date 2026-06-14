@@ -53,7 +53,26 @@ const MAX_REPLANS = 2;
  * feed each other. Everything else (edits, runs, mcp_call, reason/calculate
  * which synthesize prior results) stays strictly sequential.
  */
-const PARALLEL_TOOLS = new Set(["read_file", "list_files", "web_search"]);
+/** The built-in agent tools — the SINGLE source for their names + which may run
+ *  in parallel. The planner schema enum, parsePlan's validation, PARALLEL_TOOLS,
+ *  and the replanner prompt's tool list all derive from this, so a tool's name +
+ *  parallelism live in exactly one place (no drift across the five surfaces that
+ *  used to repeat them). Execution lives in runTool's dispatch — the planner
+ *  schema constrains the model to these names, so dispatch only sees valid ones. */
+const AGENT_TOOLS: { name: string; parallel?: boolean }[] = [
+  { name: "web_search", parallel: true },
+  { name: "read_file", parallel: true },
+  { name: "list_files", parallel: true },
+  { name: "analyze_image" },
+  { name: "run_template" },
+  { name: "reason" },
+  { name: "edit_file" },
+  { name: "run_tests" },
+  { name: "calculate" },
+  { name: "mcp_call" },
+];
+const BUILTIN_AGENT_TOOLS = AGENT_TOOLS.map((t) => t.name);
+const PARALLEL_TOOLS = new Set(AGENT_TOOLS.filter((t) => t.parallel).map((t) => t.name));
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -882,15 +901,6 @@ function withMemory(system: string, memoryBlock: string | null): string {
  *  through parsePlan's catch block as `{steps:[]}` → agentic mode
  *  silently disables. With it, the model literally cannot emit
  *  invalid JSON in the first place. */
-/** The built-in agent tools — the single source. Both the planner JSON-schema
- *  enum and parsePlan's validation set derive from this, so a new tool can't be
- *  added to one and forgotten in the other (the model would emit a step that
- *  parsePlan then silently drops). */
-const BUILTIN_AGENT_TOOLS = [
-  "web_search", "read_file", "list_files", "analyze_image", "run_template", "reason",
-  "edit_file", "run_tests", "calculate", "mcp_call",
-] as const;
-
 function buildPlannerSchema(customActions: WorkspaceAction[] = []) {
   const toolEnum = [
     ...BUILTIN_AGENT_TOOLS,
@@ -1045,7 +1055,7 @@ function buildReplannerSystem(
   customActions: WorkspaceAction[] = [],
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
 ): string {
-  const builtinTools = "web_search | read_file | list_files | analyze_image | run_template | reason | edit_file | run_tests | calculate | mcp_call";
+  const builtinTools = BUILTIN_AGENT_TOOLS.join(" | ");
   const customSection = customActions.length > 0
     ? ` | ${customActions.map((a) => a.id).join(" | ")}`
     : "";
