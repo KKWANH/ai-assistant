@@ -38,7 +38,10 @@ export type WorkspaceHomeView = "overview" | "surface" | null;
  * Custom workspace actions (tools the agent planner may use)
  * ------------------------------------------------------------------ */
 
-export type ActionType = "run_script" | "read_file" | "web_search" | "format";
+/** The custom-action types — runtime array is the single source; the ActionType
+ *  union and the server's validation Set both derive from it (no drift). */
+export const ACTION_TYPES = ["run_script", "read_file", "web_search", "format"] as const;
+export type ActionType = (typeof ACTION_TYPES)[number];
 
 export interface WorkspaceAction {
   id: string;

@@ -13,6 +13,7 @@ import type {
   ActionBlock,
   BlockType,
 } from "@ariadne/shared";
+import { ACTION_TYPES } from "@ariadne/shared";
 import { readActionsYaml } from "../ariadneFolder.js";
 import logger from "../logger.js";
 
@@ -26,7 +27,7 @@ export interface ActionsLoadResult {
   error: string | null;
 }
 
-const VALID_TYPES: Set<ActionType> = new Set(["run_script", "read_file", "web_search", "format"]);
+const VALID_TYPES: Set<ActionType> = new Set(ACTION_TYPES);
 
 export function loadWorkspaceActions(workspaceRoot: string): ActionsLoadResult {
   let source: string | null = null;
