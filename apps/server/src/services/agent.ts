@@ -46,33 +46,374 @@ const STEP_TIMEOUT_MS = 60_000;
  */
 const MAX_REPLANS = 2;
 
-/**
- * Tools that are read-only, side-effect-free, and take fixed args from the plan
- * (no dependency on a prior step's result). A maximal run of consecutive such
- * steps can execute concurrently (R3) — order doesn't matter and they don't
- * feed each other. Everything else (edits, runs, mcp_call, reason/calculate
- * which synthesize prior results) stays strictly sequential.
- */
-/** The built-in agent tools — the SINGLE source for their names + which may run
- *  in parallel. The planner schema enum, parsePlan's validation, PARALLEL_TOOLS,
- *  and the replanner prompt's tool list all derive from this, so a tool's name +
- *  parallelism live in exactly one place (no drift across the five surfaces that
- *  used to repeat them). Execution lives in runTool's dispatch — the planner
- *  schema constrains the model to these names, so dispatch only sees valid ones. */
-const AGENT_TOOLS: { name: string; parallel?: boolean }[] = [
-  { name: "web_search", parallel: true },
-  { name: "read_file", parallel: true },
-  { name: "list_files", parallel: true },
-  { name: "analyze_image" },
-  { name: "run_template" },
-  { name: "reason" },
-  { name: "edit_file" },
-  { name: "run_tests" },
-  { name: "calculate" },
-  { name: "mcp_call" },
-];
-const BUILTIN_AGENT_TOOLS = AGENT_TOOLS.map((t) => t.name);
-const PARALLEL_TOOLS = new Set(AGENT_TOOLS.filter((t) => t.parallel).map((t) => t.name));
+/** What every built-in tool's `run` receives: the step's description, the chat +
+ *  provider it runs under, the per-step abort signal, and the shared `sources`
+ *  array that web-gathering tools push onto for citation. Built once per step in
+ *  runTool from the same args the switch used to read off its closure. */
+interface ToolContext {
+  description: string;
+  chat: Chat;
+  provider: AiProvider;
+  sources: SearchResult[];
+  signal: AbortSignal;
+}
+
+interface ToolDef {
+  /** Read-only, side-effect-free, fixed-arg tools (no dependency on a prior
+   *  step's result). The executor batches a maximal run of consecutive such
+   *  steps concurrently (R3); everything else (edits, runs, mcp_call,
+   *  reason/calculate which synthesize prior results) stays strictly sequential. */
+  parallel?: boolean;
+  /** The tool's execution — each was a `case` in runTool's old switch. */
+  run: (ctx: ToolContext) => Promise<string>;
+}
+
+/** The built-in agent tools — the SINGLE source for each tool's name,
+ *  parallelism, AND execution. Adding a tool is one entry here (plus the shared
+ *  `AgentTool` union, which the `run` body can't live without). The
+ *  `Record<AgentTool, …>` keys ARE that union, so the compiler forces this table
+ *  to stay exhaustive — the successor to runTool's old `default: never` guard —
+ *  and rejects a name that isn't a real tool. BUILTIN_AGENT_TOOLS, the planner
+ *  schema enum, PARALLEL_TOOLS, the replanner prompt, and runTool's dispatch all
+ *  derive from this; nothing repeats the list. Key order is the prompt order, so
+ *  keep it stable. */
+const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
+  web_search: {
+    parallel: true,
+    run: async ({ description, signal, sources }) => {
+      const resp = await performSearch(description, signal);
+      if (resp.results.length === 0) return "No results found.";
+      const top = resp.results.slice(0, 5);
+      sources.push(...top);
+      // Read the top pages, not just snippets — so the model can extract real
+      // content (tables, rankings, detail) a 150-char snippet can never hold.
+      // This is the difference between "couldn't find KLA in the list" and
+      // actually pulling the ranking. Concurrent + best-effort; a failed/empty
+      // fetch falls back to that result's snippet.
+      const pages = await Promise.all(top.slice(0, 3).map((r) => fetchUrlText(r.url, signal)));
+      return top
+        .map((r, i) => {
+          const body = (pages[i] ?? "").trim();
+          const content = body ? body.slice(0, 2500) : r.snippet;
+          return `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${content}`;
+        })
+        .join("\n\n");
+    },
+  },
+
+  read_file: {
+    parallel: true,
+    run: async ({ description, chat, provider }) => {
+      if (!chat.workspaceId) return "[No workspace attached — cannot read files]";
+      const snapshot = dbGetLatestSnapshot(chat.workspaceId);
+      if (!snapshot || snapshot.files.length === 0) return "[No snapshot available]";
+      // Heuristically pick up to 3 files whose names match the description
+      const descLower = description.toLowerCase();
+      const candidates = snapshot.files
+        .filter((f) => f.path.toLowerCase().includes(descLower) || descLower.includes(f.path.split("/").pop()?.toLowerCase() ?? ""))
+        .slice(0, 3)
+        .map((f) => f.path);
+      if (candidates.length === 0) {
+        // Fallback: just read first 2 files
+        candidates.push(...snapshot.files.slice(0, 2).map((f) => f.path));
+      }
+      // We need root path — pull from snapshot workspace
+      const ws = dbGetWorkspace(chat.workspaceId);
+      if (!ws) return "[Workspace not found]";
+      const focused = await focusedRead(ws.rootPath, candidates, snapshot, provider);
+      return focused.map((f) => `--- ${f.path} ---\n${f.content}`).join("\n\n");
+    },
+  },
+
+  list_files: {
+    parallel: true,
+    run: async ({ chat }) => {
+      if (!chat.workspaceId) return "[No workspace attached]";
+      const snapshot = dbGetLatestSnapshot(chat.workspaceId);
+      if (!snapshot) return "[No snapshot available]";
+      const list = snapshot.files.slice(0, 30).map((f) => f.path).join("\n");
+      return `Files in workspace:\n${list}`;
+    },
+  },
+
+  analyze_image: {
+    run: async ({ description, provider, signal }) => {
+      // Requires images in context — delegate to reason step
+      if (!provider.completeWithImages) return "[Vision not supported by this provider]";
+      const { text } = await provider.completeWithImages({
+        system: "You are a visual analysis assistant.",
+        prompt: description,
+        images: [],
+        signal,
+      });
+      return text;
+    },
+  },
+
+  run_template: {
+    run: async ({ description, chat }) => {
+      if (!chat.workspaceId) return "[No workspace attached — cannot run templates]";
+      // Fire off a run async and return the run ID as result
+      try {
+        const run = await createRun({
+          workspaceId: chat.workspaceId,
+          templateId: "research-brief",
+          input: { topic: description },
+        });
+        return `Started template run ${run.id} (status: ${run.status})`;
+      } catch (err) {
+        return `[run_template failed: ${err instanceof Error ? err.message : String(err)}]`;
+      }
+    },
+  },
+
+  reason: {
+    run: async ({ description, provider, signal }) => {
+      const { text } = await provider.complete({
+        system: "You are a reasoning assistant. Think through the task carefully and provide a clear, well-structured analysis.",
+        prompt: description,
+        signal,
+      });
+      return text;
+    },
+  },
+
+  edit_file: {
+    run: async ({ description, chat, provider, signal }) => {
+      // Phase C: actually stage. The chat's open attempt is the
+      // staging "branch"; multiple edit_file calls in one turn or
+      // across turns accumulate into the same manifest.
+      if (!chat.workspaceId) return "[No workspace attached — cannot propose file edits]";
+      const ws = dbGetWorkspace(chat.workspaceId);
+      if (!ws) return "[Workspace not found]";
+
+      // Ask the model for a concrete, machine-readable edit. We accept
+      // either {path, search, replace} or {path, content} from the
+      // model so it can full-write when the change is too broad for
+      // a clean search/replace.
+      const { text } = await provider.complete({
+        system:
+          "You produce a single file edit as JSON. Given a workspace and a goal, " +
+          "decide ONE file to change and emit exactly:\n" +
+          "  { \"path\": \"...\", \"search\": \"...\", \"replace\": \"...\" }  OR\n" +
+          "  { \"path\": \"...\", \"content\": \"...full file body...\" }\n" +
+          "Prefer search/replace; fall back to full content only when the change " +
+          "is too broad for a clean string match. The `search` must occur exactly " +
+          "once in the file. Do not add commentary outside the JSON.",
+        prompt: description,
+        json: true,
+        signal,
+      });
+
+      let proposal: { path?: string; search?: string; replace?: string; content?: string };
+      try {
+        proposal = JSON.parse(extractJson(text)) as typeof proposal;
+      } catch {
+        return "[edit_file: model did not return valid JSON — kept the agent's plan but did not stage]\n" + text.slice(0, 500);
+      }
+      if (!proposal.path || typeof proposal.path !== "string") {
+        return "[edit_file: missing 'path' in model output]";
+      }
+
+      // Resolve the attempt + run the same stage logic the edit_file
+      // action block uses. Path-traversal + match-count rules are
+      // shared via stageEdit().
+      const { getOrOpenAttempt, stagingIdForAttempt } = await import("./attempts.js");
+      const { stageEdit } = await import("./stagedEdits.js");
+      const attempt = getOrOpenAttempt(chat.id, chat.workspaceId);
+      const stagingId = stagingIdForAttempt(attempt.id);
+
+      const abs = safeResolveUnderRoot(ws.rootPath, proposal.path);
+      if (!abs) {
+        return `[edit_file: path traversal rejected: ${proposal.path}]`;
+      }
+      const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
+
+      let proposed: string;
+      let action: "create" | "modify" | "replace";
+      if (typeof proposal.content === "string") {
+        proposed = proposal.content;
+        action = existing === null ? "create" : "replace";
+      } else if (typeof proposal.search === "string" && proposal.search.length > 0) {
+        if (existing === null) return `[edit_file: file does not exist for search/replace: ${proposal.path}]`;
+        let count = 0;
+        let from = 0;
+        while (true) {
+          const idx = existing.indexOf(proposal.search, from);
+          if (idx === -1) break;
+          count++;
+          from = idx + proposal.search.length;
+        }
+        if (count === 0) return `[edit_file: search string not found in ${proposal.path}]`;
+        if (count > 1) return `[edit_file: search matched ${count.toString()} times in ${proposal.path} (need exactly 1)]`;
+        proposed = existing.split(proposal.search).join(proposal.replace ?? "");
+        action = "modify";
+      } else {
+        return "[edit_file: model output missing 'search' or 'content']";
+      }
+      if (existing !== null && proposed === existing) {
+        return `[edit_file: proposed change is identical to current ${proposal.path}]`;
+      }
+
+      try {
+        const stats = await stageEdit({
+          runId: stagingId,
+          workspace: ws,
+          path: proposal.path,
+          action,
+          before: existing,
+          after: proposed,
+        });
+        return `Staged ${action} for ${proposal.path} (+${stats.added.toString()}/-${stats.removed.toString()}) — attempt ${attempt.id.slice(0, 8)}. Review at /attempts/${attempt.id}/diff`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return `[edit_file: staging failed: ${msg}]`;
+      }
+    },
+  },
+
+  run_tests: {
+    run: async ({ description, chat }) => {
+      // Real execution: run the workspace's test command. Output is
+      // prefixed with ✓/✗ so the re-plan gate (low-information
+      // detection) can branch on failure automatically.
+      if (!chat.workspaceId) return "[No workspace attached — cannot run tests]";
+      const ws = dbGetWorkspace(chat.workspaceId);
+      if (!ws) return "[Workspace not found]";
+
+      // For agent use the command comes from the step description
+      // ("run npm test", "execute pytest -k auth") or a sensible default.
+      const command = description.trim() || "npm test";
+
+      const { spawn } = await import("node:child_process");
+      return await new Promise<string>((resolve) => {
+        let stdout = "";
+        let stderr = "";
+        const proc = spawn("/bin/sh", ["-c", command], { cwd: ws.rootPath });
+        const timer = setTimeout(() => proc.kill("SIGTERM"), 120_000);
+        proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
+        proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
+        proc.on("close", (code) => {
+          clearTimeout(timer);
+          const passed = code === 0;
+          const head = passed
+            ? `✓ Tests passed (\`${command}\`)`
+            : `✗ Tests failed (exit ${(code ?? "?").toString()}, \`${command}\`)`;
+          // Trim aggressively — agent context budget is tighter than
+          // an action block's. Tail of stdout/stderr is what's useful
+          // for triage anyway.
+          const out = stdout.slice(-1500);
+          const err = stderr.slice(-500);
+          resolve(
+            [head, out.trim() ? "stdout: " + out : "", err.trim() ? "stderr: " + err : ""]
+              .filter(Boolean)
+              .join("\n"),
+          );
+        });
+        proc.on("error", (e) => {
+          clearTimeout(timer);
+          resolve(`[run_tests error: ${e.message}]`);
+        });
+      });
+    },
+  },
+
+  calculate: {
+    run: async ({ description }) => {
+      // Math expressions via mathjs — in-process, no side effects, no
+      // filesystem / network. The planner puts the expression in the
+      // step's description; we accept either a bare expression
+      // ("17% of 48200") or one wrapped in obvious context the model
+      // tends to add ("Calculate: 17% of 48200" / "= 17% of 48200").
+      const { evaluate } = await import("mathjs");
+      const cleaned = description
+        .replace(/^.*?[:=]/, "")                            // drop "Calculate:" / "result ="
+        .replace(/(\d+(?:\.\d+)?)\s*%/g, "($1/100)")         // tolerant percent-of, multi-digit
+        .replace(/\bof\b/gi, "*")                           // "of" → "*"
+        .trim();
+      if (!cleaned) return "[calculate: empty expression]";
+      try {
+        // mathjs evaluate is synchronous; a Promise.race "timeout" can't
+        // interrupt it (the event loop is blocked during evaluation) and only
+        // leaks a timer, so call it directly. A malformed expression throws
+        // into the catch below.
+        const result: unknown = evaluate(cleaned);
+        const formatted =
+          typeof result === "number" || typeof result === "bigint"
+            ? result.toString()
+            : (result?.toString?.() ?? JSON.stringify(result));
+        return `\`${cleaned}\` = **${formatted}**`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return `[calculate failed: ${msg}]`;
+      }
+    },
+  },
+
+  mcp_call: {
+    run: async ({ description, chat }) => {
+      // Description format the planner agreed to in its system prompt:
+      //   "<serverName>::<toolName> <json-args>"
+      // We split on the FIRST whitespace after `::` so server/tool names
+      // with no internal spaces stay intact and the JSON tail starts
+      // where the brace begins.
+      const trimmed = description.trim();
+      const sepIdx = trimmed.indexOf("::");
+      if (sepIdx < 0) {
+        return `[mcp_call: description must be "<serverName>::<toolName> <jsonArgs>", got: ${description.slice(0, 80)}]`;
+      }
+      const serverName = trimmed.slice(0, sepIdx).trim();
+      const afterServer = trimmed.slice(sepIdx + 2);
+      const braceIdx = afterServer.indexOf("{");
+      const toolName = (braceIdx < 0 ? afterServer : afterServer.slice(0, braceIdx)).trim();
+      const argsRaw = braceIdx < 0 ? "{}" : afterServer.slice(braceIdx).trim();
+      if (!serverName || !toolName) {
+        return `[mcp_call: empty server or tool name]`;
+      }
+      let args: Record<string, unknown>;
+      try {
+        const parsed = JSON.parse(argsRaw) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return `[mcp_call: args must be a JSON object, got ${argsRaw.slice(0, 80)}]`;
+        }
+        args = parsed as Record<string, unknown>;
+      } catch (err) {
+        return `[mcp_call: invalid JSON args — ${err instanceof Error ? err.message : String(err)}]`;
+      }
+      // Resolve serverName → serverId. The planner sees names, not ids,
+      // so the agent does the lookup. Account-scoped — admin sees all.
+      const candidate = dbListMcpServers(chat.createdBy ?? undefined)
+        .find((s) => s.enabled && s.name === serverName);
+      if (!candidate) {
+        const enabled = dbListMcpServers(chat.createdBy ?? undefined)
+          .filter((s) => s.enabled).map((s) => s.name).join(", ") || "(none)";
+        // Throw so the caller's catch block sets step.status="failed"
+        // and the conditional re-plan kicks in. Re-planner sees the
+        // refreshed inventory and can pick the right server.
+        throw new Error(`no enabled MCP server named "${serverName}" — registered: ${enabled}`);
+      }
+      const result = await mcpCallTool(candidate.id, toolName, args);
+      // mcpClient.callTool maps tool-level errors to "[mcp_call error] ..."
+      // strings (preserves the body for the re-planner). Throw on that
+      // prefix so the step status flips to "failed" — without this the
+      // UI checklist renders ✓ for a step that visibly failed (the
+      // audit V3 bug). The re-plan loop already triggers on
+      // step.status === "failed", so a tool-name typo gets a second
+      // chance with the full inventory in the planner prompt.
+      if (result.startsWith("[mcp_call error]")) {
+        throw new Error(result.slice("[mcp_call error]".length).trim());
+      }
+      return result.slice(0, 8_000);
+    },
+  },
+};
+
+const BUILTIN_AGENT_TOOLS = Object.keys(AGENT_TOOLS) as AgentTool[];
+const PARALLEL_TOOLS = new Set<AgentTool>(
+  (Object.entries(AGENT_TOOLS) as [AgentTool, ToolDef][])
+    .filter(([, def]) => def.parallel)
+    .map(([name]) => name),
+);
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -441,318 +782,14 @@ async function runTool(
     return executeCustomAction(customAction, description, chat, provider, sources, signal);
   }
 
-  switch (tool) {
-    case "web_search": {
-      const resp = await performSearch(description, signal);
-      if (resp.results.length === 0) return "No results found.";
-      const top = resp.results.slice(0, 5);
-      sources.push(...top);
-      // Read the top pages, not just snippets — so the model can extract real
-      // content (tables, rankings, detail) a 150-char snippet can never hold.
-      // This is the difference between "couldn't find KLA in the list" and
-      // actually pulling the ranking. Concurrent + best-effort; a failed/empty
-      // fetch falls back to that result's snippet.
-      const pages = await Promise.all(top.slice(0, 3).map((r) => fetchUrlText(r.url, signal)));
-      return top
-        .map((r, i) => {
-          const body = (pages[i] ?? "").trim();
-          const content = body ? body.slice(0, 2500) : r.snippet;
-          return `[${(i + 1).toString()}] ${r.title}\n${r.url}\n${content}`;
-        })
-        .join("\n\n");
-    }
-
-    case "read_file": {
-      if (!chat.workspaceId) return "[No workspace attached — cannot read files]";
-      const snapshot = dbGetLatestSnapshot(chat.workspaceId);
-      if (!snapshot || snapshot.files.length === 0) return "[No snapshot available]";
-      // Heuristically pick up to 3 files whose names match the description
-      const descLower = description.toLowerCase();
-      const candidates = snapshot.files
-        .filter((f) => f.path.toLowerCase().includes(descLower) || descLower.includes(f.path.split("/").pop()?.toLowerCase() ?? ""))
-        .slice(0, 3)
-        .map((f) => f.path);
-      if (candidates.length === 0) {
-        // Fallback: just read first 2 files
-        candidates.push(...snapshot.files.slice(0, 2).map((f) => f.path));
-      }
-      // We need root path — pull from snapshot workspace
-      const ws = dbGetWorkspace(chat.workspaceId);
-      if (!ws) return "[Workspace not found]";
-      const focused = await focusedRead(ws.rootPath, candidates, snapshot, provider);
-      return focused.map((f) => `--- ${f.path} ---\n${f.content}`).join("\n\n");
-    }
-
-    case "list_files": {
-      if (!chat.workspaceId) return "[No workspace attached]";
-      const snapshot = dbGetLatestSnapshot(chat.workspaceId);
-      if (!snapshot) return "[No snapshot available]";
-      const list = snapshot.files.slice(0, 30).map((f) => f.path).join("\n");
-      return `Files in workspace:\n${list}`;
-    }
-
-    case "analyze_image": {
-      // Requires images in context — delegate to reason step
-      if (!provider.completeWithImages) return "[Vision not supported by this provider]";
-      const { text } = await provider.completeWithImages({
-        system: "You are a visual analysis assistant.",
-        prompt: description,
-        images: [],
-        signal,
-      });
-      return text;
-    }
-
-    case "run_template": {
-      if (!chat.workspaceId) return "[No workspace attached — cannot run templates]";
-      // Fire off a run async and return the run ID as result
-      try {
-        const run = await createRun({
-          workspaceId: chat.workspaceId,
-          templateId: "research-brief",
-          input: { topic: description },
-        });
-        return `Started template run ${run.id} (status: ${run.status})`;
-      } catch (err) {
-        return `[run_template failed: ${err instanceof Error ? err.message : String(err)}]`;
-      }
-    }
-
-    case "reason": {
-      const { text } = await provider.complete({
-        system: "You are a reasoning assistant. Think through the task carefully and provide a clear, well-structured analysis.",
-        prompt: description,
-        signal,
-      });
-      return text;
-    }
-
-    case "calculate": {
-      // Math expressions via mathjs — in-process, no side effects, no
-      // filesystem / network. The planner puts the expression in the
-      // step's description; we accept either a bare expression
-      // ("17% of 48200") or one wrapped in obvious context the model
-      // tends to add ("Calculate: 17% of 48200" / "= 17% of 48200").
-      const { evaluate } = await import("mathjs");
-      const cleaned = description
-        .replace(/^.*?[:=]/, "")                            // drop "Calculate:" / "result ="
-        .replace(/(\d+(?:\.\d+)?)\s*%/g, "($1/100)")         // tolerant percent-of, multi-digit
-        .replace(/\bof\b/gi, "*")                           // "of" → "*"
-        .trim();
-      if (!cleaned) return "[calculate: empty expression]";
-      try {
-        // mathjs evaluate is synchronous; a Promise.race "timeout" can't
-        // interrupt it (the event loop is blocked during evaluation) and only
-        // leaks a timer, so call it directly. A malformed expression throws
-        // into the catch below.
-        const result: unknown = evaluate(cleaned);
-        const formatted =
-          typeof result === "number" || typeof result === "bigint"
-            ? result.toString()
-            : (result?.toString?.() ?? JSON.stringify(result));
-        return `\`${cleaned}\` = **${formatted}**`;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return `[calculate failed: ${msg}]`;
-      }
-    }
-
-    case "edit_file": {
-      // Phase C: actually stage. The chat's open attempt is the
-      // staging "branch"; multiple edit_file calls in one turn or
-      // across turns accumulate into the same manifest.
-      if (!chat.workspaceId) return "[No workspace attached — cannot propose file edits]";
-      const ws = dbGetWorkspace(chat.workspaceId);
-      if (!ws) return "[Workspace not found]";
-
-      // Ask the model for a concrete, machine-readable edit. We accept
-      // either {path, search, replace} or {path, content} from the
-      // model so it can full-write when the change is too broad for
-      // a clean search/replace.
-      const { text } = await provider.complete({
-        system:
-          "You produce a single file edit as JSON. Given a workspace and a goal, " +
-          "decide ONE file to change and emit exactly:\n" +
-          "  { \"path\": \"...\", \"search\": \"...\", \"replace\": \"...\" }  OR\n" +
-          "  { \"path\": \"...\", \"content\": \"...full file body...\" }\n" +
-          "Prefer search/replace; fall back to full content only when the change " +
-          "is too broad for a clean string match. The `search` must occur exactly " +
-          "once in the file. Do not add commentary outside the JSON.",
-        prompt: description,
-        json: true,
-        signal,
-      });
-
-      let proposal: { path?: string; search?: string; replace?: string; content?: string };
-      try {
-        proposal = JSON.parse(extractJson(text)) as typeof proposal;
-      } catch {
-        return "[edit_file: model did not return valid JSON — kept the agent's plan but did not stage]\n" + text.slice(0, 500);
-      }
-      if (!proposal.path || typeof proposal.path !== "string") {
-        return "[edit_file: missing 'path' in model output]";
-      }
-
-      // Resolve the attempt + run the same stage logic the edit_file
-      // action block uses. Path-traversal + match-count rules are
-      // shared via stageEdit().
-      const { getOrOpenAttempt, stagingIdForAttempt } = await import("./attempts.js");
-      const { stageEdit } = await import("./stagedEdits.js");
-      const attempt = getOrOpenAttempt(chat.id, chat.workspaceId);
-      const stagingId = stagingIdForAttempt(attempt.id);
-
-      const abs = safeResolveUnderRoot(ws.rootPath, proposal.path);
-      if (!abs) {
-        return `[edit_file: path traversal rejected: ${proposal.path}]`;
-      }
-      const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
-
-      let proposed: string;
-      let action: "create" | "modify" | "replace";
-      if (typeof proposal.content === "string") {
-        proposed = proposal.content;
-        action = existing === null ? "create" : "replace";
-      } else if (typeof proposal.search === "string" && proposal.search.length > 0) {
-        if (existing === null) return `[edit_file: file does not exist for search/replace: ${proposal.path}]`;
-        let count = 0;
-        let from = 0;
-        while (true) {
-          const idx = existing.indexOf(proposal.search, from);
-          if (idx === -1) break;
-          count++;
-          from = idx + proposal.search.length;
-        }
-        if (count === 0) return `[edit_file: search string not found in ${proposal.path}]`;
-        if (count > 1) return `[edit_file: search matched ${count.toString()} times in ${proposal.path} (need exactly 1)]`;
-        proposed = existing.split(proposal.search).join(proposal.replace ?? "");
-        action = "modify";
-      } else {
-        return "[edit_file: model output missing 'search' or 'content']";
-      }
-      if (existing !== null && proposed === existing) {
-        return `[edit_file: proposed change is identical to current ${proposal.path}]`;
-      }
-
-      try {
-        const stats = await stageEdit({
-          runId: stagingId,
-          workspace: ws,
-          path: proposal.path,
-          action,
-          before: existing,
-          after: proposed,
-        });
-        return `Staged ${action} for ${proposal.path} (+${stats.added.toString()}/-${stats.removed.toString()}) — attempt ${attempt.id.slice(0, 8)}. Review at /attempts/${attempt.id}/diff`;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return `[edit_file: staging failed: ${msg}]`;
-      }
-    }
-
-    case "run_tests": {
-      // Real execution: run the workspace's test command. Output is
-      // prefixed with ✓/✗ so the re-plan gate (low-information
-      // detection) can branch on failure automatically.
-      if (!chat.workspaceId) return "[No workspace attached — cannot run tests]";
-      const ws = dbGetWorkspace(chat.workspaceId);
-      if (!ws) return "[Workspace not found]";
-
-      // For agent use the command comes from the step description
-      // ("run npm test", "execute pytest -k auth") or a sensible default.
-      const command = description.trim() || "npm test";
-
-      const { spawn } = await import("node:child_process");
-      return await new Promise<string>((resolve) => {
-        let stdout = "";
-        let stderr = "";
-        const proc = spawn("/bin/sh", ["-c", command], { cwd: ws.rootPath });
-        const timer = setTimeout(() => proc.kill("SIGTERM"), 120_000);
-        proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
-        proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
-        proc.on("close", (code) => {
-          clearTimeout(timer);
-          const passed = code === 0;
-          const head = passed
-            ? `✓ Tests passed (\`${command}\`)`
-            : `✗ Tests failed (exit ${(code ?? "?").toString()}, \`${command}\`)`;
-          // Trim aggressively — agent context budget is tighter than
-          // an action block's. Tail of stdout/stderr is what's useful
-          // for triage anyway.
-          const out = stdout.slice(-1500);
-          const err = stderr.slice(-500);
-          resolve(
-            [head, out.trim() ? "stdout: " + out : "", err.trim() ? "stderr: " + err : ""]
-              .filter(Boolean)
-              .join("\n"),
-          );
-        });
-        proc.on("error", (e) => {
-          clearTimeout(timer);
-          resolve(`[run_tests error: ${e.message}]`);
-        });
-      });
-    }
-
-    case "mcp_call": {
-      // Description format the planner agreed to in its system prompt:
-      //   "<serverName>::<toolName> <json-args>"
-      // We split on the FIRST whitespace after `::` so server/tool names
-      // with no internal spaces stay intact and the JSON tail starts
-      // where the brace begins.
-      const trimmed = description.trim();
-      const sepIdx = trimmed.indexOf("::");
-      if (sepIdx < 0) {
-        return `[mcp_call: description must be "<serverName>::<toolName> <jsonArgs>", got: ${description.slice(0, 80)}]`;
-      }
-      const serverName = trimmed.slice(0, sepIdx).trim();
-      const afterServer = trimmed.slice(sepIdx + 2);
-      const braceIdx = afterServer.indexOf("{");
-      const toolName = (braceIdx < 0 ? afterServer : afterServer.slice(0, braceIdx)).trim();
-      const argsRaw = braceIdx < 0 ? "{}" : afterServer.slice(braceIdx).trim();
-      if (!serverName || !toolName) {
-        return `[mcp_call: empty server or tool name]`;
-      }
-      let args: Record<string, unknown>;
-      try {
-        const parsed = JSON.parse(argsRaw) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          return `[mcp_call: args must be a JSON object, got ${argsRaw.slice(0, 80)}]`;
-        }
-        args = parsed as Record<string, unknown>;
-      } catch (err) {
-        return `[mcp_call: invalid JSON args — ${err instanceof Error ? err.message : String(err)}]`;
-      }
-      // Resolve serverName → serverId. The planner sees names, not ids,
-      // so the agent does the lookup. Account-scoped — admin sees all.
-      const candidate = dbListMcpServers(chat.createdBy ?? undefined)
-        .find((s) => s.enabled && s.name === serverName);
-      if (!candidate) {
-        const enabled = dbListMcpServers(chat.createdBy ?? undefined)
-          .filter((s) => s.enabled).map((s) => s.name).join(", ") || "(none)";
-        // Throw so the caller's catch block sets step.status="failed"
-        // and the conditional re-plan kicks in. Re-planner sees the
-        // refreshed inventory and can pick the right server.
-        throw new Error(`no enabled MCP server named "${serverName}" — registered: ${enabled}`);
-      }
-      const result = await mcpCallTool(candidate.id, toolName, args);
-      // mcpClient.callTool maps tool-level errors to "[mcp_call error] ..."
-      // strings (preserves the body for the re-planner). Throw on that
-      // prefix so the step status flips to "failed" — without this the
-      // UI checklist renders ✓ for a step that visibly failed (the
-      // audit V3 bug). The re-plan loop already triggers on
-      // step.status === "failed", so a tool-name typo gets a second
-      // chance with the full inventory in the planner prompt.
-      if (result.startsWith("[mcp_call error]")) {
-        throw new Error(result.slice("[mcp_call error]".length).trim());
-      }
-      return result.slice(0, 8_000);
-    }
-
-    default: {
-      const _exhaustive: never = tool;
-      return `[Unknown tool: ${String(_exhaustive)}]`;
-    }
-  }
+  // Dispatch to the registry — every built-in tool's execution lives in its
+  // AGENT_TOOLS[tool].run. The planner schema constrains `tool` to the
+  // registered names plus custom-action ids; a custom action deleted between
+  // planning and execution arrives as a name with no entry, so fall back the
+  // same way the old switch's `default` did.
+  const entry = AGENT_TOOLS[tool];
+  if (!entry) return `[Unknown tool: ${String(tool)}]`;
+  return entry.run({ description, chat, provider, sources, signal });
 }
 
 // ---------------------------------------------------------------------------
