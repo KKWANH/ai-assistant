@@ -213,7 +213,7 @@ function AppContent() {
             <Route path="/settings" element={<SettingsView />} />
             <Route path="/search" element={<SearchView />} />
             <Route path="/compare" element={<CompareView />} />
-            <Route path="/developers" element={<DevelopersView />} />
+            <Route path="/developers/*" element={<DevelopersView />} />
             <Route path="/reports" element={<ReportsQueueView />} />
             <Route path="/tutorial" element={<TutorialPage />} />
 

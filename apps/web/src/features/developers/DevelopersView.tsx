@@ -1,279 +1,332 @@
 /**
- * DevelopersView — the in-app developer docs hub (/developers). A docs-style
- * shell (sidebar sections) over the API reference, architecture diagrams, and
- * extension guides. Aimed at open-source contributors: how the backend is laid
- * out, how to add a workspace, and how to extend the server.
+ * DevelopersView — the in-app docs site (/developers/<slug>). A documentation
+ * shell over the page registry (docsRegistry): a hierarchical sidebar, a
+ * scroll-spy "On this page" rail, breadcrumbs, prev/next, and fuzzy search that
+ * also feeds the Cmd+K palette. Content is Markdown (docsKit) or the
+ * interactive API reference. Adding a page is one registry entry — the nav,
+ * routing, TOC, and search all derive from it.
  */
-import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { BookOpen, Boxes, Terminal, GitBranch, Workflow, ArrowLeft } from "lucide-react";
-import { ApiReference } from "./ApiReference";
-import { SystemDiagram, RequestLifecycleDiagram, DataModelDiagram } from "./diagrams";
+import { useMemo, useState, useRef, useEffect, type ReactNode } from "react";
+import { Link, useParams, useNavigate, Navigate } from "react-router-dom";
+import { ArrowLeft, ArrowRight, ChevronRight, Search, FileText, Hash } from "lucide-react";
+import { useRegisterCommands, type CommandItem } from "../../lib/commands";
+import { DocsMarkdown, useScrollSpy } from "./docsKit";
+import {
+  DOC_SECTIONS, ALL_PAGES, findPage, pageHeadings, DEFAULT_SLUG,
+  type DocPage, type DocSection,
+} from "./docsRegistry";
 
-type SectionId = "overview" | "architecture" | "api" | "guides";
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
 
-const NAV: { id: SectionId; label: string; icon: typeof BookOpen }[] = [
-  { id: "overview", label: "Overview", icon: BookOpen },
-  { id: "architecture", label: "Architecture", icon: Boxes },
-  { id: "api", label: "API Reference", icon: GitBranch },
-  { id: "guides", label: "Guides", icon: Workflow },
-];
+interface Hit { page: DocPage; section: DocSection; score: number }
 
-/** Monospace code block. */
-function Code({ children }: { children: ReactNode }) {
-  return (
-    <pre className="rounded-lg border border-border bg-surface-2 p-3 text-2xs font-mono text-foreground overflow-x-auto leading-relaxed">
-      {children}
-    </pre>
-  );
+/** Tiny term-AND fuzzy rank over title/section/description/headings. */
+function searchDocs(query: string): Hit[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const terms = q.split(/\s+/);
+  const hits: Hit[] = [];
+  for (const { page, section } of ALL_PAGES) {
+    const title = page.title.toLowerCase();
+    const heads = pageHeadings(page).map((h) => h.text.toLowerCase()).join(" ");
+    const desc = page.description.toLowerCase();
+    const sec = section.label.toLowerCase();
+    let score = 0;
+    let ok = true;
+    for (const t of terms) {
+      const inTitle = title.includes(t);
+      const inHead = heads.includes(t);
+      const inDesc = desc.includes(t);
+      const inSec = sec.includes(t);
+      if (!(inTitle || inHead || inDesc || inSec)) { ok = false; break; }
+      score += (inTitle ? 5 : 0) + (inHead ? 2 : 0) + (inDesc ? 1 : 0) + (inSec ? 1 : 0);
+    }
+    if (ok) hits.push({ page, section, score });
+  }
+  return hits.sort((a, b) => b.score - a.score).slice(0, 8);
 }
 
-function Figure({ title, children, caption }: { title: string; children: ReactNode; caption?: string }) {
-  return (
-    <figure className="rounded-xl border border-border bg-card p-4">
-      <figcaption className="text-xs font-semibold text-foreground mb-3">{title}</figcaption>
-      {children}
-      {caption && <p className="text-2xs text-muted-foreground mt-3 leading-snug">{caption}</p>}
-    </figure>
-  );
-}
+function SearchBox() {
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const hits = useMemo(() => searchDocs(q), [q]);
 
-function Overview() {
+  useEffect(() => { setActive(0); }, [q]);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => { document.removeEventListener("mousedown", onDoc); };
+  }, []);
+
+  const go = (h: Hit) => {
+    navigate(`/developers/${h.page.slug}`);
+    setQ("");
+    setOpen(false);
+  };
+
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Ariadne for developers</h2>
-        <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-          A local-first AI workspace platform (AGPL-3.0). It runs on your machine, points every answer back at the source,
-          and is built to be extended. Three ideas shape the codebase:
-        </p>
+    <div ref={boxRef} className="relative">
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 focus-within:border-accent/60">
+        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => { setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, hits.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter" && hits[active]) { e.preventDefault(); go(hits[active]); }
+            else if (e.key === "Escape") { setOpen(false); }
+          }}
+          placeholder="Search docs"
+          className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+        />
       </div>
-      <div className="grid sm:grid-cols-3 gap-3">
-        {[
-          { t: "Local-first", d: "The server binds to loopback; a loopback request IS the admin. Remote access (the tunnel) requires a cookie and loses local-only powers like the terminal." },
-          { t: "Register, don't hardcode", d: "Commands, settings, surfaces — and the server's API routes — are registries. Neither the web shell nor the server bootstrap enumerates them; you contribute a hook or a CORE_ROUTES entry." },
-          { t: "Dual-use", d: "A power-user IDE (editor, git, terminal, surfaces) and an easy non-developer mode, toggled per account and per workspace." },
-        ].map((x) => (
-          <div key={x.t} className="rounded-lg border border-border bg-card p-3">
-            <h3 className="text-xs font-semibold text-accent mb-1">{x.t}</h3>
-            <p className="text-2xs text-muted-foreground leading-snug">{x.d}</p>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Monorepo layout</h3>
-        <Code>{`apps/
-  server/   Fastify + node:sqlite — routes/ services/ providers/ surface/ db/
-  web/      React 18 + Vite + Tailwind v4 — features/ components/ lib/
-  desktop/  Tauri shell (sidecar spawns the server)
-  admin/    supervisor (process management)
-packages/
-  shared/   zod schemas, types, theme, the provider registry — imported by both apps
-projects/   static example projects (lecture, portfolio) contributed via a registry`}</Code>
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Run it</h3>
-        <Code>{`npm install
-./ops/ariadne.sh restart      # build web + (re)start the server on :4319
-# or for development:
-npm run dev:server            # tsx watch — the API on :4319
-npm run dev:web               # vite on :5173 (proxies /api → :4319)`}</Code>
-        <p className="text-2xs text-muted-foreground">
-          Web changes are served from <code className="font-mono">apps/web/dist</code>; rebuild + restart with{" "}
-          <code className="font-mono">./ops/ariadne.sh restart</code>.
-        </p>
-      </div>
+      {open && q && (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+          {hits.length === 0 ? (
+            <p className="px-3 py-2.5 text-2xs text-muted-foreground">No matches for “{q}”.</p>
+          ) : (
+            hits.map((h, i) => (
+              <button
+                key={h.page.slug}
+                onMouseEnter={() => { setActive(i); }}
+                onClick={() => { go(h); }}
+                className={[
+                  "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors",
+                  i === active ? "bg-accent/10" : "hover:bg-surface-2",
+                ].join(" ")}
+              >
+                <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-medium text-foreground">{h.page.title}</span>
+                  <span className="block truncate text-2xs text-muted-foreground">{h.section.label} · {h.page.description}</span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function Architecture() {
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
+
+function Sidebar({ slug }: { slug: string }) {
   return (
-    <div className="space-y-5 max-w-3xl">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Architecture</h2>
-        <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-          A React SPA talks to a Fastify server over four channels — REST, server-sent events, a terminal WebSocket, and{" "}
-          <code className="font-mono text-xs">postMessage</code> to the sandboxed surface iframe. The server owns sqlite,
-          the embedding index, the AI providers, and the host's git/PTY/filesystem.
-        </p>
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-border md:flex">
+      <div className="shrink-0 space-y-3 border-b border-border p-3">
+        <Link to="/" className="flex items-center gap-1.5 text-2xs text-muted-foreground transition-colors hover:text-foreground">
+          <ArrowLeft className="h-3 w-3" /> Back to app
+        </Link>
+        <SearchBox />
       </div>
-      <Figure
-        title="System"
-        caption="The browser never reaches storage or providers directly — everything goes through the Fastify routes, which the auth hook gates (loopback = admin, remote = cookie)."
-      >
-        <SystemDiagram />
-      </Figure>
-      <Figure
-        title="A chat message's lifecycle"
-        caption="streamAssistantReply resolves the effective settings (a workspace's model override, else the account default), classifies on a cheap triage tier, retrieves top-k chunks, calls the metered provider, and streams deltas back over SSE. 'instant' mode skips triage + retrieval."
-      >
-        <RequestLifecycleDiagram />
-      </Figure>
-      <Figure
-        title="Data model"
-        caption="The workspace is the hub: a scan produces a snapshot + embedding index; chats, runs, a surface, and memory all hang off it. Stored in node:sqlite."
-      >
-        <DataModelDiagram />
-      </Figure>
-    </div>
+      <nav className="min-h-0 flex-1 overflow-y-auto p-3">
+        {DOC_SECTIONS.map((section) => {
+          const Icon = section.icon;
+          return (
+            <div key={section.id} className="mb-5 last:mb-0">
+              <p className="mb-1.5 flex items-center gap-1.5 px-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Icon className="h-3 w-3" /> {section.label}
+              </p>
+              <div className="space-y-0.5">
+                {section.pages.map((page) => {
+                  const active = page.slug === slug;
+                  return (
+                    <Link
+                      key={page.slug}
+                      to={`/developers/${page.slug}`}
+                      className={[
+                        "block rounded-md px-2 py-1.5 text-xs transition-colors",
+                        active
+                          ? "bg-accent/10 font-medium text-accent"
+                          : "text-foreground/80 hover:bg-surface-2 hover:text-foreground",
+                      ].join(" ")}
+                    >
+                      {page.title}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+    </aside>
   );
 }
 
-function Guides() {
+// ---------------------------------------------------------------------------
+// On this page (right rail)
+// ---------------------------------------------------------------------------
+
+function OnThisPage({ page, scrollEl }: { page: DocPage; scrollEl: HTMLElement | null }) {
+  const headings = useMemo(() => pageHeadings(page), [page]);
+  const ids = useMemo(() => headings.map((h) => h.id), [headings]);
+  const active = useScrollSpy(ids, scrollEl);
+  if (headings.length < 2) return <div className="hidden w-56 shrink-0 xl:block" />;
   return (
-    <div className="space-y-8 max-w-3xl">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Guides</h2>
-        <p className="text-sm text-muted-foreground mt-1">Common extension points, end to end.</p>
-      </div>
-
-      <section className="space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Boxes className="h-4 w-4 text-accent" /> Add a workspace
-        </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          A workspace is a local folder plus include/exclude globs. Create one, scan it into a snapshot + embedding index,
-          then everything (chat retrieval, the data tab, runs) reads from that snapshot.
+    <div className="hidden w-56 shrink-0 xl:block">
+      <div className="sticky top-0 max-h-screen overflow-y-auto p-6 pl-2">
+        <p className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Hash className="h-3 w-3" /> On this page
         </p>
-        <Code>{`# 1. Create — rootPath is an absolute local folder
-curl -s -X POST localhost:4319/api/workspaces \\
-  -H 'content-type: application/json' \\
-  -d '{"name":"Notes","rootPath":"/Users/me/notes"}'
-# → { id, name, rootPath, ... }
-
-# 2. Scan → snapshot (file list) + embeddings; emits an SSE scan-complete
-curl -s -X POST localhost:4319/api/workspaces/<id>/scan
-
-# 3. Read the snapshot the UI renders from
-curl -s localhost:4319/api/workspaces/<id>/snapshot`}</Code>
-        <p className="text-2xs text-muted-foreground leading-snug">
-          Per-workspace config (default model, home view, visibility) lives on the workspace row and is set via{" "}
-          <code className="font-mono">PATCH /api/workspaces/:id</code>. To scaffold files + a custom surface on create, pass
-          a <code className="font-mono">starter</code> id (see <code className="font-mono">projects/</code>).
-        </p>
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <GitBranch className="h-4 w-4 text-accent" /> Extend the backend — add a route
-        </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Every route file exports a plugin <code className="font-mono text-xs">(app) =&gt; {`{ … }`}</code>. You don't touch{" "}
-          <code className="font-mono text-xs">index.ts</code> — append ONE entry to the route registry (
-          <code className="font-mono text-xs">routes/registry.ts</code>), which the bootstrap iterates inside the{" "}
-          <code className="font-mono text-xs">/api</code> scope (so the auth hook runs). Guards come from{" "}
-          <code className="font-mono text-xs">workspaceGuard.ts</code>.
-        </p>
-        <Code>{`// apps/server/src/routes/notes.ts
-import type { FastifyInstance } from "fastify";
-import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
-
-export async function noteRoutes(app: FastifyInstance) {
-  app.post<{ Params: { id: string }; Body: { text?: string } }>(
-    "/workspaces/:id/notes",
-    async (req, reply) => {
-      // mutations should refuse remote access
-      if (await rejectRemoteAccess("Local only.", req, reply)) return;
-      const ws = await requireWorkspace(req.params.id, req, reply); // write access
-      if (!ws) return;
-      // ... do the work against ws.rootPath ...
-      return reply.send({ ok: true });
-    },
-  );
-}
-
-// apps/server/src/routes/registry.ts — append ONE entry; index.ts iterates it:
-{ domain: "notes", description: "Workspace notes.", register: noteRoutes },`}</Code>
-        <ul className="text-2xs text-muted-foreground space-y-1 list-disc pl-4 leading-snug">
-          <li><code className="font-mono">requireWorkspace(id, req, reply, "read")</code> for reads; omit the 4th arg for owner/write.</li>
-          <li><code className="font-mono">accessContext(req)</code> is <code className="font-mono">"local"</code> only on a real loopback connection — gate dangerous powers (shell, fs) on it.</li>
-          <li>Heavy work belongs in <code className="font-mono">services/</code>; keep route handlers thin.</li>
-          <li>Re-run <code className="font-mono">node scripts/gen-api-inventory.mjs</code> and your route shows up here automatically.</li>
+        <ul className="space-y-1 border-l border-border">
+          {headings.map((h) => (
+            <li key={h.id} style={{ paddingLeft: h.depth === 3 ? 14 : 0 }}>
+              <a
+                href={`#${h.id}`}
+                className={[
+                  "-ml-px block border-l-2 py-0.5 pl-3 text-2xs leading-snug transition-colors",
+                  active === h.id
+                    ? "border-accent font-medium text-accent"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                {h.text}
+              </a>
+            </li>
+          ))}
         </ul>
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Terminal className="h-4 w-4 text-accent" /> Add an AI provider
-        </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Providers derive from a single registry. An OpenAI-compatible vendor is one descriptor — no new class. A bespoke
-          transport (non-OpenAI wire format) adds a <code className="font-mono text-xs">create()</code> factory on the same
-          descriptor.
-        </p>
-        <Code>{`// packages/shared/src/config.ts — PROVIDER_REGISTRY
-{
-  id: "myvendor", label: "My Vendor", kind: "openai-compatible",
-  envKey: "MYVENDOR_API_KEY",
-  baseURL: "https://api.myvendor.com/v1",
-  defaultModel: "my-model-1",
-  models: [
-    { id: "my-model-1", label: "My Model 1", traitKey: "model.trait.minimax",
-      speed: "normal", costTier: "mid", pricing: { inUsd: 0.5, outUsd: 1.5 } },
-  ],
-  // bespoke transport instead of openai-compatible? add:
-  // create: (model, key) => new MyVendorProvider(model, key),
-}
-// then add "myvendor" to PROVIDERS. Labels, defaults, model choices, pricing,
-// vision, key resolution, the settings UI + status route all derive from it.`}</Code>
-      </section>
+      </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Page chrome
+// ---------------------------------------------------------------------------
+
+function Breadcrumbs({ section, page }: { section: DocSection; page: DocPage }) {
+  return (
+    <nav className="mb-3 flex items-center gap-1.5 text-2xs text-muted-foreground">
+      <span>{section.label}</span>
+      <ChevronRight className="h-3 w-3" />
+      <span className="text-foreground/70">{page.title}</span>
+    </nav>
+  );
+}
+
+function PrevNext({ slug }: { slug: string }) {
+  const idx = ALL_PAGES.findIndex((p) => p.page.slug === slug);
+  const prev = idx > 0 ? ALL_PAGES[idx - 1] : undefined;
+  const next = idx >= 0 && idx < ALL_PAGES.length - 1 ? ALL_PAGES[idx + 1] : undefined;
+  return (
+    <div className="mt-12 grid grid-cols-2 gap-3 border-t border-border pt-6">
+      {prev ? (
+        <Link to={`/developers/${prev.page.slug}`} className="group flex flex-col rounded-xl border border-border p-3 transition-colors hover:border-accent/50 hover:bg-surface-2">
+          <span className="flex items-center gap-1 text-2xs text-muted-foreground"><ArrowLeft className="h-3 w-3" /> Previous</span>
+          <span className="mt-0.5 text-sm font-medium text-foreground group-hover:text-accent">{prev.page.title}</span>
+        </Link>
+      ) : <span />}
+      {next ? (
+        <Link to={`/developers/${next.page.slug}`} className="group flex flex-col items-end rounded-xl border border-border p-3 text-right transition-colors hover:border-accent/50 hover:bg-surface-2">
+          <span className="flex items-center gap-1 text-2xs text-muted-foreground">Next <ArrowRight className="h-3 w-3" /></span>
+          <span className="mt-0.5 text-sm font-medium text-foreground group-hover:text-accent">{next.page.title}</span>
+        </Link>
+      ) : <span />}
+    </div>
+  );
+}
+
+/** Mobile-only page picker (the sidebar is hidden < md). */
+function MobilePicker({ slug }: { slug: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="border-b border-border p-3 md:hidden">
+      <select
+        value={slug}
+        onChange={(e) => { navigate(`/developers/${e.target.value}`); }}
+        className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-foreground"
+      >
+        {DOC_SECTIONS.map((section) => (
+          <optgroup key={section.id} label={section.label}>
+            {section.pages.map((page) => (
+              <option key={page.slug} value={page.slug}>{page.title}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------
+
+function PageBody({ content }: { content: DocPage["content"] }): ReactNode {
+  if (content.kind === "md") return <DocsMarkdown body={content.body} />;
+  return content.render();
 }
 
 export function DevelopersView() {
-  const [section, setSection] = useState<SectionId>("overview");
-  return (
-    <div className="flex-1 min-h-0 flex">
-      {/* Sidebar nav */}
-      <aside className="w-52 shrink-0 border-r border-border overflow-y-auto p-3 hidden md:block">
-        <Link to="/" className="flex items-center gap-1.5 text-2xs text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft className="h-3 w-3" /> Back to app
-        </Link>
-        <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground px-2 mb-2">Developer docs</p>
-        <nav className="space-y-0.5">
-          {NAV.map((n) => {
-            const Icon = n.icon;
-            const active = section === n.id;
-            return (
-              <button
-                key={n.id}
-                onClick={() => setSection(n.id)}
-                className={[
-                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors",
-                  active ? "bg-accent/10 text-accent font-medium" : "text-foreground hover:bg-surface-3",
-                ].join(" ")}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                {n.label}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+  const { "*": splat } = useParams();
+  const slug = (splat ?? "").replace(/\/$/, "");
+  const navigate = useNavigate();
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null);
 
-      {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* Mobile section tabs */}
-        <div className="md:hidden flex gap-1 overflow-x-auto border-b border-border px-3 py-2">
-          {NAV.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => setSection(n.id)}
-              className={["shrink-0 px-2.5 py-1 rounded-md text-xs", section === n.id ? "bg-accent/10 text-accent" : "text-muted-foreground"].join(" ")}
-            >
-              {n.label}
-            </button>
-          ))}
-        </div>
-        <div className="p-5 sm:p-8">
-          {section === "overview" && <Overview />}
-          {section === "architecture" && <Architecture />}
-          {section === "api" && <ApiReference />}
-          {section === "guides" && <Guides />}
-        </div>
+  // Every page is a Cmd+K target — "register, don't hardcode" for docs search.
+  const commands = useMemo<CommandItem[]>(
+    () =>
+      ALL_PAGES.map(({ page, section }) => ({
+        id: `docs:${page.slug}`,
+        label: page.title,
+        description: `Docs · ${section.label}`,
+        section: "Docs",
+        icon: <FileText className="h-4 w-4" />,
+        onSelect: () => { navigate(`/developers/${page.slug}`); },
+      })),
+    [navigate],
+  );
+  useRegisterCommands("docs", commands);
+
+  const found = slug ? findPage(slug) : undefined;
+
+  // Reset scroll to top when the page changes (unless deep-linking to a hash).
+  useEffect(() => {
+    if (scrollEl && !window.location.hash) scrollEl.scrollTo({ top: 0 });
+  }, [slug, scrollEl]);
+
+  if (!slug) return <Navigate to={`/developers/${DEFAULT_SLUG}`} replace />;
+  if (!found) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+        <p className="text-sm text-muted-foreground">No docs page at <code className="font-mono">/{slug}</code>.</p>
+        <Link to={`/developers/${DEFAULT_SLUG}`} className="text-xs font-medium text-accent hover:underline">Go to the docs home →</Link>
       </div>
+    );
+  }
+  const { page, section } = found;
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      <Sidebar slug={slug} />
+      <main ref={setScrollEl} className="min-h-0 flex-1 overflow-y-auto">
+        <MobilePicker slug={slug} />
+        <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8 lg:px-10">
+          <article className="min-w-0 max-w-3xl flex-1">
+            <Breadcrumbs section={section} page={page} />
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{page.title}</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{page.description}</p>
+            <div className="mt-6">
+              <PageBody content={page.content} />
+            </div>
+            <PrevNext slug={slug} />
+          </article>
+          <OnThisPage page={page} scrollEl={scrollEl} />
+        </div>
+      </main>
     </div>
   );
 }
