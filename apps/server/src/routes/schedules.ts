@@ -17,7 +17,7 @@ import {
   dbDeleteSchedule,
   dbGetWorkspace,
 } from "../db/repo.js";
-import { canAccessWorkspace } from "./workspaceGuard.js";
+import { canModifyWorkspace } from "./workspaceGuard.js";
 import { computeFirstRunAt, computeNextRunAt } from "../services/scheduler.js";
 import { loadActionDefs } from "../services/actions.js";
 
@@ -32,7 +32,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const ws = dbGetWorkspace(req.params.workspaceId);
       if (!ws) return reply.status(404).send({ error: "Workspace not found" });
-      if (!canAccessWorkspace(ws, req.account)) {
+      if (!canModifyWorkspace(ws, req.account)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
       return reply.send(dbListSchedulesForWorkspace(req.params.workspaceId));
@@ -47,7 +47,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
       if (!req.account) return reply.status(401).send({ error: "Sign in required" });
       const ws = dbGetWorkspace(req.params.workspaceId);
       if (!ws) return reply.status(404).send({ error: "Workspace not found" });
-      if (!canAccessWorkspace(ws, req.account)) {
+      if (!canModifyWorkspace(ws, req.account)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
       const parsed = CreateScheduleSchema.safeParse(req.body);

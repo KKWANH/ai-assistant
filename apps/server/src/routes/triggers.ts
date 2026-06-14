@@ -24,7 +24,7 @@ import {
   dbDeleteTrigger,
   dbGetWorkspace,
 } from "../db/repo.js";
-import { canAccessWorkspace } from "./workspaceGuard.js";
+import { canModifyWorkspace } from "./workspaceGuard.js";
 import { loadActionDefs } from "../services/actions.js";
 import { createActionRun } from "../runs/actionEngine.js";
 import logger from "../logger.js";
@@ -61,11 +61,11 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const ws = dbGetWorkspace(req.params.workspaceId);
       if (!ws) return reply.status(404).send({ error: "Workspace not found" });
-      if (!canAccessWorkspace(ws, req.account)) {
+      if (!canModifyWorkspace(ws, req.account)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
       // A trigger secret is a credential. On a shared/built-in/public workspace
-      // canAccessWorkspace is true for other accounts, so only return the
+      // canModifyWorkspace is true for other accounts, so only return the
       // caller's OWN triggers — otherwise listing would leak someone else's
       // webhook secret (caught in review).
       const mine = dbListTriggersForWorkspace(req.params.workspaceId).filter(
@@ -83,7 +83,7 @@ export async function triggerRoutes(app: FastifyInstance): Promise<void> {
       if (!req.account) return reply.status(401).send({ error: "Sign in required" });
       const ws = dbGetWorkspace(req.params.workspaceId);
       if (!ws) return reply.status(404).send({ error: "Workspace not found" });
-      if (!canAccessWorkspace(ws, req.account)) {
+      if (!canModifyWorkspace(ws, req.account)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
       const parsed = CreateTriggerSchema.safeParse(req.body);

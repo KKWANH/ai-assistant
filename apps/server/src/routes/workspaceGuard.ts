@@ -64,15 +64,6 @@ export function canModifyWorkspace(workspace: Workspace, account: Account): bool
 }
 
 /**
- * Deprecated alias — kept so unaudited call sites still compile and stay
- * strict (treat unknown access as write-level). Prefer canViewWorkspace
- * or canModifyWorkspace explicitly.
- */
-export function canAccessWorkspace(workspace: Workspace, account: Account): boolean {
-  return canModifyWorkspace(workspace, account);
-}
-
-/**
  * Fetch a workspace by id and enforce the access guard. On a missing workspace
  * or denied access this sends the appropriate 404/403 response and returns
  * null — callers should `return` immediately when the result is null.
