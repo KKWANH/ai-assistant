@@ -514,3 +514,414 @@ surface, and memory all reference the workspace.
 > EXISTS\` plus guarded column adds. There's no version table and no
 > down-migrations, so keep new columns nullable or defaulted.
 `;
+
+// --- Concepts ---------------------------------------------------------------
+
+export const SURFACES = `
+A **surface** is a custom interactive screen — a dashboard, a tool, a control
+panel — that you write in TypeScript/React and attach to a workspace. It runs in
+a **sandboxed iframe** and reaches Ariadne only through a typed bridge, so it can
+be powerful without being dangerous.
+
+## The sandbox
+
+A surface is served into an \`<iframe sandbox="allow-scripts">\` — note the absence
+of \`allow-same-origin\`, so it cannot read the parent's cookies or DOM, and cannot
+call \`/api\` directly. Every capability arrives over a \`postMessage\` bridge that
+the host (running with your session) brokers: the surface asks, the host performs
+the authenticated call and returns the result. A render crash inside a surface is
+caught and shown as a banner — it can't take down the app.
+
+## What a surface can do
+
+Through the SDK hook \`useAriadne()\`, a surface can:
+
+- **Ask the workspace's model** — \`ask(prompt)\` for a one-shot completion.
+- **Search the workspace** — \`search(query)\` for the most relevant file chunks.
+- **Read files** — \`listFiles()\`, \`readText(path)\`, \`readCsv(path)\`.
+- **Persist its own state** — \`getState()\` / \`setState(json)\`.
+- **Run templates & actions** — \`runTemplate\`, \`runAction\`, \`getRun\`.
+- **Stage a file edit** for review — \`stageFile(path, content)\`.
+- **Pull market data** — quotes, FX, history, dividends, news (best-effort).
+
+It also gets a **UI kit** (Card, Stat, Button, Badge, Grid) and **charts**
+(LineChart, BarChart, PieChart) that already track the app's theme.
+
+## Where it lives
+
+A surface is a file in the workspace — \`.ariadne/surface.tsx\` (or a
+\`.ariadne/surface/\` folder for multiple files). The server bundles it with
+esbuild into \`.ariadne/surface-dist/bundle.js\` and serves it to the iframe. Set
+the workspace's home view to **surface** and it becomes the immersive landing
+screen, no tabs.
+
+> [!NOTE]
+> Surfaces are authored locally only — the editor and the build run on your
+> machine. [Build a surface](/developers/build-a-surface) walks through the full
+> SDK with a starter.
+`;
+
+export const RUNS_AND_TEMPLATES = `
+A **run** is a recorded execution of a **template** (a structured,
+evidence-first research task) or an **action** (an ordered pipeline of blocks).
+Runs are traceable: each records its inputs, the files it chose, its steps, and
+its output, so you can re-open — or re-run — it later.
+
+## Templates
+
+A template declares its inputs, the Markdown **sections** its output must
+contain, and whether evidence and a re-run diff are required. The built-ins
+(research brief, investment memo, job-search review, source audit) ship in the
+server; **projects contribute their own** via \`registerProjectTemplates(...)\` at
+boot, so the core never hardcodes a project's templates.
+
+A template run moves through phases — \`created → scanning → context_pick →
+generating → completed\` — and **pauses at \`context_pick\`** so you approve which
+files it grounds on before it spends the expensive model.
+
+## Actions: the block pipeline
+
+An action is an ordered list of **blocks**, each feeding its output to the next:
+
+| Block | Does |
+| --- | --- |
+| \`ask_ai\` | Ask the model (with workspace retrieval + memory) |
+| \`web_analysis\` | Web search + summarize |
+| \`run_script\` | Run a workspace \`.sh\` / \`.py\` script |
+| \`read_file\` | Read a file's content |
+| \`write_file\` | Append to or replace a file |
+| \`edit_file\` | Stage a change for review |
+| \`run_tests\` | Run a test command, capture pass/fail |
+
+Each block receives the previous block's output (capped at 8&nbsp;KB). The
+pipeline is **fail-fast** — the first failed block stops the run, and every
+block's result is recorded so you see exactly where it stopped.
+
+> [!IMPORTANT]
+> These block types are the run engine's vocabulary — a **separate** system from
+> the chat agent's tools. [Add an agent tool](/developers/add-an-agent-tool)
+> explains the distinction.
+
+## Staged edits & review
+
+\`edit_file\` (and the chat agent's edits) never write straight to your files.
+They **stage** the change under \`.ariadne/staged/<runId>/\` as a before/after
+diff. You review it, pick which paths to apply, and only then is it written — and
+committed to the workspace's history. Nothing touches your working tree without
+your approval.
+`;
+
+export const MEMORY = `
+**Memory** is a small set of facts the assistant has confirmed about a workspace
+— things like *"the test command is \`npm run typecheck\`"* or *"the database is
+Postgres 14."* Confirmed facts ride along into the model's prompts so it stops
+re-deriving (or guessing) them.
+
+## Where it lives
+
+Memory is a human-editable file in the workspace: \`.ariadne/memory.yaml\`. No
+database, no hidden state — open it, read it, edit it. Each entry is a single
+sentence (≤ 500 chars) plus when it was added, by whom, and an optional source
+(the chat message it came from).
+
+## How it's used
+
+When you save a fact, it's injected — as an authoritative block — into:
+
+- the **agent planner** prompt, so step-picking reflects it,
+- the **synthesis** prompt, so the final answer reflects it,
+- and the run engine's **\`ask_ai\`** block.
+
+The render is capped (~60 entries / 6&nbsp;KB) to stay within the context
+budget; beyond that the oldest are truncated with a note.
+
+## Manage it
+
+| Method | Path |
+| --- | --- |
+| GET | \`/api/workspaces/:id/memory\` |
+| POST | \`/api/workspaces/:id/memory\` |
+| DELETE | \`/api/workspaces/:id/memory/:memId\` |
+
+All three require workspace write access.
+
+> [!TIP]
+> Because memory is just a YAML file in the workspace, it travels with the
+> workspace and is reviewable in version control — the facts the AI leans on are
+> never opaque.
+`;
+
+// --- Extending (additions) --------------------------------------------------
+
+export const BUILD_A_SURFACE = `
+A surface is a TypeScript/React screen you attach to a workspace, written against
+the \`@ariadne/surface\` SDK. The server bundles it and runs it in a sandboxed
+iframe — see [Surfaces](/developers/surfaces) for the security model; this page
+is the SDK.
+
+## A minimal surface
+
+\`\`\`tsx
+// .ariadne/surface.tsx
+import { useAriadne, Card, Stat, Grid, useState, useEffect } from "@ariadne/surface";
+
+export default function Surface() {
+  const ariadne = useAriadne();
+  const [files, setFiles] = useState([]);
+  useEffect(() => { ariadne.listFiles().then(setFiles); }, [ariadne]);
+
+  return (
+    <Card title="Workspace">
+      <Grid cols={2} gap={12}>
+        <Stat label="Files" value={files.length} />
+      </Grid>
+    </Card>
+  );
+}
+\`\`\`
+
+The default export is your surface. Edit it in the workspace's surface editor
+(local only) — it auto-builds and live-previews as you type.
+
+## The SDK — useAriadne()
+
+\`useAriadne()\` returns a stable object. The core methods:
+
+| Method | Returns |
+| --- | --- |
+| \`ask(prompt)\` | the model's reply (string) |
+| \`search(query)\` | \`{ path, text }[]\` — top workspace chunks |
+| \`listFiles()\` | \`{ path, size, extension, estimatedTokens }[]\` |
+| \`readText(path)\` | file content |
+| \`readCsv(path)\` | \`{ headers, rows }\` |
+| \`getState()\` / \`setState(json)\` | this surface's persisted state (≤ 256 KB) |
+| \`listTemplates()\` / \`runTemplate(id, input)\` / \`getRun(id)\` | templates + runs |
+| \`runAction(id, input)\` | run an \`actions.yaml\` action |
+| \`stageFile(path, content)\` | stage a data-file edit for review |
+
+Market data (best-effort): \`getQuotes\`, \`getQuotesDetailed\`, \`getFxRates\`,
+\`getQuoteHistory\`, \`getQuoteNews\`, \`getDividendHistory\`, \`getQuoteCalendars\`.
+
+## The UI kit
+
+Themed components, all from \`@ariadne/surface\`:
+
+- **\`Card\`** — \`{ title?, children }\`
+- **\`Stat\`** — \`{ label, value, delta? }\` (\`delta\` colours green/red with an arrow)
+- **\`Button\`** — \`{ label, onClick?, variant?: "primary" | "ghost", disabled? }\`
+- **\`Badge\`** — \`{ label, tone?: "neutral" | "success" | "warning" | "danger" | "info" }\`
+- **\`Grid\`** — \`{ cols?, gap?, children }\`
+- **Charts** — \`LineChart\`, \`BarChart\`, \`PieChart\`, each \`{ data: { label, value }[], title?, … }\`
+
+The common React hooks (\`useState\`, \`useEffect\`, \`useMemo\`, \`useRef\`,
+\`useCallback\`) are re-exported too. Use the kit and \`rgb(var(--…))\`
+[theme variables](/developers/theming) instead of hardcoded colours, so the
+surface tracks light/dark automatically.
+
+## Persist state
+
+\`\`\`tsx
+const ariadne = useAriadne();
+// load once on mount
+useEffect(() => { ariadne.getState().then((s) => { if (s) restore(s); }); }, [ariadne]);
+// save (JSON, ≤ 256 KB) — lands in .ariadne/surface-state.json
+const save = (next) => ariadne.setState(next);
+\`\`\`
+
+> [!NOTE]
+> The SDK contract is versioned (\`API_VERSION\`). A surface can record the version
+> it targets with \`export const apiVersion = N\`.
+`;
+
+export const ADD_A_SETTING = `
+The Settings screen is a registry. Any component can contribute a section of
+settings while it's mounted — it appears alongside the built-in sections with no
+edit to the settings screen itself.
+
+## Register a section
+
+\`\`\`tsx
+import { useMemo } from "react";
+import { useRegisterSettings, type SettingsSection } from "../../lib/settings-registry";
+
+function MyFeatureSettings() {
+  const [verbose, setVerbose] = useMyStore();
+  const section: SettingsSection = useMemo(
+    () => ({
+      title: "My Feature",
+      fields: [
+        {
+          id: "verbose",
+          label: "Verbose logging",
+          description: "Print extra detail to the console",
+          type: "toggle",
+          value: verbose,
+          onChange: setVerbose,
+        },
+      ],
+    }),
+    [verbose, setVerbose],
+  );
+  useRegisterSettings("my-feature", section);
+  return null; // or your feature's UI
+}
+\`\`\`
+
+## Field types
+
+A \`SettingsField\` is one of:
+
+- **\`toggle\`** — \`{ type, id, label, description?, value: boolean, onChange }\`
+- **\`select\`** — \`{ type, id, label, value: string, options: { value, label }[], onChange }\`
+
+## Notes
+
+- **State is yours.** The registry only renders the control; each field carries
+  its own \`value\` + \`onChange\`, so the setting lives in your store/hook. Persist
+  it wherever fits (a store, localStorage, or the server).
+- **Memoize the section** (\`useMemo\`) so it isn't re-registered every render.
+- Re-registering the same \`id\` replaces its section; unmounting removes it — the
+  same model as the [command palette](/developers/add-a-command).
+`;
+
+export const CONNECT_MCP = `
+Ariadne speaks the **Model Context Protocol**. Register an MCP server and the
+chat agent can call its tools — no code, just configuration. Servers are
+per-account and spawned locally (stdio), so registering one is a local-only
+operation.
+
+## Register a server
+
+\`\`\`bash
+curl -s -X POST localhost:4319/api/mcp-servers \\
+  -H 'content-type: application/json' \\
+  -d '{
+    "name": "fs",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/notes"],
+    "enabled": true
+  }'
+\`\`\`
+
+| Field | Meaning |
+| --- | --- |
+| \`name\` | the name the agent refers to (≤ 60 chars) |
+| \`command\` | the binary to spawn (\`npx\`, an absolute path, …) |
+| \`args\` | arguments appended to the command |
+| \`env\` | environment variables (for secrets) |
+| \`enabled\` | include it in the agent's inventory (default \`true\`) |
+
+The transport is currently **stdio**. Check the connection with
+\`POST /api/mcp-servers/:id/test\` and list its tools with
+\`GET /api/mcp-servers/:id/tools\`.
+
+## How the agent uses it
+
+At the start of an agent run, Ariadne connects to each enabled server (10&nbsp;s
+timeout, cached) and lists its tools (cached 60&nbsp;s) so the planner sees the
+**real** tool names. The planner then emits an \`mcp_call\` step whose description
+is:
+
+\`\`\`text
+<serverName>::<toolName> <json-args>
+# e.g.   fs::read_text_file {"path":"/Users/me/notes/todo.md"}
+\`\`\`
+
+A failed tool call flips the step to failed and the agent re-plans with the
+refreshed inventory. [Add an agent tool](/developers/add-an-agent-tool) shows how
+\`mcp_call\` fits the built-in tool registry.
+
+## Endpoints
+
+| Method | Path |
+| --- | --- |
+| GET | \`/api/mcp-servers\` |
+| POST | \`/api/mcp-servers\` |
+| PATCH | \`/api/mcp-servers/:id\` |
+| DELETE | \`/api/mcp-servers/:id\` |
+| GET | \`/api/mcp-servers/:id/tools\` |
+| POST | \`/api/mcp-servers/:id/test\` |
+`;
+
+// --- Reference (additions) --------------------------------------------------
+
+export const THEMING = `
+Ariadne's look is driven by **design tokens** — semantic names like \`accent\` and
+\`surface-2\`, never raw hex. The tokens live in one place and are injected as CSS
+custom properties at runtime, so the whole app (and every surface) restyles from
+a single source.
+
+## The tokens
+
+\`THEME_TOKENS\` (in \`packages/shared\`) defines a \`dark\` and a \`light\` set — 34
+tokens each, as space-separated RGB triples consumed via \`rgb(var(--token))\` (so
+Tailwind opacity modifiers like \`bg-accent/10\` work). The groups:
+
+- **Surfaces** — \`background\`, \`surface-1\`, \`surface-2\`, \`surface-3\`, \`card\`
+- **Text** — \`foreground\`, \`card-foreground\`, \`muted\`, \`muted-foreground\`
+- **Lines & focus** — \`border\`, \`border-strong\`, \`ring\`
+- **Accent** — \`accent\`, \`accent-foreground\`
+- **Status** — \`success\`, \`warning\`, \`destructive\`, \`info\` (each \`+ -foreground\`)
+- **Regions** — \`sidebar\`, \`topbar\`, \`inspector\` (\`+ -foreground\` / \`-border\`)
+
+## Using them
+
+In TSX, every token is a Tailwind utility:
+
+\`\`\`tsx
+<div className="bg-surface-2 text-foreground border border-border">
+  <span className="text-accent">accent</span>
+</div>
+\`\`\`
+
+In raw CSS or a surface, read the variable directly — \`rgb(var(--accent))\`.
+
+## Switching modes
+
+\`applyTheme(mode)\` writes every token of the chosen mode onto \`:root\` as a CSS
+variable (and toggles a \`.light\` class). The app ships **dark** and **light**;
+the toggle is in **Settings → Preferences**. The same system also defines the
+type scale (\`--text-2xs\`…\`--text-2xl\`), the radius scale, motion durations, and
+the z-index scale.
+
+> [!TIP]
+> To add a colour: put the token in \`THEME_TOKENS\` (both modes) and map it in
+> \`globals.css\`'s \`@theme inline\` block. It's then a Tailwind utility everywhere
+> — the "one source" rule for styling.
+`;
+
+export const COMMANDS = `
+The repository's npm scripts and the ops helper. Run them from the repo root.
+
+## Run & develop
+
+| Command | What |
+| --- | --- |
+| \`./ops/ariadne.sh restart\` | build the web app + (re)start the server on :4319 |
+| \`npm run dev:server\` | \`tsx watch\` — the API on :4319, restarts on change |
+| \`npm run dev:web\` | Vite on :5173 with HMR, proxies \`/api\` → :4319 |
+| \`npm run build:web\` | production build of the web app |
+| \`npm run start:server\` | run the server once (no watch) |
+
+## Check
+
+| Command | What |
+| --- | --- |
+| \`npm run typecheck\` | strict \`tsc\` over shared + server + admin + web |
+| \`npm run gen:api\` | regenerate the API inventory from the routes |
+| \`npm run gen:api:check\` | fail if the committed inventory drifted (a CI gate) |
+| \`npm run check:bundle\` | enforce the per-chunk bundle budgets |
+
+## Evaluate
+
+| Command | What |
+| --- | --- |
+| \`npm run eval:retrieval\` | retrieval-quality eval |
+| \`npm run eval:rag\` | end-to-end RAG eval |
+| \`npm run eval:strategy\` | agent-strategy eval |
+
+> [!NOTE]
+> The production app is served from \`apps/web/dist\`; after a web change, rebuild
+> and restart with \`./ops/ariadne.sh restart\`. The dev server on :5173 is for
+> iteration only.
+`;

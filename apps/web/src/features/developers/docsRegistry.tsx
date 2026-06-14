@@ -7,13 +7,16 @@
  * to documentation.
  */
 import type { ReactNode } from "react";
-import { BookOpen, Boxes, Workflow, GitBranch, type LucideIcon } from "lucide-react";
+import { BookOpen, Boxes, Layers, Workflow, GitBranch, type LucideIcon } from "lucide-react";
 import { ApiReference } from "./ApiReference";
 import { extractHeadings, type Heading } from "./docsKit";
 import {
   INTRODUCTION, QUICKSTART, PROJECT_LAYOUT,
   ARCHITECTURE_OVERVIEW, REQUEST_LIFECYCLE, DATA_MODEL, AUTH_MODEL,
-  ADD_A_ROUTE, ADD_A_PROVIDER, ADD_AN_AGENT_TOOL, ADD_A_COMMAND, ADD_A_WORKSPACE, CONTRIBUTE_A_PROJECT,
+  SURFACES, RUNS_AND_TEMPLATES, MEMORY,
+  ADD_A_ROUTE, ADD_A_PROVIDER, ADD_AN_AGENT_TOOL, BUILD_A_SURFACE, ADD_A_SETTING,
+  ADD_A_COMMAND, CONNECT_MCP, ADD_A_WORKSPACE, CONTRIBUTE_A_PROJECT,
+  THEMING, COMMANDS,
 } from "./docsContent";
 
 export type PageContent =
@@ -61,6 +64,16 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
+    id: "concepts",
+    label: "Concepts",
+    icon: Layers,
+    pages: [
+      { slug: "surfaces", title: "Surfaces", description: "Custom interactive screens in a sandboxed iframe, talking through a typed bridge.", content: md(SURFACES) },
+      { slug: "runs-and-templates", title: "Runs & templates", description: "Traceable executions: evidence-first templates and the block pipeline.", content: md(RUNS_AND_TEMPLATES) },
+      { slug: "memory", title: "Memory", description: "Confirmed workspace facts that ride into the model's prompts.", content: md(MEMORY) },
+    ],
+  },
+  {
     id: "extending",
     label: "Extending Ariadne",
     icon: Workflow,
@@ -68,7 +81,10 @@ export const DOC_SECTIONS: DocSection[] = [
       { slug: "add-a-route", title: "Add a route", description: "Extend the backend — a Fastify plugin plus one registry entry.", content: md(ADD_A_ROUTE) },
       { slug: "add-a-provider", title: "Add a provider", description: "Wire up an AI provider from a single registry descriptor.", content: md(ADD_A_PROVIDER) },
       { slug: "add-an-agent-tool", title: "Add an agent tool", description: "Give the plan-and-execute agent a new built-in tool.", content: md(ADD_AN_AGENT_TOOL) },
+      { slug: "build-a-surface", title: "Build a surface", description: "Author a custom screen against the @ariadne/surface SDK.", content: md(BUILD_A_SURFACE) },
+      { slug: "add-a-setting", title: "Add a setting", description: "Contribute a settings section from any component.", content: md(ADD_A_SETTING) },
       { slug: "add-a-command", title: "Add a command", description: "Contribute to the Cmd+K palette from any component.", content: md(ADD_A_COMMAND) },
+      { slug: "connect-mcp", title: "Connect an MCP server", description: "Register a Model Context Protocol server the agent can call.", content: md(CONNECT_MCP) },
       { slug: "add-a-workspace", title: "Add a workspace", description: "Create, scan, and configure a workspace over the API.", content: md(ADD_A_WORKSPACE) },
       { slug: "contribute-a-project", title: "Contribute a project", description: "A self-contained example app that plugs in through registries.", content: md(CONTRIBUTE_A_PROJECT) },
     ],
@@ -84,6 +100,8 @@ export const DOC_SECTIONS: DocSection[] = [
         description: "Every HTTP endpoint, auto-generated from the server routes.",
         content: { kind: "node", render: () => <ApiReference /> },
       },
+      { slug: "theming", title: "Theming", description: "The design tokens that drive every colour in the app.", content: md(THEMING) },
+      { slug: "commands", title: "Commands", description: "The npm scripts and ops helper for running, checking, and evaluating.", content: md(COMMANDS) },
     ],
   },
 ];
