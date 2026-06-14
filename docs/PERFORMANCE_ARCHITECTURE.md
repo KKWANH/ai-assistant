@@ -62,6 +62,7 @@ gz each**, in their own chunk.
 - `vendor-markdown` (52 kB gz) — first assistant message renders
 - `vendor-codemirror` (137 kB gz) — first edit
 - `xlsx` (142 kB gz) — first xlsx attachment
+- `TerminalPanel` (83 kB gz, xterm.js + fit) — first terminal open
 
 ### 1.4 Disallowed shapes
 

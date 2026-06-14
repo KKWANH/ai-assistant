@@ -55,6 +55,7 @@ const CATEGORY_RULES: Rule[] = [
   { match: /^vendor-codemirror/,   category: "feature",    budgetGz: 200 * KB, rationale: "CodeMirror state+view+commands+lang-javascript+language; first edit" },
   { match: /^xlsx-/,               category: "feature",    budgetGz: 200 * KB, rationale: "xlsx parser; first xlsx attachment" },
   { match: /^MarkdownContent-/,    category: "feature",    budgetGz: 200 * KB, rationale: "memo'd markdown component; lazy" },
+  { match: /^TerminalPanel-/,      category: "feature",    budgetGz: 120 * KB, rationale: "@xterm/xterm + addon-fit + css; lazy on first terminal open (P3 IDE #7)" },
 
   // ── Documented route-lazy exception ─────────────────────────────────
   { match: /^WorkspaceFileEditor-/, category: "exception", budgetGz: 300 * KB, rationale: "CodeMirror-backed power-user editor; documented exception in PERFORMANCE_ARCHITECTURE §1.2" },
