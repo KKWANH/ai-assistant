@@ -26,7 +26,10 @@ function now(): string {
 }
 
 export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
-  // List every schedule on a workspace the caller can access.
+  // List the workspace's schedules. Modify-level on purpose (not view-level):
+  // schedules are automation config, so they stay owner/admin-only — never
+  // exposed to read-only or guest viewers of a public/shared workspace. Don't
+  // relax this to canViewWorkspace.
   app.get<{ Params: { workspaceId: string } }>(
     "/workspaces/:workspaceId/schedules",
     async (req, reply) => {

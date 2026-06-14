@@ -55,7 +55,9 @@ function fireRateLimited(triggerId: string): boolean {
 }
 
 export async function triggerRoutes(app: FastifyInstance): Promise<void> {
-  // List every trigger on a workspace the caller can access.
+  // List the workspace's triggers. Modify-level on purpose (not view-level): a
+  // trigger holds a webhook secret, so even the OWN-filter below runs behind an
+  // owner/admin gate. Don't relax this to canViewWorkspace.
   app.get<{ Params: { workspaceId: string } }>(
     "/workspaces/:workspaceId/triggers",
     async (req, reply) => {
