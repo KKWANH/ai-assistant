@@ -24,6 +24,16 @@ export function openDb(dbPath: string): DatabaseSync {
   return db;
 }
 
+/**
+ * Schema migrations — intentionally a simple, ADDITIVE-ONLY scheme: every boot
+ * re-runs `CREATE TABLE IF NOT EXISTS` blocks plus guarded `addColumnIfMissing`
+ * ALTERs (idempotent via SQLite introspection). There is no version table and
+ * no down-migrations — adding a table or a nullable column is a one-liner, but
+ * anything non-additive (renames, type changes, data backfills) is NOT
+ * supported here and must be handled deliberately (a one-off script + a manual
+ * note), not by editing this function. Keep new columns nullable / defaulted so
+ * existing rows stay valid.
+ */
 function runMigrations(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS workspaces (

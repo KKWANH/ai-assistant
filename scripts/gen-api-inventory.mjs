@@ -133,6 +133,19 @@ export const API_ENDPOINTS: ApiEndpoint[] = ${JSON.stringify(all, null, 2)};
 export const DOMAIN_DESCRIPTIONS: Record<string, string> = ${JSON.stringify(descriptions, null, 2)};
 `;
 
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-fs.writeFileSync(OUT, header, "utf-8");
-console.log(`Wrote ${all.length} endpoints across ${new Set(all.map((e) => e.domain)).size} domains → ${path.relative(ROOT, OUT)}`);
+// `--check` (for CI / a pre-commit hook): fail if the committed file is stale,
+// instead of writing. Keeps the docs honest without trusting people to re-run.
+if (process.argv.includes("--check")) {
+  const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf-8") : "";
+  if (current !== header) {
+    console.error(
+      `✗ ${path.relative(ROOT, OUT)} is out of date — run \`npm run gen:api\` and commit the result.`,
+    );
+    process.exit(1);
+  }
+  console.log(`✓ API inventory is in sync (${all.length} endpoints).`);
+} else {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, header, "utf-8");
+  console.log(`Wrote ${all.length} endpoints across ${new Set(all.map((e) => e.domain)).size} domains → ${path.relative(ROOT, OUT)}`);
+}
