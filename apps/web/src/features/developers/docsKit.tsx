@@ -8,7 +8,7 @@
  * reloading the SPA. Kept separate from the chat renderer (MarkdownContent),
  * which is intentionally compact — docs want air.
  */
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -45,14 +45,21 @@ export interface Heading {
   depth: 2 | 3;
   text: string;
   id: string;
+  /** 1-based source line — matches react-markdown's hast `node.position`, which
+   *  is how the renderer looks an id back up (render-order-independent, so it's
+   *  safe under React StrictMode's double-invoked render). */
+  line: number;
 }
 
 /** Pull h2/h3 headings out of a markdown body for the TOC. Skips fenced code so
  *  a `# comment` inside a ```block``` never shows up as a heading. */
 export function extractHeadings(markdown: string): Heading[] {
   const out: Heading[] = [];
+  const seen = new Map<string, number>(); // de-dup: a repeated slug gets -2, -3, …
   let inFence = false;
-  for (const line of markdown.split("\n")) {
+  const lines = markdown.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     if (/^\s*```/.test(line)) {
       inFence = !inFence;
       continue;
@@ -61,7 +68,11 @@ export function extractHeadings(markdown: string): Heading[] {
     const m = /^(#{2,3})\s+(.+?)\s*#*$/.exec(line);
     if (m) {
       const text = m[2]!.replace(/[`*_]/g, "").trim();
-      out.push({ depth: m[1]!.length as 2 | 3, text, id: slugify(text) });
+      const base = slugify(text);
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      const id = n === 0 ? base : `${base}-${(n + 1).toString()}`;
+      out.push({ depth: m[1]!.length as 2 | 3, text, id, line: i + 1 });
     }
   }
   return out;
@@ -109,17 +120,6 @@ export function useScrollSpy(ids: string[], rootEl: HTMLElement | null): string 
 // ---------------------------------------------------------------------------
 // Building blocks
 // ---------------------------------------------------------------------------
-
-/** Flatten React children to their plain-text content (for heading ids). */
-function textOf(node: ReactNode): string {
-  if (node == null || node === false) return "";
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join("");
-  if (typeof node === "object" && "props" in node) {
-    return textOf((node as { props: { children?: ReactNode } }).props.children);
-  }
-  return "";
-}
 
 /** Copy-able code block with a language tag — the docs.* staple. */
 export function CodeBlock({ language, code }: { language?: string; code: string }) {
@@ -175,12 +175,24 @@ function Callout({ kind, children }: { kind: CalloutKind; children: ReactNode })
   );
 }
 
+/** The leading plain-text string of a blockquote's first paragraph, or "". Both
+ *  callout detection and stripping key off this exact spot, so they always agree
+ *  — a token that isn't a plain-text lead (e.g. inside bold) is left as a normal
+ *  blockquote rather than a callout we can't strip. */
+function leadString(children: ReactNode): string {
+  const arr = Array.isArray(children) ? children : [children];
+  const firstEl = arr.find((c) => typeof c === "object" && c !== null) as
+    | { props?: { children?: ReactNode } }
+    | undefined;
+  const inner = firstEl?.props?.children;
+  const innerArr = Array.isArray(inner) ? inner : [inner];
+  return typeof innerArr[0] === "string" ? innerArr[0] : "";
+}
+
 /** If a blockquote opens with a GitHub alert token (`[!NOTE]`), return its kind;
  *  else null. The token itself is stripped at render time by stripAlertToken. */
 function calloutKind(children: ReactNode): CalloutKind | null {
-  const arr = Array.isArray(children) ? children : [children];
-  const firstEl = arr.find((c) => typeof c === "object" && c !== null);
-  const m = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/.exec(textOf(firstEl).trimStart());
+  const m = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/.exec(leadString(children));
   return m ? (m[1] as CalloutKind) : null;
 }
 
@@ -188,14 +200,17 @@ function calloutKind(children: ReactNode): CalloutKind | null {
 // The docs markdown renderer
 // ---------------------------------------------------------------------------
 
-function heading(depth: 2 | 3) {
+// The id comes from the precomputed (de-duped) list, looked up by the heading's
+// source line — see DocsMarkdown — so the rendered anchor always matches the TOC
+// (even for repeated heading text) and is stable under StrictMode's double render.
+function heading(depth: 2 | 3, idForLine: (line: number | undefined) => string) {
   const Tag = (`h${depth}` as "h2" | "h3");
   const cls =
     depth === 2
       ? "group scroll-mt-24 text-xl font-semibold tracking-tight text-foreground mt-10 mb-3 pb-1.5 border-b border-border/60 first:mt-0"
       : "group scroll-mt-24 text-base font-semibold text-foreground mt-7 mb-2";
-  return function H({ children }: { children?: ReactNode }) {
-    const id = slugify(textOf(children));
+  return function H({ node, children }: { node?: { position?: { start: { line: number } } }; children?: ReactNode }) {
+    const id = idForLine(node?.position?.start.line);
     return (
       <Tag id={id} className={cls}>
         <a href={`#${id}`} className="no-underline">
@@ -209,8 +224,7 @@ function heading(depth: 2 | 3) {
 
 const components: Components = {
   h1: ({ children }) => <h1 className="text-2xl font-bold tracking-tight text-foreground">{children}</h1>,
-  h2: heading(2),
-  h3: heading(3),
+  // h2/h3 are injected per-render in DocsMarkdown (they need the de-duped ids).
   h4: ({ children }) => <h4 className="mt-5 mb-1 text-sm font-semibold text-foreground">{children}</h4>,
   p: ({ children }) => <p className="my-3 text-sm leading-7 text-foreground/90">{children}</p>,
   ul: ({ children }) => <ul className="my-3 ml-5 list-disc space-y-1.5 text-sm leading-7 marker:text-muted-foreground/60 text-foreground/90">{children}</ul>,
@@ -302,8 +316,20 @@ function stripAlertToken(children: ReactNode): ReactNode {
 }
 
 export const DocsMarkdown = memo(function DocsMarkdown({ body }: { body: string }) {
+  // Map each heading's source line → its de-duped id (the same ids the TOC uses),
+  // and have the h2/h3 components look themselves up by line. Keying on the line
+  // (not render order) keeps the anchors matching the TOC even when two headings
+  // share text, and is safe under StrictMode's double-invoked render.
+  const idForLine = useMemo(() => {
+    const byLine = new Map(extractHeadings(body).map((h) => [h.line, h.id]));
+    return (line: number | undefined) => (line != null ? (byLine.get(line) ?? "") : "");
+  }, [body]);
+  const withHeadings = useMemo<Components>(
+    () => ({ ...components, h2: heading(2, idForLine), h3: heading(3, idForLine) }),
+    [idForLine],
+  );
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={components}>
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={withHeadings}>
       {body}
     </ReactMarkdown>
   );
