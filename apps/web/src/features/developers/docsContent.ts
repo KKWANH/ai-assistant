@@ -6,47 +6,6 @@
  * this page" rail and in-page anchors pick them up.
  */
 
-export const INTRODUCTION = `
-Ariadne is a **local-first AI workspace** (AGPL-3.0). It runs on your machine,
-points every answer back at its source, and is built — top to bottom — to be
-extended. If you're here to add a route, a provider, a tool, or a whole project,
-these docs are the map.
-
-## Three ideas shape the codebase
-
-Understanding these three makes the rest of the code predictable.
-
-### Local-first
-
-The server binds to loopback. A request that arrives over a real loopback
-connection **is** the admin — no login, full powers (the terminal, the host
-filesystem, git). The same server can be reached remotely through a Cloudflare
-tunnel, but a remote request must carry a session cookie and loses the
-local-only powers. One predicate, \`accessContext(req)\`, draws that line; gate
-anything dangerous on it.
-
-### Register, don't hardcode
-
-Commands, settings, surfaces, AI providers, agent tools, and the server's HTTP
-routes are all **registries**. Neither the web shell nor the server bootstrap
-enumerates them by hand — you contribute one entry and the platform wires the
-rest (the nav, the schema, the search, the docs). Most "how do I add X?"
-questions have the same answer: find X's registry and append to it.
-
-### Dual-use
-
-Ariadne is at once a power-user IDE — file editor, git panel, terminal,
-programmable surfaces — and an approachable tool for non-developers, toggled per
-account and per workspace. Features are built so the depth is *discoverable*,
-not in your face.
-
-> [!TIP]
-> New to the codebase? Read [Quickstart](/developers/quickstart) to get it
-> running, skim [Architecture](/developers/architecture-overview) for the shape
-> of the system, then jump to whichever [extension guide](/developers/add-a-route)
-> matches your task.
-`;
-
 export const QUICKSTART = `
 Ariadne is a Node monorepo (npm workspaces). You need **Node ≥ 22** — the server
 uses the built-in \`node:sqlite\`, so there's no native database to compile.

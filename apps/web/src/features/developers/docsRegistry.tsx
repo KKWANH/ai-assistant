@@ -9,9 +9,10 @@
 import type { ReactNode } from "react";
 import { BookOpen, Boxes, Layers, Workflow, Server, GitBranch, type LucideIcon } from "lucide-react";
 import { ApiReference } from "./ApiReference";
+import { DocsLanding } from "./docsLanding";
 import { extractHeadings, type Heading } from "./docsKit";
 import {
-  INTRODUCTION, QUICKSTART, PROJECT_LAYOUT,
+  QUICKSTART, PROJECT_LAYOUT,
   ARCHITECTURE_OVERVIEW, REQUEST_LIFECYCLE, DATA_MODEL, AUTH_MODEL,
   SURFACES, RUNS_AND_TEMPLATES, MEMORY,
   ADD_A_ROUTE, ADD_A_PROVIDER, ADD_AN_AGENT_TOOL, BUILD_A_SURFACE, ADD_A_SETTING,
@@ -30,6 +31,9 @@ export interface DocPage {
   title: string;
   /** One line — the page header subtitle, the search snippet, the <title>. */
   description: string;
+  /** A landing page: rendered chrome-free (no breadcrumb/title/TOC/prev-next),
+   *  full width — it owns its whole presentation. */
+  hero?: boolean;
   content: PageContent;
 }
 
@@ -48,7 +52,7 @@ export const DOC_SECTIONS: DocSection[] = [
     label: "Getting started",
     icon: BookOpen,
     pages: [
-      { slug: "introduction", title: "Introduction", description: "What Ariadne is and the three ideas that shape the codebase.", content: md(INTRODUCTION) },
+      { slug: "introduction", title: "Introduction", description: "A local-first AI workspace you can see into — and extend.", hero: true, content: { kind: "node", render: () => <DocsLanding /> } },
       { slug: "quickstart", title: "Quickstart", description: "Install, run, and develop with hot reload.", content: md(QUICKSTART) },
       { slug: "project-layout", title: "Project layout", description: "The monorepo, and where each kind of change goes.", content: md(PROJECT_LAYOUT) },
     ],

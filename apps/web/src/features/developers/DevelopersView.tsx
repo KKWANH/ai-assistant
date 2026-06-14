@@ -314,18 +314,23 @@ export function DevelopersView() {
       <Sidebar slug={slug} />
       <main ref={setScrollEl} className="min-h-0 flex-1 overflow-y-auto">
         <MobilePicker slug={slug} />
-        <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8 lg:px-10">
-          <article className="min-w-0 max-w-3xl flex-1">
-            <Breadcrumbs section={section} page={page} />
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{page.title}</h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{page.description}</p>
-            <div className="mt-6">
-              <PageBody content={page.content} />
-            </div>
-            <PrevNext slug={slug} />
-          </article>
-          <OnThisPage page={page} scrollEl={scrollEl} />
-        </div>
+        {page.hero ? (
+          // A landing page owns its full presentation — no breadcrumb/title/TOC.
+          <PageBody content={page.content} />
+        ) : (
+          <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8 lg:px-10">
+            <article className="min-w-0 max-w-3xl flex-1">
+              <Breadcrumbs section={section} page={page} />
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{page.title}</h1>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{page.description}</p>
+              <div className="mt-6">
+                <PageBody content={page.content} />
+              </div>
+              <PrevNext slug={slug} />
+            </article>
+            <OnThisPage page={page} scrollEl={scrollEl} />
+          </div>
+        )}
       </main>
     </div>
   );
