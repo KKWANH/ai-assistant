@@ -7,7 +7,7 @@
  * to documentation.
  */
 import type { ReactNode } from "react";
-import { BookOpen, Boxes, Layers, Workflow, GitBranch, type LucideIcon } from "lucide-react";
+import { BookOpen, Boxes, Layers, Workflow, Server, GitBranch, type LucideIcon } from "lucide-react";
 import { ApiReference } from "./ApiReference";
 import { extractHeadings, type Heading } from "./docsKit";
 import {
@@ -16,6 +16,7 @@ import {
   SURFACES, RUNS_AND_TEMPLATES, MEMORY,
   ADD_A_ROUTE, ADD_A_PROVIDER, ADD_AN_AGENT_TOOL, BUILD_A_SURFACE, ADD_A_SETTING,
   ADD_A_COMMAND, CONNECT_MCP, ADD_A_WORKSPACE, CONTRIBUTE_A_PROJECT,
+  RUNNING_THE_SERVER, CONFIGURATION, REMOTE_ACCESS, DESKTOP_APP, EVALUATION,
   THEMING, COMMANDS,
 } from "./docsContent";
 
@@ -87,6 +88,18 @@ export const DOC_SECTIONS: DocSection[] = [
       { slug: "connect-mcp", title: "Connect an MCP server", description: "Register a Model Context Protocol server the agent can call.", content: md(CONNECT_MCP) },
       { slug: "add-a-workspace", title: "Add a workspace", description: "Create, scan, and configure a workspace over the API.", content: md(ADD_A_WORKSPACE) },
       { slug: "contribute-a-project", title: "Contribute a project", description: "A self-contained example app that plugs in through registries.", content: md(CONTRIBUTE_A_PROJECT) },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    icon: Server,
+    pages: [
+      { slug: "running-the-server", title: "Running the server", description: "The ops CLI and the supervisor that keeps the server alive.", content: md(RUNNING_THE_SERVER) },
+      { slug: "configuration", title: "Configuration", description: "Environment variables, ports, and where state lives on disk.", content: md(CONFIGURATION) },
+      { slug: "remote-access", title: "Remote access", description: "Expose Ariadne through a Cloudflare tunnel, with login and roles.", content: md(REMOTE_ACCESS) },
+      { slug: "desktop-app", title: "The desktop app", description: "The Tauri shell that runs the server as a sidecar.", content: md(DESKTOP_APP) },
+      { slug: "evaluation", title: "Evaluation", description: "The offline retrieval, RAG, and strategy eval suite.", content: md(EVALUATION) },
     ],
   },
   {

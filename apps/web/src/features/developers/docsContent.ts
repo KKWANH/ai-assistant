@@ -925,3 +925,241 @@ The repository's npm scripts and the ops helper. Run them from the repo root.
 > and restart with \`./ops/ariadne.sh restart\`. The dev server on :5173 is for
 > iteration only.
 `;
+
+// --- Operations -------------------------------------------------------------
+
+export const RUNNING_THE_SERVER = `
+\`ops/ariadne.sh\` is the lifecycle tool. It builds the web app, starts a
+**supervisor** that owns the server (and the tunnel), and gives you status and
+logs. The supervisor keeps the server alive and serves a small admin dashboard.
+
+## The ops CLI
+
+\`\`\`bash
+./ops/ariadne.sh start      # build web + launch the supervisor (daemonized)
+./ops/ariadne.sh restart    # stop, then start
+./ops/ariadne.sh stop       # SIGTERM the supervisor (SIGKILL if it lingers)
+./ops/ariadne.sh status     # supervisor PID, server health, current tunnel URL
+./ops/ariadne.sh logs NAME  # tail a log — NAME: server (default) | tunnel | supervisor
+./ops/ariadne.sh admin      # open the admin dashboard
+\`\`\`
+
+## The supervisor
+
+\`start\` launches the supervisor (\`apps/admin\`) as a background daemon. It:
+
+- spawns and **monitors** two children — the server and the Cloudflare tunnel —
+  restarting them if they die,
+- rotates logs and writes its PID to the run directory,
+- serves an **admin dashboard** on \`127.0.0.1:7459\` (loopback only — never
+  exposed through the tunnel) with status, log tails, error analysis, and a
+  restart button.
+
+The server itself listens on \`:4319\`. See [Configuration](/developers/configuration)
+for the ports and directories, and [Remote access](/developers/remote-access) for
+reaching it from another device.
+
+> [!NOTE]
+> For day-to-day development you don't need the supervisor — run
+> \`npm run dev:server\` and \`npm run dev:web\` directly (see
+> [Commands](/developers/commands)). The supervisor is for running Ariadne as a
+> persistent, self-healing service.
+`;
+
+export const CONFIGURATION = `
+Ariadne reads its configuration from environment variables, with local-first
+defaults — nothing is required to run on your own machine. Set them in your
+shell or an uncommitted \`.env\`.
+
+## Server & network
+
+| Variable | Default | Controls |
+| --- | --- | --- |
+| \`ARIADNE_PORT\` | \`4319\` | the server's HTTP port |
+| \`ARIADNE_BIND\` | \`127.0.0.1\` | bind address; \`0.0.0.0\` exposes on all interfaces (login then required) |
+| \`ARIADNE_ADMIN_USER\` | \`admin\` | the seeded admin username |
+| \`ARIADNE_ADMIN_PASSWORD\` | random (logged once) | the seeded admin password — set it to silence the warning |
+
+## Data & logs
+
+These default under the repo root; point them elsewhere to relocate state.
+
+| Variable | Default | Holds |
+| --- | --- | --- |
+| \`ARIADNE_HOME\` | \`./data\` | the SQLite DB (\`ariadne.db\`) + settings |
+| \`ARIADNE_LOG_DIR\` | \`./logs\` | active + rotated logs |
+| \`ARIADNE_RUN_DIR\` | \`./run\` | PID files + the tunnel URL |
+
+## Providers
+
+| Variable | Default | Controls |
+| --- | --- | --- |
+| \`ARIADNE_PROVIDER\` | \`ollama\` | the default provider when none is set in Settings |
+| \`ANTHROPIC_API_KEY\`, \`OPENAI_API_KEY\`, \`GEMINI_API_KEY\`, \`MOONSHOT_API_KEY\`, … | — | provider keys (or paste them in **Settings → Providers**) |
+| \`OLLAMA_BASE_URL\` | \`http://localhost:11434\` | the local Ollama endpoint |
+| \`VLLM_BASE_URL\` | — | required for the vLLM provider |
+| \`TAVILY_API_KEY\`, \`BRAVE_API_KEY\` | — | web-search backends |
+
+A key set in **Settings → Providers** is stored in the DB and fills the same
+slot; the env var is the fallback.
+
+## State on disk
+
+Two places hold state:
+
+- **\`$ARIADNE_HOME/ariadne.db\`** — the single SQLite database: accounts,
+  sessions, settings, workspaces, chats, runs, the embedding + full-text
+  indexes, and usage.
+- **\`<workspace>/.ariadne/\`** — per-workspace, travels with the folder:
+  \`workspace.yaml\` (globs), \`memory.yaml\`, \`actions.yaml\`, \`surface.tsx\` +
+  \`surface-dist/\`, \`staged/\` (pending edits), \`scripts/\`, \`hooks/\`.
+
+> [!TIP]
+> Because per-workspace state lives in \`.ariadne/\` as plain YAML/TSX, it's
+> reviewable in the workspace's own version control — config and memory are never
+> hidden inside a database.
+`;
+
+export const REMOTE_ACCESS = `
+By default Ariadne binds to loopback, and a loopback request is the admin — see
+[the auth model](/developers/auth-model). To reach it from another device, expose
+it through a **Cloudflare tunnel**. Requests then arrive as \`remote\`,
+authenticate with a session cookie, and lose the local-only powers (terminal,
+host filesystem).
+
+## The tunnel
+
+The supervisor runs \`cloudflared\` for you, in one of two modes:
+
+- **Quick tunnel** (default, zero-config) — an ephemeral
+  \`https://<random>.trycloudflare.com\` URL, printed on \`start\` and shown by
+  \`./ops/ariadne.sh status\`. Good for a quick share.
+- **Named tunnel** (stable) — set \`ARIADNE_TUNNEL_NAME\` and
+  \`ARIADNE_TUNNEL_HOSTNAME\` (a Cloudflare-managed domain you own) and the URL is
+  deterministic across restarts. \`ops/setup-tunnel.sh <hostname>\` wires it up.
+
+Either way the tunnel forwards to \`http://localhost:4319\`; the admin dashboard on
+\`:7459\` is never exposed.
+
+## Remote authentication
+
+A request arriving through the tunnel is detected as \`remote\` (Cloudflare's
+\`cf-*\` headers). Remote callers must authenticate:
+
+| Route | Purpose |
+| --- | --- |
+| \`POST /api/auth/login\` | username + password → a signed \`ariadne_session\` cookie (30 days) |
+| \`POST /api/auth/guest\` | a passwordless guest session |
+| \`POST /api/auth/logout\` | clear the session |
+
+The cookie is \`httpOnly\`, \`sameSite=lax\`, \`secure\`, and signed with a secret
+generated on first boot.
+
+## Who can do what
+
+| Capability | Local | Guest | User | Admin |
+| --- | --- | --- | --- | --- |
+| Read files, chat | ✅ | ✅ (capped) | ✅ | ✅ |
+| Write / edit files | ✅ | ❌ | ✅ (own) | ✅ |
+| Agent mode, runs, scripts | ✅ | ❌ | ✅ (own) | ✅ |
+| Terminal, host git / fs | ✅ | ❌ | ❌ | ❌ |
+
+Local is implicitly admin (no login). Guests are read-mostly with a daily token
+cap. The terminal and raw host access stay **local-only** for everyone — they
+never cross the tunnel.
+
+> [!WARNING]
+> Exposing Ariadne puts your workspaces and AI keys behind a login. Set a strong
+> \`ARIADNE_ADMIN_PASSWORD\`, prefer a named tunnel you control, and remember a
+> quick-tunnel URL — though random — is reachable by anyone who has it.
+`;
+
+export const DESKTOP_APP = `
+Ariadne ships an experimental **desktop shell** built with Tauri — a native
+window around the same local server, with no browser tab to manage.
+
+## How it works
+
+The Tauri shell (Rust) treats the Node server as a **sidecar**. On launch it:
+
+1. picks a free loopback port,
+2. spawns the server (\`npm run start:server\`) with \`ARIADNE_PORT=<port>\`,
+   \`ARIADNE_BIND=127.0.0.1\` (forced — the desktop is always loopback-only), and
+   \`ARIADNE_DESKTOP=1\`,
+3. waits for the port to accept connections, then points the webview at
+   \`http://127.0.0.1:<port>\`,
+4. on quit, sends \`SIGTERM\` to the server so it shuts down cleanly (closing any
+   MCP child processes).
+
+The window loads the built web app from \`apps/web/dist\`.
+
+## Build & run
+
+\`\`\`bash
+cd apps/desktop
+npm run tauri:dev      # a dev window
+npm run tauri:build    # package the app
+\`\`\`
+
+> [!NOTE]
+> This is an early shell: it currently launches the repo's server via
+> \`npm run start:server\`, so it needs Node and the source tree present. A later
+> phase will bundle a standalone server binary as a Tauri \`externalBin\` so the
+> app is self-contained; macOS signing/notarization isn't wired up yet.
+`;
+
+export const EVALUATION = `
+Ariadne's retrieval and answer quality are guarded by an **offline eval suite**
+under \`apps/server/src/eval\`. Each eval runs labeled cases against fixture
+workspaces and reports metrics; some enforce thresholds.
+
+## Retrieval
+
+\`\`\`bash
+npm run eval:retrieval            # metrics over the retrieval cases
+npm run eval:retrieval -- --ci    # also check the gates in gates.yaml
+\`\`\`
+
+Runs the labeled query→expected-file cases (plus safety cases) against four
+fixtures (\`code-small\`, \`korean-mixed\`, \`portfolio-small\`, \`safety-fixture\`) and
+reports **Hit@1/3/6, MRR, nDCG@6, context precision/recall, distractor-leak
+rate**, and latency. \`--ci\` prints PASS/FAIL against the gates (Hit@6 ≥ 0.85,
+MRR ≥ 0.65, p95 ≤ 500&nbsp;ms, …); add \`--strict\` to make a failing gate exit
+non-zero.
+
+\`npm run eval:retrieval:promoted\` replays cases captured from real 👎 feedback on
+your own workspaces — these **do** exit non-zero on a regression, as a guard.
+
+## RAG — answer quality
+
+\`\`\`bash
+npm run eval:rag             # deterministic mock answers (default)
+npm run eval:rag -- --live   # a real provider from Settings
+\`\`\`
+
+Runs answer cases that assert **faithfulness** (each sentence supported by the
+retrieved context), expected vs. forbidden claims, and correct **abstention**
+when the answer isn't in context. A case passes at faithfulness ≥ 0.85, no
+forbidden-claim leaks, and correct abstention. \`--use-db\` builds a scratch index
+so the semantic and symbol-boosted strategies have data.
+
+## Strategy
+
+\`\`\`bash
+npm run eval:strategy -- --use-db
+\`\`\`
+
+Runs the **same** retrieval cases across the ranking strategies — \`keyword-only\`,
+\`keyword+symbol\`, \`semantic-only\`, \`auto\` — side by side, so you can see what
+each buys. This is the data behind the default retrieval choice.
+
+## Output
+
+Every run writes JSON plus a Markdown report under \`data/evals/<timestamp>/\` —
+aggregate metrics, a per-case table, and a failures section.
+
+> [!NOTE]
+> The evals are offline, and retrieval/strategy are deterministic — no API key
+> needed. \`eval:rag\` defaults to mock answers; pass \`--live\` only to measure a
+> real provider.
+`;
