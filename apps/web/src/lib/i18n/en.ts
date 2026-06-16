@@ -158,6 +158,7 @@ const en = {
   "chat.empty.noProvider.action": "Connect a provider in Settings",
   "chat.empty.startNew": "Or start a new conversation",
   "chat.empty.sendToStart": "Send a message to start the conversation.",
+  "chat.empty.projectSubtitle": "What can I help you with?",
 
   "chat.example.files.title": "Attach files and ask questions",
   "chat.example.files.body": "PDF · doc · spreadsheet · image",

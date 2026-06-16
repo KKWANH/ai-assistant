@@ -151,6 +151,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.empty.noProvider.action": "설정에서 제공자 연결",
   "chat.empty.startNew": "새 대화 시작하기",
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
+  "chat.empty.projectSubtitle": "무엇을 도와드릴까요?",
 
   "chat.example.files.title": "파일을 올려서 질문하기",
   "chat.example.files.body": "PDF · 문서 · 스프레드시트 · 이미지",

@@ -33,7 +33,7 @@ import {
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
-import { resolveProjectChatStarters } from "../../projects";
+import { resolveProjectChat, resolveProjectIcon } from "../../projects";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import { ChatComposer, type WebSearchMode } from "./ChatComposer";
@@ -203,7 +203,9 @@ function MessageList({
   // in the empty state. Clicking one prefills the composer (the user sends).
   const { data: ws } = useWorkspace(chat?.workspaceId ?? "");
   const prefillComposer = useUIStore((s) => s.prefillComposer);
-  const starters = ws ? resolveProjectChatStarters(ws) : [];
+  const projectChat = ws ? resolveProjectChat(ws) : null;
+  const starters = projectChat?.starters ?? [];
+  const ProjectIcon = projectChat ? resolveProjectIcon(projectChat.icon) : null;
 
   // A generation running on the server that this tab is not live-streaming
   // (another tab, or a reload mid-generation) — rendered as a streaming
@@ -236,17 +238,23 @@ function MessageList({
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         {starters.length > 0 ? (
-          <div className="w-full max-w-md">
-            <p className="mb-3 text-center text-xs text-muted-foreground">{t("chat.empty.sendToStart")}</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="w-full max-w-lg text-center">
+            {ProjectIcon && (
+              <span className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10">
+                <ProjectIcon className="h-5 w-5 text-accent" />
+              </span>
+            )}
+            {ws?.name && <h2 className="text-lg font-semibold text-foreground">{ws.name}</h2>}
+            <p className="mt-1 mb-5 text-sm text-muted-foreground">{t("chat.empty.projectSubtitle")}</p>
+            <div className="grid grid-cols-1 gap-2 text-left sm:grid-cols-2">
               {starters.map((s) => (
                 <button
                   key={s.label}
                   onClick={() => prefillComposer(s.prompt)}
-                  className="rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-2"
+                  className="rounded-xl border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-2"
                 >
-                  <span className="block text-xs font-medium text-foreground">{s.label}</span>
-                  <span className="mt-0.5 block truncate text-2xs text-muted-foreground">{s.prompt}</span>
+                  <span className="block text-sm font-medium text-foreground">{s.label}</span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">{s.prompt}</span>
                 </button>
               ))}
             </div>

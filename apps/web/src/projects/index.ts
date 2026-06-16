@@ -73,14 +73,19 @@ export function resolveProjectHomeScreen(ws: Workspace): ReactNode | null {
   return null;
 }
 
-/** Chat starters a project contributes for its workspaces (the per-project
- *  custom chat), or [] if none claims it. */
-export function resolveProjectChatStarters(ws: Workspace): ProjectChatStarter[] {
+/** A project's chat decoration for its workspaces — starters plus the project's
+ *  icon name — or null if none claims it. Drives the decorated empty chat state
+ *  (the per-project custom chat). */
+export function resolveProjectChat(
+  ws: Workspace,
+): { starters: ProjectChatStarter[]; icon: string } | null {
   for (const p of WEB_PROJECTS) {
     const starters = p.chatStarters?.(ws);
-    if (starters && starters.length > 0) return starters;
+    if (starters && starters.length > 0) {
+      return { starters, icon: p.starterCard?.icon ?? "Sparkles" };
+    }
   }
-  return [];
+  return null;
 }
 
 /** Project-contributed React routes, spread into the app router. */
