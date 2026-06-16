@@ -18,7 +18,7 @@ import { project as code } from "@projects/code/web";
 import { project as decisions } from "@projects/decisions/web";
 import { project as papers } from "@projects/papers/web";
 import { project as lecture } from "@projects/lecture/web";
-import { lectureRoutes } from "@projects/lecture/web/routes";
+import { lectureRoutes, lectureHome } from "@projects/lecture/web/routes";
 
 export const WEB_PROJECTS: ProjectWebModule[] = [
   budget,
@@ -57,6 +57,18 @@ export function resolveProjectHome(ws: Workspace): string | null {
   for (const p of WEB_PROJECTS) {
     const home = p.resolveHome?.(ws);
     if (home) return home;
+  }
+  return null;
+}
+
+/** A project's home SCREEN, rendered inside the standard workspace shell (the
+ *  screen tab) rather than as a separate full-page route — so project workspaces
+ *  share the same chrome as any other. Returns the component, or null. */
+const HOME_SCREENS: ((ws: Workspace) => ReactNode | null)[] = [lectureHome];
+export function resolveProjectHomeScreen(ws: Workspace): ReactNode | null {
+  for (const home of HOME_SCREENS) {
+    const node = home(ws);
+    if (node) return node;
   }
   return null;
 }

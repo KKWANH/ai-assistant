@@ -68,7 +68,6 @@ import {
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { SidebarItem } from "../ui/SidebarItem";
-import { resolveProjectHome } from "../../projects";
 import { IconButton } from "../ui/IconButton";
 import { Badge } from "../ui/Badge";
 import { CommandMenu } from "../ui/CommandMenu";
@@ -780,15 +779,14 @@ export function AppShell({ children }: AppShellProps) {
                           activeWorkspaceId === ws.id &&
                           location.pathname.startsWith("/workspaces/")
                         }
-                        // Projects with an immersive home open straight to it:
-                        // a project's resolveHome (e.g. lecture → /lecture), or
-                        // a custom screen set as main; else the overview. The
-                        // tabs stay reachable from inside either home.
+                        // Open the workspace hub. A project's home (e.g. lecture)
+                        // now renders INSIDE the hub's screen tab — same chrome as
+                        // any workspace — so projects no longer bypass it. A custom
+                        // screen set as the immersive main still opens to /screen.
                         to={
-                          resolveProjectHome(ws) ??
-                          (ws.homeView === "surface"
+                          ws.homeView === "surface"
                             ? `/workspaces/${ws.id}/screen`
-                            : `/workspaces/${ws.id}`)
+                            : `/workspaces/${ws.id}`
                         }
                         onClick={() => {
                           setActiveWorkspaceId(ws.id);

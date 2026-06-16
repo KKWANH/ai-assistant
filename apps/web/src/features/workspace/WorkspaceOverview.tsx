@@ -90,7 +90,7 @@ import { SurfaceView } from "../surface/SurfaceView";
 import { DataFilesView } from "./DataFilesView";
 import { GitPanel } from "./GitPanel";
 import { ContextEditor } from "./ContextEditor";
-import { resolveProjectHome } from "../../projects";
+import { resolveProjectHome, resolveProjectHomeScreen } from "../../projects";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { HooksPanel } from "../hooks/HooksPanel";
 import { templateName, templateDescription } from "../../lib/templateLabels";
@@ -683,14 +683,25 @@ export function WorkspaceOverview() {
   // Auto-switches to "surface" once the surface query resolves with
   // exists=true, unless the user has already picked a tab themselves.
   const surfaceExists = surfaceData?.state?.exists ?? false;
+  // A project (e.g. lecture) contributes a default home SCREEN rendered inside
+  // this shell. Priority on the screen tab: a user surface > the project home >
+  // the empty "add a screen" state.
+  const projectHome = ws ? resolveProjectHomeScreen(ws) : null;
+  const hasProjectHome = projectHome != null;
   const [activeTab, setActiveTab] = useState<string>("chats");
   const [userPickedTab, setUserPickedTab] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   useEffect(() => {
     if (userPickedTab) return;
     if (surfaceData === undefined) return;
-    if (surfaceExists && activeTab !== "surface") setActiveTab("surface");
-  }, [surfaceData, surfaceExists, userPickedTab, activeTab]);
+    // Land on the screen tab when there's something to show (a user surface or a
+    // project home), else fall back to chats — also resets a stale "surface" tab
+    // carried over when switching from a screen workspace to a plain one (same
+    // route, no remount).
+    const wantsScreen = surfaceExists || hasProjectHome;
+    if (wantsScreen && activeTab !== "surface") setActiveTab("surface");
+    else if (!wantsScreen && activeTab === "surface") setActiveTab("chats");
+  }, [surfaceData, surfaceExists, hasProjectHome, userPickedTab, activeTab]);
   // Turning Advanced off while on a power tab → fall back to chats so the
   // user isn't stranded on a now-hidden tab.
   useEffect(() => {
@@ -1378,6 +1389,16 @@ export function WorkspaceOverview() {
                 <SurfaceView workspaceId={ws.id} />
               </ErrorBoundary>
             </div>
+          ) : projectHome ? (
+            // A project's default home (e.g. lecture), rendered in the SAME shell
+            // — so a project workspace gets the same chrome as a custom-surface
+            // one. A user can still author a surface (Advanced → Edit screen) to
+            // override it. Own boundary + Suspense so the tabs stay live.
+            <ErrorBoundary label="화면을 불러오는 중 문제가 발생했어요">
+              <Suspense fallback={<EditorFallback />}>
+                <div className="flex-1 flex flex-col min-h-0">{projectHome}</div>
+              </Suspense>
+            </ErrorBoundary>
           ) : (
             <div className="flex-1 overflow-y-auto min-h-0">
               <WorkspacePanel>
