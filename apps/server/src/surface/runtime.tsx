@@ -247,6 +247,44 @@ export function useAriadne(): AriadneSDK {
   return sdk.current;
 }
 
+/** Live data made easy: call `fn` now and again every `intervalMs`, returning
+ *  the latest result — so a surface (the workspace's default screen) stays
+ *  real-time without hand-wiring setInterval. `deps` re-subscribe the poll (e.g.
+ *  when the symbols change). The latest `fn` is always used, so it can close over
+ *  fresh state without restarting the timer.
+ *
+ *    const { data: quotes } = usePoll(() => ariadne.getQuotes(syms), 30_000, [syms.join()]);
+ */
+export function usePoll<T>(
+  fn: () => Promise<T>,
+  intervalMs: number,
+  deps: unknown[] = [],
+): { data: T | null; error: string | null; loading: boolean } {
+  const [state, setState] = useState<{ data: T | null; error: string | null; loading: boolean }>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+  useEffect(() => {
+    let alive = true;
+    const run = () => {
+      fnRef.current().then(
+        (data) => { if (alive) setState({ data, error: null, loading: false }); },
+        (err: unknown) => {
+          if (alive) setState((s) => ({ ...s, error: err instanceof Error ? err.message : String(err), loading: false }));
+        },
+      );
+    };
+    run();
+    const id = setInterval(run, intervalMs);
+    return () => { alive = false; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- caller owns deps; fn is read via a ref
+  }, [intervalMs, ...deps]);
+  return state;
+}
+
 // ---------------------------------------------------------------------------
 // CSS-var colour helpers — all chart colours come from theme tokens
 // ---------------------------------------------------------------------------

@@ -26,6 +26,15 @@ declare module "@ariadne/surface" {
   export function useRef<T>(initial: T): { current: T };
   export function useMemo<T>(factory: () => T, deps: ReadonlyArray<unknown>): T;
 
+  /** Live data: call `fn` now and every `intervalMs`, returning the latest
+   *  result — keep the default screen real-time without wiring setInterval.
+   *  `deps` re-subscribe the poll. */
+  export function usePoll<T>(
+    fn: () => Promise<T>,
+    intervalMs: number,
+    deps?: ReadonlyArray<unknown>,
+  ): { data: T | null; error: string | null; loading: boolean };
+
   // ── Data types ───────────────────────────────────────────────────────────
   export interface SurfaceFile {
     path: string;

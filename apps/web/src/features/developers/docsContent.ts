@@ -682,6 +682,24 @@ The common React hooks (\`useState\`, \`useEffect\`, \`useMemo\`, \`useRef\`,
 [theme variables](/developers/theming) instead of hardcoded colours, so the
 surface tracks light/dark automatically.
 
+## Live data
+
+A surface is a workspace's default screen, so it should feel live — not a
+one-shot snapshot. \`usePoll\` re-runs a fetch on an interval and hands you the
+latest result, no \`setInterval\` to wire up:
+
+\`\`\`tsx
+const { data: quotes, loading } = usePoll(
+  () => ariadne.getQuotes(["AAPL", "MSFT", "NVDA"]),
+  30000,            // refresh every 30s
+);
+\`\`\`
+
+It returns \`{ data, error, loading }\`; pass a \`deps\` array as the third argument
+to re-subscribe when inputs change (e.g. \`[symbols.join()]\`). The latest \`fn\` is
+always used, so it can close over fresh state without restarting the timer. The
+**Live data** starter in the surface editor is built around it.
+
 ## Persist state
 
 \`\`\`tsx

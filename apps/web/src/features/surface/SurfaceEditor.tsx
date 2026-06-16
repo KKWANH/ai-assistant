@@ -76,6 +76,36 @@ export default function App() {
 }
 `,
   },
+  {
+    id: "live",
+    label: "Live data",
+    source: `import { React, usePoll, useAriadne, Stat, Grid } from "@ariadne/surface";
+
+export default function App() {
+  const ariadne = useAriadne();
+  // usePoll re-fetches on an interval — the screen stays real-time on its own,
+  // no setInterval to wire up.
+  const { data: quotes, loading } = usePoll(
+    () => ariadne.getQuotes(["AAPL", "MSFT", "NVDA"]),
+    30000,
+  );
+
+  return (
+    <div style={{ padding: 24, color: "rgb(var(--foreground))" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Live quotes</h1>
+      <p style={{ color: "rgb(var(--muted-foreground))", fontSize: 13, marginBottom: 12 }}>
+        {loading ? "Loading…" : "Updates every 30s"}
+      </p>
+      <Grid cols={3} gap={12}>
+        {(quotes ?? []).map((q) => (
+          <Stat key={q.symbol} label={q.symbol} value={q.price} />
+        ))}
+      </Grid>
+    </div>
+  );
+}
+`,
+  },
 ];
 
 export interface SurfaceEditorProps {
