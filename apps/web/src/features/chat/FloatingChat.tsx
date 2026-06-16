@@ -10,7 +10,7 @@
  */
 import { useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
-import { MessageSquare, X, Maximize2 } from "lucide-react";
+import { MessageSquare, X, Maximize2, Plus } from "lucide-react";
 import { useT } from "../../lib/i18n";
 import { useChats, useCreateChat } from "../../lib/queries";
 import { Spinner } from "../../components/ui/Spinner";
@@ -46,16 +46,37 @@ export function FloatingChat({ workspaceId }: { workspaceId: string }) {
     setOpen(true);
   };
 
+  // Start a fresh chat for this workspace (drops into the decorated starter
+  // empty state) without leaving the screen.
+  const handleNewChat = async () => {
+    try {
+      const created = await createChat.mutateAsync({ workspaceId });
+      setChatId(created.id);
+      setOpen(true);
+    } catch {
+      /* surfaced by the mutation's own error path */
+    }
+  };
+
   return (
     <>
-      {/* Glass panel — anchored to the screen, above the FAB. */}
+      {/* Glass panel — anchored to the screen, above the FAB. Full-width on
+          phones, a fixed 440px card on larger screens. */}
       {open && chatId && (
-        <div className="absolute bottom-[5.25rem] right-4 z-30 flex h-[min(68vh,560px)] w-[min(440px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-2xl backdrop-blur-xl animate-fade-in">
+        <div className="absolute inset-x-3 bottom-[5.25rem] z-30 flex h-[min(70vh,560px)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-2xl backdrop-blur-xl animate-fade-in sm:inset-x-auto sm:right-4 sm:w-[440px]">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-surface-2/50 px-3 py-2">
             <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
               <MessageSquare className="h-3.5 w-3.5 text-accent" /> {t("chat.floating.label")}
             </span>
             <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => void handleNewChat()}
+                aria-label={t("chat.floating.newChat")}
+                title={t("chat.floating.newChat")}
+                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
               <button
                 onClick={() => { if (chatId) navigate(`/chat/${chatId}`); }}
                 aria-label={t("chat.floating.expand")}

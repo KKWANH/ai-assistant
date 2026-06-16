@@ -153,6 +153,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
   "chat.empty.projectSubtitle": "무엇을 도와드릴까요?",
   "chat.floating.label": "채팅",
+  "chat.floating.newChat": "새 채팅",
   "chat.floating.expand": "전체 채팅으로 열기",
   "chat.floating.close": "닫기",
 

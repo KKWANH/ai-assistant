@@ -160,6 +160,7 @@ const en = {
   "chat.empty.sendToStart": "Send a message to start the conversation.",
   "chat.empty.projectSubtitle": "What can I help you with?",
   "chat.floating.label": "Chat",
+  "chat.floating.newChat": "New chat",
   "chat.floating.expand": "Open full chat",
   "chat.floating.close": "Close",
 
