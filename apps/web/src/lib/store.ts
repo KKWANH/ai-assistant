@@ -117,6 +117,12 @@ export interface UIStore {
   // Chat: composer workspace selector
   chatComposerWorkspaceId: string | null;
   setChatComposerWorkspaceId: (id: string | null) => void;
+
+  /** Unsent composer text keyed by chat id (or "new") — kept here, not in the
+   *  composer's local state, so navigating away (e.g. to the fullscreen screen)
+   *  and back doesn't clear what you were typing. Cleared on send. */
+  composerDrafts: Record<string, string>;
+  setComposerDraft: (key: string, text: string) => void;
 }
 
 export const useUIStore = create<UIStore>((set, get) => ({
@@ -200,4 +206,14 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   chatComposerWorkspaceId: null,
   setChatComposerWorkspaceId: (id) => set({ chatComposerWorkspaceId: id }),
+
+  composerDrafts: {},
+  setComposerDraft: (key, text) =>
+    set((s) => {
+      if ((s.composerDrafts[key] ?? "") === text) return s; // no-op, avoid churn
+      const next = { ...s.composerDrafts };
+      if (text) next[key] = text;
+      else delete next[key];
+      return { composerDrafts: next };
+    }),
 }));

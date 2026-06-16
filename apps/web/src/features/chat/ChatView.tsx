@@ -463,6 +463,8 @@ function ThreadView({ chatId }: { chatId: string }) {
       <div className="shrink-0 px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
         <OpenAttemptChip chatId={chatId} />
         <ChatComposer
+          key={chatId}
+          draftKey={chatId}
           onSend={(opts) => void handleSend(opts)}
           pending={busy}
           onStop={busy ? handleStop : undefined}

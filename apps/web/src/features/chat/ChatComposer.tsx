@@ -110,6 +110,9 @@ export interface ChatComposerProps {
    *  scopes its override to this (the server applies the override by the chat's
    *  workspaceId), falling back to the composer's selected target for new chats. */
   chatWorkspaceId?: string | null;
+  /** Persist the unsent draft under this key (the chat id, or "new"). Restored on
+   *  remount so navigating away and back keeps what you typed. */
+  draftKey?: string;
 }
 
 const IMAGE_TYPES = [
@@ -362,8 +365,11 @@ export function ChatComposer({
   onRunSuggestion,
   onDismissSuggestion,
   chatWorkspaceId = null,
+  draftKey = "new",
 }: ChatComposerProps) {
-  const [content, setContent] = useState("");
+  // Seed from the persisted draft (lazy — only on mount) so a remount after
+  // navigating away restores what was typed. Persisted back on every change.
+  const [content, setContent] = useState(() => useUIStore.getState().composerDrafts[draftKey] ?? "");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   // AK: workspace file picker modal state. Opens via the folder-tree button
   // in the toolbar (visible only when a workspace is attached) so the user
@@ -409,7 +415,20 @@ export function ChatComposer({
       textareaRef.current?.focus();
     }
   }, [composerPulse]);
+  // Persist the draft on every change (imperative — no extra subscription), so a
+  // remount restores it. Cleared automatically when content becomes "" on send.
+  useEffect(() => {
+    useUIStore.getState().setComposerDraft(draftKey, content);
+  }, [content, draftKey]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Keep the textarea sized to its content after a draft restore or a starter
+  // prefill (onChange's auto-grow only fires on user typing).
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200).toString()}px`;
+  }, [content]);
   const { toast } = useToast();
   const { t } = useT();
 

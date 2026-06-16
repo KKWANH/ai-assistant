@@ -554,7 +554,7 @@ function UserMessageBubble({
           </button>
           <span className="text-2xs text-muted-foreground px-1">{time}</span>
         </div>
-        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed">
+        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed whitespace-pre-wrap break-words">
           {message.content}
           {message.webSearch && (
             <Badge variant="default" className="ml-2 text-2xs opacity-70">
