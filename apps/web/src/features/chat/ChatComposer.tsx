@@ -402,6 +402,11 @@ export function ChatComposer({
       // is clicked — mom expected web search to be turned on, not just
       // "considered."
       setWebMode("on");
+    } else if (composerPulse.kind === "set_text") {
+      // A project chat starter (or any prefill) — drop it in the composer and
+      // focus so the user can review, tweak the mode, and send.
+      setContent(composerPulse.text);
+      textareaRef.current?.focus();
     }
   }, [composerPulse]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);

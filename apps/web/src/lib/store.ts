@@ -105,8 +105,14 @@ export interface UIStore {
    *  This pattern beats a flat boolean because two clicks in a row
    *  should fire twice; useEffect dep on a counter handles that
    *  cleanly. */
-  composerPulse: { kind: "open_file_picker" | "toggle_web_search"; n: number } | null;
+  composerPulse:
+    | { kind: "open_file_picker" | "toggle_web_search"; n: number }
+    | { kind: "set_text"; text: string; n: number }
+    | null;
   pulseComposer: (kind: "open_file_picker" | "toggle_web_search") => void;
+  /** Prefill the composer with text (e.g. a project's chat starter) — the user
+   *  reviews + sends, so it uses the composer's own modes. */
+  prefillComposer: (text: string) => void;
 
   // Chat: composer workspace selector
   chatComposerWorkspaceId: string | null;
@@ -186,6 +192,10 @@ export const useUIStore = create<UIStore>((set, get) => ({
   pulseComposer: (kind) =>
     set((state) => ({
       composerPulse: { kind, n: (state.composerPulse?.n ?? 0) + 1 },
+    })),
+  prefillComposer: (text) =>
+    set((state) => ({
+      composerPulse: { kind: "set_text", text, n: (state.composerPulse?.n ?? 0) + 1 },
     })),
 
   chatComposerWorkspaceId: null,

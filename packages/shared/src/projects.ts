@@ -48,6 +48,14 @@ export interface ProjectStarterCard {
   descKey: string;
 }
 
+/** A suggested chat prompt a project contributes for its workspaces — shown in
+ *  the empty chat state. The label is the chip text; clicking it prefills the
+ *  composer with `prompt` (the user reviews + sends). */
+export interface ProjectChatStarter {
+  label: string;
+  prompt: string;
+}
+
 /** Web-side contribution of an example project. */
 export interface ProjectWebModule {
   name: string;
@@ -57,4 +65,7 @@ export interface ProjectWebModule {
    *  to the default overview. (Rich React routes are wired separately via the
    *  web registry's route list.) */
   resolveHome?: (ws: import("./types.js").Workspace) => string | null;
+  /** Chat starters shown in an empty chat grounded in this project's workspace
+   *  — the per-project custom chat entry point. Null/empty = the generic state. */
+  chatStarters?: (ws: import("./types.js").Workspace) => ProjectChatStarter[] | null;
 }

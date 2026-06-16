@@ -29,9 +29,11 @@ import {
   useOpenAttemptForChat,
   useChatAttempts,
   useProviderStatus,
+  useWorkspace,
 } from "../../lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
+import { resolveProjectChatStarters } from "../../projects";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import { ChatComposer, type WebSearchMode } from "./ChatComposer";
@@ -197,6 +199,11 @@ function MessageList({
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const { t, locale } = useT();
+  // Per-project chat: a project (e.g. lecture) contributes starter prompts shown
+  // in the empty state. Clicking one prefills the composer (the user sends).
+  const { data: ws } = useWorkspace(chat?.workspaceId ?? "");
+  const prefillComposer = useUIStore((s) => s.prefillComposer);
+  const starters = ws ? resolveProjectChatStarters(ws) : [];
 
   // A generation running on the server that this tab is not live-streaming
   // (another tab, or a reload mid-generation) — rendered as a streaming
@@ -227,10 +234,26 @@ function MessageList({
 
   if (messages.length === 0 && !streaming && !synthetic) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-xs text-muted-foreground italic">
-          {t("chat.empty.sendToStart")}
-        </p>
+      <div className="flex-1 flex items-center justify-center p-6">
+        {starters.length > 0 ? (
+          <div className="w-full max-w-md">
+            <p className="mb-3 text-center text-xs text-muted-foreground">{t("chat.empty.sendToStart")}</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {starters.map((s) => (
+                <button
+                  key={s.label}
+                  onClick={() => prefillComposer(s.prompt)}
+                  className="rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-2"
+                >
+                  <span className="block text-xs font-medium text-foreground">{s.label}</span>
+                  <span className="mt-0.5 block truncate text-2xs text-muted-foreground">{s.prompt}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">{t("chat.empty.sendToStart")}</p>
+        )}
       </div>
     );
   }

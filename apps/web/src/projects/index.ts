@@ -10,7 +10,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Wallet, BookOpen, ChefHat, Code2, ClipboardList, Microscope, GraduationCap, FileText } from "lucide-react";
-import type { ProjectWebModule, ProjectStarterCard, Workspace } from "@ariadne/shared";
+import type { ProjectWebModule, ProjectStarterCard, ProjectChatStarter, Workspace } from "@ariadne/shared";
 import { project as budget } from "@projects/budget/web";
 import { project as reading } from "@projects/reading/web";
 import { project as chefbook } from "@projects/chefbook/web";
@@ -71,6 +71,16 @@ export function resolveProjectHomeScreen(ws: Workspace): ReactNode | null {
     if (node) return node;
   }
   return null;
+}
+
+/** Chat starters a project contributes for its workspaces (the per-project
+ *  custom chat), or [] if none claims it. */
+export function resolveProjectChatStarters(ws: Workspace): ProjectChatStarter[] {
+  for (const p of WEB_PROJECTS) {
+    const starters = p.chatStarters?.(ws);
+    if (starters && starters.length > 0) return starters;
+  }
+  return [];
 }
 
 /** Project-contributed React routes, spread into the app router. */
