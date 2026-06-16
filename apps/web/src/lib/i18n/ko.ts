@@ -355,6 +355,7 @@ const ko: Record<TranslationKey, string> = {
   "workspace.patterns.exclude": "제외",
 
   "workspace.surface.customScreen": "맞춤 화면",
+  "workspace.surface.screen": "화면",
   "workspace.surface.createRuns": "템플릿",
   "workspace.surface.editScreen": "화면 편집",
   "workspace.surface.tip.customScreen": "이 워크스페이스 전용으로 만든 화면 (예: 포트폴리오 대시보드)",

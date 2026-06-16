@@ -1251,7 +1251,11 @@ export function WorkspaceOverview() {
             <TabsTrigger value="surface">
               <span className="flex items-center gap-1.5" title={t("workspace.surface.tip.customScreen")}>
                 <Layout className="h-3.5 w-3.5" />
-                {t("workspace.surface.customScreen")}
+                {/* "Custom screen" only when it's a user-authored surface; a
+                    project's own home screen is just "Screen". */}
+                {hasProjectHome && !surfaceExists
+                  ? t("workspace.surface.screen")
+                  : t("workspace.surface.customScreen")}
               </span>
             </TabsTrigger>
             <TabsTrigger value="data">

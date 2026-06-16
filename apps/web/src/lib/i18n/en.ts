@@ -360,6 +360,7 @@ const en = {
   "workspace.patterns.exclude": "Exclude",
 
   "workspace.surface.customScreen": "Custom screen",
+  "workspace.surface.screen": "Screen",
   "workspace.surface.createRuns": "Templates",
   "workspace.surface.editScreen": "Edit screen",
   "workspace.surface.tip.customScreen": "A screen built just for this workspace (e.g. a portfolio dashboard).",
