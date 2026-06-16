@@ -159,6 +159,9 @@ const en = {
   "chat.empty.startNew": "Or start a new conversation",
   "chat.empty.sendToStart": "Send a message to start the conversation.",
   "chat.empty.projectSubtitle": "What can I help you with?",
+  "chat.floating.label": "Chat",
+  "chat.floating.expand": "Open full chat",
+  "chat.floating.close": "Close",
 
   "chat.example.files.title": "Attach files and ask questions",
   "chat.example.files.body": "PDF · doc · spreadsheet · image",

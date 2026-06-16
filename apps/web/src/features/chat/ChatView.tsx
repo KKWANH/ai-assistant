@@ -315,7 +315,7 @@ function MessageList({
 }
 
 // ── Thread view ───────────────────────────────────────────────────────────────
-function ThreadView({ chatId }: { chatId: string }) {
+export function ThreadView({ chatId }: { chatId: string }) {
   const { toast } = useToast();
   const { t } = useT();
   const qc = useQueryClient();

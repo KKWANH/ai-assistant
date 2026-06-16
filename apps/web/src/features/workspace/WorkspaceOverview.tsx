@@ -87,6 +87,7 @@ import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useUIStore } from "../../lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
 import { SurfaceView } from "../surface/SurfaceView";
+import { FloatingChat } from "../chat/FloatingChat";
 import { DataFilesView } from "./DataFilesView";
 import { GitPanel } from "./GitPanel";
 import { ContextEditor } from "./ContextEditor";
@@ -1341,7 +1342,7 @@ export function WorkspaceOverview() {
         {/* Custom screen — fills the remaining height. When surface.tsx
             exists, render it. Otherwise show a centred "add custom screen"
             placeholder so the empty state explains the next step. */}
-        <TabsContent value="surface" className="flex-1 flex flex-col min-h-0 p-0">
+        <TabsContent value="surface" className="relative flex-1 flex flex-col min-h-0 p-0">
           {hasSurface ? (
             <div className="flex-1 flex flex-col min-h-0 p-4">
               {/* Set this custom screen as the workspace's immersive main
@@ -1426,6 +1427,8 @@ export function WorkspaceOverview() {
               </WorkspacePanel>
             </div>
           )}
+          {/* Chat over the screen — only when there's a real screen to chat about. */}
+          {(surfaceExists || hasProjectHome) && <FloatingChat workspaceId={ws.id} />}
         </TabsContent>
 
         {/* Data — view & edit CSV files (independent of surface) */}
