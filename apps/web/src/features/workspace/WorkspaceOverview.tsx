@@ -49,6 +49,7 @@ import {
   SquareTerminal,
   Webhook,
   Copy,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 import {
@@ -1212,6 +1213,17 @@ export function WorkspaceOverview() {
                   </Button>
                 </>
               )}
+              {/* Consolidated per-workspace settings (model, screen, files,
+                  visibility…) — always available, not gated behind Advanced. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<SettingsIcon className="h-3.5 w-3.5" />}
+                onClick={() => navigate(`/workspaces/${ws.id}/settings`)}
+                title={t("workspace.settings.tip")}
+              >
+                {t("workspace.settings.button")}
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"

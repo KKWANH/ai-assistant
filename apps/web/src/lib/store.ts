@@ -26,6 +26,29 @@ function saveWorkspaceAdvanced(map: Record<string, boolean>): void {
   }
 }
 
+// Per-workspace floating-chat open behavior — "recent" continues the
+// workspace's latest chat (the default), "new" always starts a fresh one.
+// A personal UI preference set in Workspace Settings, so it's client-side
+// (localStorage) rather than a workspace field, keyed by workspace id.
+export type FloatingChatMode = "recent" | "new";
+const FLOATING_CHAT_KEY = "ariadne.floatingChatMode.v1";
+function loadFloatingChatMode(): Record<string, FloatingChatMode> {
+  try {
+    const raw = localStorage.getItem(FLOATING_CHAT_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, FloatingChatMode>) : {};
+  } catch {
+    return {};
+  }
+}
+function saveFloatingChatMode(map: Record<string, FloatingChatMode>): void {
+  try {
+    localStorage.setItem(FLOATING_CHAT_KEY, JSON.stringify(map));
+  } catch {
+    /* localStorage unavailable / over quota — fall back to in-memory only */
+  }
+}
+
 export type SidebarSection =
   | "chat"
   | "workspaces"
@@ -61,6 +84,10 @@ export interface UIStore {
   setWorkspaceAdvanced: (on: boolean) => void;
   workspaceAdvancedById: Record<string, boolean>;
   setWorkspaceAdvancedFor: (id: string, on: boolean) => void;
+
+  // Per-workspace floating-chat open behavior (see loadFloatingChatMode).
+  floatingChatModeById: Record<string, FloatingChatMode>;
+  setFloatingChatModeFor: (id: string, mode: FloatingChatMode) => void;
 
   // Command menu
   commandMenuOpen: boolean;
@@ -143,6 +170,14 @@ export const useUIStore = create<UIStore>((set, get) => ({
       const next = { ...s.workspaceAdvancedById, [id]: on };
       saveWorkspaceAdvanced(next);
       return { workspaceAdvancedById: next };
+    }),
+
+  floatingChatModeById: loadFloatingChatMode(),
+  setFloatingChatModeFor: (id, mode) =>
+    set((s) => {
+      const next = { ...s.floatingChatModeById, [id]: mode };
+      saveFloatingChatMode(next);
+      return { floatingChatModeById: next };
     }),
 
   inspectorOpen: true,

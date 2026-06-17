@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { MessageSquare, X, Maximize2, Plus } from "lucide-react";
 import { useT } from "../../lib/i18n";
 import { useChats, useCreateChat } from "../../lib/queries";
+import { useUIStore } from "../../lib/store";
 import { Spinner } from "../../components/ui/Spinner";
 
 // Lazy so the screen views (immersive home, the Screen tab) don't pull the chat
@@ -24,16 +25,19 @@ export function FloatingChat({ workspaceId }: { workspaceId: string }) {
   const navigate = useNavigate();
   const { data: chats } = useChats();
   const createChat = useCreateChat();
+  const openMode = useUIStore((s) => s.floatingChatModeById[workspaceId] ?? "recent");
   const [open, setOpen] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
 
   const handleOpen = async () => {
     if (!chatId) {
-      // Continue the workspace's most recent chat, or start one.
+      // "recent" (default) continues the workspace's latest chat; "new" always
+      // opens a fresh one — the per-workspace preference from Workspace Settings.
       const wsChats = (chats ?? [])
         .filter((c) => c.workspaceId === workspaceId)
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      if (wsChats[0]) setChatId(wsChats[0].id);
+      const recent = openMode === "recent" ? wsChats[0] : undefined;
+      if (recent) setChatId(recent.id);
       else {
         try {
           const created = await createChat.mutateAsync({ workspaceId });
