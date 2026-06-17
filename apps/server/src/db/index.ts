@@ -355,6 +355,8 @@ function runMigrations(db: DatabaseSync): void {
   skills("variables_json", "TEXT");
   skills("description", "TEXT");
   skills("category", "TEXT");
+  // workspace_id (NULL → account-global skill; set → scoped to one workspace)
+  skills("workspace_id", "TEXT");
 
   const chatMessages = addColumnIfMissing(db, "chat_messages");
   chatMessages("agent_json", "TEXT");
@@ -380,6 +382,9 @@ function runMigrations(db: DatabaseSync): void {
   // Per-workspace model override (NULL → inherit the account-global default)
   workspaces("default_provider", "TEXT");
   workspaces("default_model", "TEXT");
+  // default_skill_id (NULL → none; set → skill pre-filled into the composer
+  // when starting a new chat in this workspace)
+  workspaces("default_skill_id", "TEXT");
 
   const runs = addColumnIfMissing(db, "runs");
   runs("created_by", "TEXT");

@@ -850,7 +850,8 @@ export const getAccountLimits = () =>
 // ── Skills ────────────────────────────────────────────────────────────────────
 import type { Skill, CreateSkillInput, UpdateSkillInput } from "@ariadne/shared";
 
-export const listSkills = () => request<Skill[]>("GET", "/skills");
+export const listSkills = (workspaceId?: string) =>
+  request<Skill[]>("GET", workspaceId ? `/skills?workspaceId=${encodeURIComponent(workspaceId)}` : "/skills");
 export const createSkill = (input: CreateSkillInput) =>
   request<Skill>("POST", "/skills", input);
 export const updateSkill = (id: string, input: UpdateSkillInput) =>

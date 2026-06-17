@@ -110,6 +110,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       homeView: null,
       defaultProvider: null,
       defaultModel: null,
+      defaultSkillId: null,
     };
 
     dbInsertWorkspace(workspace);

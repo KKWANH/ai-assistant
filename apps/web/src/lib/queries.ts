@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report, Skill, ActionSchedule } from "@ariadne/shared";
+import type { Run, RunStatus, Chat, ChatMessage, AgentStep, Report, ActionSchedule } from "@ariadne/shared";
 import * as api from "./api";
 
 // ── Query keys ───────────────────────────────────────────────────────────────
@@ -1278,10 +1278,15 @@ export function useAccountLimits() {
 
 // ── Skills ────────────────────────────────────────────────────────────────────
 
-export function useSkills() {
+/**
+ * The account's skills (+ built-ins). With a workspaceId, also includes that
+ * workspace's scoped skills; the key is per-workspace so the global list and a
+ * workspace list are cached separately.
+ */
+export function useSkills(workspaceId?: string) {
   return useQuery({
-    queryKey: ["skills"] as const,
-    queryFn: api.listSkills,
+    queryKey: ["skills", workspaceId ?? null] as const,
+    queryFn: () => api.listSkills(workspaceId),
   });
 }
 
@@ -1300,10 +1305,9 @@ export function useUpdateSkill() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: import("@ariadne/shared").UpdateSkillInput }) =>
       api.updateSkill(id, input),
-    onSuccess: (updated) => {
-      qc.setQueryData<Skill[]>(["skills"], (prev) =>
-        prev ? prev.map((s) => (s.id === updated.id ? updated : s)) : prev,
-      );
+    onSuccess: () => {
+      // Invalidate every skill list (global + per-workspace keys).
+      void qc.invalidateQueries({ queryKey: ["skills"] });
     },
   });
 }
@@ -1312,10 +1316,8 @@ export function useDeleteSkill() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.deleteSkill(id),
-    onSuccess: (_, id) => {
-      qc.setQueryData<Skill[]>(["skills"], (prev) =>
-        prev ? prev.filter((s) => s.id !== id) : prev,
-      );
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["skills"] });
     },
   });
 }

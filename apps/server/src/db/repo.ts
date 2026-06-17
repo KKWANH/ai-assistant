@@ -96,8 +96,8 @@ const WORKSPACE_SELECT = `
 export function dbInsertWorkspace(w: Workspace): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category,home_view,default_provider,default_model)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category,home_view,default_provider,default_model,default_skill_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     w.id,
     w.name,
@@ -112,7 +112,8 @@ export function dbInsertWorkspace(w: Workspace): void {
     w.category ?? null,
     w.homeView ?? null,
     w.defaultProvider ?? null,
-    w.defaultModel ?? null
+    w.defaultModel ?? null,
+    w.defaultSkillId ?? null
   );
 }
 
@@ -146,6 +147,7 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   if (fields.homeView !== undefined) { sets.push("home_view = ?"); vals.push(fields.homeView); }
   if (fields.defaultProvider !== undefined) { sets.push("default_provider = ?"); vals.push(fields.defaultProvider ?? null); }
   if (fields.defaultModel !== undefined) { sets.push("default_model = ?"); vals.push(fields.defaultModel ?? null); }
+  if (fields.defaultSkillId !== undefined) { sets.push("default_skill_id = ?"); vals.push(fields.defaultSkillId ?? null); }
   // rootPath is intentionally NOT exposed via the public PATCH route
   // (UpdateWorkspaceSchema doesn't list it) — repointing has snapshot/
   // index implications and shouldn't be a casual user action. It IS
@@ -186,6 +188,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     homeView: (row["home_view"] as string | null ?? null) as Workspace["homeView"],
     defaultProvider: (row["default_provider"] as string | null ?? null) as Workspace["defaultProvider"],
     defaultModel: (row["default_model"] as string | null) ?? null,
+    defaultSkillId: (row["default_skill_id"] as string | null) ?? null,
   };
 }
 
@@ -785,13 +788,26 @@ function rowToReport(row: Record<string, unknown>): Report {
 // Skills — account-scoped reusable prompt snippets
 // ---------------------------------------------------------------------------
 
-export function dbListSkills(accountId: string): Skill[] {
+/**
+ * The account's skills, newest-updated first. With a workspaceId, includes that
+ * workspace's scoped skills alongside the account-global ones; without it, only
+ * the account-global skills (workspace_id IS NULL).
+ */
+export function dbListSkills(accountId: string, workspaceId?: string | null): Skill[] {
   const db = getDb();
-  const rows = db
-    .prepare(
-      "SELECT * FROM skills WHERE account_id = ? ORDER BY updated_at DESC",
-    )
-    .all(accountId) as Record<string, unknown>[];
+  const rows = (
+    workspaceId
+      ? db
+          .prepare(
+            "SELECT * FROM skills WHERE account_id = ? AND (workspace_id IS NULL OR workspace_id = ?) ORDER BY updated_at DESC",
+          )
+          .all(accountId, workspaceId)
+      : db
+          .prepare(
+            "SELECT * FROM skills WHERE account_id = ? AND workspace_id IS NULL ORDER BY updated_at DESC",
+          )
+          .all(accountId)
+  ) as Record<string, unknown>[];
   return rows.map(rowToSkill);
 }
 
@@ -807,11 +823,12 @@ export function dbInsertSkill(s: Skill): void {
   const db = getDb();
   db.prepare(
     `INSERT INTO skills
-       (id, account_id, name, prompt, description, category, variables_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, account_id, workspace_id, name, prompt, description, category, variables_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     s.id,
     s.accountId,
+    s.workspaceId ?? null,
     s.name,
     s.prompt,
     s.description ?? null,
@@ -868,6 +885,7 @@ function rowToSkill(row: Record<string, unknown>): Skill {
   return {
     id: row["id"] as string,
     accountId: row["account_id"] as string,
+    workspaceId: (row["workspace_id"] as string | null) ?? null,
     name: row["name"] as string,
     prompt: row["prompt"] as string,
     description: (row["description"] as string | null) ?? undefined,

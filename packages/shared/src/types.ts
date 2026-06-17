@@ -30,6 +30,10 @@ export interface Workspace {
    *  provider). The "per-workspace config" lever (P2). */
   defaultProvider: ProviderId | null;
   defaultModel: string | null;
+  /** A skill whose prompt is pre-filled into the composer when starting a new
+   *  chat in this workspace. null = none. References a skill id (user or
+   *  built-in). */
+  defaultSkillId: string | null;
 }
 
 export type WorkspaceHomeView = "overview" | "surface" | null;
@@ -813,6 +817,10 @@ export interface Skill {
   id: string;
   /** null for built-in skills shipped server-side; user id otherwise. */
   accountId: string | null;
+  /** null = account-global skill (usable in every workspace); set = scoped to
+   *  one workspace, only surfaced in that workspace's chats. Built-ins leave
+   *  it unset. */
+  workspaceId?: string | null;
   /** Short label shown in the menu and as the slash-command keyword. */
   name: string;
   /** The text inserted into the composer when this skill fires.

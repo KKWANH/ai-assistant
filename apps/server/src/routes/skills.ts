@@ -32,9 +32,11 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
   // List the calling account's skills (newest-updated first) plus the
   // built-in skills appended at the end so the user's own picks are
   // most reachable in the picker.
-  app.get("/skills", async (req, reply) => {
+  app.get<{ Querystring: { workspaceId?: string } }>("/skills", async (req, reply) => {
     if (!req.account) return reply.status(401).send({ error: "Sign in required" });
-    const userSkills = dbListSkills(req.account.id);
+    // With ?workspaceId=, include that workspace's scoped skills alongside the
+    // account-global ones; without it, just the account-global set.
+    const userSkills = dbListSkills(req.account.id, req.query.workspaceId ?? null);
     const builtins = listBuiltinSkills();
     return reply.send([...userSkills, ...builtins]);
   });
@@ -50,6 +52,7 @@ export async function skillRoutes(app: FastifyInstance): Promise<void> {
     const skill: Skill = {
       id: crypto.randomUUID(),
       accountId: req.account.id,
+      workspaceId: parsed.data.workspaceId ?? null,
       name: parsed.data.name.trim(),
       prompt: parsed.data.prompt,
       description: parsed.data.description,

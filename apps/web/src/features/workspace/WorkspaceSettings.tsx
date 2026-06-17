@@ -14,14 +14,15 @@
  */
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles } from "lucide-react";
 import { PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS } from "@ariadne/shared";
 import type { ProviderId, Workspace } from "@ariadne/shared";
-import { useWorkspace, useUpdateWorkspace, useSettings, useSurface } from "../../lib/queries";
+import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { useToast } from "../../components/ui/Toast";
 import { useUIStore, type FloatingChatMode } from "../../lib/store";
 import { resolveProjectHomeScreen } from "../../projects";
+import { SkillsManager } from "../settings/SkillsManager";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -83,6 +84,7 @@ export function WorkspaceSettings() {
         <div className="max-w-2xl mx-auto px-5 py-6 flex flex-col gap-6">
           <GeneralSection ws={ws} />
           <ChatModelSection ws={ws} />
+          <SkillsSection ws={ws} />
           {hasScreen && <HomeScreenSection ws={ws} />}
           <FilesSection ws={ws} />
         </div>
@@ -248,6 +250,46 @@ function ChatModelSection({ ws }: { ws: Workspace }) {
               { value: "new", label: t("workspaceSettings.chat.floatingNew") },
             ]}
           />
+        </Field>
+      </Card>
+    </section>
+  );
+}
+
+// ── Skills ───────────────────────────────────────────────────────────────────
+function SkillsSection({ ws }: { ws: Workspace }) {
+  const { t } = useT();
+  const { toast } = useToast();
+  const update = useUpdateWorkspace();
+  // Global + this workspace's scoped skills + built-ins — any can be the default.
+  const { data: skills } = useSkills(ws.id);
+
+  const setDefault = (id: string) =>
+    update
+      .mutateAsync({ id: ws.id, input: { defaultSkillId: id || null } })
+      .catch(() => toast({ title: t("workspaceSettings.saveFailed"), variant: "error" }));
+
+  const options = [
+    { value: "", label: t("workspaceSettings.skills.defaultNone") },
+    ...(skills ?? []).map((s) => ({ value: s.id, label: `/${s.name}` })),
+  ];
+
+  return (
+    <section>
+      <SectionHeading icon={<Sparkles className="h-3.5 w-3.5" />}>
+        {t("workspaceSettings.skills.heading")}
+      </SectionHeading>
+      <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-4">
+        <Field label={t("workspaceSettings.skills.defaultLabel")} hint={t("workspaceSettings.skills.defaultHint")}>
+          <Select
+            className="max-w-xs"
+            value={ws.defaultSkillId ?? ""}
+            onChange={(e) => void setDefault(e.target.value)}
+            options={options}
+          />
+        </Field>
+        <Field label={t("workspaceSettings.skills.manageLabel")} hint={t("workspaceSettings.skills.manageHint")}>
+          <SkillsManager workspaceId={ws.id} />
         </Field>
       </Card>
     </section>

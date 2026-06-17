@@ -113,6 +113,10 @@ export interface ChatComposerProps {
   /** Persist the unsent draft under this key (the chat id, or "new"). Restored on
    *  remount so navigating away and back keeps what you typed. */
   draftKey?: string;
+  /** True when this composer belongs to a brand-new / empty chat (no messages
+   *  yet). Gates the per-workspace default-skill pre-fill so it never seeds a
+   *  chat that already has history. */
+  chatIsEmpty?: boolean;
 }
 
 const IMAGE_TYPES = [
@@ -366,6 +370,7 @@ export function ChatComposer({
   onDismissSuggestion,
   chatWorkspaceId = null,
   draftKey = "new",
+  chatIsEmpty = false,
 }: ChatComposerProps) {
   // Seed from the persisted draft (lazy — only on mount) so a remount after
   // navigating away restores what was typed. Persisted back on every change.
@@ -434,11 +439,29 @@ export function ChatComposer({
 
   const { chatComposerWorkspaceId, setChatComposerWorkspaceId } = useUIStore();
   const { data: workspaces } = useWorkspaces();
-  const { data: skills } = useSkills();
+  // Scope to the chat's workspace so its own skills join the global + built-in
+  // ones in the picker (and let the default-skill pre-fill resolve them).
+  const { data: skills } = useSkills(chatWorkspaceId ?? chatComposerWorkspaceId ?? undefined);
   const { data: settings } = useSettings();
   const { data: providerStatus } = useProviderStatus();
   const updateSettings = useUpdateSettings();
   const updateWorkspace = useUpdateWorkspace();
+
+  // Pre-fill the composer with this workspace's default skill when starting a
+  // new (empty) chat there — once per mount, and never over an existing draft.
+  // Variable placeholders ({key}) are left in place for the user to fill.
+  const defaultSkillSeededRef = useRef(false);
+  useEffect(() => {
+    if (defaultSkillSeededRef.current) return;
+    if (!chatIsEmpty || content !== "") return;
+    const wsId = chatWorkspaceId ?? chatComposerWorkspaceId;
+    const skillId = workspaces?.find((w) => w.id === wsId)?.defaultSkillId;
+    if (!skillId) return;
+    const skill = skills?.find((s) => s.id === skillId);
+    if (!skill) return;
+    defaultSkillSeededRef.current = true;
+    setContent(skill.prompt);
+  }, [chatIsEmpty, content, chatWorkspaceId, chatComposerWorkspaceId, workspaces, skills]);
   const { data: me } = useMe();
   // Easy mode shows friendly model names + a one-line trait instead of raw ids.
   const isSimple = me?.account.mode === "simple";

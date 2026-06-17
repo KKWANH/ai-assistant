@@ -480,6 +480,7 @@ export function ThreadView({ chatId }: { chatId: string }) {
           onRunSuggestion={() => void handleRunSuggestion()}
           onDismissSuggestion={() => setSuggestion(null)}
           chatWorkspaceId={chat?.workspaceId ?? null}
+          chatIsEmpty={messages.length === 0}
         />
       </div>
     </div>
@@ -602,6 +603,7 @@ export function ChatView() {
         <ChatComposer
           onSend={(opts) => void handleSend(opts)}
           pending={pending}
+          chatIsEmpty
         />
       </div>
     </div>

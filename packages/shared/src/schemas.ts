@@ -37,6 +37,8 @@ export const UpdateWorkspaceSchema = z.object({
   // Per-workspace model override; null clears it (inherit account default).
   defaultProvider: z.enum(PROVIDERS).nullable().optional(),
   defaultModel: z.string().min(1).max(120).nullable().optional(),
+  // Default skill pre-filled into the composer on a new chat; null clears it.
+  defaultSkillId: z.string().min(1).max(80).nullable().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 
@@ -233,6 +235,8 @@ export const CreateSkillSchema = z.object({
   prompt: z.string().min(1).max(4000),
   description: z.string().max(200).optional(),
   variables: z.array(SkillVariableSchema).max(8).optional(),
+  // Scope the skill to a single workspace; omitted/null = account-global.
+  workspaceId: z.string().min(1).max(80).nullable().optional(),
 });
 export type CreateSkillInput = z.infer<typeof CreateSkillSchema>;
 
