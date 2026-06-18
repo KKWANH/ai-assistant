@@ -416,6 +416,9 @@ export type AccessContext = "local" | "remote";
 export interface AuthInfo {
   account: Account;
   accessContext: AccessContext;
+  /** True when served by the desktop shell (ARIADNE_DESKTOP=1) — gates the
+   *  desktop-only first-run wizard. Absent on the web build. */
+  desktop?: boolean;
 }
 
 /* ------------------------------------------------------------------ *

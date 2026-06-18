@@ -72,6 +72,7 @@ import { IconButton } from "../ui/IconButton";
 import { Badge } from "../ui/Badge";
 import { CommandMenu } from "../ui/CommandMenu";
 import type { CommandItem } from "../ui/CommandMenu";
+import { FirstRunWizard } from "../../features/onboarding/FirstRunWizard";
 import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
 import { isBuiltinWorkspace } from "@ariadne/shared";
@@ -988,6 +989,9 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Command Menu overlay — standard mode only */}
       <CommandMenu items={commandItems} />
+
+      {/* Desktop first-run onboarding — no-op on web / after a key is set. */}
+      <FirstRunWizard />
     </div>
   );
 }

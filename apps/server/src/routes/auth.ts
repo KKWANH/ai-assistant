@@ -104,6 +104,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/me
   app.get("/auth/me", async (req, reply) => {
     // The onRequest hook has already attached req.account and req.accessContext
-    return reply.send({ account: req.account, accessContext: req.accessContext });
+    return reply.send({
+      account: req.account,
+      accessContext: req.accessContext,
+      desktop: process.env.ARIADNE_DESKTOP === "1",
+    });
   });
 }
