@@ -20,7 +20,9 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 /// Holds the Node sidecar so it can be killed when the app exits. None when we
 /// attached to a server we didn't start (so we never kill it).
@@ -181,18 +183,69 @@ fn main() {
             if !ready {
                 eprintln!("Ariadne: server did not become ready on port {PORT} within 30s");
             }
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
+
+            // Menu-bar tray — the app lives here; the window is just one client
+            // onto the server. Status line, then open/browser, then quit.
+            let status = MenuItem::with_id(app, "status", format!("Ariadne · running on :{PORT}"), false, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open window", true, None::<&str>)?;
+            let browser = MenuItem::with_id(app, "browser", "Open in browser", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Ariadne", true, None::<&str>)?;
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &status,
+                    &PredefinedMenuItem::separator(app)?,
+                    &open,
+                    &browser,
+                    &PredefinedMenuItem::separator(app)?,
+                    &quit,
+                ],
+            )?;
+            let mut tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("Ariadne")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "open" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    "browser" => {
+                        let _ = Command::new("open")
+                            .arg(format!("http://127.0.0.1:{PORT}"))
+                            .spawn();
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                });
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray = tray.icon(icon);
+            }
+            tray.build(app)?;
+
+            // The window is shown on launch, but its close button HIDES it (the
+            // tray + server keep running) instead of quitting the app.
+            let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
                 .title("Ariadne")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(900.0, 600.0)
                 .build()?;
+            let hide_handle = win.clone();
+            win.on_window_event(move |event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = hide_handle.hide();
+                }
+            });
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building the Ariadne desktop shell")
-        .run(|app, event| {
-            // Tear the sidecar down with the app so no orphan server lingers.
-            if let RunEvent::ExitRequested { .. } = event {
+        .run(|app, event| match event {
+            // Tear down ONLY a sidecar we started (None when we attached to an
+            // existing server — never kill that one).
+            RunEvent::ExitRequested { .. } => {
                 if let Some(state) = app.try_state::<Sidecar>() {
                     if let Ok(mut guard) = state.0.lock() {
                         if let Some(mut child) = guard.take() {
@@ -201,5 +254,13 @@ fn main() {
                     }
                 }
             }
+            // Dock-icon click after the window was hidden — bring it back.
+            RunEvent::Reopen { .. } => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+            _ => {}
         });
 }

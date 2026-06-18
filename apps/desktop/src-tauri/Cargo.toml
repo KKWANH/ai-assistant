@@ -9,10 +9,10 @@ rust-version = "1.77"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# No extra crates for the Phase 0 spike — std covers port-picking, spawning the
-# Node sidecar, and the readiness probe. Phase 1 (bundled Node binary) may add
-# tauri-plugin-shell + the updater plugin.
-tauri = { version = "2", features = [] }
+# tray-icon: the app lives in the menu bar; the window is optional (close =
+# hide, the tray + server keep running). std covers the sidecar spawn + the
+# connect probe.
+tauri = { version = "2", features = ["tray-icon"] }
 
 # SIGTERM the Node sidecar on exit so its cleanup (MCP child shutdown) runs;
 # std's Child::kill is SIGKILL only, which would orphan MCP workers. Unix-only —
