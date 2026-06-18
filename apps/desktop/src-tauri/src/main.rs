@@ -13,7 +13,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::Mutex;
@@ -22,15 +22,34 @@ use std::time::{Duration, Instant};
 
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 
-/// Holds the Node sidecar so it can be killed when the app exits.
+/// Holds the Node sidecar so it can be killed when the app exits. None when we
+/// attached to a server we didn't start (so we never kill it).
 struct Sidecar(Mutex<Option<Child>>);
 
-/// Ask the OS for a free loopback port by binding :0 and reading it back.
-fn pick_free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .unwrap_or(4319)
+/// The canonical Ariadne port — the web/ops server uses it too. Fixed (not a
+/// random free port) so the desktop ATTACHES to an already-running server and
+/// shares its data, and so the webview origin is stable (localStorage persists
+/// across launches, and is shared with a browser tab on the same port).
+const PORT: u16 = 4319;
+
+/// Is a real Ariadne server already answering on this port? A bare TCP connect
+/// isn't enough (something else could hold the port), so probe an API route and
+/// look for an HTTP status line — a live server answers 200 (loopback admin) or
+/// 401. Avoids starting a SECOND server on a separate DB.
+fn server_alive(port: u16) -> bool {
+    use std::io::{Read, Write};
+    let Ok(mut s) = TcpStream::connect(("127.0.0.1", port)) else { return false };
+    let _ = s.set_read_timeout(Some(Duration::from_millis(800)));
+    if s
+        .write_all(b"GET /api/auth/me HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return false;
+    }
+    let mut buf = [0u8; 64];
+    let n = s.read(&mut buf).unwrap_or(0);
+    let head = String::from_utf8_lossy(&buf[..n]);
+    head.starts_with("HTTP/1.") && (head.contains(" 200") || head.contains(" 401"))
 }
 
 /// Poll until the server accepts TCP connections (a good-enough readiness
@@ -108,50 +127,59 @@ fn stop_sidecar(child: &mut Child) {
 }
 
 fn main() {
-    let port = pick_free_port();
+    // Connect-or-spawn. If a server (the web/ops one) is already up on the fixed
+    // port, ATTACH to it — the desktop window becomes one more client on the
+    // same data, so it shows the same workspaces and shares localStorage with a
+    // browser tab. Only when nothing is there do we start our own bundled server.
+    let attach = server_alive(PORT);
 
-    // Redirect user data outside the (read-only) bundle; create the dirs so a
-    // first run on a clean machine has somewhere to write.
-    let data = app_data_dir();
-    for sub in ["data", "logs", "run"] {
-        let _ = std::fs::create_dir_all(data.join(sub));
-    }
-
-    // Spawn the bundled Node server. `--import tsx` strips types on the fly so
-    // the same source the web build runs from boots here unchanged.
-    // ARIADNE_DESKTOP marks this as a trusted single-user loopback context.
-    let sidecar = match resolve_runtime() {
-        Some((node, entry, cwd)) => Command::new(&node)
-            .arg("--import")
-            .arg("tsx")
-            .arg(&entry)
-            .current_dir(&cwd)
-            .env("ARIADNE_PORT", port.to_string())
-            .env("ARIADNE_DESKTOP", "1")
-            // Loopback-only: the desktop webview is the only client. The server
-            // already defaults to 127.0.0.1, but set it explicitly so a stray
-            // ARIADNE_BIND in the user's shell env can't expose the sidecar.
-            .env("ARIADNE_BIND", "127.0.0.1")
-            .env("ARIADNE_HOME", data.join("data"))
-            .env("ARIADNE_LOG_DIR", data.join("logs"))
-            .env("ARIADNE_RUN_DIR", data.join("run"))
-            .spawn()
-            .map_err(|e| eprintln!("Ariadne: failed to start the Node server: {e}"))
-            .ok(),
-        None => {
-            eprintln!("Ariadne: could not locate the bundled Node runtime or server entry");
-            None
+    let sidecar = if attach {
+        None // we don't own this server — never kill it on exit.
+    } else {
+        // Redirect user data outside the (read-only) bundle; create the dirs so a
+        // first run on a clean machine has somewhere to write.
+        let data = app_data_dir();
+        for sub in ["data", "logs", "run"] {
+            let _ = std::fs::create_dir_all(data.join(sub));
+        }
+        // Spawn the bundled Node server. `--import tsx` strips types on the fly so
+        // the same source the web build runs from boots here unchanged.
+        // ARIADNE_DESKTOP marks this as a trusted single-user loopback context.
+        match resolve_runtime() {
+            Some((node, entry, cwd)) => Command::new(&node)
+                .arg("--import")
+                .arg("tsx")
+                .arg(&entry)
+                .current_dir(&cwd)
+                .env("ARIADNE_PORT", PORT.to_string())
+                .env("ARIADNE_DESKTOP", "1")
+                // Loopback-only: the desktop webview is the only client. The server
+                // already defaults to 127.0.0.1, but set it explicitly so a stray
+                // ARIADNE_BIND in the user's shell env can't expose the sidecar.
+                .env("ARIADNE_BIND", "127.0.0.1")
+                .env("ARIADNE_HOME", data.join("data"))
+                .env("ARIADNE_LOG_DIR", data.join("logs"))
+                .env("ARIADNE_RUN_DIR", data.join("run"))
+                .spawn()
+                .map_err(|e| eprintln!("Ariadne: failed to start the Node server: {e}"))
+                .ok(),
+            None => {
+                eprintln!("Ariadne: could not locate the bundled Node runtime or server entry");
+                None
+            }
         }
     };
 
-    let ready = wait_until_ready(port, Duration::from_secs(30));
-    let url = format!("http://127.0.0.1:{port}");
+    // Already-alive servers are ready by definition; a freshly spawned one we
+    // wait for.
+    let ready = attach || wait_until_ready(PORT, Duration::from_secs(30));
+    let url = format!("http://127.0.0.1:{PORT}");
 
     tauri::Builder::default()
         .manage(Sidecar(Mutex::new(sidecar)))
         .setup(move |app| {
             if !ready {
-                eprintln!("Ariadne: server did not become ready on port {port} within 30s");
+                eprintln!("Ariadne: server did not become ready on port {PORT} within 30s");
             }
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
                 .title("Ariadne")
