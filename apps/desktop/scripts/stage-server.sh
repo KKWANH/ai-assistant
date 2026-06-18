@@ -33,19 +33,41 @@ cp -R "$REPO/packages"           "$DEST/packages"
 # must travel along too.
 cp -R "$REPO/projects"           "$DEST/projects"
 cp -R "$REPO/apps/web/dist"      "$DEST/apps/web/dist"
-cp    "$REPO/package.json"       "$DEST/package.json"
 cp    "$REPO/tsconfig.base.json" "$DEST/tsconfig.base.json"
 
-# Third-party deps. Native modules (.node) are arm64 prebuilt and load under
-# the bundled Node 22 (N-API ABI-stable). Symlinks are preserved here; the
-# runtime resolves them fine.
-cp -R "$REPO/node_modules"       "$DEST/node_modules"
+# Lean production node_modules: ONLY the server's runtime closure + tsx, built
+# fresh from the declared deps of server + shared + surface-sdk. This drops the
+# web/editor build tooling the old whole-tree copy dragged in (vite,
+# lucide-react, @babel, lightningcss, typescript…) — the bundle's biggest win.
+# @ariadne/* are intentionally excluded: tsx resolves them via tsconfig `paths`
+# to the staged packages/ source, not node_modules.
+node -e '
+  const fs = require("fs");
+  const repo = process.argv[1], dest = process.argv[2];
+  const dep = (p) => { try { return JSON.parse(fs.readFileSync(repo + "/" + p, "utf8")).dependencies || {}; } catch { return {}; } };
+  const deps = {
+    ...dep("apps/server/package.json"),
+    ...dep("packages/shared/package.json"),
+    ...dep("packages/surface-sdk/package.json"),
+  };
+  for (const k of Object.keys(deps)) if (k.startsWith("@ariadne/")) delete deps[k];
+  const root = JSON.parse(fs.readFileSync(repo + "/package.json", "utf8"));
+  deps.tsx = (root.devDependencies && root.devDependencies.tsx) || "^4.20.6";
+  fs.writeFileSync(dest + "/package.json",
+    JSON.stringify({ name: "ariadne-server-bundle", private: true, type: "module", dependencies: deps }, null, 2));
+' "$REPO" "$DEST"
+( cd "$DEST" && npm install --omit=dev --no-audit --no-fund --no-package-lock )
 rm -rf "$DEST/apps/server/node_modules" 2>/dev/null || true
-
-# Drop dangling symlinks — Tauri's resource resolver follows every symlink and
-# errors on broken ones. The workspace `@ariadne/*` links point at apps/* we
-# don't all stage (e.g. apps/admin); they're unused anyway since tsx resolves
-# @ariadne/* through tsconfig `paths`, not node_modules.
+# Belt-and-suspenders: no dangling symlinks for Tauri's resource resolver.
 find "$DEST" -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+
+# Drop cross-platform prebuilt binaries (other OS/arch) — dead weight on macOS
+# arm64. node-pty alone ships ~58M of win32/darwin-x64 prebuilds.
+find "$DEST/node_modules" -type d -name prebuilds | while read -r pb; do
+  find "$pb" -mindepth 1 -maxdepth 1 ! -name 'darwin-arm64' -exec rm -rf {} + 2>/dev/null || true
+done
+# A fresh npm extraction can drop the execute bit on node-pty's spawn-helper
+# (a posix_spawn shim) — restore it or pty.fork() fails with "posix_spawnp failed".
+find "$DEST/node_modules" -name spawn-helper -exec chmod +x {} + 2>/dev/null || true
 
 echo "✓ staged ($(du -sh "$DEST" | cut -f1))"
