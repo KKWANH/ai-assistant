@@ -11,9 +11,11 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: background-color var(--motion-fast), color var(--motion-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast),
+    transform var(--motion-fast) var(--ease-out);
   color: rgb(var(--sidebar-foreground));
   position: relative;
+  user-select: none;
 }
 
 .item:focus-visible {
@@ -24,6 +26,11 @@
 .item:hover {
   background-color: rgb(var(--surface-3));
   color: rgb(var(--foreground));
+}
+
+/* Tactile depress on press — matches the Button/IconButton language. */
+.item:active {
+  transform: scale(0.985);
 }
 
 /* Active state */

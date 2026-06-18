@@ -12,6 +12,8 @@
   text-decoration: none;
   /* A button label is a unit — never wrap it mid-word (e.g. Korean 이전/다음). */
   white-space: nowrap;
+  /* Chrome, not content — don't let a drag select the label text. */
+  user-select: none;
 }
 
 .btn:focus-visible {
@@ -19,8 +21,10 @@
   box-shadow: 0 0 0 2px rgb(var(--ring));
 }
 
+/* Clearly inert — desaturated + dimmed, not just faded. */
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
+  filter: grayscale(45%);
   cursor: not-allowed;
 }
 

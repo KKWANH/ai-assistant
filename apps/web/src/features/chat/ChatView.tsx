@@ -9,6 +9,7 @@
  * No local message arrays — streaming writes directly to the cache.
  */
 import { useEffect, useRef, useState } from "react";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   FolderOpen,
@@ -198,6 +199,13 @@ function MessageList({
   chat: Chat | undefined;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Stick to the bottom only when the user is already there — so streaming
+  // tokens don't yank them away while they've scrolled up to read history.
+  const atBottomRef = useRef(true);
+  // Smoothly animate messages in/out (sent, streamed, edited) instead of
+  // popping — the app's core surface should feel fluid.
+  const [listRef] = useAutoAnimate<HTMLDivElement>();
   const { t, locale } = useT();
   // Per-project chat: a project (e.g. lecture) contributes starter prompts shown
   // in the empty state. Clicking one prefills the composer (the user sends).
@@ -229,9 +237,10 @@ function MessageList({
     : null;
 
   useEffect(() => {
-    // Instant (not smooth) — during streaming this fires on every token, and
-    // a queued smooth animation just fights itself into jank.
-    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+    // Only follow if the user is at (or near) the bottom. Instant, not smooth —
+    // during streaming this fires on every token and a queued smooth animation
+    // just fights itself into jank.
+    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, streaming, reconnectGen]);
 
   if (messages.length === 0 && !streaming && !synthetic) {
@@ -272,8 +281,15 @@ function MessageList({
     // ignore its parent's bounds (default `min-height: auto`) and the
     // following `shrink-0` siblings get pushed off-screen. `min-h-0`
     // restores the expected clipping.
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="flex flex-col gap-6 px-3 sm:px-5 py-4 sm:py-5 max-w-4xl mx-auto">
+    <div
+      ref={scrollRef}
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      }}
+      className="flex-1 min-h-0 overflow-y-auto"
+    >
+      <div ref={listRef} className="flex flex-col gap-6 px-3 sm:px-5 py-4 sm:py-5 max-w-4xl mx-auto">
         {chat && (
           <div className="flex flex-col items-center gap-1.5">
             <div className="text-center text-xs text-muted-foreground">

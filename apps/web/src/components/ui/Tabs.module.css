@@ -37,12 +37,13 @@
   color: rgb(var(--foreground));
 }
 
-/* Active tab: full-colour text + accent underline */
+/* Active tab: full-colour text + accent underline. The underline lives on
+   every trigger (hidden) so it can ease in/out on activation rather than pop. */
 .triggerActive {
   color: rgb(var(--foreground));
 }
 
-.triggerActive::after {
+.trigger::after {
   content: "";
   position: absolute;
   bottom: -1px;
@@ -51,4 +52,13 @@
   height: 2px;
   border-radius: 1px;
   background-color: rgb(var(--accent));
+  opacity: 0;
+  transform: scaleX(0.6);
+  transition: opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.triggerActive::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
