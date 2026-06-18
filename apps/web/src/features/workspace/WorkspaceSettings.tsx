@@ -14,10 +14,10 @@
  */
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles, TrendingUp } from "lucide-react";
 import { PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS } from "@ariadne/shared";
 import type { ProviderId, Workspace } from "@ariadne/shared";
-import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills } from "../../lib/queries";
+import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills, useWorkspaceUsage } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
 import { useToast } from "../../components/ui/Toast";
 import { useUIStore, type FloatingChatMode } from "../../lib/store";
@@ -86,6 +86,7 @@ export function WorkspaceSettings() {
           <ChatModelSection ws={ws} />
           <SkillsSection ws={ws} />
           {hasScreen && <HomeScreenSection ws={ws} />}
+          <UsageSection ws={ws} />
           <FilesSection ws={ws} />
         </div>
       </div>
@@ -325,6 +326,73 @@ function HomeScreenSection({ ws }: { ws: Workspace }) {
             ]}
           />
         </Field>
+      </Card>
+    </section>
+  );
+}
+
+// ── Usage ────────────────────────────────────────────────────────────────────
+function UsageSection({ ws }: { ws: Workspace }) {
+  const { t } = useT();
+  const { data: usage } = useWorkspaceUsage(ws.id);
+  const total = usage?.total;
+  const hasUsage = !!total && (total.inputTokens > 0 || total.outputTokens > 0);
+
+  return (
+    <section>
+      <SectionHeading icon={<TrendingUp className="h-3.5 w-3.5" />}>
+        {t("workspaceSettings.usage.heading")}
+      </SectionHeading>
+      <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-3">
+        <p className="text-2xs text-muted-foreground leading-relaxed">{t("workspaceSettings.usage.desc")}</p>
+        {hasUsage && total ? (
+          <>
+            <div className="flex flex-wrap gap-5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-2xs text-muted-foreground">{t("settings.usage.tokensIn")}</span>
+                <span className="font-mono text-sm text-foreground">{total.inputTokens.toLocaleString()}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-2xs text-muted-foreground">{t("settings.usage.tokensOut")}</span>
+                <span className="font-mono text-sm text-foreground">{total.outputTokens.toLocaleString()}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-2xs text-muted-foreground">{t("settings.usage.totalCost")}</span>
+                <span className="font-mono text-sm text-foreground">
+                  {total.costUsd === 0 ? "$0.00" : `$${total.costUsd.toFixed(4)}`}
+                </span>
+              </div>
+            </div>
+            {usage.byModel.length > 0 && (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-2xs">
+                  <thead>
+                    <tr className="bg-surface-3 border-b border-border text-muted-foreground">
+                      <th className="px-2.5 py-1.5 text-left font-medium">{t("settings.usage.model")}</th>
+                      <th className="px-2.5 py-1.5 text-right font-medium">{t("settings.usage.tokensInCol")}</th>
+                      <th className="px-2.5 py-1.5 text-right font-medium">{t("settings.usage.tokensOutCol")}</th>
+                      <th className="px-2.5 py-1.5 text-right font-medium">{t("settings.usage.cost")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usage.byModel.map((row, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="px-2.5 py-1.5 font-mono text-foreground">{row.model}</td>
+                        <td className="px-2.5 py-1.5 text-right font-mono text-muted-foreground">{row.inputTokens.toLocaleString()}</td>
+                        <td className="px-2.5 py-1.5 text-right font-mono text-muted-foreground">{row.outputTokens.toLocaleString()}</td>
+                        <td className="px-2.5 py-1.5 text-right font-mono text-foreground">
+                          {row.costUsd === 0 ? "$0.00" : `$${row.costUsd.toFixed(4)}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t("workspaceSettings.usage.empty")}</p>
+        )}
       </Card>
     </section>
   );

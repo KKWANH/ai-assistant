@@ -207,7 +207,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       ? await resolveOllamaModel(settings.model)
       : settings.model;
   const rawProvider = await getProvider({ provider: settings.provider, model });
-  const provider = meteringProvider(rawProvider, assistantMsgId, model, accountId);
+  const provider = meteringProvider(rawProvider, assistantMsgId, model, accountId, chat.workspaceId ?? null);
 
   // Instant mode short-circuit. Skip every upstream classifier
   // (agent, web-search, action-intent), skip workspace retrieval +
@@ -310,6 +310,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       assistantMsgId,
       triageModelName,
       accountId,
+      chat.workspaceId ?? null,
     );
     triagePromise = triage(triageProvider, userContent, triageNeeds, controller.signal).catch(() => null);
   }

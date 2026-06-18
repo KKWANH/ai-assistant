@@ -405,6 +405,29 @@ function runMigrations(db: DatabaseSync): void {
   // rows from before this migration (and on usage not attributed to an account).
   const usageEvents = addColumnIfMissing(db, "usage_events");
   usageEvents("account_id", "TEXT");
+  // workspace_id so per-workspace token usage is a direct SUM, not a JOIN
+  // through run_id (which is a run id for runs but a message id for chats).
+  // Recorded at the metering wrapper going forward; one-time backfill below.
+  const usageHadWorkspace = (
+    db.prepare("PRAGMA table_info(usage_events)").all() as Array<{ name: string }>
+  ).some((c) => c.name === "workspace_id");
+  usageEvents("workspace_id", "TEXT");
+  if (!usageHadWorkspace) {
+    // Recover historical attribution: run usage keys off a run id, chat usage
+    // off the assistant message id. Orphaned events (deleted message/run) stay
+    // NULL. Runs once, when the column is first added.
+    db.exec(
+      `UPDATE usage_events SET workspace_id =
+         (SELECT r.workspace_id FROM runs r WHERE r.id = usage_events.run_id)
+       WHERE workspace_id IS NULL AND run_id IN (SELECT id FROM runs)`,
+    );
+    db.exec(
+      `UPDATE usage_events SET workspace_id =
+         (SELECT c.workspace_id FROM chat_messages m JOIN chats c ON c.id = m.chat_id
+          WHERE m.id = usage_events.run_id)
+       WHERE workspace_id IS NULL AND run_id IN (SELECT id FROM chat_messages)`,
+    );
+  }
 
   const reports = addColumnIfMissing(db, "reports");
   reports("attachments_json", "TEXT NOT NULL DEFAULT '[]'");

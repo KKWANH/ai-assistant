@@ -391,6 +391,15 @@ export function useUsage() {
   });
 }
 
+export function useWorkspaceUsage(workspaceId: string) {
+  return useQuery({
+    queryKey: [...qk.usage, workspaceId] as const,
+    queryFn: () => api.getWorkspaceUsage(workspaceId),
+    enabled: !!workspaceId,
+    staleTime: 30_000,
+  });
+}
+
 // ── Scripts ───────────────────────────────────────────────────────────────────
 export function useScripts(workspaceId: string) {
   return useQuery({

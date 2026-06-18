@@ -11,6 +11,7 @@ import {
   dbUpdateWorkspace,
   dbDeleteWorkspace,
   dbGetLatestSnapshot,
+  dbGetWorkspaceUsage,
 } from "../db/repo.js";
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
@@ -159,6 +160,14 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const workspace = await requireWorkspace(req.params.id, req, reply, "read");
     if (!workspace) return;
     return reply.send(workspace);
+  });
+
+  // Token usage attributed to this workspace (its chats + runs), same shape as
+  // the global GET /usage.
+  app.get<{ Params: { id: string } }>("/workspaces/:id/usage", async (req, reply) => {
+    const ws = await requireWorkspace(req.params.id, req, reply, "read");
+    if (!ws) return;
+    return reply.send(dbGetWorkspaceUsage(ws.id));
   });
 
   // GET/PUT the project context — user-authored standing instructions for the

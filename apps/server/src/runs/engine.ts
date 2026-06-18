@@ -33,7 +33,7 @@ import type { Snapshot } from "@ariadne/shared";
  * Wraps a provider so every `complete()` call records a usage_events row.
  * `model` is passed separately because it lives on Settings, not AiProvider.
  */
-export function meteringProvider(inner: AiProvider, runId: string, model: string, accountId: string | null = null): AiProvider {
+export function meteringProvider(inner: AiProvider, runId: string, model: string, accountId: string | null = null, workspaceId: string | null = null): AiProvider {
   const recordUsage = (usage: import("../providers/index.js").ProviderUsage) => {
     const { inputTokens, outputTokens } = usage;
     const costUsd = costOf(model, inputTokens, outputTokens);
@@ -47,6 +47,7 @@ export function meteringProvider(inner: AiProvider, runId: string, model: string
         outputTokens,
         costUsd,
         accountId,
+        workspaceId,
         createdAt: new Date().toISOString(),
       });
     } catch (err) {
@@ -189,7 +190,7 @@ async function runPhaseOne(
   let provider: AiProvider;
   try {
     const rawProvider = await getProvider(settings);
-    provider = meteringProvider(rawProvider, runId, settings.model, run.createdBy ?? null);
+    provider = meteringProvider(rawProvider, runId, settings.model, run.createdBy ?? null, run.workspaceId);
   } catch (err) {
     failRun(run, "scan", err);
     return;
@@ -298,7 +299,7 @@ async function runPhaseTwo(runId: string): Promise<void> {
   let provider: AiProvider;
   try {
     const rawProvider = await getProvider(settings);
-    provider = meteringProvider(rawProvider, runId, settings.model, run.createdBy ?? null);
+    provider = meteringProvider(rawProvider, runId, settings.model, run.createdBy ?? null, run.workspaceId);
   } catch (err) {
     failRun(run, "focused_read", err);
     return;

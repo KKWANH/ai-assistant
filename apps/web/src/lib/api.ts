@@ -367,6 +367,9 @@ export const setAccountContext = (context: string) =>
 export const getUsage = () =>
   request<UsageSummary>("GET", "/usage");
 
+export const getWorkspaceUsage = (id: string) =>
+  request<UsageSummary>("GET", `/workspaces/${id}/usage`);
+
 // ── Actions ───────────────────────────────────────────────────────────────────
 import type { WorkspaceAction, ActionDef } from "@ariadne/shared";
 

@@ -402,17 +402,20 @@ export interface UsageEventRow {
   costUsd: number;
   /** Account the usage is attributed to (for per-account limits). */
   accountId?: string | null;
+  /** Workspace the usage is attributed to (for per-workspace usage); null for
+   *  workspace-less chats and model comparisons. */
+  workspaceId?: string | null;
   createdAt: string;
 }
 
 export function dbInsertUsageEvent(e: UsageEventRow): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO usage_events (id,run_id,provider,model,input_tokens,output_tokens,cost_usd,account_id,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO usage_events (id,run_id,provider,model,input_tokens,output_tokens,cost_usd,account_id,workspace_id,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
   ).run(
     e.id, e.runId, e.provider, e.model,
-    e.inputTokens, e.outputTokens, e.costUsd, e.accountId ?? null, e.createdAt
+    e.inputTokens, e.outputTokens, e.costUsd, e.accountId ?? null, e.workspaceId ?? null, e.createdAt
   );
 }
 
@@ -451,6 +454,49 @@ export function dbGetTotalUsage(): UsageSummary {
      GROUP BY provider, model
      ORDER BY cost_usd DESC`
   ).all() as Array<{ provider: string; model: string; input_tokens: number; output_tokens: number; cost_usd: number; runs: number }>;
+
+  const byModel: UsageSummaryByModel[] = byModelRows.map((r) => ({
+    provider: r.provider,
+    model: r.model,
+    inputTokens: r.input_tokens,
+    outputTokens: r.output_tokens,
+    costUsd: r.cost_usd,
+    runs: r.runs,
+  }));
+
+  return {
+    total: {
+      inputTokens: totalRow?.input_tokens ?? 0,
+      outputTokens: totalRow?.output_tokens ?? 0,
+      costUsd: totalRow?.cost_usd ?? 0,
+    },
+    byModel,
+  };
+}
+
+/** Token usage attributed to one workspace (its chats + runs). Same shape as
+ *  dbGetTotalUsage, filtered by workspace_id. */
+export function dbGetWorkspaceUsage(workspaceId: string): UsageSummary {
+  const db = getDb();
+
+  const totalRow = db.prepare(
+    `SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,
+            COALESCE(SUM(output_tokens),0) AS output_tokens,
+            COALESCE(SUM(cost_usd),0) AS cost_usd
+     FROM usage_events WHERE workspace_id = ?`
+  ).get(workspaceId) as { input_tokens: number; output_tokens: number; cost_usd: number } | undefined;
+
+  const byModelRows = db.prepare(
+    `SELECT provider, model,
+            COALESCE(SUM(input_tokens),0) AS input_tokens,
+            COALESCE(SUM(output_tokens),0) AS output_tokens,
+            COALESCE(SUM(cost_usd),0) AS cost_usd,
+            COUNT(DISTINCT run_id) AS runs
+     FROM usage_events
+     WHERE workspace_id = ?
+     GROUP BY provider, model
+     ORDER BY cost_usd DESC`
+  ).all(workspaceId) as Array<{ provider: string; model: string; input_tokens: number; output_tokens: number; cost_usd: number; runs: number }>;
 
   const byModel: UsageSummaryByModel[] = byModelRows.map((r) => ({
     provider: r.provider,
