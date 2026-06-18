@@ -42,4 +42,10 @@ cp    "$REPO/tsconfig.base.json" "$DEST/tsconfig.base.json"
 cp -R "$REPO/node_modules"       "$DEST/node_modules"
 rm -rf "$DEST/apps/server/node_modules" 2>/dev/null || true
 
+# Drop dangling symlinks — Tauri's resource resolver follows every symlink and
+# errors on broken ones. The workspace `@ariadne/*` links point at apps/* we
+# don't all stage (e.g. apps/admin); they're unused anyway since tsx resolves
+# @ariadne/* through tsconfig `paths`, not node_modules.
+find "$DEST" -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+
 echo "✓ staged ($(du -sh "$DEST" | cut -f1))"
