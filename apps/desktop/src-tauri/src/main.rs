@@ -201,7 +201,11 @@ fn main() {
                     &quit,
                 ],
             )?;
-            let mut tray = TrayIconBuilder::new()
+            TrayIconBuilder::new()
+                // A monochrome glyph on transparent — marked as a template so
+                // macOS recolors it to match the menu bar (no black box).
+                .icon(tauri::include_image!("icons/trayTemplate.png"))
+                .icon_as_template(true)
                 .menu(&menu)
                 .tooltip("Ariadne")
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -218,11 +222,8 @@ fn main() {
                     }
                     "quit" => app.exit(0),
                     _ => {}
-                });
-            if let Some(icon) = app.default_window_icon().cloned() {
-                tray = tray.icon(icon);
-            }
-            tray.build(app)?;
+                })
+                .build(app)?;
 
             // The window is shown on launch, but its close button HIDES it (the
             // tray + server keep running) instead of quitting the app.
