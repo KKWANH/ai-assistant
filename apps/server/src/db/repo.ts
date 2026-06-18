@@ -128,7 +128,13 @@ export function dbGetWorkspace(id: string): Workspace | null {
 
 export function dbListWorkspaces(): Workspace[] {
   const db = getDb();
-  const rows = db.prepare(`${WORKSPACE_SELECT} ORDER BY w.created_at DESC`).all() as Record<string, unknown>[];
+  // Manual order where set (drag-reorder), else creation order. Lower = higher.
+  const rows = db
+    .prepare(
+      `${WORKSPACE_SELECT}
+       ORDER BY COALESCE(w.sort_order, -CAST(strftime('%s', w.created_at) AS REAL)) ASC, w.id`,
+    )
+    .all() as Record<string, unknown>[];
   return rows.map(rowToWorkspace);
 }
 
@@ -148,6 +154,7 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   if (fields.defaultProvider !== undefined) { sets.push("default_provider = ?"); vals.push(fields.defaultProvider ?? null); }
   if (fields.defaultModel !== undefined) { sets.push("default_model = ?"); vals.push(fields.defaultModel ?? null); }
   if (fields.defaultSkillId !== undefined) { sets.push("default_skill_id = ?"); vals.push(fields.defaultSkillId ?? null); }
+  if (fields.sortOrder !== undefined) { sets.push("sort_order = ?"); vals.push(fields.sortOrder ?? null); }
   // rootPath is intentionally NOT exposed via the public PATCH route
   // (UpdateWorkspaceSchema doesn't list it) — repointing has snapshot/
   // index implications and shouldn't be a casual user action. It IS
@@ -189,6 +196,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     defaultProvider: (row["default_provider"] as string | null ?? null) as Workspace["defaultProvider"],
     defaultModel: (row["default_model"] as string | null) ?? null,
     defaultSkillId: (row["default_skill_id"] as string | null) ?? null,
+    sortOrder: (row["sort_order"] as number | null) ?? null,
   };
 }
 
@@ -537,8 +545,15 @@ const CHAT_SELECT = `
 
 export function dbListChats(): Chat[] {
   const db = getDb();
+  // Manual order where set; otherwise recency (updated_at). A dragged chat gets
+  // a concrete sort_order (a midpoint in the same -epoch scale), so it sits
+  // exactly where it was dropped while unreordered chats keep bumping on
+  // activity. Lower sort_order = higher in the list.
   const rows = db
-    .prepare(`${CHAT_SELECT} ORDER BY c.updated_at DESC`)
+    .prepare(
+      `${CHAT_SELECT}
+       ORDER BY COALESCE(c.sort_order, -CAST(strftime('%s', c.updated_at) AS REAL)) ASC, c.id`,
+    )
     .all() as Record<string, unknown>[];
   return rows.map(rowToChat);
 }
@@ -567,11 +582,11 @@ export function dbGetChatMeta(id: string): { id: string; createdBy: string | nul
 
 export function dbUpdateChat(
   id: string,
-  fields: { title?: string; workspaceId?: string | null; updatedAt: string }
+  fields: { title?: string; workspaceId?: string | null; sortOrder?: number | null; updatedAt: string }
 ): Chat | null {
   const db = getDb();
   const sets: string[] = ["updated_at = ?"];
-  const vals: (string | null)[] = [fields.updatedAt];
+  const vals: (string | number | null)[] = [fields.updatedAt];
 
   if (fields.title !== undefined) {
     sets.push("title = ?");
@@ -580,6 +595,10 @@ export function dbUpdateChat(
   if (fields.workspaceId !== undefined) {
     sets.push("workspace_id = ?");
     vals.push(fields.workspaceId);
+  }
+  if (fields.sortOrder !== undefined) {
+    sets.push("sort_order = ?");
+    vals.push(fields.sortOrder);
   }
 
   vals.push(id);
@@ -638,6 +657,7 @@ function rowToChat(row: Record<string, unknown>): Chat {
     createdByName: (row["created_by_name"] as string | null) ?? null,
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
+    sortOrder: (row["sort_order"] as number | null) ?? null,
   };
 }
 

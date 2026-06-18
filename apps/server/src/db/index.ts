@@ -385,6 +385,12 @@ function runMigrations(db: DatabaseSync): void {
   // default_skill_id (NULL → none; set → skill pre-filled into the composer
   // when starting a new chat in this workspace)
   workspaces("default_skill_id", "TEXT");
+  // sort_order (NULL → fall back to creation order; set → manual drag-reorder)
+  workspaces("sort_order", "REAL");
+
+  // chats gain sort_order for manual drag-reorder (NULL → recency fallback).
+  const chats = addColumnIfMissing(db, "chats");
+  chats("sort_order", "REAL");
 
   const runs = addColumnIfMissing(db, "runs");
   runs("created_by", "TEXT");

@@ -53,6 +53,7 @@ import {
   Sparkles,
   SlidersHorizontal,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
 import {
   useWorkspaces,
@@ -63,10 +64,13 @@ import {
   useDeleteChat,
   useDeleteEmptyChats,
   useUpdateChat,
+  useUpdateWorkspace,
   useDeleteWorkspace,
   useUpdateMode,
+  qk,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
+import { SortableList, SortableItem, midpointSortOrder } from "./SortableList";
 import { SidebarItem } from "../ui/SidebarItem";
 import { IconButton } from "../ui/IconButton";
 import { Badge } from "../ui/Badge";
@@ -110,11 +114,13 @@ function ChatListBody({
   activeChatId,
   workspaces,
   closeMobileNav,
+  onReorder,
 }: {
   chats: Chat[];
   activeChatId: string | null;
   workspaces: Workspace[] | undefined;
   closeMobileNav: () => void;
+  onReorder: (reordered: Chat[], movedId: string, toIndex: number) => void;
 }) {
   const { t } = useT();
   const PAGE = 50;
@@ -123,15 +129,18 @@ function ChatListBody({
   const remaining = chats.length - visible.length;
   return (
     <>
-      {visible.map((chat) => (
-        <ChatRow
-          key={chat.id}
-          chat={chat}
-          active={activeChatId === chat.id}
-          workspaces={workspaces}
-          closeMobileNav={closeMobileNav}
-        />
-      ))}
+      <SortableList items={visible} getId={(c) => c.id} onReorder={onReorder}>
+        {visible.map((chat) => (
+          <SortableItem key={chat.id} id={chat.id}>
+            <ChatRow
+              chat={chat}
+              active={activeChatId === chat.id}
+              workspaces={workspaces}
+              closeMobileNav={closeMobileNav}
+            />
+          </SortableItem>
+        ))}
+      </SortableList>
       {remaining > 0 && (
         <button
           type="button"
@@ -318,10 +327,35 @@ export function AppShell({ children }: AppShellProps) {
   const updateMode = useUpdateMode();
   const logout = useLogout();
   const deleteWorkspace = useDeleteWorkspace();
+  const updateWorkspace = useUpdateWorkspace();
+  const updateChat = useUpdateChat();
   const deleteEmptyChats = useDeleteEmptyChats();
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useT();
+
+  // Drag-to-reorder. Compute the moved item's new sort_order (a midpoint of its
+  // displayed neighbours, so one write), then optimistically set it in the FULL
+  // cache and re-sort by the SAME COALESCE(sort_order, -epoch) the server uses —
+  // so a paginated/filtered sub-list reorders without dropping the rest. The
+  // mutation's success refetch confirms the identical order.
+  const wsEff = (w: Workspace) => w.sortOrder ?? -(Date.parse(w.createdAt) / 1000);
+  const chatEff = (c: Chat) => c.sortOrder ?? -(Date.parse(c.updatedAt) / 1000);
+  const reorderWorkspaces = (reordered: Workspace[], movedId: string, toIndex: number) => {
+    const sortOrder = midpointSortOrder(reordered, toIndex, wsEff);
+    qc.setQueryData<Workspace[]>(qk.workspaces, (old) =>
+      old ? [...old.map((w) => (w.id === movedId ? { ...w, sortOrder } : w))].sort((a, b) => wsEff(a) - wsEff(b)) : old,
+    );
+    updateWorkspace.mutate({ id: movedId, input: { sortOrder } });
+  };
+  const reorderChats = (reordered: Chat[], movedId: string, toIndex: number) => {
+    const sortOrder = midpointSortOrder(reordered, toIndex, chatEff);
+    qc.setQueryData<Chat[]>(["chats"], (old) =>
+      old ? [...old.map((c) => (c.id === movedId ? { ...c, sortOrder } : c))].sort((a, b) => chatEff(a) - chatEff(b)) : old,
+    );
+    updateChat.mutate({ id: movedId, input: { sortOrder } });
+  };
 
   // AU — Auto-cleanup empty chats older than 24h on app mount. Silent
   // (no toast), single fire per page load. Today's empties stay in case
@@ -766,8 +800,9 @@ export function AppShell({ children }: AppShellProps) {
                 </IconButton>
               </div>
               {workspaces && workspaces.length > 0 ? (
-                workspaces.map((ws) => (
-                  <div key={ws.id}>
+                <SortableList items={workspaces} getId={(w) => w.id} onReorder={reorderWorkspaces}>
+                {workspaces.map((ws) => (
+                  <SortableItem key={ws.id} id={ws.id}>
                     <div
                       className="relative group"
                       onMouseEnter={() => setHoveredWorkspaceId(ws.id)}
@@ -843,8 +878,9 @@ export function AppShell({ children }: AppShellProps) {
                           ))}
                         </div>
                       )}
-                  </div>
-                ))
+                  </SortableItem>
+                ))}
+                </SortableList>
               ) : (
                 <button
                   className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md"
@@ -876,6 +912,7 @@ export function AppShell({ children }: AppShellProps) {
                 activeChatId={activeChatId}
                 workspaces={workspaces}
                 closeMobileNav={() => setMobileNavOpen(false)}
+                onReorder={reorderChats}
               />
             ) : (
               <p className="px-2 py-1.5 text-xs text-muted-foreground">

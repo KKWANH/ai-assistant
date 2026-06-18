@@ -39,6 +39,8 @@ export const UpdateWorkspaceSchema = z.object({
   defaultModel: z.string().min(1).max(120).nullable().optional(),
   // Default skill pre-filled into the composer on a new chat; null clears it.
   defaultSkillId: z.string().min(1).max(80).nullable().optional(),
+  // Manual sidebar order (drag-to-reorder); null clears the override.
+  sortOrder: z.number().nullable().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 
@@ -142,6 +144,8 @@ export type CreateChatInput = z.infer<typeof CreateChatSchema>;
 export const UpdateChatSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   workspaceId: z.string().nullable().optional(),
+  // Manual sidebar order (drag-to-reorder); null clears the override.
+  sortOrder: z.number().nullable().optional(),
 });
 export type UpdateChatInput = z.infer<typeof UpdateChatSchema>;
 

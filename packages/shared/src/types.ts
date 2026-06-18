@@ -34,6 +34,9 @@ export interface Workspace {
    *  chat in this workspace. null = none. References a skill id (user or
    *  built-in). */
   defaultSkillId: string | null;
+  /** Manual sidebar order (drag-to-reorder). null = unset → falls back to
+   *  creation order. */
+  sortOrder?: number | null;
 }
 
 export type WorkspaceHomeView = "overview" | "surface" | null;
@@ -683,6 +686,9 @@ export interface Chat {
   createdByName: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Manual sidebar order (drag-to-reorder). null = unset → falls back to
+   *  recency (updated_at), so unreordered chats still bump on activity. */
+  sortOrder?: number | null;
   /** Populated by GET /api/chats/:id. */
   messages?: ChatMessage[];
 }

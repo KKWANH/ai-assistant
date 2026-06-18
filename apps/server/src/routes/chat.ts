@@ -582,6 +582,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     const updated = dbUpdateChat(req.params.id, {
       title: parsed.data.title,
       workspaceId: parsed.data.workspaceId,
+      sortOrder: parsed.data.sortOrder,
       updatedAt: now(),
     });
     return reply.send(updated);
