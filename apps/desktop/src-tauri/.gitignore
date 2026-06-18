@@ -2,3 +2,7 @@
 /target/
 # Tauri-generated schemas/permissions
 /gen/
+# Bundled Node sidecar (~110MB) — fetch with scripts/fetch-node-sidecar.sh
+/binaries/
+# Staged self-contained server tree — built by scripts/stage-server.sh
+/.bundle/
