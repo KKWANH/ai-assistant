@@ -23,7 +23,7 @@ import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { performSearch, fetchUrlText } from "./search.js";
 import { readUpload } from "./uploads.js";
-import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible } from "./retrieval.js";
+import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible, type RerankFn } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 import { getWorkspaceContext, renderContextForPrompt } from "./workspaceContext.js";
 import { loadWorkspaceActions } from "./actions.js";
@@ -97,6 +97,10 @@ export async function buildChatContext(
   /** Active provider id — picks the attachment text budget (a 1M-context model
    *  can hold a whole document; a local model can't). */
   providerId?: string,
+  /** Optional second-pass reranker (built from the active provider). Applied
+   *  to workspace retrieval only for substantive queries — see the gate at the
+   *  retrieval call below. Unset → retrieval is unchanged. */
+  rerank?: RerankFn,
 ): Promise<ChatContextResult> {
   // Resolve the web-search promise (or boolean) at the latest possible
   // moment, so attachment parsing and workspace-snapshot I/O run in parallel
@@ -242,6 +246,12 @@ export async function buildChatContext(
       // retriever can be substituted behind the same call later.
       let contentPart: string | undefined;
       if (ws && userMessage.content.trim()) {
+        // Rerank only substantive queries (≳ a sentence). A long, specific
+        // question earns one extra fast (noThink) model call to reorder the
+        // retrieved set for precision; a short "what's this?" doesn't — so
+        // quick chat stays quick. Unset reranker → unchanged retrieval.
+        const useRerank =
+          rerank && userMessage.content.trim().length >= 80 ? rerank : undefined;
         const ranked = await retrieveRelevantChunks(
           ws.rootPath,
           snapshot.files,
@@ -249,7 +259,7 @@ export async function buildChatContext(
           // Letting the retriever know the workspaceId unlocks the
           // embedding path — it'll cosine-score against the stored
           // index when one exists, fall back to keyword otherwise.
-          { workspaceId: ws.id },
+          { workspaceId: ws.id, rerank: useRerank },
         );
         const rendered = formatChunksForPrompt(ranked);
         if (rendered) {

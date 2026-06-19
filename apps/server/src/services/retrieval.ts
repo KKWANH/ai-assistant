@@ -52,6 +52,10 @@ const MAX_FILES_READ = 40;
 const FILE_READ_BUDGET = 25_000;
 /** Default top-k chunks returned. */
 const DEFAULT_TOP_K = 6;
+/** When a reranker is supplied, how many fused candidates to hand it before
+ *  the final top-k slice. Wide enough to give the rerank something to reorder,
+ *  bounded so the rerank prompt stays cheap. */
+const RERANK_POOL = 20;
 
 // Stop-words pulled out before scoring — tiny, language-agnostic list. Keeps
 // CJK terms intact (Korean particles like 은/는 aren't tokens here anyway —
@@ -135,12 +139,33 @@ export interface RetrievedChunk {
   score: number;
 }
 
+/**
+ * Second-pass reranker. Given the query and the fused candidate set, returns
+ * a reordered top-k. Supplied by the caller (see services/reranker.ts) so
+ * retrieval stays decoupled from the chat provider. Must never throw and must
+ * never drop a candidate it wasn't asked to — it only re-prioritises.
+ */
+export type RerankFn = (
+  query: string,
+  candidates: RetrievedChunk[],
+  topK: number,
+) => Promise<RetrievedChunk[]>;
+
 export interface RetrieveOptions {
   topK?: number;
   chunkChars?: number;
   /** When set, the retriever first checks for a stored embedding index
    *  and uses it before falling back to keyword search. */
   workspaceId?: string;
+  /**
+   * Optional second-pass reranker applied to the hybrid candidate set before
+   * the final top-k slice. When present, hybrid widens its candidate pool and
+   * lets the model reorder by relevance to *this* query (precision lift, fights
+   * lost-in-the-middle). Off by default — the chat path enables it only for
+   * substantive queries; eval/agent/action paths leave it unset (unchanged
+   * behaviour). Applies to the hybrid strategy only.
+   */
+  rerank?: RerankFn;
   /**
    * Pin the retrieval strategy instead of using the default `auto`
    * waterfall (semantic → keyword+symbol). Used by the eval harness to
@@ -270,7 +295,7 @@ export async function retrieveWithMeta(
         warnings: ["forceStrategy=hybrid requires workspaceId (none provided)"],
       };
     }
-    return retrieveByHybridMeta(options.workspaceId, query, topK);
+    return retrieveByHybridMeta(options.workspaceId, query, topK, options.rerank);
   }
 
   // ── auto → hybrid (cycle-2 P1). The default/chat/action path fuses BM25 +
@@ -282,7 +307,7 @@ export async function retrieveWithMeta(
   //    fall through to keyword+symbol below (unchanged behaviour for un-indexed
   //    or provider-mismatched workspaces).
   if (force === "auto" && options.workspaceId) {
-    const hybrid = await retrieveByHybridMeta(options.workspaceId, query, topK);
+    const hybrid = await retrieveByHybridMeta(options.workspaceId, query, topK, options.rerank);
     if (hybrid.chunks.length > 0) return hybrid;
     if (hybrid.warnings.length > 0) warnings.push(...hybrid.warnings);
   }
@@ -930,6 +955,7 @@ async function retrieveByHybridMeta(
   workspaceId: string,
   query: string,
   topK: number,
+  rerank?: RerankFn,
 ): Promise<RetrievalResult> {
   // Pull a larger candidate set per source than the final topK so
   // the fusion has something to merge. 30 each is a reasonable v1.
@@ -1002,16 +1028,24 @@ async function retrieveByHybridMeta(
     }
   }
 
-  // Sort by descending RRF score, slice topK. Score field on the
-  // returned chunks carries the RRF score (not BM25 / cosine) so the
-  // harness / UI can show a meaningful number.
-  const ranked = Array.from(rrf.entries())
+  // Sort by descending RRF score. Score field on the returned chunks carries
+  // the RRF score (not BM25 / cosine) so the harness / UI can show a
+  // meaningful number.
+  const fullRanked = Array.from(rrf.entries())
     .map(([key, score]) => {
       const chunk = chunkData.get(key)!;
       return { ...chunk, score };
     })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+    .sort((a, b) => b.score - a.score);
+
+  // Optional second-pass rerank: widen to a candidate pool and let the model
+  // reorder by relevance to this query before the final slice. The reranker
+  // fails safe to the fused order, so this never makes results worse than the
+  // plain RRF slice.
+  const ranked =
+    rerank && fullRanked.length > 1
+      ? await rerank(query, fullRanked.slice(0, RERANK_POOL), topK)
+      : fullRanked.slice(0, topK);
 
   // Strategy = "none" only when there were no candidates at all.
   if (ranked.length === 0) {

@@ -43,6 +43,7 @@ import { getActiveSettings, getTriageSettings, isProviderConfigured } from "../c
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
+import { makeReranker } from "../services/reranker.js";
 import { runAgent } from "../services/agent.js";
 import { runDeepAgent } from "../services/orchestrator.js";
 import { cleanChatStagedTrees } from "../services/attempts.js";
@@ -442,7 +443,9 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         content: userContent,
         attachments: attachmentRefs,
         webSearch: webSearchInput,
-      }, accountContext, provider.id);
+        // Reranker built from the active (metered) provider; buildChatContext
+        // applies it to workspace retrieval only for substantive queries.
+      }, accountContext, provider.id, makeReranker(provider));
     } catch (err) {
       logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
       contextResult = {
