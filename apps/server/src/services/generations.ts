@@ -39,6 +39,11 @@ export function beginGeneration(input: BeginGenerationInput): LiveGeneration {
   return entry;
 }
 
+/** Is a generation currently registered for this chat? */
+export function isGenerating(chatId: string): boolean {
+  return registry.has(chatId);
+}
+
 /** Fold a stream event into the entry so its partial state stays current. */
 export function applyEventToGeneration(entry: LiveGeneration, event: ChatStreamEvent): void {
   switch (event.type) {
@@ -62,7 +67,12 @@ export function applyEventToGeneration(entry: LiveGeneration, event: ChatStreamE
   }
 }
 
-export function endGeneration(chatId: string): void {
+/** Remove a generation. Pass `entry` to make the delete identity-guarded — it
+ *  only removes the registry slot if it still holds THIS generation, so a
+ *  finishing generation can never delete a different one that took its chatId
+ *  slot in the interim. */
+export function endGeneration(chatId: string, entry?: LiveGeneration): void {
+  if (entry && registry.get(chatId) !== entry) return;
   registry.delete(chatId);
 }
 

@@ -54,7 +54,9 @@ import {
   endGeneration,
   getGenerationStatus,
   abortGeneration,
+  isGenerating,
   applyEventToGeneration,
+  type LiveGeneration,
 } from "../services/generations.js";
 import logger from "../logger.js";
 
@@ -664,6 +666,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // One generation per chat. Without this, a second concurrent message would
+      // overwrite the first's registry entry — orphaning its abort controller
+      // (Stop can no longer reach it) and corrupting /active status.
+      if (isGenerating(chat.id)) {
+        return reply.status(409).send({ error: "This chat is already generating a reply." });
+      }
+
       // --- Hijack the raw response for SSE ---
       reply.hijack();
       const raw = reply.raw;
@@ -700,6 +709,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           // client gone
         }
       }, 15_000);
+
+      // Hoisted so the finally can identity-guard the registry cleanup.
+      let genRef: LiveGeneration | undefined;
 
       try {
         // --- Save attachments to disk and build ChatAttachment[] ---
@@ -764,6 +776,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           agentMode: willDefinitelyAgent,
           controller,
         });
+        genRef = gen;
         const emit = (event: ChatStreamEvent): void => {
           applyEventToGeneration(gen, event);
           sseEmit(event);
@@ -871,7 +884,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         sseEmit({ type: "error", error: msg });
       } finally {
         clearInterval(heartbeat);
-        endGeneration(chat.id);
+        if (genRef) endGeneration(chat.id, genRef);
         sseEnd();
       }
     }
@@ -924,6 +937,12 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         const edited = dbEditMessageContent(existing.id, nextContent, now());
         if (edited) userMsg = edited;
       }
+      // One generation per chat (see POST /messages) — guard before touching
+      // the registry so a concurrent regenerate can't orphan a live controller.
+      if (isGenerating(chat.id)) {
+        return reply.status(409).send({ error: "This chat is already generating a reply." });
+      }
+
       // 2. Drop every later message (assistant reply + any following turns).
       dbDeleteMessagesAfter(chat.id, userMsg.id);
 
@@ -947,6 +966,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         try { raw.write(": keep-alive\n\n"); } catch { /* gone */ }
       }, 15_000);
 
+      // Hoisted so the finally can identity-guard the registry cleanup.
+      let genRef: LiveGeneration | undefined;
+
       try {
         // Emit the (edited) user message so the client UI replaces the
         // previous bubble in place.
@@ -960,6 +982,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           agentMode: willDefinitelyAgent,
           controller,
         });
+        genRef = gen;
         const emit = (event: ChatStreamEvent): void => {
           applyEventToGeneration(gen, event);
           sseEmit(event);
@@ -1027,7 +1050,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         sseEmit({ type: "error", error: msg });
       } finally {
         clearInterval(heartbeat);
-        endGeneration(chat.id);
+        if (genRef) endGeneration(chat.id, genRef);
         sseEnd();
       }
     },

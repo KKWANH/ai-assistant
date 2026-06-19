@@ -277,7 +277,7 @@ const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
   },
 
   run_tests: {
-    run: async ({ description, chat, allowLocalExec }) => {
+    run: async ({ description, chat, allowLocalExec, signal }) => {
       // Real execution: run the workspace's test command. Output is
       // prefixed with ✓/✗ so the re-plan gate (low-information
       // detection) can branch on failure automatically.
@@ -302,10 +302,16 @@ const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
         // them out of its own environment.
         const proc = spawn("/bin/sh", ["-c", command], { cwd: ws.rootPath, env: scriptEnv() });
         const timer = setTimeout(() => proc.kill("SIGTERM"), 120_000);
+        // Kill the child when the step/run is aborted (Stop, disconnect-reap, or
+        // step timeout) — otherwise it keeps running for the full 120s with
+        // nobody waiting on it.
+        const onAbort = (): void => { proc.kill("SIGTERM"); };
+        signal.addEventListener("abort", onAbort, { once: true });
+        const cleanup = (): void => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); };
         proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
         proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
         proc.on("close", (code) => {
-          clearTimeout(timer);
+          cleanup();
           const passed = code === 0;
           const head = passed
             ? `✓ Tests passed (\`${command}\`)`
@@ -322,7 +328,7 @@ const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
           );
         });
         proc.on("error", (e) => {
-          clearTimeout(timer);
+          cleanup();
           resolve(`[run_tests error: ${e.message}]`);
         });
       });
@@ -851,15 +857,19 @@ async function executeCustomAction(
         let err = "";
         const proc = spawn(cmd, [scriptPath], { cwd: ws.rootPath, env: scriptEnv() });
         const timer = setTimeout(() => { proc.kill("SIGTERM"); resolve("[Script timed out]"); }, 30_000);
+        // Kill the script if the step/run is aborted (Stop, disconnect-reap).
+        const onAbort = (): void => { proc.kill("SIGTERM"); };
+        signal.addEventListener("abort", onAbort, { once: true });
+        const cleanup = (): void => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); };
         proc.stdout.on("data", (c: Buffer) => { out += c.toString("utf-8"); });
         proc.stderr.on("data", (c: Buffer) => { err += c.toString("utf-8"); });
         proc.on("close", (code) => {
-          clearTimeout(timer);
+          cleanup();
           const result = out.slice(0, 8_000);
           if (err) resolve(`stdout: ${result}\nstderr: ${err.slice(0, 1_000)}\nexit: ${String(code)}`);
           else resolve(result || `[Script exited with code ${String(code)}]`);
         });
-        proc.on("error", (e) => { clearTimeout(timer); resolve(`[Script error: ${e.message}]`); });
+        proc.on("error", (e) => { cleanup(); resolve(`[Script error: ${e.message}]`); });
       });
     }
 
