@@ -8,6 +8,7 @@ import {
   dbGetWorkspace,
 } from "../db/repo.js";
 import { createRun, confirmContext, getContextPick } from "../runs/engine.js";
+import { abortRun } from "../runs/runRegistry.js";
 import { rejectGuest } from "./workspaceGuard.js";
 import { accountOverLimit } from "../services/limits.js";
 import { readArtifact } from "../ariadneFolder.js";
@@ -165,6 +166,19 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
     const manifest = getStagedManifest(run.workspaceId, req.params.runId);
     if (!manifest) return reply.status(404).send({ error: "No staged edits for this run" });
     return reply.send(manifest);
+  });
+
+  // POST /api/runs/:runId/stop — abort an in-flight run (action or template
+  // generate phase). Aborts the LLM calls + any spawned child; the pipeline
+  // then marks the run failed ("Stopped by user") at its next checkpoint.
+  app.post<{ Params: { runId: string } }>("/runs/:runId/stop", async (req, reply) => {
+    const run = dbGetRun(req.params.runId);
+    if (!run) return reply.status(404).send({ error: "Run not found" });
+    if (!isOwnerOrAdmin(run.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
+    const wasRunning = abortRun(req.params.runId);
+    return reply.send({ ok: true, wasRunning });
   });
 
   // POST /api/runs/:runId/staged/apply — copy selected after/<paths>

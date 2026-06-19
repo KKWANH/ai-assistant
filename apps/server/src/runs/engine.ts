@@ -16,6 +16,7 @@ import { dbGetRun, dbInsertRun, dbUpdateRun, dbGetLatestSnapshot, dbGetEvidenceP
 import { scanWorkspace } from "../workspace/scanner.js";
 import { buildManifest, selectCandidates, focusedRead } from "../gasp/filter.js";
 import { getTemplate } from "./templates.js";
+import { beginRun, endRun } from "./runRegistry.js";
 import { extractAndMapClaims, renderUnsupportedClaims, buildEvidencePack, computeRunDiff, renderDiff } from "./evidence.js";
 import { writeArtifact, writeEvidence, writeRunRecord, readArtifact } from "../ariadneFolder.js";
 import type { AiProvider } from "../providers/index.js";
@@ -277,15 +278,31 @@ export async function confirmContext(runId: string, selectedFiles: string[]): Pr
   dbUpdateRun(runId, { status: "generating", selectedFiles });
   appendTrace(run, traceEvent("context_approved", "ok", `${selectedFiles.length.toString()} files approved by user`));
 
-  // Run async
-  void runPhaseTwo(run.id).catch((err) => {
-    logger.error({ runId: run.id, err }, "Unhandled error in runPhaseTwo");
-  });
+  // Run async. Register the abort handle synchronously so POST /runs/:id/stop
+  // can reach the generate phase while it's the long-running LLM work.
+  const signal = beginRun(run.id);
+  void runPhaseTwo(run.id, signal)
+    .catch((err) => {
+      logger.error({ runId: run.id, err }, "Unhandled error in runPhaseTwo");
+    })
+    .finally(() => endRun(run.id));
 
   return dbGetRun(runId) ?? run;
 }
 
-async function runPhaseTwo(runId: string): Promise<void> {
+/** Mark a run stopped and return true if the signal has been aborted. */
+function stopped(runId: string, signal: AbortSignal): boolean {
+  if (!signal.aborted) return false;
+  dbUpdateRun(runId, {
+    status: "failed",
+    error: "Stopped by user",
+    completedAt: new Date().toISOString(),
+  });
+  logger.info({ runId }, "run stopped by user");
+  return true;
+}
+
+async function runPhaseTwo(runId: string, signal: AbortSignal): Promise<void> {
   const run = dbGetRun(runId);
   if (!run) return;
 
@@ -305,6 +322,7 @@ async function runPhaseTwo(runId: string): Promise<void> {
     return;
   }
 
+  if (stopped(runId, signal)) return;
   // --- focused read ---
   appendTrace(run, traceEvent("focused_read", "running", "Reading selected files"));
   const snapshot = dbGetLatestSnapshot(run.workspaceId);
@@ -329,16 +347,19 @@ ${template.promptHint ?? ""}`;
 Source files:
 ${fileContext}`;
 
+  if (stopped(runId, signal)) return;
   let brief: string;
   try {
-    const { text } = await provider.complete({ system, prompt });
+    const { text } = await provider.complete({ system, prompt, signal });
     brief = text;
     appendTrace(run, traceEvent("brief", "ok", "Brief generated"));
   } catch (err) {
+    if (signal.aborted) { stopped(runId, signal); return; }
     failRun(run, "brief", err);
     return;
   }
 
+  if (stopped(runId, signal)) return;
   // --- claims extraction ---
   appendTrace(run, traceEvent("claims", "running", "Extracting claims"));
   let claims;
