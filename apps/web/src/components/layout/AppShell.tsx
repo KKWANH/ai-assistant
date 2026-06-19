@@ -114,7 +114,8 @@ function Logo({ className }: { className?: string }) {
  *  no longer drag-reorderable, so this is how the user orders them. */
 function ChatSortControl() {
   const { t } = useT();
-  const { chatSort, setChatSort } = useUIStore();
+  const chatSort = useUIStore((s) => s.chatSort);
+  const setChatSort = useUIStore((s) => s.setChatSort);
   const [open, setOpen] = useState(false);
   const { mounted, leaving } = useExitTransition(open, 100);
   const ref = useRef<HTMLDivElement>(null);
@@ -233,7 +234,9 @@ function ChatRow({
 }) {
   const navigate = useNavigate();
   const { t } = useT();
-  const { setSidebarSection } = useUIStore();
+  // Single stable-setter selector — without it every chat row re-renders on
+  // each composer keystroke (which writes a draft into the store).
+  const setSidebarSection = useUIStore((s) => s.setSidebarSection);
   const deleteChat = useDeleteChat();
   const updateChat = useUpdateChat();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -397,24 +400,27 @@ function ChatRow({
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const {
-    activeWorkspaceId,
-    setActiveWorkspaceId,
-    setActiveRunId,
-    inspectorOpen,
-    toggleInspector,
-    sidebarSection,
-    setSidebarSection,
-    theme,
-    toggleTheme,
-    setCreateWorkspaceOpen,
-    setReportDialogOpen,
-    setCommandMenuOpen,
-    setTutorialOpen,
-    sidebarWidth,
-    setSidebarWidth,
-    chatSort,
-  } = useUIStore();
+  // Subscribe per-field, not to the whole store. Without these narrow selectors
+  // the shell re-renders on every composer keystroke (which persists a draft
+  // into `composerDrafts`), re-running the entire sidebar + command list. Each
+  // selector returns a primitive or a stable setter, so Object.is keeps the
+  // shell from re-rendering unless one of THESE values actually changes.
+  const activeWorkspaceId = useUIStore((s) => s.activeWorkspaceId);
+  const setActiveWorkspaceId = useUIStore((s) => s.setActiveWorkspaceId);
+  const setActiveRunId = useUIStore((s) => s.setActiveRunId);
+  const inspectorOpen = useUIStore((s) => s.inspectorOpen);
+  const toggleInspector = useUIStore((s) => s.toggleInspector);
+  const sidebarSection = useUIStore((s) => s.sidebarSection);
+  const setSidebarSection = useUIStore((s) => s.setSidebarSection);
+  const theme = useUIStore((s) => s.theme);
+  const toggleTheme = useUIStore((s) => s.toggleTheme);
+  const setCreateWorkspaceOpen = useUIStore((s) => s.setCreateWorkspaceOpen);
+  const setReportDialogOpen = useUIStore((s) => s.setReportDialogOpen);
+  const setCommandMenuOpen = useUIStore((s) => s.setCommandMenuOpen);
+  const setTutorialOpen = useUIStore((s) => s.setTutorialOpen);
+  const sidebarWidth = useUIStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
+  const chatSort = useUIStore((s) => s.chatSort);
 
   // Drag the sidebar↔main divider to resize (desktop). Tracked on window so the
   // drag continues even if the pointer outruns the 4px handle.
