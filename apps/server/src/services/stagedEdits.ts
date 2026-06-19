@@ -151,6 +151,11 @@ export async function applyStagedEdits(
   workspaceId: string,
   runId: string,
   selectedPaths: string[],
+  /** Whether the apply request came from a local (loopback) session. Remote
+   *  applies write the file edits but must NOT fire staged_apply hooks, which
+   *  spawn a shell — the same "execute only locally" rule the terminal,
+   *  scripts and config editors already follow. */
+  local: boolean,
 ): Promise<ApplyResult> {
   const ws = dbGetWorkspace(workspaceId);
   if (!ws) throw new Error("Workspace not found");
@@ -161,6 +166,7 @@ export async function applyStagedEdits(
   const selected = new Set(selectedPaths);
   const result: ApplyResult = { applied: [], skipped: [], errors: [], commitSha: null };
   const root = path.resolve(ws.rootPath);
+  const ariadneRoot = path.join(root, ".ariadne");
 
   for (const f of manifest.files) {
     if (!selected.has(f.path)) {
@@ -173,6 +179,14 @@ export async function applyStagedEdits(
       // files can be edited externally.
       const abs = safeResolveUnderRoot(root, f.path);
       if (!abs) throw new Error("Path escapes workspace root");
+      // Never apply a staged edit into Ariadne's own metadata dir. hooks.yaml /
+      // actions.yaml / scripts/* there execute a shell; allowing them through
+      // the apply path would bypass the local-only config editors and let an
+      // agent-staged file plant arbitrary commands. Config is edited via its
+      // dedicated (local-gated) routes, never via staged diffs.
+      if (abs === ariadneRoot || abs.startsWith(ariadneRoot + path.sep)) {
+        throw new Error("Refusing to write into .ariadne/ (managed config — use the config editors)");
+      }
       if (f.action === "delete") {
         if (fs.existsSync(abs)) fs.unlinkSync(abs);
       } else {
@@ -224,7 +238,7 @@ export async function applyStagedEdits(
   // outcome before they move on. Per-hook timeout is in the YAML
   // (default 30s, max 5m), so a runaway hook can't wedge apply
   // forever. Returned summaries surface inline on the apply page.
-  if (result.applied.length > 0) {
+  if (local && result.applied.length > 0) {
     result.hookResults = await fireHooks("staged_apply", ws.rootPath, {
       runId,
       paths: result.applied,

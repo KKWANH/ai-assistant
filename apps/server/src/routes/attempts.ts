@@ -79,7 +79,7 @@ export async function attemptRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: "paths[] is required" });
       }
       try {
-        const result = await applyAttempt(req.params.id, paths);
+        const result = await applyAttempt(req.params.id, paths, req.accessContext === "local");
         return reply.send(result);
       } catch (err) {
         return reply.status(400).send({

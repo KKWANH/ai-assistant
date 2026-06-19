@@ -56,6 +56,10 @@ interface ToolContext {
   provider: AiProvider;
   sources: SearchResult[];
   signal: AbortSignal;
+  /** Whether the originating chat request was a local (loopback) session.
+   *  The shell-spawning tools (run_tests, run_script) refuse when false, so a
+   *  remote session can plan/read/search/answer but never execute host code. */
+  allowLocalExec: boolean;
 }
 
 interface ToolDef {
@@ -273,11 +277,16 @@ const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
   },
 
   run_tests: {
-    run: async ({ description, chat }) => {
+    run: async ({ description, chat, allowLocalExec }) => {
       // Real execution: run the workspace's test command. Output is
       // prefixed with ✓/✗ so the re-plan gate (low-information
       // detection) can branch on failure automatically.
       if (!chat.workspaceId) return "[No workspace attached — cannot run tests]";
+      // Shell execution is local-only — a remote session must not be able to
+      // run host commands through the agent (same rule as terminal/scripts).
+      if (!allowLocalExec) {
+        return "[Skipped — running commands is only available from the local app, not over the remote connection.]";
+      }
       const ws = dbGetWorkspace(chat.workspaceId);
       if (!ws) return "[Workspace not found]";
 
@@ -289,7 +298,9 @@ const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
       return await new Promise<string>((resolve) => {
         let stdout = "";
         let stderr = "";
-        const proc = spawn("/bin/sh", ["-c", command], { cwd: ws.rootPath });
+        // scriptEnv() strips API keys/secrets so an agent-run command can't read
+        // them out of its own environment.
+        const proc = spawn("/bin/sh", ["-c", command], { cwd: ws.rootPath, env: scriptEnv() });
         const timer = setTimeout(() => proc.kill("SIGTERM"), 120_000);
         proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
         proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
@@ -433,6 +444,10 @@ export interface RunAgentOptions {
    *  planner's "no tools needed" decision — if the user explicitly
    *  toggled web search, we honor it even when the plan is empty. */
   webSearchMode?: "off" | "auto" | "on";
+  /** Whether the chat request came from a local (loopback) session. Gates the
+   *  shell-spawning tools (run_tests / run_script). Defaults to false (deny) so
+   *  a caller that forgets to pass it can never accidentally enable remote exec. */
+  allowLocalExec?: boolean;
 }
 
 export interface RunAgentResult {
@@ -444,6 +459,7 @@ export interface RunAgentResult {
 
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   const { chat, history, userMessage, provider, emit, signal, accountContext, webSearchMode } = opts;
+  const allowLocalExec = opts.allowLocalExec ?? false;
 
   // Load custom actions for this workspace (if any), plus a short summary
   // of workspace state so the planner knows whether file/list tools are
@@ -606,7 +622,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     let result: string;
     try {
       result = await withTimeout(
-        runTool(step.tool, step.description, chat, provider, customActions, collectedSources, stepSignal),
+        runTool(step.tool, step.description, chat, provider, customActions, collectedSources, stepSignal, allowLocalExec),
         STEP_TIMEOUT_MS,
         stepCtl,
       );
@@ -775,11 +791,12 @@ async function runTool(
   customActions: WorkspaceAction[],
   sources: SearchResult[],
   signal: AbortSignal,
+  allowLocalExec: boolean,
 ): Promise<string> {
   // Check if the tool name matches a custom action id
   const customAction = customActions.find((a) => a.id === tool);
   if (customAction) {
-    return executeCustomAction(customAction, description, chat, provider, sources, signal);
+    return executeCustomAction(customAction, description, chat, provider, sources, signal, allowLocalExec);
   }
 
   // Dispatch to the registry — every built-in tool's execution lives in its
@@ -789,7 +806,7 @@ async function runTool(
   // same way the old switch's `default` did.
   const entry = AGENT_TOOLS[tool];
   if (!entry) return `[Unknown tool: ${String(tool)}]`;
-  return entry.run({ description, chat, provider, sources, signal });
+  return entry.run({ description, chat, provider, sources, signal, allowLocalExec });
 }
 
 // ---------------------------------------------------------------------------
@@ -803,10 +820,15 @@ async function executeCustomAction(
   provider: AiProvider,
   sources: SearchResult[],
   signal: AbortSignal,
+  allowLocalExec: boolean,
 ): Promise<string> {
   switch (action.type) {
     case "run_script": {
       if (!chat.workspaceId) return "[No workspace attached — cannot run scripts]";
+      // Script execution is local-only — same rule as run_tests / terminal.
+      if (!allowLocalExec) {
+        return "[Skipped — running scripts is only available from the local app, not over the remote connection.]";
+      }
       const ws = dbGetWorkspace(chat.workspaceId);
       if (!ws) return "[Workspace not found]";
       const scriptName = action.script;

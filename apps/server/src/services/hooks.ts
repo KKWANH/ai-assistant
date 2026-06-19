@@ -31,6 +31,7 @@ import yaml from "yaml";
 import type { HookEvent, WorkspaceHook, HookRunSummary } from "@ariadne/shared";
 import { HOOK_EVENTS } from "@ariadne/shared";
 import { appendHookLog, readHooksYaml } from "../ariadneFolder.js";
+import { scriptEnv } from "./scriptEnv.js";
 import logger from "../logger.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -112,8 +113,10 @@ function runOne(
     // cwd is the workspace root — hooks operate on user files, not
     // Ariadne internals. Env is augmented with ARIADNE_EVENT and
     // ARIADNE_PAYLOAD for hooks that want to branch on details.
+    // scriptEnv() strips API keys/secrets so a hook command can't read the
+    // provider keys out of its own environment.
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...scriptEnv(),
       ARIADNE_EVENT: hook.event,
     };
     if (payload) {

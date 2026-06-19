@@ -137,6 +137,8 @@ interface StreamReplyOptions {
   accountContext: string | undefined;
   /** Account the usage is billed to (for per-account token limits). */
   accountId: string | null;
+  /** Local (loopback) session? Gates the agent's shell-spawning tools. */
+  allowLocalExec: boolean;
   emit: (e: ChatStreamEvent) => void;
   controller: AbortController;
   assistantMsgId: string;
@@ -169,7 +171,7 @@ interface StreamReplyResult {
 async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamReplyResult> {
   const {
     chat, history, userContent, attachmentRefs, webSearchMode, agentMode: rawAgentMode,
-    mode, accountLocale, accountContext, accountId, emit, controller, assistantMsgId,
+    mode, accountLocale, accountContext, accountId, allowLocalExec, emit, controller, assistantMsgId,
     shouldGenerateTitle,
   } = opts;
 
@@ -406,6 +408,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         signal: controller.signal,
         accountContext,
         webSearchMode,
+        allowLocalExec,
       });
       assistantContent = agentResult.content;
       agentTrace = agentResult.agent;
@@ -780,6 +783,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           accountId: req.account?.id ?? null,
           accountLocale: req.account?.locale,
           accountContext: req.account?.context,
+          allowLocalExec: req.accessContext === "local",
           emit,
           controller,
           assistantMsgId,
@@ -980,6 +984,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           accountId: req.account?.id ?? null,
           accountLocale: req.account?.locale,
           accountContext: req.account?.context,
+          allowLocalExec: req.accessContext === "local",
           emit,
           controller,
           assistantMsgId,

@@ -186,7 +186,12 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
       }
       try {
         const { applyStagedEdits } = await import("../services/stagedEdits.js");
-        const result = await applyStagedEdits(run.workspaceId, req.params.runId, paths);
+        const result = await applyStagedEdits(
+          run.workspaceId,
+          req.params.runId,
+          paths,
+          req.accessContext === "local",
+        );
         return reply.send(result);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

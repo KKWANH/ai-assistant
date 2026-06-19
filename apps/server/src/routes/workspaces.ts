@@ -77,6 +77,17 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/workspaces
   app.post("/workspaces", async (req, reply) => {
     if (await rejectGuest(req, reply)) return;
+    // A workspace's rootPath can point anywhere on the host, and its owner can
+    // then read every file beneath it (GET .../file, snapshot, RAG, …). Choosing
+    // that root is a privileged host-level action, so creation is restricted to
+    // admins or local (loopback) sessions. Without this, a remote non-admin
+    // could root a workspace at "/" and turn it into an arbitrary host-file read.
+    if (req.accessContext === "remote" && req.account?.role !== "admin") {
+      return reply.status(403).send({
+        error: "Forbidden",
+        detail: "Creating a workspace must be done from the local app or by an admin.",
+      });
+    }
     const parsed = CreateWorkspaceSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });

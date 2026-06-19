@@ -85,6 +85,8 @@ export function listAttemptsForChat(chatId: string): AgentAttempt[] {
 export async function applyAttempt(
   attemptId: string,
   selectedPaths: string[],
+  /** Local (loopback) session? Gates staged_apply hook execution — see applyStagedEdits. */
+  local: boolean,
 ): Promise<ApplyResult> {
   const attempt = dbGetAttempt(attemptId);
   if (!attempt) throw new Error("Attempt not found");
@@ -94,6 +96,7 @@ export async function applyAttempt(
     attempt.workspaceId,
     stagingIdForAttempt(attemptId),
     selectedPaths,
+    local,
   );
   if (result.applied.length > 0) {
     dbUpdateAttempt(attemptId, {
