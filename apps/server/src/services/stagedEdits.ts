@@ -258,6 +258,21 @@ export function discardStagedEdits(workspaceId: string, runId: string): void {
   }
 }
 
+/**
+ * Wipe ALL transient staged trees for a workspace — `.ariadne/staged/` only,
+ * leaving config/snapshots/surface intact. Call before the workspace row is
+ * deleted (while rootPath is still resolvable), so removing a workspace doesn't
+ * orphan its staged build artifacts on disk. Best-effort.
+ */
+export function clearAllStaged(workspaceId: string): void {
+  const ws = dbGetWorkspace(workspaceId);
+  if (!ws) return;
+  const stagedBase = path.join(ws.rootPath, ".ariadne", "staged");
+  if (fs.existsSync(stagedBase)) {
+    fs.rmSync(stagedBase, { recursive: true, force: true });
+  }
+}
+
 // ── Apply log + rewind ──────────────────────────────────────────────────────
 
 interface ApplyRecord {

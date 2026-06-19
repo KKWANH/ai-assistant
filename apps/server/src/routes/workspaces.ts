@@ -314,6 +314,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: "Built-in workspaces cannot be deleted." });
     }
 
+    // Wipe transient staged trees on disk before the row (and rootPath) are gone.
+    const { clearAllStaged } = await import("../services/stagedEdits.js");
+    clearAllStaged(req.params.id);
     dbDeleteWorkspace(req.params.id);
     return reply.send({ ok: true });
   });

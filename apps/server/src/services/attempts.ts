@@ -42,6 +42,21 @@ export function stagingIdForAttempt(attemptId: string): string {
 }
 
 /**
+ * Best-effort: wipe the on-disk staged trees of every attempt in a chat. Call
+ * before deleting the chat — dbDeleteChat removes the attempt rows, but their
+ * `.ariadne/staged/attempt-*` directories would otherwise leak on disk.
+ */
+export function cleanChatStagedTrees(chatId: string): void {
+  for (const a of dbListAttemptsForChat(chatId)) {
+    try {
+      discardStagedEdits(a.workspaceId, stagingIdForAttempt(a.id));
+    } catch (err) {
+      logger.warn({ chatId, attemptId: a.id, err }, "Failed to clean attempt staged tree");
+    }
+  }
+}
+
+/**
  * Return the chat's current open attempt, creating one if none exists.
  * Caller already knows the chat's workspace; we re-validate to avoid
  * a stale-cache crash.

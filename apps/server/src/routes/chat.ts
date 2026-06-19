@@ -45,6 +45,7 @@ import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "
 import type { AttachmentRef } from "../services/chatContext.js";
 import { runAgent } from "../services/agent.js";
 import { runDeepAgent } from "../services/orchestrator.js";
+import { cleanChatStagedTrees } from "../services/attempts.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
 import { generateChatTitle, triage, type TriageResult } from "../services/triage.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
@@ -602,6 +603,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     if (!isOwnerOrAdmin(existing.createdBy, req.account)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
+    // Wipe the attempts' on-disk staged trees BEFORE the rows are gone.
+    cleanChatStagedTrees(req.params.id);
     dbDeleteChat(req.params.id);
     return reply.send({ ok: true });
   });
