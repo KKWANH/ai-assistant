@@ -496,6 +496,16 @@ function ActionCard({
                 disabled={readOnly}
                 onChange={(e) => setInput(k, { key: e.target.value })}
               />
+              <select
+                className={`${inputCls} w-20 shrink-0`}
+                value={inp.type}
+                disabled={readOnly}
+                title={t("actions.inputType")}
+                onChange={(e) => setInput(k, { type: e.target.value === "text" ? "text" : "string" })}
+              >
+                <option value="string">{t("actions.inputTypeLine")}</option>
+                <option value="text">{t("actions.inputTypeMulti")}</option>
+              </select>
               <input
                 className={`${inputCls} flex-1`}
                 value={inp.label}
