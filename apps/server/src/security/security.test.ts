@@ -32,6 +32,11 @@ describe("accessContext — the local/remote trust boundary", () => {
     assert.equal(accessContext(req("127.0.0.1", { "cf-connecting-ip": "8.8.8.8" })), "remote");
     assert.equal(accessContext(req("127.0.0.1", { "cf-ray": "abc-DFW" })), "remote");
   });
+  test("a reverse-proxy hop over loopback is remote (forwarding headers win)", () => {
+    assert.equal(accessContext(req("127.0.0.1", { "x-forwarded-for": "8.8.8.8" })), "remote");
+    assert.equal(accessContext(req("127.0.0.1", { "x-real-ip": "8.8.8.8" })), "remote");
+    assert.equal(accessContext(req("127.0.0.1", { forwarded: "for=8.8.8.8" })), "remote");
+  });
   test("a missing peer address is treated as remote, not local", () => {
     assert.equal(accessContext(req("")), "remote");
   });
