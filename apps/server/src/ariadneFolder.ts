@@ -240,14 +240,27 @@ export function writeHooksYaml(workspaceRoot: string, source: string): void {
   fs.writeFileSync(dest, source, "utf-8");
 }
 
-/** Append one log line to .ariadne/hooks/<hookId>.log. Caller-owned
- *  format. Used by the hook runner to record each invocation. */
+/** Per-file append queue — serializes hook-log writes (so lines keep their
+ *  order) without blocking the event loop on each output chunk. The hook runner
+ *  calls appendHookLog once per stdout/stderr chunk, so a chatty hook used to
+ *  fire one synchronous appendFileSync per chunk on the shared worker. */
+const hookLogQueues = new Map<string, Promise<unknown>>();
+
+/** Append one log line to .ariadne/hooks/<hookId>.log. Caller-owned format.
+ *  Non-blocking + best-effort: a failed write is swallowed (logging must never
+ *  break a hook run) and chained so concurrent chunks stay in order. */
 export function appendHookLog(workspaceRoot: string, hookId: string, line: string): void {
   const dir = path.resolve(hooksLogDir(workspaceRoot));
   assertInsideAriadne(workspaceRoot, dir);
-  fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${hookId}.log`);
-  fs.appendFileSync(file, line, "utf-8");
+  // First write for this file seeds the chain with a one-time mkdir.
+  const prev = hookLogQueues.get(file) ?? fs.promises.mkdir(dir, { recursive: true });
+  const next = prev
+    .then(() => fs.promises.appendFile(file, line, "utf-8"))
+    .catch(() => {
+      /* best-effort logging */
+    });
+  hookLogQueues.set(file, next);
 }
 
 /** Read the tail of a hook's log, capped at ~8 KB. Used by the UI

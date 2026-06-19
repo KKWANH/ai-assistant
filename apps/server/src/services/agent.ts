@@ -231,7 +231,7 @@ const AGENT_TOOLS: Record<AgentTool, ToolDef> = {
       if (!abs) {
         return `[edit_file: path traversal rejected: ${proposal.path}]`;
       }
-      const existing = fs.existsSync(abs) ? fs.readFileSync(abs, "utf-8") : null;
+      const existing = await fs.promises.readFile(abs, "utf-8").catch(() => null);
 
       let proposed: string;
       let action: "create" | "modify" | "replace";
@@ -883,7 +883,7 @@ async function executeCustomAction(
         // `/root-secrets` from satisfying a bare prefix match.
         const resolved = safeResolveUnderRoot(ws.rootPath, filePath);
         if (!resolved) return "[Path traversal not allowed]";
-        const content = fs.readFileSync(resolved, "utf-8");
+        const content = await fs.promises.readFile(resolved, "utf-8");
         return content.slice(0, 8_000);
       } catch {
         return `[Could not read file: ${filePath}]`;
