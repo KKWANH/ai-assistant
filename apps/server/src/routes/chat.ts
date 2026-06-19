@@ -442,7 +442,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         content: userContent,
         attachments: attachmentRefs,
         webSearch: webSearchInput,
-      }, accountContext);
+      }, accountContext, provider.id);
     } catch (err) {
       logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
       contextResult = {

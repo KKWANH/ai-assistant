@@ -29,6 +29,24 @@ import { getWorkspaceContext, renderContextForPrompt } from "./workspaceContext.
 import { loadWorkspaceActions } from "./actions.js";
 import { loadHooks } from "./hooks.js";
 
+// Per-provider budget (chars) for attached-document text — ~4 chars ≈ 1 token.
+// The old flat 4 000-char cap truncated a real document (a paper, a thesis) to
+// its first page, so the model only ever received the title + table of contents
+// and could never review the body. Hosted models hold a whole document; local
+// models have smaller context windows, so they get a conservative budget. The
+// budget is shared across all attachments in one message.
+const ATTACHMENT_BUDGET_BY_PROVIDER: Record<string, number> = {
+  gemini: 600_000, // ~1M-token context
+  anthropic: 180_000, // ~200k
+  moonshot: 200_000, // ~256k
+  minimax: 200_000,
+  openai: 120_000, // ~128k
+  ollama: 24_000, // local — modest default context window
+  vllm: 24_000,
+  mock: 4_000,
+};
+const DEFAULT_ATTACHMENT_BUDGET = 24_000;
+
 // ---------------------------------------------------------------------------
 // Public return type
 // ---------------------------------------------------------------------------
@@ -75,7 +93,10 @@ export async function buildChatContext(
      */
     webSearch?: boolean | Promise<boolean>;
   },
-  accountContext?: string
+  accountContext?: string,
+  /** Active provider id — picks the attachment text budget (a 1M-context model
+   *  can hold a whole document; a local model can't). */
+  providerId?: string,
 ): Promise<ChatContextResult> {
   // Resolve the web-search promise (or boolean) at the latest possible
   // moment, so attachment parsing and workspace-snapshot I/O run in parallel
@@ -96,10 +117,26 @@ export async function buildChatContext(
   let searchResults: SearchResult[] | null = null;
   let contextSources: string[] = [];
 
-  // 1. Attached files / images
-  if (userMessage.attachments && userMessage.attachments.length > 0) {
+  // 1. Attached files / images. Carry the most recent attachment forward when
+  //    THIS turn has none — so a multi-turn "analyse this document" conversation
+  //    keeps the document instead of losing it after the first question (the
+  //    user shouldn't have to re-attach the file on every follow-up).
+  let effectiveAttachments = userMessage.attachments;
+  if (!effectiveAttachments || effectiveAttachments.length === 0) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const h = history[i];
+      if (h?.role === "user" && h.attachments && h.attachments.length > 0) {
+        effectiveAttachments = h.attachments.map((a) => ({ uploadId: a.id, useMarkdown: false }));
+        break;
+      }
+    }
+  }
+  if (effectiveAttachments && effectiveAttachments.length > 0) {
     const fileParts: string[] = [];
-    for (const att of userMessage.attachments) {
+    // Shared budget across all attachments in this message (see the per-provider
+    // table). The first file may use the whole budget; later files get the rest.
+    let budget = ATTACHMENT_BUDGET_BY_PROVIDER[providerId ?? ""] ?? DEFAULT_ATTACHMENT_BUDGET;
+    for (const att of effectiveAttachments) {
       const upload = readUpload(att.uploadId);
       if (!upload) continue;
 
@@ -113,7 +150,11 @@ export async function buildChatContext(
         // markdown" and markitdown is installed, route through it for
         // structure-preserving extraction.
         const text = await parseUploadedFile(upload.data, upload.meta.name, att.uploadId, !!att.useMarkdown);
-        const capped = text.length > 4000 ? text.slice(0, 4000) + "\n[...truncated...]" : text;
+        const capped =
+          text.length > budget
+            ? text.slice(0, budget) + "\n[...truncated — file exceeds the model's context budget...]"
+            : text;
+        budget = Math.max(0, budget - text.length);
         fileParts.push(`--- Attached file: ${upload.meta.name} ---\n${capped}`);
       }
     }
