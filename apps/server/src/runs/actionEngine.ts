@@ -116,6 +116,15 @@ async function runActionPipeline(runId: string, action: ActionDef, signal: Abort
     return;
   }
 
+  // Effective inputs = declared-input defaults, overlaid with whatever the run
+  // actually supplied (caller values win). So a declared input the caller
+  // omitted falls back to its default instead of leaving a literal {{key}}.
+  const effectiveInput: Record<string, string> = {};
+  for (const inp of action.inputs ?? []) {
+    if (inp.default != null) effectiveInput[inp.key] = inp.default;
+  }
+  Object.assign(effectiveInput, run.input ?? {});
+
   const results: BlockResult[] = [];
   let priorOutput = "";
 
@@ -145,7 +154,7 @@ async function runActionPipeline(runId: string, action: ActionDef, signal: Abort
     dbUpdateRun(runId, { blockResults: results });
 
     try {
-      const output = await runBlock(block, priorOutput, workspace, provider, runId, run.input, signal);
+      const output = await runBlock(block, priorOutput, workspace, provider, runId, effectiveInput, signal);
       result.status = "ok";
       result.output = output;
       priorOutput = output;
@@ -408,7 +417,7 @@ async function runBlock(
       // Doesn't touch the workspace — proposed edit lands at
       // .ariadne/staged/<runId>/{before,after}/<path> + manifest.json.
       // The user reviews + applies from /runs/<id>/diff.
-      const filePath = (cfg["path"] ?? "").trim();
+      const filePath = interp(cfg["path"] ?? "").trim();
       if (!filePath) throw new Error("edit_file: missing 'path'");
       const abs = safeResolveUnderRoot(workspace.rootPath, filePath);
       if (!abs) throw new Error("Path traversal not allowed");
@@ -422,7 +431,7 @@ async function runBlock(
 
       if (hasContent) {
         // Full rewrite — the model produced the whole desired body.
-        proposed = cfg["content"]!;
+        proposed = interp(cfg["content"]!);
         action = existing === null ? "create" : "replace";
       } else if (hasSearch) {
         // Search/replace — robust to formatting drift since it
@@ -430,8 +439,8 @@ async function runBlock(
         if (existing === null) {
           throw new Error(`edit_file: file does not exist for search/replace: ${filePath}`);
         }
-        const search = cfg["search"]!;
-        const replace = cfg["replace"] ?? "";
+        const search = interp(cfg["search"]!);
+        const replace = interp(cfg["replace"] ?? "");
         const expected = cfg["require_match_count"]
           ? parseInt(cfg["require_match_count"], 10)
           : null;

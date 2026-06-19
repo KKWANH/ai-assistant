@@ -30,10 +30,11 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { ActionDef, ActionBlock, BlockType } from "@ariadne/shared";
+import type { ActionDef, ActionBlock, ActionInput, BlockType } from "@ariadne/shared";
 import type { TranslationKey } from "../../lib/i18n/en";
 import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
+import { Dialog } from "../../components/ui/Dialog";
 import { useActionDefs, useSaveActions, useRunAction } from "../../lib/queries";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
@@ -167,6 +168,19 @@ function serializeActionDefs(actions: ActionDef[]): string {
     lines.push("    name: " + yamlScalar(a.name));
     lines.push("    description: " + yamlScalar(a.description));
     if (a.category) lines.push("    category: " + yamlScalar(a.category));
+    // Serialize declared inputs BEFORE blocks (the empty-blocks branch below
+    // `continue`s, which would otherwise skip them).
+    if (a.inputs && a.inputs.length > 0) {
+      lines.push("    inputs:");
+      for (const inp of a.inputs) {
+        lines.push("      - key: " + yamlScalar(inp.key));
+        lines.push("        type: " + yamlScalar(inp.type));
+        lines.push("        label: " + yamlScalar(inp.label));
+        lines.push("        required: " + (inp.required ? "true" : "false"));
+        if (inp.default != null) lines.push("        default: " + yamlScalar(inp.default));
+        if (inp.placeholder != null) lines.push("        placeholder: " + yamlScalar(inp.placeholder));
+      }
+    }
     if (a.blocks.length === 0) {
       lines.push("    blocks: []");
       continue;
@@ -414,6 +428,17 @@ function ActionCard({
     onBlocksChange([...action.blocks, freshBlock(type)]);
   }
 
+  const inputs = action.inputs ?? [];
+  function setInput(k: number, patch: Partial<ActionInput>) {
+    onChange({ inputs: inputs.map((inp, j) => (j === k ? { ...inp, ...patch } : inp)) });
+  }
+  function removeInput(k: number) {
+    onChange({ inputs: inputs.filter((_, j) => j !== k) });
+  }
+  function addInput() {
+    onChange({ inputs: [...inputs, { key: "", type: "string", label: "", required: false }] });
+  }
+
   return (
     <div
       className={[
@@ -455,6 +480,55 @@ function ActionCard({
         disabled={readOnly}
         onChange={(e) => onChange({ description: e.target.value })}
       />
+
+      {/* Declared inputs — prompted for on run, interpolated as {{key}}. */}
+      <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-border">
+        <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground pl-2">
+          {t("actions.inputs")}
+        </span>
+        <div className="flex flex-col gap-1.5 pl-2">
+          {inputs.map((inp, k) => (
+            <div key={k} className="flex items-center gap-1.5">
+              <input
+                className={`${inputCls} w-24 font-mono`}
+                value={inp.key}
+                placeholder="key"
+                disabled={readOnly}
+                onChange={(e) => setInput(k, { key: e.target.value })}
+              />
+              <input
+                className={`${inputCls} flex-1`}
+                value={inp.label}
+                placeholder={t("actions.inputLabel")}
+                disabled={readOnly}
+                onChange={(e) => setInput(k, { label: e.target.value })}
+              />
+              <input
+                className={`${inputCls} w-28`}
+                value={inp.default ?? ""}
+                placeholder={t("actions.inputDefault")}
+                disabled={readOnly}
+                onChange={(e) => setInput(k, { default: e.target.value })}
+              />
+              <label className="flex items-center gap-1 text-2xs text-muted-foreground shrink-0 select-none">
+                <input
+                  type="checkbox"
+                  checked={inp.required}
+                  disabled={readOnly}
+                  onChange={(e) => setInput(k, { required: e.target.checked })}
+                />
+                {t("actions.inputRequired")}
+              </label>
+              <IconButton label={t("actions.removeInput")} size="sm" disabled={readOnly} onClick={() => removeInput(k)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </IconButton>
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" disabled={readOnly} onClick={addInput} className="self-start">
+            + {t("actions.addInput")}
+          </Button>
+        </div>
+      </div>
 
       {/* Block pipeline */}
       <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-border">
@@ -505,6 +579,7 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
   const [readOnly, setReadOnly] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showYaml, setShowYaml] = useState(false);
+  const [runForm, setRunForm] = useState<ActionDef | null>(null);
   const initedRef = useRef(false);
 
   useEffect(() => {
@@ -568,13 +643,23 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
     }
   }
 
-  async function handleRun(action: ActionDef) {
+  function handleRun(action: ActionDef) {
     if (dirty) {
       toast({ title: t("actions.saveBeforeRun"), variant: "error" });
       return;
     }
+    // Declared inputs → prompt for them first; otherwise run straight away.
+    if (action.inputs && action.inputs.length > 0) {
+      setRunForm(action);
+      return;
+    }
+    void doRun(action, {});
+  }
+
+  async function doRun(action: ActionDef, input: Record<string, string>) {
+    setRunForm(null);
     try {
-      const run = await runAction.mutateAsync({ workspaceId, actionId: action.id });
+      const run = await runAction.mutateAsync({ workspaceId, actionId: action.id, input });
       navigate(`/runs/${run.id}`);
     } catch (err) {
       toast({ title: t("actions.runFailed"), description: (err as Error).message, variant: "error" });
@@ -692,6 +777,84 @@ export function ActionsEditor({ workspaceId }: ActionsEditorProps) {
           </pre>
         </div>
       )}
+
+      {runForm && (
+        <ActionRunDialog
+          action={runForm}
+          pending={runAction.isPending}
+          onClose={() => setRunForm(null)}
+          onRun={(input) => void doRun(runForm, input)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Prompt for an action's declared inputs before running it. Pre-fills
+ *  defaults, blocks submit until required fields are filled, then runs. */
+function ActionRunDialog({
+  action,
+  pending,
+  onClose,
+  onRun,
+}: {
+  action: ActionDef;
+  pending: boolean;
+  onClose: () => void;
+  onRun: (input: Record<string, string>) => void;
+}) {
+  const { t } = useT();
+  const inputs: ActionInput[] = action.inputs ?? [];
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const inp of inputs) init[inp.key] = inp.default ?? "";
+    return init;
+  });
+  const missingRequired = inputs.some((i) => i.required && !(values[i.key] ?? "").trim());
+  return (
+    <Dialog open onClose={onClose} title={action.name}>
+      <div className="flex flex-col gap-3">
+        {action.description && (
+          <p className="text-xs text-muted-foreground">{action.description}</p>
+        )}
+        {inputs.map((inp) => (
+          <label key={inp.key} className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-foreground">
+              {inp.label}
+              {inp.required && <span className="text-destructive"> *</span>}
+            </span>
+            {inp.type === "text" ? (
+              <textarea
+                className={`${inputCls} resize-y min-h-[64px]`}
+                value={values[inp.key] ?? ""}
+                placeholder={inp.placeholder}
+                onChange={(e) => setValues((v) => ({ ...v, [inp.key]: e.target.value }))}
+              />
+            ) : (
+              <input
+                className={inputCls}
+                value={values[inp.key] ?? ""}
+                placeholder={inp.placeholder}
+                onChange={(e) => setValues((v) => ({ ...v, [inp.key]: e.target.value }))}
+              />
+            )}
+          </label>
+        ))}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={pending}
+            disabled={missingRequired}
+            onClick={() => onRun(values)}
+          >
+            {t("actions.run")}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

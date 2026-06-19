@@ -131,12 +131,30 @@ export interface ActionBlock {
   config: Record<string, string>;
 }
 
+/**
+ * A declared input for a parameterized action — mirrors TemplateInput. Values
+ * are interpolated into block configs as `{{key}}` / `{{input.key}}`. Declaring
+ * inputs makes an action discoverable: the UI prompts for them on run and
+ * pre-fills defaults, instead of the values only being passable via raw API.
+ */
+export interface ActionInput {
+  key: string;
+  type: "string" | "text";
+  label: string;
+  required: boolean;
+  default?: string;
+  placeholder?: string;
+}
+
 export interface ActionDef {
   id: string;
   name: string;
   description: string;
   /** Domain category, matching Template.category (research/finance/career/…). */
   category: string;
+  /** Declared inputs interpolated into block configs. Optional/empty = the
+   *  action takes no parameters. */
+  inputs?: ActionInput[];
   blocks: ActionBlock[];
 }
 

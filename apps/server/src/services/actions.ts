@@ -10,6 +10,7 @@ import type {
   WorkspaceAction,
   ActionType,
   ActionDef,
+  ActionInput,
   ActionBlock,
   BlockType,
 } from "@ariadne/shared";
@@ -218,7 +219,27 @@ export function loadActionDefs(workspaceRoot: string): ActionDefsLoadResult {
       continue;
     }
 
-    actions.push({ id, name, description, category, blocks });
+    // Declared inputs (optional). Keys must match the interp guard so a declared
+    // input can actually be substituted as {{key}}.
+    const inputs: ActionInput[] = [];
+    if (Array.isArray(item["inputs"])) {
+      for (const ri of item["inputs"] as unknown[]) {
+        const r = ri as Record<string, unknown> | undefined;
+        if (!r || typeof r !== "object") continue;
+        const key = typeof r["key"] === "string" ? r["key"].trim() : "";
+        if (!key || !/^[a-zA-Z0-9_]+$/.test(key)) continue;
+        inputs.push({
+          key,
+          type: r["type"] === "text" ? "text" : "string",
+          label: typeof r["label"] === "string" && r["label"].trim() ? r["label"].trim() : key,
+          required: r["required"] === true,
+          ...(typeof r["default"] === "string" ? { default: r["default"] } : {}),
+          ...(typeof r["placeholder"] === "string" ? { placeholder: r["placeholder"] } : {}),
+        });
+      }
+    }
+
+    actions.push({ id, name, description, category, inputs, blocks });
   }
 
   return { actions, error: errors.length > 0 ? errors.join("; ") : null };
