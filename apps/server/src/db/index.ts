@@ -460,6 +460,19 @@ function runMigrations(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_workspace_path
       ON chunk_embeddings(workspace_id, path);
   `);
+
+  // usage_events had NO indexes despite being queried on hot paths: the
+  // per-account token-limit check runs on every metered LLM call, and the
+  // run/workspace usage panels filter by those keys. runs/claims are scanned
+  // by the runs list and workspace teardown. Without these every such query
+  // full-scans a table that grows for the life of the install.
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_usage_events_account   ON usage_events(account_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_workspace ON usage_events(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_run       ON usage_events(run_id);
+    CREATE INDEX IF NOT EXISTS idx_runs_workspace         ON runs(workspace_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_claims_run             ON claims(run_id);
+  `);
 }
 
 /**

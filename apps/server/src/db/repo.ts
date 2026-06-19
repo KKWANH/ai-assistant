@@ -171,11 +171,26 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
 /** Delete a workspace and all of its derived rows (snapshots, runs, claims, index). */
 export function dbDeleteWorkspace(id: string): void {
   const db = getDb();
-  db.prepare("DELETE FROM claims WHERE run_id IN (SELECT id FROM runs WHERE workspace_id = ?)").run(id);
-  db.prepare("DELETE FROM runs WHERE workspace_id = ?").run(id);
-  db.prepare("DELETE FROM snapshots WHERE workspace_id = ?").run(id);
-  db.prepare("DELETE FROM file_index WHERE workspace_id = ?").run(id);
-  db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+  // No FK cascades exist (foreign_keys=ON is a no-op without REFERENCES), so
+  // every workspace-scoped table is cleaned by hand — and atomically, so a
+  // failure can't leave a half-deleted workspace. Anything keyed by
+  // workspace_id (or by a run/claim that belongs to it) goes here.
+  withTransaction(() => {
+    db.prepare("DELETE FROM claims WHERE run_id IN (SELECT id FROM runs WHERE workspace_id = ?)").run(id);
+    db.prepare("DELETE FROM usage_events WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM runs WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM snapshots WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM file_index WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM chunk_embeddings WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM chunk_fts WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM symbol_index WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM action_schedules WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM action_triggers WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM agent_attempts WHERE workspace_id = ?").run(id);
+    // Only workspace-scoped skills; account-global skills have workspace_id NULL.
+    db.prepare("DELETE FROM skills WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+  });
 }
 
 function rowToWorkspace(row: Record<string, unknown>): Workspace {
@@ -608,8 +623,19 @@ export function dbUpdateChat(
 
 export function dbDeleteChat(id: string): void {
   const db = getDb();
-  db.prepare("DELETE FROM chat_messages WHERE chat_id = ?").run(id);
-  db.prepare("DELETE FROM chats WHERE id = ?").run(id);
+  withTransaction(() => {
+    // Chat usage is metered with run_id = the (assistant) message id, so clear
+    // those rows before the messages they reference disappear — otherwise they
+    // linger and keep counting toward token/usage totals forever.
+    db.prepare(
+      "DELETE FROM usage_events WHERE run_id IN (SELECT id FROM chat_messages WHERE chat_id = ?)",
+    ).run(id);
+    // Agent attempts are keyed by chat_id (their on-disk staged trees under
+    // .ariadne/staged/ are cleaned separately by the attempt lifecycle).
+    db.prepare("DELETE FROM agent_attempts WHERE chat_id = ?").run(id);
+    db.prepare("DELETE FROM chat_messages WHERE chat_id = ?").run(id);
+    db.prepare("DELETE FROM chats WHERE id = ?").run(id);
+  });
 }
 
 /** AT/AU — Bulk-delete chats with zero messages, optionally scoped to a
