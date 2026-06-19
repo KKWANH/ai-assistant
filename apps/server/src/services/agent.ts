@@ -700,16 +700,20 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     const testFailure = lastStep.tool === "run_tests" && /^✗/.test(lastResult.trimStart());
     const anyFailed = batch.some((s) => s.status === "failed");
     const allLowInformation = results.every((r) => isLowInformation(r));
-    const shouldConsiderReplan =
-      !isLast &&
-      replansUsed < MAX_REPLANS &&
-      (anyFailed || allLowInformation || testFailure);
+    const shouldConsiderReplan = shouldReplanAfterBatch({
+      testFailure,
+      anyFailed,
+      allLowInformation,
+      isLast,
+      replansUsed,
+      nextStepIndex: lastIdx + 1,
+    });
 
     if (shouldConsiderReplan) {
       const remaining = steps.slice(lastIdx + 1);
       const revisedRaw = await safeComplete(provider, {
         system: buildReplannerSystem(customActions, workspaceHint),
-        prompt: buildReplannerPrompt(userMessage, stepResults, remaining),
+        prompt: buildReplannerPrompt(userMessage, stepResults, remaining, testFailure),
         json: true,
         jsonSchema: plannerSchema,
         noThink: true,
@@ -1123,6 +1127,34 @@ function buildPlannerPrompt(history: ChatMessage[], userMessage: string): string
   return `${historyStr ? `Recent conversation:\n${historyStr}\n\n` : ""}Task: ${userMessage}`;
 }
 
+/**
+ * Decide whether to invoke the replanner after a batch of steps.
+ *
+ * A failing test is worth acting on even when it's the LAST planned step —
+ * that's exactly when the "fix until tests pass" loop should kick in. An
+ * external, ground-truth signal (a red test) is the most reliable repair
+ * driver there is, so we don't want a plan that ends on a failing test to just
+ * report it. Generic failures / low-information on the last step are NOT worth a
+ * replan: we're about to synthesize regardless and there's nothing left to feed
+ * forward. All paths stay bounded by the replan budget and remaining step room.
+ *
+ * Pure + exported so the trigger logic is unit-tested rather than buried in the
+ * loop where the testFailure/isLast interaction is easy to re-break.
+ */
+export function shouldReplanAfterBatch(opts: {
+  testFailure: boolean;
+  anyFailed: boolean;
+  allLowInformation: boolean;
+  isLast: boolean;
+  replansUsed: number;
+  /** Index of the next step to run, i.e. lastExecutedIndex + 1. */
+  nextStepIndex: number;
+}): boolean {
+  const { testFailure, anyFailed, allLowInformation, isLast, replansUsed, nextStepIndex } = opts;
+  const canReplan = replansUsed < MAX_REPLANS && nextStepIndex < MAX_STEPS;
+  return canReplan && (testFailure || (!isLast && (anyFailed || allLowInformation)));
+}
+
 function buildReplannerSystem(
   customActions: WorkspaceAction[] = [],
   workspace: WorkspaceHint = { attached: false, fileCount: 0 },
@@ -1150,7 +1182,18 @@ function buildReplannerPrompt(
   userMessage: string,
   completedResults: string[],
   remainingSteps: AgentStep[],
+  testFailed = false,
 ): string {
+  // When the trigger was a failing test, orient the replanner toward a repair
+  // rather than a generic revision — especially important when there are no
+  // remaining steps (the failure was the last planned step), where "revise the
+  // remaining steps" alone gives it nothing to act on.
+  const repairDirective = testFailed
+    ? "\n\nThe tests above FAILED (a step's result starts with ✗). Produce concrete " +
+      "steps to FIX the cause — edit the offending file based on the specific error, then " +
+      "re-run the tests to confirm. Do not stop at a failing test, and do not just repeat " +
+      "the same edit; address the error shown."
+    : "";
   return `Task: ${userMessage}
 
 Completed steps so far:
@@ -1159,7 +1202,7 @@ ${completedResults.join("\n\n")}
 Remaining planned steps:
 ${JSON.stringify(remainingSteps.map((s) => ({ description: s.description, tool: s.tool })), null, 2)}
 
-Revise the remaining steps if warranted by what you have learned. Return JSON.`;
+Revise the remaining steps if warranted by what you have learned.${repairDirective} Return JSON.`;
 }
 
 /** System + prompt for the direct-answer path (planner returned no steps). */
