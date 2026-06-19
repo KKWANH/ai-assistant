@@ -22,6 +22,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 export function SortableList<T>({
   items,
@@ -39,8 +40,13 @@ export function SortableList<T>({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // auto-animate add/remove (a new chat slides in, a deleted one slides out).
+  // Disabled during a drag so it doesn't double-animate dnd-kit's own reorder.
+  const [animParent, enableAnim] = useAutoAnimate<HTMLDivElement>();
   const ids = items.map(getId);
-  const onDragEnd = (e: DragEndEvent) => {
+  const handleDragEnd = (e: DragEndEvent) => {
+    // Re-enable after dnd-kit's drop transition settles.
+    window.setTimeout(() => enableAnim(true), 250);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const from = ids.indexOf(String(active.id));
@@ -49,9 +55,14 @@ export function SortableList<T>({
     onReorder(arrayMove(items, from, to), String(active.id), to);
   };
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={() => enableAnim(false)}
+      onDragEnd={handleDragEnd}
+    >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        {children}
+        <div ref={animParent}>{children}</div>
       </SortableContext>
     </DndContext>
   );

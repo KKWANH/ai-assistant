@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FolderOpen, Plus, Clock, FileText, ArrowRight } from "lucide-react";
 import { useWorkspaces } from "../../lib/queries";
@@ -7,6 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useUIStore } from "../../lib/store";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { useScrollRestoration } from "../../lib/useScrollRestoration";
 
 export function WorkspaceList() {
   const { data: workspaces, isLoading } = useWorkspaces();
@@ -15,6 +17,9 @@ export function WorkspaceList() {
   const { t } = useT();
   // Smoothly animate cards in / out / reorder as workspaces change (motion).
   const [cardsRef] = useAutoAnimate<HTMLDivElement>();
+  // Restore scroll when returning to the list from a workspace.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollRestoration(scrollRef);
 
   if (isLoading) {
     return (
@@ -46,7 +51,7 @@ export function WorkspaceList() {
   }
 
   return (
-    <div className="p-5 max-w-5xl mx-auto w-full overflow-y-auto h-full">
+    <div ref={scrollRef} className="p-5 max-w-5xl mx-auto w-full overflow-y-auto h-full">
       <PageHeader
         icon={<FolderOpen className="h-5 w-5" />}
         title={t("workspace.list.title")}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { useUIStore } from "../../lib/store";
+import { useExitTransition } from "../../lib/useExitTransition";
 import { useT } from "../../lib/i18n";
 import { useRegisteredCommands, type CommandItem } from "../../lib/commands";
 
@@ -98,7 +99,10 @@ export function CommandMenu({ items }: CommandMenuProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [commandMenuOpen, filtered, selectedIdx, setCommandMenuOpen]);
 
-  if (!commandMenuOpen) return null;
+  // Keep mounted through the exit animation when closing.
+  const { mounted, leaving } = useExitTransition(commandMenuOpen);
+
+  if (!mounted) return null;
 
   // With a query the results are fuzzy-RANKED, so show one flat list (grouping
   // would fragment sections and fight the ranking). Empty query → grouped.
@@ -120,12 +124,12 @@ export function CommandMenu({ items }: CommandMenuProps) {
   return (
     <div className="fixed inset-0 z-[var(--z-command)] flex items-start justify-center px-3 pt-[clamp(1rem,8vh,15vh)] sm:px-0 sm:pt-[15vh]">
       <div
-        className="absolute inset-0 bg-black/60"
+        className={`absolute inset-0 bg-black/60 transition-opacity duration-150 ${leaving ? "opacity-0" : "animate-fade-in"}`}
         onClick={() => setCommandMenuOpen(false)}
         aria-hidden="true"
       />
       <div
-        className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
+        className={`relative z-10 w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl overflow-hidden transition-all duration-150 ${leaving ? "opacity-0 scale-95" : "animate-modal-in"}`}
         role="dialog"
         aria-label={t("commandMenu.ariaLabel")}
         aria-modal="true"

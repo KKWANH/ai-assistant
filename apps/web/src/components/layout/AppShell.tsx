@@ -55,6 +55,8 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore } from "../../lib/store";
+import { useExitTransition } from "../../lib/useExitTransition";
+import { ContextMenu, useContextMenu } from "../ui/ContextMenu";
 import {
   useWorkspaces,
   useRuns,
@@ -171,6 +173,8 @@ function ChatRow({
   const deleteChat = useDeleteChat();
   const updateChat = useUpdateChat();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { mounted: menuMounted, leaving: menuLeaving } = useExitTransition(menuOpen);
+  const chatCtx = useContextMenu();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(chat.title);
 
@@ -208,7 +212,32 @@ function ChatRow({
   }
 
   return (
-    <div className="relative group">
+    <div className="relative group" {...chatCtx.bind}>
+      <ContextMenu
+        at={chatCtx.at}
+        open={chatCtx.open}
+        close={chatCtx.close}
+        items={[
+          {
+            label: t("nav.renameChat"),
+            icon: <Pencil className="h-3.5 w-3.5" />,
+            onSelect: () => {
+              setDraft(chat.title);
+              setRenaming(true);
+            },
+          },
+          {
+            label: t("nav.deleteChat"),
+            icon: <Trash2 className="h-3.5 w-3.5" />,
+            destructive: true,
+            onSelect: () => {
+              void deleteChat.mutateAsync(chat.id).then(() => {
+                if (active) navigate("/");
+              });
+            },
+          },
+        ]}
+      />
       <SidebarItem
         label={chat.title || t("commandMenu.untitledChat")}
         icon={<MessageSquare className="h-3.5 w-3.5" />}
@@ -229,10 +258,10 @@ function ChatRow({
       >
         <MoreHorizontal className="h-3.5 w-3.5" />
       </button>
-      {menuOpen && (
+      {menuMounted && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-          <div className="absolute left-1 top-9 z-30 w-48 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+          <div className={`absolute left-1 top-9 z-30 w-48 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs origin-top-left transition-all duration-100 ${menuLeaving ? "opacity-0 scale-95" : "animate-fade-in"}`}>
             <button
               className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
               onClick={() => {
