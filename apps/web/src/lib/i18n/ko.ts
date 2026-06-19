@@ -77,6 +77,7 @@ const ko: Record<TranslationKey, string> = {
   "nav.openMenu": "메뉴 열기",
   "nav.closeMenu": "메뉴 닫기",
   "nav.hideSidebar": "사이드바 숨기기",
+  "nav.resizeSidebar": "드래그로 크기 조절 · 더블클릭으로 초기화",
   "nav.showSidebar": "사이드바 보이기",
   "nav.home": "홈",
 

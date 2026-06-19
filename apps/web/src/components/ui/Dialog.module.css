@@ -41,6 +41,15 @@
   animation: ariadne-modal-in var(--motion-slow) var(--ease-out) both;
 }
 
+/* Exit — reverse the entrance, snappier so dismissal feels immediate. The
+   `leaving` modifier is added by Dialog.tsx for the exit-animation window. */
+.backdrop.leaving {
+  animation: ariadne-fade-in var(--motion-fast) var(--ease-in) reverse both;
+}
+.panel.leaving {
+  animation: ariadne-modal-in var(--motion-fast) var(--ease-in) reverse both;
+}
+
 .sm  { max-width: 24rem; }
 .md  { max-width: 28rem; }
 .lg  { max-width: 32rem; }

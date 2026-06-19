@@ -49,6 +49,25 @@ function saveFloatingChatMode(map: Record<string, FloatingChatMode>): void {
   }
 }
 
+// Desktop-style resizable sidebar — drag the divider to set the width, kept in
+// localStorage so it survives reloads (and is shared with a browser tab on the
+// same loopback origin in the desktop app).
+const SIDEBAR_WIDTH_KEY = "ariadne.sidebarWidth.v1";
+export const SIDEBAR_WIDTH_MIN = 180;
+export const SIDEBAR_WIDTH_MAX = 440;
+const SIDEBAR_WIDTH_DEFAULT = 208;
+export function clampSidebarWidth(n: number): number {
+  return Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, Math.round(n)));
+}
+function loadSidebarWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    return Number.isFinite(raw) && raw > 0 ? clampSidebarWidth(raw) : SIDEBAR_WIDTH_DEFAULT;
+  } catch {
+    return SIDEBAR_WIDTH_DEFAULT;
+  }
+}
+
 export type SidebarSection =
   | "chat"
   | "workspaces"
@@ -88,6 +107,10 @@ export interface UIStore {
   // Per-workspace floating-chat open behavior (see loadFloatingChatMode).
   floatingChatModeById: Record<string, FloatingChatMode>;
   setFloatingChatModeFor: (id: string, mode: FloatingChatMode) => void;
+
+  // Resizable sidebar width (px), persisted. See loadSidebarWidth.
+  sidebarWidth: number;
+  setSidebarWidth: (px: number) => void;
 
   // Command menu
   commandMenuOpen: boolean;
@@ -179,6 +202,13 @@ export const useUIStore = create<UIStore>((set, get) => ({
       saveFloatingChatMode(next);
       return { floatingChatModeById: next };
     }),
+
+  sidebarWidth: loadSidebarWidth(),
+  setSidebarWidth: (px) => {
+    const w = clampSidebarWidth(px);
+    try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w)); } catch { /* ignore */ }
+    set({ sidebarWidth: w });
+  },
 
   inspectorOpen: true,
   setInspectorOpen: (open) => set({ inspectorOpen: open }),

@@ -20,7 +20,7 @@
  * driven by a hamburger toggle; the Inspector is shown only at `lg`+.
  * Right Inspector: contextual — only on workspace/template/run detail screens.
  */
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, type CSSProperties, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import { NotificationsBell } from "../../features/alerts/NotificationsBell";
 import {
@@ -318,7 +318,28 @@ export function AppShell({ children }: AppShellProps) {
     setReportDialogOpen,
     setCommandMenuOpen,
     setTutorialOpen,
+    sidebarWidth,
+    setSidebarWidth,
   } = useUIStore();
+
+  // Drag the sidebar↔main divider to resize (desktop). Tracked on window so the
+  // drag continues even if the pointer outruns the 4px handle.
+  const startSidebarResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: PointerEvent) => setSidebarWidth(startW + (ev.clientX - startX));
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const { data: workspaces } = useWorkspaces();
   const { data: allRuns } = useRuns();
@@ -539,7 +560,10 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top Bar */}
-      <header className="h-10 shrink-0 flex items-center justify-between gap-2 px-2 sm:px-3 border-b border-topbar-border bg-topbar">
+      <header
+        data-tauri-drag-region
+        className="h-10 shrink-0 flex items-center justify-between gap-2 px-2 sm:px-3 border-b border-topbar-border bg-topbar"
+      >
         <div className="flex items-center gap-1 min-w-0">
           {/* Mobile drawer toggle */}
           <span className="flex md:hidden">
@@ -728,10 +752,11 @@ export function AppShell({ children }: AppShellProps) {
           />
         )}
 
-        {/* Sidebar — static column ≥md, off-canvas drawer below md */}
+        {/* Sidebar — static column ≥md (drag-resizable), off-canvas drawer below md */}
         <nav
+          style={{ "--sidebar-w": `${sidebarWidth}px` } as CSSProperties}
           className={[
-            "w-52 shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden",
+            "shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden md:w-[var(--sidebar-w)]",
             "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:w-64 max-md:shadow-2xl",
             "max-md:transition-transform max-md:duration-200 max-md:ease-out",
             mobileNavOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",
@@ -1011,6 +1036,20 @@ export function AppShell({ children }: AppShellProps) {
             )}
           </div>
         </nav>
+
+        {/* Resize handle — drag to set the sidebar width (desktop, when the
+            sidebar is shown). A thin hit-target with a hover/active accent. */}
+        {!sidebarCollapsed && (
+          <div
+            onPointerDown={startSidebarResize}
+            onDoubleClick={() => setSidebarWidth(208)}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("nav.resizeSidebar")}
+            title={t("nav.resizeSidebar")}
+            className="hidden md:block w-1 shrink-0 -ml-px cursor-col-resize bg-transparent hover:bg-accent/40 active:bg-accent/60 transition-colors"
+          />
+        )}
 
         {/* Main canvas — `min-w-0` lets it shrink under flex parents that
             don't, and `min-h-0` lets children with `overflow-y-auto` clip

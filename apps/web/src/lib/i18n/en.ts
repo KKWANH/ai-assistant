@@ -84,6 +84,7 @@ const en = {
   "nav.openMenu": "Open menu",
   "nav.closeMenu": "Close menu",
   "nav.hideSidebar": "Hide sidebar",
+  "nav.resizeSidebar": "Drag to resize · double-click to reset",
   "nav.showSidebar": "Show sidebar",
   "nav.home": "Home",
 

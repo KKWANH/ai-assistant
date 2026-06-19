@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode, useRef } from "react";
+import { useEffect, useState, type ReactNode, useRef } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton";
 import { useT } from "../../lib/i18n";
@@ -48,6 +48,21 @@ export function Dialog({
   // back when the dialog closes. Without this, closing a dialog drops
   // keyboard focus on document.body — the user loses their place.
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Keep the dialog mounted through its exit animation: `render` lags `open`
+  // by the exit duration, and `leaving` drives the reverse keyframes.
+  const [render, setRender] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setRender(true);
+      setLeaving(false);
+    } else if (render) {
+      setLeaving(true);
+      const id = window.setTimeout(() => setRender(false), 180);
+      return () => window.clearTimeout(id);
+    }
+  }, [open, render]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -102,17 +117,19 @@ export function Dialog({
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  if (!open) return null;
+  if (!render) return null;
+
+  const lv = leaving ? ` ${styles["leaving"]!}` : "";
 
   return (
     <div
-      className={styles["overlay"]!}
+      className={styles["overlay"]! + lv}
       aria-modal="true"
       role="dialog"
       aria-labelledby={title ? "dialog-title" : undefined}
     >
       <div
-        className={styles["backdrop"]!}
+        className={styles["backdrop"]! + lv}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -121,6 +138,7 @@ export function Dialog({
         className={[
           styles["panel"]!,
           sizeClass[size],
+          leaving ? styles["leaving"]! : "",
           className,
         ]
           .filter(Boolean)
