@@ -27,6 +27,7 @@
     "start:server": "tsx apps/server/src/index.ts",
     "start:supervisor": "tsx apps/admin/src/supervisor.ts",
     "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p apps/server && tsc --noEmit -p apps/admin && tsc --noEmit -p apps/web",
+    "test": "npm run test --workspace @ariadne/server",
     "eval:retrieval": "tsx apps/server/src/eval/runRetrievalEval.ts",
     "eval:retrieval:ci": "tsx apps/server/src/eval/runRetrievalEval.ts --ci",
     "eval:retrieval:promoted": "tsx apps/server/src/eval/runPromotedRetrievalEval.ts",
