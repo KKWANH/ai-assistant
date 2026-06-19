@@ -30,6 +30,7 @@ import { listMemories, renderMemoryForPrompt } from "../services/workspaceMemory
 import { scriptEnv } from "../services/scriptEnv.js";
 import { scriptsDir } from "../ariadneFolder.js";
 import { meteringProvider, makeDateRunId, traceEvent, appendTrace, failRun } from "./engine.js";
+import { beginRun, endRun } from "./runRegistry.js";
 import { createAlert } from "../services/alerts.js";
 import logger from "../logger.js";
 
@@ -82,14 +83,19 @@ export async function createActionRun(input: {
 
   dbInsertRun(run);
 
-  void runActionPipeline(run.id, action).catch((err: unknown) => {
-    logger.error({ runId: run.id, err }, "Unhandled error in runActionPipeline");
-  });
+  // Register the abort handle synchronously (before this returns) so POST
+  // /runs/:id/stop can reach the run the instant the client has its id.
+  const signal = beginRun(run.id);
+  void runActionPipeline(run.id, action, signal)
+    .catch((err: unknown) => {
+      logger.error({ runId: run.id, err }, "Unhandled error in runActionPipeline");
+    })
+    .finally(() => endRun(run.id));
 
   return run;
 }
 
-async function runActionPipeline(runId: string, action: ActionDef): Promise<void> {
+async function runActionPipeline(runId: string, action: ActionDef, signal: AbortSignal): Promise<void> {
   const run = dbGetRun(runId);
   if (!run) return;
   const workspace = dbGetWorkspace(run.workspaceId);
@@ -114,6 +120,17 @@ async function runActionPipeline(runId: string, action: ActionDef): Promise<void
   let priorOutput = "";
 
   for (let i = 0; i < action.blocks.length; i++) {
+    // Stopped between blocks — bail before starting the next one.
+    if (signal.aborted) {
+      dbUpdateRun(runId, {
+        status: "failed",
+        error: "Stopped by user",
+        completedAt: new Date().toISOString(),
+        blockResults: results,
+      });
+      logger.info({ runId }, "action run stopped by user");
+      return;
+    }
     const block = action.blocks[i]!;
     const label = `Block ${(i + 1).toString()}/${action.blocks.length.toString()}: ${block.type}`;
     const result: BlockResult = {
@@ -128,7 +145,7 @@ async function runActionPipeline(runId: string, action: ActionDef): Promise<void
     dbUpdateRun(runId, { blockResults: results });
 
     try {
-      const output = await runBlock(block, priorOutput, workspace, provider, runId);
+      const output = await runBlock(block, priorOutput, workspace, provider, runId, run.input, signal);
       result.status = "ok";
       result.output = output;
       priorOutput = output;
@@ -189,12 +206,34 @@ async function runBlock(
   workspace: Workspace,
   provider: AiProvider,
   runId: string,
+  input: Record<string, string>,
+  signal: AbortSignal,
 ): Promise<string> {
   const cfg = block.config;
 
+  // Interpolate caller-supplied inputs into config strings so a single
+  // ActionDef can be parameterized per run (e.g. an "analyze this ticker"
+  // action that takes a `symbol` input). Both `{{symbol}}` (bare, matching
+  // the action's `inputs[].name`) and `{{input.symbol}}` resolve — the bare
+  // form is what the existing finance actions already use in their prompts
+  // and write paths. {{prior}} / {{output}} expand to the previous block's
+  // output for callers that want it mid-string rather than only as the
+  // implicit priorOutput fallback.
+  const interp = (s: string): string => {
+    let out = s;
+    for (const [k, v] of Object.entries(input)) {
+      if (!/^[a-zA-Z0-9_]+$/.test(k)) continue; // guard against regex-special keys
+      const val = (v ?? "").toString();
+      out = out
+        .replace(new RegExp(`\\{\\{\\s*input\\.${k}\\s*\\}\\}`, "g"), val)
+        .replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, "g"), val);
+    }
+    return out.replace(/\{\{\s*(?:prior|output|priorOutput)\s*\}\}/g, () => priorOutput);
+  };
+
   switch (block.type) {
     case "ask_ai": {
-      const instruction = (cfg["prompt"] ?? "").trim();
+      const instruction = interp(cfg["prompt"] ?? "").trim();
       if (!instruction) throw new Error("ask_ai: missing 'prompt'");
 
       // Workspace RAG — same retriever the chat path uses (cosine over
@@ -251,13 +290,13 @@ async function runBlock(
       const { text } = await provider.complete({
         system: memoryBlock ? `${baseSystem}\n\n${memoryBlock}` : baseSystem,
         prompt,
-        signal: AbortSignal.timeout(BLOCK_LLM_TIMEOUT_MS),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(BLOCK_LLM_TIMEOUT_MS)]),
       });
       return text;
     }
 
     case "web_analysis": {
-      const query = (cfg["query"] || priorOutput).trim().slice(0, 240);
+      const query = (interp(cfg["query"] ?? "") || priorOutput).trim().slice(0, 240);
       if (!query) throw new Error("web_analysis: no query (set 'query' or chain after a block)");
       const resp = await performSearch(query);
       if (resp.results.length === 0) return "검색 결과가 없습니다.";
@@ -270,7 +309,7 @@ async function runBlock(
           "Summarize these web search results into a concise, well-sourced analysis " +
           "in Markdown. Keep the bracketed source numbers.",
         prompt: `Query: ${query}\n\nResults:\n${sourcesBlock}`,
-        signal: AbortSignal.timeout(BLOCK_LLM_TIMEOUT_MS),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(BLOCK_LLM_TIMEOUT_MS)]),
       });
       return text;
     }
@@ -294,10 +333,14 @@ async function runBlock(
           proc.kill("SIGTERM");
           reject(new Error("Script timed out"));
         }, SCRIPT_TIMEOUT_MS);
+        // Kill the script if the run is stopped.
+        const onAbort = (): void => { proc.kill("SIGTERM"); reject(new Error("Stopped by user")); };
+        signal.addEventListener("abort", onAbort, { once: true });
+        const cleanup = (): void => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); };
         proc.stdout.on("data", (c: Buffer) => { out += c.toString("utf-8"); });
         proc.stderr.on("data", (c: Buffer) => { err += c.toString("utf-8"); });
         proc.on("close", (code) => {
-          clearTimeout(timer);
+          cleanup();
           const result = out.slice(0, OUTPUT_CAP);
           if (code !== 0 && !result) {
             reject(new Error(`Script exited ${String(code)}: ${err.slice(0, 500)}`));
@@ -305,12 +348,12 @@ async function runBlock(
             resolve(result || `[script exited ${String(code)}]`);
           }
         });
-        proc.on("error", (e) => { clearTimeout(timer); reject(e); });
+        proc.on("error", (e) => { cleanup(); reject(e); });
       });
     }
 
     case "read_file": {
-      const filePath = (cfg["path"] ?? "").trim();
+      const filePath = interp(cfg["path"] ?? "").trim();
       if (!filePath) throw new Error("read_file: missing 'path'");
       const resolved = safeResolveUnderRoot(workspace.rootPath, filePath);
       if (!resolved) throw new Error("Path traversal not allowed");
@@ -323,7 +366,7 @@ async function runBlock(
       // (or a configured constant) lands back on disk. mode=append is
       // the default since most callers want a running log (monthly
       // briefs append into one file rather than overwriting).
-      const filePath = (cfg["path"] ?? "").trim();
+      const filePath = interp(cfg["path"] ?? "").trim();
       if (!filePath) throw new Error("write_file: missing 'path'");
       const mode = (cfg["mode"] ?? "append").trim().toLowerCase();
       if (mode !== "append" && mode !== "replace") {
@@ -343,7 +386,7 @@ async function runBlock(
       const abs = safeResolveUnderRoot(workspace.rootPath, resolvedPath);
       if (!abs) throw new Error("Path traversal not allowed");
       // Body: explicit cfg.content wins, otherwise the prior block's output.
-      const body = (cfg["content"] ?? priorOutput ?? "").toString();
+      const body = (cfg["content"] != null ? interp(String(cfg["content"])) : (priorOutput ?? "")).toString();
       if (!body.trim()) {
         throw new Error("write_file: nothing to write (no priorOutput and no 'content')");
       }
@@ -452,10 +495,13 @@ async function runBlock(
           env: scriptEnv(),
         });
         const timer = setTimeout(() => proc.kill("SIGTERM"), ms);
+        const onAbort = (): void => { proc.kill("SIGTERM"); };
+        signal.addEventListener("abort", onAbort, { once: true });
+        const cleanup = (): void => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); };
         proc.stdout.on("data", (c: Buffer) => { stdout += c.toString("utf-8"); });
         proc.stderr.on("data", (c: Buffer) => { stderr += c.toString("utf-8"); });
         proc.on("close", (code) => {
-          clearTimeout(timer);
+          cleanup();
           const passed = code === 0;
           // Slice generously but stay under the per-block output cap so
           // the next ask_ai block isn't drowned in test logs.
@@ -470,7 +516,7 @@ async function runBlock(
           resolve(parts.join(""));
         });
         proc.on("error", (e) => {
-          clearTimeout(timer);
+          cleanup();
           resolve(`[run_tests error: ${e.message}]`);
         });
       });
