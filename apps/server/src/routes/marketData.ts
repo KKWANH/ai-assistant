@@ -10,7 +10,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory, getQuoteCalendars, getQuoteNews, getDividendHistory } from "../services/marketData.js";
+import { getQuotes, getQuotesDetailed, getFxRates, normalizeSymbol, getQuoteHistory, getQuoteCalendars, getQuoteNews, getDividendHistory, searchSymbols } from "../services/marketData.js";
 
 const MAX_SYMBOLS = 60;
 
@@ -74,6 +74,21 @@ export async function marketDataRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), items });
     } catch (e) {
       return reply.send({ symbol: raw, resolved: normalizeSymbol(raw), items: [], error: String((e as Error)?.message ?? e) });
+    }
+  });
+
+  // AS — Symbol search by name (v1/finance/search). Lets the surface's add
+  // flow resolve a typed name to real listings without an LLM. Returns
+  // { query, matches: [{symbol, name, exchange, type}] }.
+  app.get<{ Querystring: { q?: string; max?: string } }>("/market/search", async (req, reply) => {
+    const q = (req.query.q ?? "").trim();
+    if (!q) return reply.status(400).send({ error: "q query param is required" });
+    const max = Math.max(1, Math.min(15, Number(req.query.max) || 7));
+    try {
+      const matches = await searchSymbols(q, max);
+      return reply.send({ query: q, matches });
+    } catch (e) {
+      return reply.send({ query: q, matches: [], error: String((e as Error)?.message ?? e) });
     }
   });
 

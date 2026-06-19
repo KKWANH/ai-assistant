@@ -461,6 +461,13 @@ export const getFxRates = (base: string, currencies: string[]) =>
     `/market/fx?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(currencies.join(","))}`,
   );
 
+// AS — Symbol search by name (no LLM). Used by the surface add flow.
+export const searchSymbols = (query: string, max = 7) =>
+  request<{ query: string; matches: Array<{ symbol: string; name: string; exchange: string; type: string }>; error?: string }>(
+    "GET",
+    `/market/search?q=${encodeURIComponent(query)}&max=${String(max)}`,
+  );
+
 // AQ — Historical close prices for a single symbol. Used by the
 // portfolio surface for benchmark overlay (^KS200, ^GSPC).
 export const getQuoteHistory = (symbol: string, range = "1y", interval = "1d") =>

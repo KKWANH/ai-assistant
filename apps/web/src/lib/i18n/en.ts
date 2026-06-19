@@ -900,6 +900,8 @@ const en = {
   "actions.inputType": "Input type",
   "actions.inputTypeLine": "Line",
   "actions.inputTypeMulti": "Text",
+  "actions.inputTypeSymbol": "Symbol",
+  "actions.symbolSearchPlaceholder": "Search a company or ticker…",
   "actions.deleteAction": "Delete action",
   "actions.blockPipeline": "Block pipeline",
   "actions.noBlocks": "No blocks yet — add one below.",

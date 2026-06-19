@@ -450,6 +450,55 @@ export async function getQuoteNews(symbol: string, max = 8): Promise<QuoteNewsIt
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// AS — Symbol search by name. Same v1/finance/search endpoint as news, but
+//      reads the `quotes` array (fuzzy on). Lets a surface resolve a typed
+//      name ("삼성전자", "broadcom") to real listings without an LLM.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface SymbolMatch {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: string;   // EQUITY | ETF | INDEX | …
+}
+
+const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
+const searchCache = new Map<string, { items: SymbolMatch[]; expires: number }>();
+
+export async function searchSymbols(query: string, max = 7): Promise<SymbolMatch[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const key = `SEARCH:${q.toLowerCase()}:${max}`;
+  const now = Date.now();
+  const hit = searchCache.get(key);
+  if (hit && hit.expires > now) return hit.items;
+
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=${max}&newsCount=0&enableFuzzyQuery=true`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": BROWSER_UA, Accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`search ${q}: HTTP ${res.status}`);
+  const data = (await res.json()) as { quotes?: Array<{
+    symbol?: string; shortname?: string; longname?: string;
+    exchDisp?: string; quoteType?: string; isYahooFinance?: boolean;
+  }> };
+  const items: SymbolMatch[] = (data.quotes ?? []).flatMap((m) => {
+    if (!m.symbol || m.isYahooFinance === false) return [];
+    const type = (m.quoteType ?? "").toUpperCase();
+    if (type && !["EQUITY", "ETF", "MUTUALFUND", "INDEX"].includes(type)) return [];
+    return [{
+      symbol: m.symbol,
+      name: m.longname ?? m.shortname ?? m.symbol,
+      exchange: m.exchDisp ?? "",
+      type: type || "EQUITY",
+    }];
+  }).slice(0, max);
+  searchCache.set(key, { items, expires: now + SEARCH_CACHE_TTL_MS });
+  return items;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // AS — Dividend history. Yahoo's chart endpoint with events=div returns
 //      per-symbol dividend payments. Used for Total Return computation
 //      (TR = price return + dividend yield).

@@ -139,7 +139,9 @@ export interface ActionBlock {
  */
 export interface ActionInput {
   key: string;
-  type: "string" | "text";
+  /** "string" = single line · "text" = multi-line · "symbol" = ticker search
+   *  (the run form resolves a company name to its symbol, e.g. 삼성전자 → 005930.KS). */
+  type: "string" | "text" | "symbol";
   label: string;
   required: boolean;
   default?: string;

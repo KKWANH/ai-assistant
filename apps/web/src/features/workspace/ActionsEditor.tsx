@@ -36,6 +36,7 @@ import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
 import { Dialog } from "../../components/ui/Dialog";
 import { useActionDefs, useSaveActions, useRunAction } from "../../lib/queries";
+import { searchSymbols } from "../../lib/api";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 
@@ -501,10 +502,14 @@ function ActionCard({
                 value={inp.type}
                 disabled={readOnly}
                 title={t("actions.inputType")}
-                onChange={(e) => setInput(k, { type: e.target.value === "text" ? "text" : "string" })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setInput(k, { type: v === "text" || v === "symbol" ? v : "string" });
+                }}
               >
                 <option value="string">{t("actions.inputTypeLine")}</option>
                 <option value="text">{t("actions.inputTypeMulti")}</option>
+                <option value="symbol">{t("actions.inputTypeSymbol")}</option>
               </select>
               <input
                 className={`${inputCls} flex-1`}
@@ -833,7 +838,13 @@ function ActionRunDialog({
               {inp.label}
               {inp.required && <span className="text-destructive"> *</span>}
             </span>
-            {inp.type === "text" ? (
+            {inp.type === "symbol" ? (
+              <SymbolInput
+                value={values[inp.key] ?? ""}
+                placeholder={inp.placeholder}
+                onChange={(val) => setValues((v) => ({ ...v, [inp.key]: val }))}
+              />
+            ) : inp.type === "text" ? (
               <textarea
                 className={`${inputCls} resize-y min-h-[64px]`}
                 value={values[inp.key] ?? ""}
@@ -866,5 +877,87 @@ function ActionRunDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** Symbol-search field for an action's `symbol` input — type a company name,
+ *  pick the ticker (삼성전자 → 005930.KS) via the market-data search. The chosen
+ *  symbol becomes the input's value (interpolated as {{key}}). Typing a ticker
+ *  directly also works. */
+function SymbolInput({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  placeholder?: string;
+  onChange: (val: string) => void;
+}) {
+  const { t } = useT();
+  const [query, setQuery] = useState(value);
+  const [matches, setMatches] = useState<{ symbol: string; name: string; exchange: string }[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 1) {
+      setMatches([]);
+      return;
+    }
+    let cancelled = false;
+    const id = window.setTimeout(() => {
+      void searchSymbols(q, 7)
+        .then((res) => {
+          if (!cancelled) {
+            setMatches(res.matches ?? []);
+            setOpen(true);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setMatches([]);
+        });
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [query]);
+
+  return (
+    <div className="relative">
+      <input
+        className={inputCls}
+        value={query}
+        placeholder={placeholder ?? t("actions.symbolSearchPlaceholder")}
+        autoComplete="off"
+        onChange={(e) => {
+          setQuery(e.target.value);
+          onChange(e.target.value);
+        }}
+        onFocus={() => matches.length > 0 && setOpen(true)}
+      />
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-xl">
+          {matches.map((m) => (
+            <button
+              key={m.symbol}
+              type="button"
+              onClick={() => {
+                onChange(m.symbol);
+                setQuery(m.symbol);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface-3"
+            >
+              <span className="font-mono text-foreground">{m.symbol}</span>
+              <span className="truncate text-muted-foreground">
+                {m.name}
+                {m.exchange ? ` · ${m.exchange}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

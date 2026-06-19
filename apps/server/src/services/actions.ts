@@ -230,7 +230,7 @@ export function loadActionDefs(workspaceRoot: string): ActionDefsLoadResult {
         if (!key || !/^[a-zA-Z0-9_]+$/.test(key)) continue;
         inputs.push({
           key,
-          type: r["type"] === "text" ? "text" : "string",
+          type: r["type"] === "text" ? "text" : r["type"] === "symbol" ? "symbol" : "string",
           label: typeof r["label"] === "string" && r["label"].trim() ? r["label"].trim() : key,
           required: r["required"] === true,
           ...(typeof r["default"] === "string" ? { default: r["default"] } : {}),

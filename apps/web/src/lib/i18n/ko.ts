@@ -894,6 +894,8 @@ const ko: Record<TranslationKey, string> = {
   "actions.inputType": "입력 형식",
   "actions.inputTypeLine": "한 줄",
   "actions.inputTypeMulti": "여러 줄",
+  "actions.inputTypeSymbol": "심볼",
+  "actions.symbolSearchPlaceholder": "회사명 또는 티커 검색…",
   "actions.deleteAction": "액션 삭제",
   "actions.blockPipeline": "블록 파이프라인",
   "actions.noBlocks": "아직 블록이 없습니다 — 아래에서 추가하세요.",
