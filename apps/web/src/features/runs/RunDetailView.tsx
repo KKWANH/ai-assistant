@@ -18,6 +18,7 @@ import {
   useWorkspace,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
+import MarkdownContent from "../chat/MarkdownContent";
 import type { TranslationKey } from "../../lib/i18n/en";
 import { Badge } from "../../components/ui/Badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/Tabs";
@@ -110,29 +111,15 @@ function BriefTab({ runId }: { runId: string }) {
         {t("runs.detail.briefPending")}
       </p>
     );
+  // Render through the shared react-markdown pipeline (no rehype-raw, default
+  // URL sanitization), NOT a hand-rolled regex → dangerouslySetInnerHTML. The
+  // brief is LLM-generated and summarizes web/file/trigger content, so raw HTML
+  // in it (e.g. `<img onerror=…>`) must never execute in the app origin.
   return (
-    <article
-      className="prose max-w-none text-sm leading-relaxed"
-      dangerouslySetInnerHTML={{ __html: mdToHtml(brief.markdown) }}
-    />
+    <article className="max-w-none text-sm leading-relaxed">
+      <MarkdownContent content={brief.markdown} />
+    </article>
   );
-}
-
-/** Minimal markdown → HTML for brief preview (no external dep). */
-function mdToHtml(md: string): string {
-  return md
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/`(.+?)`/g, "<code>$1</code>")
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<[hlp])(.+)$/gm, "$1")
-    .replace(/^<li>/gm, "<ul><li>")
-    .replace(/<\/li>(?!\n<li>)/g, "</li></ul>")
-    .trim();
 }
 
 // ── Evidence tab ─────────────────────────────────────────────────────────────

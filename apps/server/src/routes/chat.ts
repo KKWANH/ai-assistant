@@ -709,7 +709,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         if (rawAttachments) {
           for (const att of rawAttachments as PostAttachmentInput[]) {
             const uploadId = newId();
-            const meta = saveUpload(uploadId, att.name, att.mediaType, att.dataBase64);
+            const meta = saveUpload(uploadId, att.name, att.mediaType, att.dataBase64, req.account?.id);
             chatAttachments.push({
               id: uploadId,
               name: att.name,
@@ -1067,8 +1067,30 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/uploads/:id", async (req, reply) => {
     const upload = readUpload(req.params.id);
     if (!upload) return reply.status(404).send({ error: "Upload not found" });
+    // Ownership: only the uploader (or an admin) may fetch it. Uploads saved
+    // before this field existed have no accountId and stay readable (they're
+    // UUID-keyed, not enumerable) — but new ones are owner-scoped.
+    if (
+      upload.meta.accountId &&
+      upload.meta.accountId !== req.account?.id &&
+      req.account?.role !== "admin"
+    ) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
+    // Never let an uploader-chosen Content-Type render as active same-origin
+    // content. Inline only inert raster images + PDF; force everything else
+    // (text/html, image/svg+xml, …) to download as an opaque blob. nosniff
+    // stops the browser re-interpreting the bytes as HTML.
+    reply.header("X-Content-Type-Options", "nosniff");
+    const SAFE_INLINE = new Set([
+      "image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf",
+    ]);
+    if (SAFE_INLINE.has(upload.meta.mediaType)) {
+      return reply.type(upload.meta.mediaType).send(upload.data);
+    }
     return reply
-      .type(upload.meta.mediaType)
+      .type("application/octet-stream")
+      .header("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(upload.meta.name)}`)
       .send(upload.data);
   });
 }

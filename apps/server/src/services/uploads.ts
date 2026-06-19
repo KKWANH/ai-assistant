@@ -17,6 +17,10 @@ export interface UploadMeta {
   mediaType: string;
   kind: "image" | "file";
   size: number;
+  /** Account that uploaded this, so the read route can enforce ownership.
+   *  Optional for backward compatibility with uploads saved before this field
+   *  existed (those are treated as ownerless / readable by any signed-in user). */
+  accountId?: string;
 }
 
 const uploadsDir = (): string => path.join(PATHS.home, "uploads");
@@ -39,7 +43,8 @@ export function saveUpload(
   uploadId: string,
   name: string,
   mediaType: string,
-  dataBase64: string
+  dataBase64: string,
+  accountId?: string | null
 ): UploadMeta {
   ensureUploadsDir();
 
@@ -49,6 +54,7 @@ export function saveUpload(
   const raw = Buffer.from(dataBase64, "base64");
   const kind: "image" | "file" = mediaType.startsWith("image/") ? "image" : "file";
   const meta: UploadMeta = { name, mediaType, kind, size: raw.length };
+  if (accountId) meta.accountId = accountId;
 
   fs.writeFileSync(dataPath, raw);
   fs.writeFileSync(`${dataPath}.json`, JSON.stringify(meta));

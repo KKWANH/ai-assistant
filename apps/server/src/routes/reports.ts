@@ -82,7 +82,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     const attachments: ChatAttachment[] = [];
     for (const att of parsed.data.attachments ?? []) {
       const uploadId = crypto.randomUUID();
-      const meta = saveUpload(uploadId, att.name, att.mediaType, att.dataBase64);
+      const meta = saveUpload(uploadId, att.name, att.mediaType, att.dataBase64, req.account?.id);
       attachments.push({
         id: uploadId,
         name: att.name,
