@@ -453,6 +453,58 @@ export function formatChunksForPrompt(chunks: RetrievedChunk[]): string {
     .join("\n\n");
 }
 
+/**
+ * Query-relevant extraction for an over-budget attachment.
+ *
+ * When an attached document is larger than the model's text budget, naive
+ * head-truncation (`text.slice(0, budget)`) keeps the front matter — title,
+ * abstract, table of contents — and drops the body, so the model "analyses"
+ * only the first few pages. (This is the exact failure that made a 143-page
+ * thesis review critique only the table of contents.) Instead, chunk the
+ * document, keep the chunks most relevant to the query up to the budget, and
+ * return them IN ORIGINAL DOCUMENT ORDER.
+ *
+ * Order-preserving on purpose: OP-RAG (arXiv:2409.01666) shows that for
+ * long-document QA, selecting the relevant chunks but keeping them in their
+ * original order beats both full-context ingestion and relevance-ordered
+ * concatenation — relevance picks WHAT to keep, position decides the ORDER.
+ *
+ * Reuses the same keyword chunker/scorer as workspace retrieval: no embeddings,
+ * no async, and Korean/CJK queries work (whole-run tokens). Falls back to
+ * head-truncation only when the query has no usable tokens (an attachment sent
+ * with no question — nothing to rank against).
+ */
+export function extractRelevantWithinBudget(text: string, query: string, budget: number): string {
+  if (text.length <= budget) return text;
+  const tokens = tokenize(query);
+  if (tokens.length === 0) return text.slice(0, budget);
+
+  const chunks = chunkText(text, CHUNK_CHARS);
+  const scored = chunks.map((chunk, index) => ({
+    chunk,
+    index,
+    score: scoreChunk(chunk, "", tokens),
+  }));
+
+  // Greedily take the highest-scoring chunks until the next one wouldn't fit.
+  // Stop at the first zero-score chunk: a chunk with no query term adds nothing
+  // but lost-in-the-middle distraction, so we'd rather leave the budget unspent.
+  const kept: typeof scored = [];
+  let used = 0;
+  for (const c of [...scored].sort((a, b) => b.score - a.score)) {
+    if (c.score <= 0) break;
+    const cost = c.chunk.length + 2; // +2 for the "\n\n" join
+    if (used + cost > budget) continue; // a smaller, lower-ranked chunk may still fit
+    kept.push(c);
+    used += cost;
+  }
+  if (kept.length === 0) return text.slice(0, budget);
+
+  // Emit in original document order (order-preserving).
+  kept.sort((a, b) => a.index - b.index);
+  return kept.map((c) => c.chunk).join("\n\n");
+}
+
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------

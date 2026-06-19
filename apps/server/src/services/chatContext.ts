@@ -23,7 +23,7 @@ import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { performSearch, fetchUrlText } from "./search.js";
 import { readUpload } from "./uploads.js";
-import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible, type RerankFn } from "./retrieval.js";
+import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible, extractRelevantWithinBudget, type RerankFn } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 import { getWorkspaceContext, renderContextForPrompt } from "./workspaceContext.js";
 import { loadWorkspaceActions } from "./actions.js";
@@ -154,11 +154,17 @@ export async function buildChatContext(
         // markdown" and markitdown is installed, route through it for
         // structure-preserving extraction.
         const text = await parseUploadedFile(upload.data, upload.meta.name, att.uploadId, !!att.useMarkdown);
-        const capped =
-          text.length > budget
-            ? text.slice(0, budget) + "\n[...truncated — file exceeds the model's context budget...]"
-            : text;
-        budget = Math.max(0, budget - text.length);
+        const overBudget = text.length > budget;
+        // Over budget: don't head-truncate (that keeps the title/TOC and drops
+        // the body). Keep the excerpts most relevant to THIS question, in
+        // document order. Within budget: send the whole file unchanged.
+        const capped = overBudget
+          ? extractRelevantWithinBudget(text, userMessage.content, budget) +
+            "\n[...trimmed to the most relevant excerpts — file exceeds the model's context budget...]"
+          : text;
+        // An over-budget file consumes the remaining budget; a fitting one
+        // leaves the rest for any later attachments in the same message.
+        budget = overBudget ? 0 : Math.max(0, budget - text.length);
         fileParts.push(`--- Attached file: ${upload.meta.name} ---\n${capped}`);
       }
     }
