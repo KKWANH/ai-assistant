@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import type { PostAttachmentInput } from "@ariadne/shared";
 import {
-  PROVIDERS,
+  SELECTABLE_PROVIDERS,
   PROVIDER_LABELS,
   MODEL_CHOICES,
   DEFAULT_MODELS,
@@ -1328,7 +1328,7 @@ export function ChatComposer({
                       {t("chat.composer.provider")}
                     </p>
                     <div className="flex flex-col gap-0.5">
-                      {PROVIDERS.map((p) => {
+                      {SELECTABLE_PROVIDERS.map((p) => {
                         const status = providerStatus?.find((s) => s.id === p);
                         const reachable = status?.configured ?? false;
                         const isActive = p === currentProvider;

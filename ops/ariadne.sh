@@ -85,6 +85,30 @@ wait_for_tunnel_url() {
 
 # ── Commands ───────────────────────────────────────────────────────────────
 
+# Ensure the local Ollama server is up — it's the local-first default provider,
+# so a stopped Ollama is why "the local model suddenly broke". brew services /
+# launchd can't reliably auto-start it here because $HOME lives on an external
+# volume (gui launch agents fail to bootstrap from /Volumes/...), so Ariadne
+# starts it itself — detached — every time it starts. No-op if Ollama isn't
+# installed or is already running.
+ensure_ollama() {
+  command -v ollama >/dev/null 2>&1 || return 0
+  if curl -fsS -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+    return 0
+  fi
+  info "Starting local Ollama server…"
+  nohup ollama serve >> "${ARIADNE_LOG_DIR}/ollama.log" 2>&1 &
+  local waited=0
+  while [[ $waited -lt 8 ]] && ! curl -fsS -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; do
+    sleep 1; waited=$((waited + 1))
+  done
+  if curl -fsS -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+    ok "Ollama is up (http://localhost:11434)."
+  else
+    warn "Ollama didn't come up — local models may be unavailable until it starts."
+  fi
+}
+
 cmd_start() {
   if supervisor_running; then
     local pid
@@ -119,6 +143,9 @@ cmd_start() {
 
   # Ensure dirs exist
   mkdir -p "${ARIADNE_LOG_DIR}" "${ARIADNE_RUN_DIR}"
+
+  # Ensure the local model server is up before the app needs it.
+  ensure_ollama
 
   # Remove stale tunnel URL
   rm -f "${TUNNEL_URL_FILE}"

@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles, TrendingUp } from "lucide-react";
-import { PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS } from "@ariadne/shared";
+import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS } from "@ariadne/shared";
 import type { ProviderId, Workspace } from "@ariadne/shared";
 import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills, useWorkspaceUsage } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
@@ -219,7 +219,7 @@ function ChatModelSection({ ws }: { ws: Workspace }) {
               className="min-w-[8rem]"
               value={provider}
               onChange={(e) => changeProvider(e.target.value)}
-              options={PROVIDERS.map((p) => ({ value: p, label: PROVIDER_LABELS[p] }))}
+              options={SELECTABLE_PROVIDERS.map((p) => ({ value: p, label: PROVIDER_LABELS[p] }))}
             />
             <Select
               className="min-w-[10rem] flex-1"

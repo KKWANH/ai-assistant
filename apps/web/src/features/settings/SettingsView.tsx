@@ -14,7 +14,7 @@ import {
   Sparkles,
   KeyRound,
 } from "lucide-react";
-import { PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
+import { PROVIDERS, SELECTABLE_PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { AccountMode, ProviderId } from "@ariadne/shared";
 import {
   useSettings,
@@ -200,7 +200,7 @@ export function SettingsView() {
           {t("settings.providers.pickInChat")}
         </p>
         <div className="flex flex-col gap-1.5">
-          {PROVIDERS.map((pid) => {
+          {SELECTABLE_PROVIDERS.map((pid) => {
             const live = liveProviders?.find((p) => p.id === pid);
             const fallback = settings.providers.find((p) => p.id === pid);
             const configured = live?.configured ?? fallback?.configured ?? false;

@@ -57,6 +57,9 @@ export interface ProviderDescriptor {
   baseURL?: string;
   /** Runs on the user's own machine/network — no API-key billing. */
   local?: boolean;
+  /** Hide from user-facing provider pickers (kept in PROVIDERS so it still
+   *  validates + works as an internal fallback). Used for `mock`. */
+  hidden?: boolean;
   defaultModel: string;
   models: ModelEntry[];
 }
@@ -145,7 +148,7 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     ],
   },
   mock: {
-    id: "mock", label: "Mock (no API key)", kind: "mock", local: true,
+    id: "mock", label: "Mock (no API key)", kind: "mock", local: true, hidden: true,
     defaultModel: "mock",
     models: [
       { id: "mock", label: "Mock", traitKey: "model.trait.mock", speed: "fast", costTier: "low", vision: true },
@@ -164,6 +167,12 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = Object.fromEntries(
 export const DEFAULT_MODELS: Record<ProviderId, string> = Object.fromEntries(
   REGISTRY_LIST.map((p) => [p.id, p.defaultModel]),
 ) as Record<ProviderId, string>;
+
+/** Providers offered in user-facing pickers — everything except `hidden` ones
+ *  (mock). `PROVIDERS` still includes them so they validate + work internally. */
+export const SELECTABLE_PROVIDERS: ProviderId[] = PROVIDERS.filter(
+  (p) => !PROVIDER_REGISTRY[p].hidden,
+);
 
 /** Suggested model choices surfaced in the Settings UI. (derived; hidden excluded) */
 export const MODEL_CHOICES: Record<ProviderId, string[]> = Object.fromEntries(
