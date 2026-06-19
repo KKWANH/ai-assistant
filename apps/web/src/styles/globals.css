@@ -166,6 +166,16 @@ html {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Paint the canvas itself in the theme colour. Without this, the html
+     element behind <body> is the browser's default white, and any moment a
+     descendant is transparent — e.g. a route's opacity:0 fade-in frame while
+     switching chats — flashes white. color-scheme keeps form controls,
+     scrollbars and the compositor's base paint dark to match. */
+  color-scheme: dark;
+  background-color: rgb(var(--background));
+}
+html.light {
+  color-scheme: light;
 }
 
 /* Mobile: drop the desktop ~25% up-scale back to native sizing so the

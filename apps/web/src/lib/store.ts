@@ -68,6 +68,19 @@ function loadSidebarWidth(): number {
   }
 }
 
+// How the sidebar chat list is ordered. "recent" = newest activity first
+// (default); "name" = alphabetical. Chats are no longer manually reorderable,
+// so this is the single ordering knob. Persisted across reloads.
+export type ChatSort = "recent" | "name";
+const CHAT_SORT_KEY = "ariadne.chatSort.v1";
+function loadChatSort(): ChatSort {
+  try {
+    return localStorage.getItem(CHAT_SORT_KEY) === "name" ? "name" : "recent";
+  } catch {
+    return "recent";
+  }
+}
+
 export type SidebarSection =
   | "chat"
   | "workspaces"
@@ -111,6 +124,10 @@ export interface UIStore {
   // Resizable sidebar width (px), persisted. See loadSidebarWidth.
   sidebarWidth: number;
   setSidebarWidth: (px: number) => void;
+
+  // Chat list ordering (persisted). See loadChatSort.
+  chatSort: ChatSort;
+  setChatSort: (sort: ChatSort) => void;
 
   // Command menu
   commandMenuOpen: boolean;
@@ -208,6 +225,12 @@ export const useUIStore = create<UIStore>((set, get) => ({
     const w = clampSidebarWidth(px);
     try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w)); } catch { /* ignore */ }
     set({ sidebarWidth: w });
+  },
+
+  chatSort: loadChatSort(),
+  setChatSort: (sort) => {
+    try { localStorage.setItem(CHAT_SORT_KEY, sort); } catch { /* ignore */ }
+    set({ chatSort: sort });
   },
 
   inspectorOpen: true,

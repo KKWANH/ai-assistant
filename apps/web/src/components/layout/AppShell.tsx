@@ -20,7 +20,8 @@
  * driven by a hamburger toggle; the Inspector is shown only at `lg`+.
  * Right Inspector: contextual — only on workspace/template/run detail screens.
  */
-import { type ReactNode, type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type ReactNode, type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import { NotificationsBell } from "../../features/alerts/NotificationsBell";
 import {
@@ -32,6 +33,8 @@ import {
   Moon,
   Plus,
   ChevronRight,
+  ArrowDownUp,
+  Check,
   HelpCircle,
   Compass,
   BookOpen,
@@ -54,7 +57,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUIStore } from "../../lib/store";
+import { useUIStore, type ChatSort } from "../../lib/store";
 import { useExitTransition } from "../../lib/useExitTransition";
 import { ContextMenu, useContextMenu } from "../ui/ContextMenu";
 import {
@@ -107,6 +110,67 @@ function Logo({ className }: { className?: string }) {
   );
 }
 
+/** Compact sort picker next to the CHATS header — recency or name. Chats are
+ *  no longer drag-reorderable, so this is how the user orders them. */
+function ChatSortControl() {
+  const { t } = useT();
+  const { chatSort, setChatSort } = useUIStore();
+  const [open, setOpen] = useState(false);
+  const { mounted, leaving } = useExitTransition(open, 100);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+  const options: { key: ChatSort; label: string }[] = [
+    { key: "recent", label: t("nav.sortRecent") },
+    { key: "name", label: t("nav.sortName") },
+  ];
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title={t("nav.sortChats")}
+        aria-label={t("nav.sortChats")}
+        className="flex items-center gap-1 rounded px-1 py-0.5 text-2xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ArrowDownUp className="h-3 w-3 shrink-0" />
+        {chatSort === "name" ? t("nav.sortName") : t("nav.sortRecent")}
+      </button>
+      {mounted && (
+        <div
+          role="menu"
+          className={`absolute right-0 top-full z-20 mt-1 min-w-[120px] origin-top-right rounded-lg border border-border bg-card py-1 shadow-xl transition-all duration-100 ${
+            leaving ? "opacity-0 scale-95" : "animate-fade-in"
+          }`}
+        >
+          {options.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              role="menuitemradio"
+              aria-checked={chatSort === o.key}
+              onClick={() => {
+                setChatSort(o.key);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface-3"
+            >
+              <Check className={`h-3 w-3 shrink-0 ${chatSort === o.key ? "opacity-100" : "opacity-0"}`} />
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A sidebar chat row — opens the chat; a ⋯ menu renames, moves, or deletes it. */
 // AT — paginated chat list. Avoids rendering 500 DOM nodes for users with
 // very long histories. First 50 render eagerly; "Show N more" button
@@ -116,33 +180,33 @@ function ChatListBody({
   activeChatId,
   workspaces,
   closeMobileNav,
-  onReorder,
 }: {
   chats: Chat[];
   activeChatId: string | null;
   workspaces: Workspace[] | undefined;
   closeMobileNav: () => void;
-  onReorder: (reordered: Chat[], movedId: string, toIndex: number) => void;
 }) {
   const { t } = useT();
   const PAGE = 50;
   const [shown, setShown] = useState(PAGE);
+  // Rows animate on add / remove and glide to new positions when the sort
+  // mode changes. (Chats are intentionally not drag-reorderable.)
+  const [listRef] = useAutoAnimate<HTMLDivElement>();
   const visible = chats.slice(0, shown);
   const remaining = chats.length - visible.length;
   return (
     <>
-      <SortableList items={visible} getId={(c) => c.id} onReorder={onReorder}>
+      <div ref={listRef}>
         {visible.map((chat) => (
-          <SortableItem key={chat.id} id={chat.id}>
-            <ChatRow
-              chat={chat}
-              active={activeChatId === chat.id}
-              workspaces={workspaces}
-              closeMobileNav={closeMobileNav}
-            />
-          </SortableItem>
+          <ChatRow
+            key={chat.id}
+            chat={chat}
+            active={activeChatId === chat.id}
+            workspaces={workspaces}
+            closeMobileNav={closeMobileNav}
+          />
         ))}
-      </SortableList>
+      </div>
       {remaining > 0 && (
         <button
           type="button"
@@ -349,6 +413,7 @@ export function AppShell({ children }: AppShellProps) {
     setTutorialOpen,
     sidebarWidth,
     setSidebarWidth,
+    chatSort,
   } = useUIStore();
 
   // Drag the sidebar↔main divider to resize (desktop). Tracked on window so the
@@ -378,33 +443,24 @@ export function AppShell({ children }: AppShellProps) {
   const logout = useLogout();
   const deleteWorkspace = useDeleteWorkspace();
   const updateWorkspace = useUpdateWorkspace();
-  const updateChat = useUpdateChat();
   const deleteEmptyChats = useDeleteEmptyChats();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useT();
 
-  // Drag-to-reorder. Compute the moved item's new sort_order (a midpoint of its
-  // displayed neighbours, so one write), then optimistically set it in the FULL
-  // cache and re-sort by the SAME COALESCE(sort_order, -epoch) the server uses —
-  // so a paginated/filtered sub-list reorders without dropping the rest. The
-  // mutation's success refetch confirms the identical order.
+  // Workspaces stay manually orderable by drag. Compute the moved item's new
+  // sort_order (a midpoint of its neighbours, so one write), then optimistically
+  // set it in the FULL cache and re-sort by the SAME COALESCE(sort_order, -epoch)
+  // the server uses. The mutation's success refetch confirms the identical order.
+  // (Chats are not drag-reorderable — they sort by recency/name; see chatSort.)
   const wsEff = (w: Workspace) => w.sortOrder ?? -(Date.parse(w.createdAt) / 1000);
-  const chatEff = (c: Chat) => c.sortOrder ?? -(Date.parse(c.updatedAt) / 1000);
   const reorderWorkspaces = (reordered: Workspace[], movedId: string, toIndex: number) => {
     const sortOrder = midpointSortOrder(reordered, toIndex, wsEff);
     qc.setQueryData<Workspace[]>(qk.workspaces, (old) =>
       old ? [...old.map((w) => (w.id === movedId ? { ...w, sortOrder } : w))].sort((a, b) => wsEff(a) - wsEff(b)) : old,
     );
     updateWorkspace.mutate({ id: movedId, input: { sortOrder } });
-  };
-  const reorderChats = (reordered: Chat[], movedId: string, toIndex: number) => {
-    const sortOrder = midpointSortOrder(reordered, toIndex, chatEff);
-    qc.setQueryData<Chat[]>(["chats"], (old) =>
-      old ? [...old.map((c) => (c.id === movedId ? { ...c, sortOrder } : c))].sort((a, b) => chatEff(a) - chatEff(b)) : old,
-    );
-    updateChat.mutate({ id: movedId, input: { sortOrder } });
   };
 
   // AU — Auto-cleanup empty chats older than 24h on app mount. Silent
@@ -467,8 +523,18 @@ export function AppShell({ children }: AppShellProps) {
         byWs.set(chat.workspaceId, list);
       }
     }
+    // Order by the chosen mode (chats aren't manually reorderable). "name" is
+    // locale-aware so Korean and English titles interleave sensibly; "recent"
+    // is newest-activity-first.
+    const cmp =
+      chatSort === "name"
+        ? (a: Chat, b: Chat) =>
+            (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base", numeric: true })
+        : (a: Chat, b: Chat) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
+    global.sort(cmp);
+    for (const list of byWs.values()) list.sort(cmp);
     return { globalChats: global, chatsByWorkspace: byWs };
-  }, [chats]);
+  }, [chats, chatSort]);
 
   // Show a workspace's nested chats when the user is anywhere inside that
   // workspace (overview, scripts, or one of its chats).
@@ -959,6 +1025,7 @@ export function AppShell({ children }: AppShellProps) {
               <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
                 {t("nav.chats")}
               </span>
+              {globalChats && globalChats.length > 1 && <ChatSortControl />}
             </div>
             {globalChats && globalChats.length > 0 ? (
               <ChatListBody
@@ -966,7 +1033,6 @@ export function AppShell({ children }: AppShellProps) {
                 activeChatId={activeChatId}
                 workspaces={workspaces}
                 closeMobileNav={() => setMobileNavOpen(false)}
-                onReorder={reorderChats}
               />
             ) : (
               <p className="px-2 py-1.5 text-xs text-muted-foreground">
