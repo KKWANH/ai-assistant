@@ -338,6 +338,22 @@ export async function buildChatContext(
   //     every turn.
   // `system` directly precedes `prompt`, so the concatenated text the model
   // receives is byte-identical to the previous single-prompt layout.
+  // Rubric-grounded review guidance. A review/critique is an open-ended writing
+  // task with no automatic checker — the area where a model most easily invents
+  // plausible-but-unsupported criticism. The fix is an EXTERNAL anchor: a fixed
+  // rubric for structure plus a hard requirement to ground every point in a
+  // quoted passage. (Grounded single-pass review beats ungrounded self-critique,
+  // which can DEGRADE quality — arXiv:2310.01798.) The instruction is conditional
+  // ("when the user asks you to review…"), so it's inert for ordinary chat — the
+  // model only applies it when the task is actually a review.
+  const reviewGuidance =
+    " When the user asks you to review, critique, assess, or evaluate a document, paper, or piece of work: " +
+    "organise the assessment by clear dimensions (for academic work — contribution & originality, method & " +
+    "rigour, argumentation & evidence, engagement with prior work, structure & clarity, limitations). Ground " +
+    "EVERY point in a specific quoted passage or named section of the source — quote it. Never raise an issue " +
+    "the text does not actually contain; if you cannot locate support for a point, say so rather than inventing " +
+    "it. Separate major issues from minor ones, give strengths alongside weaknesses, and make each criticism " +
+    "actionable (what concretely would fix it). Be calibrated and specific, not generic.";
   const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
@@ -346,7 +362,8 @@ export async function buildChatContext(
     "suggest running the appropriate Template. " +
     "Always reply in the same language the user writes in. " +
     "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
-    "and do not add bracketed citation markers like [1].";
+    "and do not add bracketed citation markers like [1]." +
+    reviewGuidance;
 
   const stableBlocks = [workspaceMetaBlock, projectContextBlock, memoryBlock].filter(
     (s): s is string => !!s,
