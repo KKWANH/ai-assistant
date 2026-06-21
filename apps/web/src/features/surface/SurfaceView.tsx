@@ -200,6 +200,12 @@ async function handleBridgeRequest(
       return res;
     }
 
+    case "searchSymbols": {
+      const [query, max] = args as [string, number?];
+      const res = await api.searchSymbols(query ?? "", max ?? 7);
+      return res.matches;
+    }
+
     case "getFxRates": {
       const [base, currencies] = args as [string, string[]];
       const res = await api.getFxRates(base ?? "USD", currencies ?? []);

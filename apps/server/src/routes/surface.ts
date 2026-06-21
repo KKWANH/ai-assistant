@@ -25,7 +25,7 @@ import {
   surfaceTsxPath,
 } from "../ariadneFolder.js";
 import { buildSurface } from "../services/surfaceBuild.js";
-import { stageEdit } from "../services/stagedEdits.js";
+import { stageEdit, applyStagedEdits } from "../services/stagedEdits.js";
 import { dbInsertRun, dbListRuns, dbGetLatestSnapshot } from "../db/repo.js";
 import { retrieveRelevantChunks } from "../services/retrieval.js";
 import { makeDateRunId } from "../runs/engine.js";
@@ -642,10 +642,24 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
           before,
           after: content,
         });
+        // Lightweight UI-pref files (watchlist, recurring-buy plans, todo
+        // check state) auto-apply so surface toggles persist instantly without
+        // a manual Apply. Financial data (positions CSV, etc.) still routes
+        // through the review/Apply flow.
+        let applied = false;
+        if (/(^|\/)targets\/(watch|sparplan|todos)\.json$/.test(relPath)) {
+          try {
+            await applyStagedEdits(workspace.id, runId, [relPath], req.accessContext === "local");
+            applied = true;
+          } catch {
+            // Best-effort — fall back to the normal staged-review flow.
+          }
+        }
         return reply.send({
           runId,
           added: stats.added,
           removed: stats.removed,
+          applied,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

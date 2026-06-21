@@ -137,6 +137,9 @@ export interface AriadneSDK {
    *  render an 'unquotable' badge on the positions whose symbols
    *  Yahoo (and any fallback provider) couldn't price. */
   getQuotesDetailed(symbols: string[]): Promise<{ quotes: Quote[]; errors: QuoteError[] }>;
+  /** AS — Search listings by name (no LLM). Resolves a typed name
+   *  ("삼성전자", "broadcom") to real symbols. Returns up to `max` matches. */
+  searchSymbols(query: string, max?: number): Promise<Array<{ symbol: string; name: string; exchange: string; type: string }>>;
   /** Live FX rates relative to `base` — units of base per 1 unit of each currency. */
   getFxRates(base: string, currencies: string[]): Promise<Record<string, number>>;
   /** AQ — Historical close prices for a single symbol. Used for benchmark
@@ -232,6 +235,8 @@ export function useAriadne(): AriadneSDK {
     getQuotes: (symbols: string[]) => callHost<Quote[]>("getQuotes", [symbols]),
     getQuotesDetailed: (symbols: string[]) =>
       callHost<{ quotes: Quote[]; errors: QuoteError[] }>("getQuotesDetailed", [symbols]),
+    searchSymbols: (query: string, max?: number) =>
+      callHost<Array<{ symbol: string; name: string; exchange: string; type: string }>>("searchSymbols", [query, max]),
     getFxRates: (base: string, currencies: string[]) =>
       callHost<Record<string, number>>("getFxRates", [base, currencies]),
     getQuoteHistory: (symbol: string, range?: string, interval?: string) =>

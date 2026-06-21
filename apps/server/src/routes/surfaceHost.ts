@@ -125,6 +125,7 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
         getRun: function (id) { return call('getRun', [id]); },
         getQuotes: function (symbols) { return call('getQuotes', [symbols]); },
         getQuotesDetailed: function (symbols) { return call('getQuotesDetailed', [symbols]); },
+        searchSymbols: function (query, max) { return call('searchSymbols', [query, max]); },
         getFxRates: function (base, currencies) { return call('getFxRates', [base, currencies]); },
         getTheme: function () { return Promise.resolve(window.__ariadneTheme); },
       };
