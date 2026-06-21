@@ -39,6 +39,15 @@ id_rsa
 id_rsa.*
 *.secret
 
+# private / local-only docs — internal notes, financial data, AI session
+# instructions. Untracked today; ignore so `git add -A` can't leak them on a
+# public push. Un-ignore individually if you decide to publish one.
+/CLAUDE.md
+/FEATURE_CHECKLIST.md
+/LECTURE_PREP_DESIGN.md
+/docs/REPORTED_ISSUES.md
+/자산.md
+
 # os
 .DS_Store
 

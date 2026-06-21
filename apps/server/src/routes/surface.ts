@@ -29,7 +29,8 @@ import { stageEdit, applyStagedEdits } from "../services/stagedEdits.js";
 import { dbInsertRun, dbListRuns, dbGetLatestSnapshot } from "../db/repo.js";
 import { retrieveRelevantChunks } from "../services/retrieval.js";
 import { makeDateRunId } from "../runs/engine.js";
-import { requireWorkspace, rejectRemoteAccess } from "./workspaceGuard.js";
+import { requireWorkspace, rejectRemoteAccess, isOwnerOrAdmin } from "./workspaceGuard.js";
+import { checkSensitive } from "../security/sensitive.js";
 import { getActiveSettings } from "../config.js";
 import { getProvider } from "../providers/index.js";
 import { resolveOllamaModel } from "../services/ollamaModels.js";
@@ -413,6 +414,13 @@ export async function surfaceRoutes(app: FastifyInstance): Promise<void> {
       if (!resolved.startsWith(path.resolve(workspace.rootPath) + path.sep) &&
           resolved !== path.resolve(workspace.rootPath)) {
         return reply.status(403).send({ error: "Path traversal not allowed" });
+      }
+
+      // Defense-in-depth: a workspace may be public (viewable by guests), but its
+      // SENSITIVE files must not be served to non-owners. Owner/admin still read
+      // everything; a viewer of a public workspace is blocked from sensitive paths.
+      if (checkSensitive(relPath) && !isOwnerOrAdmin(workspace.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden", detail: "This file is marked sensitive." });
       }
 
       if (!fs.existsSync(resolved)) {
