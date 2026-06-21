@@ -537,15 +537,26 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
           type: "status",
           text: accountLocale?.startsWith("ko") ? "초안을 검토·수정하는 중…" : "Critiquing and revising…",
         });
-        await answerProvider.completeStream(
-          {
-            system: contextResult.system + RIGOROUS_REVISE_GUIDANCE,
-            prompt: contextResult.prompt + `\n\n--- Draft answer to critique and improve ---\n${draft.text}`,
-            signal: controller.signal,
-          },
-          (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
-          (status) => { emit({ type: "status", text: status }); },
-        );
+        try {
+          await answerProvider.completeStream(
+            {
+              system: contextResult.system + RIGOROUS_REVISE_GUIDANCE,
+              prompt: contextResult.prompt + `\n\n--- Draft answer to critique and improve ---\n${draft.text}`,
+              signal: controller.signal,
+            },
+            (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+            (status) => { emit({ type: "status", text: status }); },
+          );
+        } catch (err) {
+          // Abort propagates to the outer handler. For any OTHER revise failure,
+          // fall back to the already-produced (and already-billed) draft rather
+          // than discarding it for a generic error message.
+          if (controller.signal.aborted) throw err;
+          if (!assistantContent.trim()) {
+            assistantContent = draft.text;
+            emit({ type: "delta", text: assistantContent });
+          }
+        }
       } else {
         await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },

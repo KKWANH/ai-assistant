@@ -188,7 +188,7 @@ export function useTemplate(id: string) {
 }
 
 // ── Runs ──────────────────────────────────────────────────────────────────────
-export function useRuns(workspaceId?: string, options?: { refetchInterval?: number }) {
+export function useRuns(workspaceId?: string, options?: { refetchInterval?: number | false }) {
   return useQuery({
     queryKey: qk.runs(workspaceId),
     queryFn: () => api.getRuns(workspaceId),

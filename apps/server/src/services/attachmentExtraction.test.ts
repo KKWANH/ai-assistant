@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractRelevantWithinBudget } from "./retrieval.js";
+import { extractRelevantWithinBudget, extractRelevantWithinBudgetSemantic } from "./retrieval.js";
 
 // A long document whose relevant passage sits PAST the budget cutoff — exactly
 // the case where head-truncation keeps the front matter and loses the answer.
@@ -30,4 +30,24 @@ test("empty query → falls back to head-truncation (nothing to rank against)", 
 
 test("no query term occurs anywhere → falls back to head-truncation", () => {
   assert.equal(extractRelevantWithinBudget(doc, "platypus", BUDGET), doc.slice(0, BUDGET));
+});
+
+// Semantic extractor guards (all return null BEFORE any embedder call, so the
+// caller falls back to the instant keyword extractor — no hot-path embed storm).
+test("semantic: whitespace query → null (→ keyword fallback)", async () => {
+  assert.equal(await extractRelevantWithinBudgetSemantic(doc, "   ", BUDGET), null);
+});
+
+test("semantic: document fits the budget → null (no extraction needed)", async () => {
+  assert.equal(await extractRelevantWithinBudgetSemantic("short note", "query", 1000), null);
+});
+
+test("semantic: very large document → null (caps embedding work)", async () => {
+  // > SEMANTIC_MAX_CHUNKS chunks; the cap returns null before touching the
+  // embedder, so a huge attachment never triggers hundreds of sequential embeds.
+  const huge = Array.from({ length: 150 }, (_, i) =>
+    `Section ${i.toString()}: ` +
+    "filler sentence with several words to occupy roughly one chunk of space. ".repeat(12),
+  ).join("\n\n");
+  assert.equal(await extractRelevantWithinBudgetSemantic(huge, "anything specific", 3000), null);
 });

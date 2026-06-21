@@ -56,6 +56,14 @@ const DEFAULT_TOP_K = 6;
  *  the final top-k slice. Wide enough to give the rerank something to reorder,
  *  bounded so the rerank prompt stays cheap. */
 const RERANK_POOL = 20;
+/** Cap the semantic attachment extractor's embedding work on the chat hot path
+ *  — above this chunk count it returns null and the caller falls back to the
+ *  INSTANT keyword extractor instead of hundreds of sequential local embeds. */
+const SEMANTIC_MAX_CHUNKS = 80;
+/** RRF weight for per-file summary rows (chunk_index = -1). < 1 so a summary
+ *  doesn't crowd out precise leaf chunks on a specific question, while still
+ *  ranking for holistic queries where it matches across many terms. */
+const SUMMARY_RRF_WEIGHT = 0.6;
 
 // Stop-words pulled out before scoring — tiny, language-agnostic list. Keeps
 // CJK terms intact (Korean particles like 은/는 aren't tokens here anyway —
@@ -508,11 +516,18 @@ export async function extractRelevantWithinBudgetSemantic(
   budget: number,
 ): Promise<string | null> {
   if (text.length <= budget) return null;
-  const provider = await getEmbeddingProvider();
-  if (!provider) return null;
+  // No usable query terms → nothing to rank semantically; fall back to the
+  // keyword/head-truncation path (mirrors the keyword extractor's guard).
+  if (tokenize(query).length === 0) return null;
 
   const chunks = chunkText(text, CHUNK_CHARS);
-  if (chunks.length === 0) return null;
+  // Bound the embedding work on the chat hot path: a very large document would
+  // mean hundreds of sequential local embeds before the answer can stream. Above
+  // the cap (or with nothing to chunk), fall back to the instant keyword extractor.
+  if (chunks.length === 0 || chunks.length > SEMANTIC_MAX_CHUNKS) return null;
+
+  const provider = await getEmbeddingProvider();
+  if (!provider) return null;
 
   let queryVec: Float32Array;
   let vectors: number[][];
@@ -1174,7 +1189,10 @@ async function retrieveByHybridMeta(
   const fullRanked = Array.from(rrf.entries())
     .map(([key, score]) => {
       const chunk = chunkData.get(key)!;
-      return { ...chunk, score };
+      // Demote per-file summary rows (chunk_index = -1) so they don't crowd out
+      // precise leaf chunks on a specific question; they still rank for holistic
+      // queries where they match across many terms.
+      return { ...chunk, score: key.endsWith("#-1") ? score * SUMMARY_RRF_WEIGHT : score };
     })
     .sort((a, b) => b.score - a.score);
 

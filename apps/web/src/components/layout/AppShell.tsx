@@ -447,7 +447,10 @@ export function AppShell({ children }: AppShellProps) {
   };
 
   const { data: workspaces } = useWorkspaces();
-  const { data: allRuns } = useRuns(undefined, { refetchInterval: 5000 });
+  // Poll the runs list only while the side panel is open — the toggle spinner
+  // doesn't justify an app-wide heartbeat on every screen. (The Activity tab
+  // itself polls at 3s when mounted; same query key, so it just runs faster.)
+  const { data: allRuns } = useRuns(undefined, { refetchInterval: activityOpen ? 5000 : false });
   const activeRunCount = (allRuns ?? []).filter(
     (r) =>
       r.status === "created" ||

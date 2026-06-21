@@ -29,6 +29,10 @@ const RERANK_MAX_CANDIDATES = 20;
 /** Truncate each passage in the prompt — the model needs enough to judge
  *  relevance, not the whole chunk. ~150 tokens is plenty for a verdict. */
 const RERANK_PASSAGE_CHARS = 600;
+/** Hard timeout for the rerank call. For a hosted answer-provider (including an
+ *  escalated one) `noThink` is a no-op, so a slow rerank could block the visible
+ *  answer; on timeout the catch below fails safe to the original retrieval order. */
+const RERANK_TIMEOUT_MS = 4000;
 
 /**
  * Build a reranker bound to one provider. The returned function matches the
@@ -71,6 +75,7 @@ export function makeReranker(provider: AiProvider): RerankFn {
         // Reranking is a judgement, not a reasoning task — skip qwen3's <think>
         // block so this stays a fast single call rather than 15–60s.
         noThink: true,
+        signal: AbortSignal.timeout(RERANK_TIMEOUT_MS),
       });
       text = res.text;
     } catch {

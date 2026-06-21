@@ -1,8 +1,10 @@
 /**
  * Code tab — a lightweight read-only file viewer for the active workspace.
- * Lists non-sensitive files; selecting one fetches its content and shows it in a
- * monospace pane, with a link to the full CodeMirror editor for highlighting +
- * editing. Sensitive files are never listed.
+ * Lists the workspace's NON-sensitive files (a client-side filter, matching the
+ * file picker/editor); selecting one fetches its content and shows it in a
+ * monospace pane, with a link to the full CodeMirror editor. (The read endpoint
+ * itself isn't sensitivity-gated server-side — same as the existing editor —
+ * so this filter is a UI convenience, not a hard boundary.)
  */
 import { useState } from "react";
 import { Link } from "react-router-dom";

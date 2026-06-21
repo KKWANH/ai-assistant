@@ -4,8 +4,9 @@ import type { Settings } from "@ariadne/shared";
 import { resolveEscalation } from "../config.js";
 
 // resolveEscalation only reads provider + model off the settings, so a minimal
-// stand-in is enough to exercise the local + premium-guard branches (the cloud
-// branch delegates to resolveTierSettings, which depends on configured keys).
+// stand-in is enough. The cloud branch now resolves the strong rung of the
+// user's OWN provider via pickTierModel (registry-only, no configured keys),
+// so it's testable here too.
 const S = (provider: string, model: string): Settings =>
   ({ provider, model } as unknown as Settings);
 
@@ -32,4 +33,17 @@ test("local user already on the biggest local model → no escalation", () => {
 
 test("a premium model is never escalated, even on a hard task", () => {
   assert.equal(resolveEscalation(S("anthropic", "claude-opus-4-7"), true, INSTALLED), null);
+});
+
+test("cloud user escalates WITHIN their own provider — never cross-vendor (privacy)", () => {
+  // An Anthropic user on a low-tier model escalates to Anthropic's strong rung,
+  // NOT to some other configured vendor — their data stays with the vendor they
+  // picked. (Regression guard for the cross-vendor escalation bug.)
+  const esc = resolveEscalation(S("anthropic", "claude-haiku-4-5"), true, []);
+  assert.equal(esc?.provider, "anthropic");
+});
+
+test("no escalation when the provider's strong rung equals the current model", () => {
+  // claude-sonnet-4-6 IS Anthropic's resolvable strong rung → nothing higher.
+  assert.equal(resolveEscalation(S("anthropic", "claude-sonnet-4-6"), true, []), null);
 });

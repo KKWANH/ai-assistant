@@ -158,11 +158,18 @@ function localParamSize(model: string): number {
  *   - Local (Ollama) user → escalate WITHIN local to the biggest installed model
  *     (free, private). Never auto-jumps a local user onto a paid cloud model
  *     they didn't pick for chat.
- *   - Cheaper cloud user → escalate to the strong cloud rung (frontier-strong),
- *     when that's a genuine upgrade (not a degrade-to-local, not the same model).
+ *   - Cheaper cloud user → escalate to the strong rung of THEIR OWN provider
+ *     (NEVER cross-vendor — a key for a different vendor must not silently
+ *     receive their chat data), and only when the registry rates it no lower.
  *   - Nothing genuinely stronger available → null.
  * `installedLocal` is the list from listOllamaModels() (pass [] off the hot path).
  */
+/** Coarse capability rank from the registry's costTier (low<mid<premium). */
+function costRank(provider: ProviderId, model: string): number {
+  const tier = PROVIDER_REGISTRY[provider].models.find((m) => m.id === model)?.costTier;
+  return tier === "premium" ? 2 : tier === "mid" ? 1 : 0;
+}
+
 export function resolveEscalation(
   current: Settings,
   hard: boolean,
@@ -186,13 +193,14 @@ export function resolveEscalation(
       : null;
   }
 
-  // Cheaper cloud user → the strong cloud rung, when it's a real upgrade.
-  const strong = resolveTierSettings("frontier-strong");
-  if (strong.provider === current.provider && strong.model === current.model) return null;
-  // frontier-strong degrades to local with no cloud key — don't push a cloud
-  // user down onto a local model and call it an escalation.
-  if (PROVIDER_REGISTRY[strong.provider].local) return null;
-  return { provider: strong.provider, model: strong.model };
+  // Cloud user → the strong rung of THEIR OWN provider. Never cross-vendor: a
+  // configured key for a different vendor must not silently receive their chat
+  // data (the invariant getTriageSettings also protects). And only when the
+  // registry rates the target no lower — otherwise it isn't an escalation.
+  const strongModel = pickTierModel(current.provider, "strong");
+  if (strongModel === current.model) return null;
+  if (costRank(current.provider, strongModel) < costRank(current.provider, current.model)) return null;
+  return { provider: current.provider, model: strongModel };
 }
 
 export function saveSettings(provider: ProviderId, model: string): Settings {
