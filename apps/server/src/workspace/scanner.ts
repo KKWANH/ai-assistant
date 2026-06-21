@@ -119,7 +119,39 @@ export async function scanWorkspace(workspace: Workspace): Promise<Snapshot> {
       }
       try {
         const { indexWorkspaceEmbeddings } = await import("../services/retrieval.js");
-        const result = await indexWorkspaceEmbeddings(workspace.id, workspace.rootPath, files);
+        // RAPTOR-lite: build a cheap LOCAL summarizer (free, private) so large
+        // files also get a file-level summary indexed for holistic questions.
+        // Skipped when no local chat model is installed (embedding-only setups);
+        // never uses a paid cloud model for bulk indexing.
+        let summarize: ((path: string, text: string) => Promise<string | null>) | undefined;
+        try {
+          const { listOllamaModels, resolveOllamaModel } = await import("../services/ollamaModels.js");
+          const installed = await listOllamaModels().catch(() => []);
+          const chatModels = installed.filter((m) => !/embed/i.test(m));
+          if (chatModels.length > 0) {
+            const { DEFAULT_MODELS } = await import("@ariadne/shared");
+            const { getProvider } = await import("../providers/index.js");
+            const model = await resolveOllamaModel(DEFAULT_MODELS.ollama);
+            const provider = await getProvider({ provider: "ollama", model });
+            summarize = async (path, text) => {
+              try {
+                const { text: out } = await provider.complete({
+                  system:
+                    "Summarise the file's purpose and key contents in 3-5 concrete sentences for a " +
+                    "search index — what it is, what it does, its main entities/sections. No preamble.",
+                  prompt: `File: ${path}\n\n${text.slice(0, 8000)}`,
+                  noThink: true,
+                });
+                return out.trim() || null;
+              } catch {
+                return null;
+              }
+            };
+          }
+        } catch {
+          /* no local summarizer available — leaf-chunk indexing only */
+        }
+        const result = await indexWorkspaceEmbeddings(workspace.id, workspace.rootPath, files, summarize);
         if (result.indexed > 0) {
           logger.info(
             { workspaceId: workspace.id, indexed: result.indexed, provider: result.provider },

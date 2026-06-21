@@ -728,6 +728,11 @@ export async function indexWorkspaceEmbeddings(
   workspaceId: string,
   rootPath: string,
   files: FileMeta[],
+  /** Optional per-file summarizer (built from a cheap/local model by the caller).
+   *  When present, large changed files also get a file-level summary indexed as a
+   *  retrievable unit (RAPTOR-lite) so holistic cross-file questions have
+   *  something to match. Absent → leaf-chunk indexing only, unchanged. */
+  summarize?: (path: string, text: string) => Promise<string | null>,
 ): Promise<{
   indexed: number;
   provider: string | null;
@@ -819,6 +824,35 @@ export async function indexWorkspaceEmbeddings(
     chunks.forEach((chunk, idx) => {
       allChunks.push({ path: p.path, chunk, index: idx, mtime: p.mtime, hash: p.hash });
     });
+  }
+
+  // RAPTOR-lite: a per-file summary as an extra retrievable unit (chunk_index
+  // -1). Leaf chunks answer specific questions well, but a holistic "what is
+  // this codebase / these notes about?" has no single chunk to match — the
+  // summary gives it one. Bounded + best-effort: only files big enough that a
+  // leaf chunk can't represent them, only the largest few per pass (so a huge
+  // workspace's first index stays cheap), and a failed/slow summary just means
+  // no summary row — leaf chunks are unchanged. Embedded + stored alongside the
+  // real chunks below, so it rides the same incremental + hybrid-retrieval path.
+  if (summarize) {
+    const SUMMARY_MIN_CHARS = 2_000;
+    const SUMMARY_MAX_FILES = 15;
+    const bigFiles = pendingForEmbed
+      .filter((p) => p.text.length >= SUMMARY_MIN_CHARS)
+      .sort((a, b) => b.text.length - a.text.length)
+      .slice(0, SUMMARY_MAX_FILES);
+    for (const p of bigFiles) {
+      const summary = await summarize(p.path, p.text).catch(() => null);
+      if (summary && summary.trim()) {
+        allChunks.push({
+          path: p.path,
+          chunk: `[File summary] ${p.path}\n${summary.trim()}`,
+          index: -1,
+          mtime: p.mtime,
+          hash: p.hash,
+        });
+      }
+    }
   }
 
   if (allChunks.length === 0) {
