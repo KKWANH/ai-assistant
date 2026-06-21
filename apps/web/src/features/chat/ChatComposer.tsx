@@ -85,7 +85,7 @@ export type WebSearchMode = "off" | "auto" | "on";
  *    - "deep" → decompose into 2–4 parallel sub-agents, then synthesize a
  *      merged answer. Costliest; for broad research / audit tasks.
  *      (server: agentMode="deep") */
-export type ReplyMode = "instant" | "auto" | "agent" | "deep";
+export type ReplyMode = "instant" | "auto" | "rigorous" | "agent" | "deep";
 /** Legacy alias kept so older callers that destructure {agentMode}
  *  from onSend still compile. New code should use ReplyMode. */
 export type AgentMode = "off" | "auto" | "on";
@@ -1106,6 +1106,7 @@ export function ChatComposer({
                 options={[
                   { value: "instant", label: t("chat.composer.replyMode.instant") },
                   { value: "auto", label: t("chat.composer.replyMode.auto") },
+                  { value: "rigorous", label: t("chat.composer.replyMode.rigorous") },
                   { value: "agent", label: t("chat.composer.replyMode.agent") },
                   { value: "deep", label: t("chat.composer.replyMode.deep") },
                 ]}

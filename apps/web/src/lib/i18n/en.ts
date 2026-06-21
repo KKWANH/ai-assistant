@@ -1286,6 +1286,7 @@ const en = {
   "chat.composer.replyModeTip.simple": "Instant: direct answer. Auto: handles it for you. Agent: takes longer but works through it step by step. Deep: splits into parallel sub-agents for broad research.",
   "chat.composer.replyMode.instant": "Instant",
   "chat.composer.replyMode.auto": "Auto",
+  "chat.composer.replyMode.rigorous": "Rigorous",
   "chat.composer.replyMode.agent": "Agent",
   "chat.composer.replyMode.deep": "Deep",
 

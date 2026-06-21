@@ -1288,6 +1288,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.replyModeTip.simple": "즉답: 바로 답. 자동: 알아서 처리. Agent: 시간이 걸려도 꼼꼼히 처리. 심층: 여러 갈래로 나눠 병렬 조사.",
   "chat.composer.replyMode.instant": "즉답",
   "chat.composer.replyMode.auto": "자동",
+  "chat.composer.replyMode.rigorous": "정밀",
   "chat.composer.replyMode.agent": "Agent",
   "chat.composer.replyMode.deep": "심층",
 

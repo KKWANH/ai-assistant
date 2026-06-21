@@ -431,7 +431,7 @@ export function ThreadView({ chatId }: { chatId: string }) {
       // Map the single-axis ReplyMode back to the server's (mode, agentMode)
       // pair. The composer surface stays clean; the API contract stays
       // backwards-compatible.
-      const apiMode = opts.replyMode === "instant" ? "instant" : undefined;
+      const apiMode = opts.replyMode === "instant" ? "instant" : opts.replyMode === "rigorous" ? "rigorous" : undefined;
       const apiAgentMode =
         opts.replyMode === "deep" ? "deep" :
         opts.replyMode === "agent" ? "on" :
@@ -576,7 +576,7 @@ export function ChatView() {
       // Navigate immediately so user sees the thread
       navigate(`/chat/${chat.id}`, { replace: true });
 
-      const apiMode = opts.replyMode === "instant" ? "instant" : undefined;
+      const apiMode = opts.replyMode === "instant" ? "instant" : opts.replyMode === "rigorous" ? "rigorous" : undefined;
       const apiAgentMode =
         opts.replyMode === "deep" ? "deep" :
         opts.replyMode === "agent" ? "on" :

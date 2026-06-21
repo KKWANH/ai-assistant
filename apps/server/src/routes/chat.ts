@@ -79,6 +79,16 @@ function autoTitle(content: string): string {
   return trimmed.length <= 40 ? trimmed : trimmed.slice(0, 40) + "…";
 }
 
+/** Appended to the system prompt for the revision pass of "rigorous" mode. The
+ *  draft is anchored in the SAME context the answer saw, so this is GROUNDED
+ *  review, not blind self-correction (which can degrade quality — 2310.01798). */
+const RIGOROUS_REVISE_GUIDANCE =
+  " You are now revising YOUR OWN draft answer, shown at the end of the prompt. First, silently " +
+  "critique it: factual errors, claims not supported by the context above, missing steps or gaps, " +
+  "weak reasoning, vagueness. Then output ONLY the improved final answer that fixes those issues — " +
+  "do not show the critique, do not say it is a revision, do not apologise. Keep what was already " +
+  "correct, ground every claim in the provided context, and reply in the user's language.";
+
 /** Plain-language message when the active provider has no API key. */
 function noProviderKeyMessage(provider: ProviderId, locale: string | undefined): string {
   const label = PROVIDER_LABELS[provider];
@@ -134,8 +144,9 @@ interface StreamReplyOptions {
   /** boolean for legacy callers; tri-state for explicit auto-classifier opt-in. */
   agentMode: boolean | "off" | "auto" | "on" | "deep";
   /** "instant" = skip every classifier/retrieval/memory step, just stream
-   *  the direct provider answer. "standard" = full pipeline. */
-  mode: "standard" | "instant";
+   *  the direct provider answer. "standard" = full pipeline. "rigorous" =
+   *  full pipeline + a draft→grounded-critique→revise pass. */
+  mode: "standard" | "instant" | "rigorous";
   /** Used for locale + saved profile context. */
   accountLocale: string | undefined;
   accountContext: string | undefined;
@@ -498,7 +509,10 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     }
     contextSearchResults = contextResult.searchResults;
 
-    emit({ type: "status", text: "Generating…" });
+    emit({
+      type: "status",
+      text: mode === "rigorous" ? (accountLocale?.startsWith("ko") ? "초안 작성 중…" : "Drafting…") : "Generating…",
+    });
     try {
       const hasImages = contextResult.images.length > 0;
       if (hasImages && answerProvider.completeWithImages) {
@@ -510,6 +524,28 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         });
         assistantContent = result.text;
         emit({ type: "delta", text: assistantContent });
+      } else if (mode === "rigorous") {
+        // Two-pass: a draft, then a grounded self-critique + single revision.
+        // Bounded to one revision; the user opted into the extra latency for a
+        // higher-quality answer on analysis / writing / review tasks.
+        const draft = await answerProvider.complete({
+          system: contextResult.system,
+          prompt: contextResult.prompt,
+          signal: controller.signal,
+        });
+        emit({
+          type: "status",
+          text: accountLocale?.startsWith("ko") ? "초안을 검토·수정하는 중…" : "Critiquing and revising…",
+        });
+        await answerProvider.completeStream(
+          {
+            system: contextResult.system + RIGOROUS_REVISE_GUIDANCE,
+            prompt: contextResult.prompt + `\n\n--- Draft answer to critique and improve ---\n${draft.text}`,
+            signal: controller.signal,
+          },
+          (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+          (status) => { emit({ type: "status", text: status }); },
+        );
       } else {
         await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },
@@ -693,7 +729,8 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { content, attachments: rawAttachments, webSearch, agentMode, mode: rawMode } = parsed.data;
-      const mode: "standard" | "instant" = rawMode === "instant" ? "instant" : "standard";
+      const mode: "standard" | "instant" | "rigorous" =
+        rawMode === "instant" ? "instant" : rawMode === "rigorous" ? "rigorous" : "standard";
 
       // Reject if both content is empty and no attachments
       const hasContent = content.trim().length > 0;

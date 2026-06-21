@@ -187,8 +187,11 @@ export const PostMessageSchema = z.object({
    *     definitions, quick one-liners — anything that doesn't need
    *     grounding. When the user picks instant, agentMode/webSearch
    *     fields are ignored by the server.
+   *   - "rigorous": full pipeline on the direct path, then a bounded
+   *     draft → grounded self-critique → revised final pass. Higher
+   *     quality (and latency) for analysis, writing, and review tasks.
    */
-  mode: z.enum(["standard", "instant"]).optional(),
+  mode: z.enum(["standard", "instant", "rigorous"]).optional(),
 });
 export type PostMessageInput = z.infer<typeof PostMessageSchema>;
 
