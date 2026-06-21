@@ -108,6 +108,10 @@ export interface UIStore {
   setInspectorOpen: (open: boolean) => void;
   toggleInspector: () => void;
 
+  // Activity panel — live background tasks (runs), toggled from the top bar.
+  activityOpen: boolean;
+  toggleActivity: () => void;
+
   // Workspace overview: show power tabs/actions. `workspaceAdvanced` is the
   // global default (toggled in Settings); `workspaceAdvancedById` holds
   // per-workspace overrides, persisted so a workspace stays in the view you
@@ -236,6 +240,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
   inspectorOpen: true,
   setInspectorOpen: (open) => set({ inspectorOpen: open }),
   toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
+
+  activityOpen: false,
+  toggleActivity: () => set((s) => ({ activityOpen: !s.activityOpen })),
 
   commandMenuOpen: false,
   setCommandMenuOpen: (open) => set({ commandMenuOpen: open }),

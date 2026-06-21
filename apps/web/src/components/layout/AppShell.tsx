@@ -28,6 +28,8 @@ import {
   FolderOpen,
   Play,
   Settings,
+  Activity,
+  Loader2,
   PanelRight,
   Sun,
   Moon,
@@ -84,6 +86,7 @@ import type { CommandItem } from "../ui/CommandMenu";
 import { FirstRunWizard } from "../../features/onboarding/FirstRunWizard";
 import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
+import { ActivityPanel } from "./ActivityPanel";
 import { isBuiltinWorkspace } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
@@ -410,6 +413,8 @@ export function AppShell({ children }: AppShellProps) {
   const setActiveRunId = useUIStore((s) => s.setActiveRunId);
   const inspectorOpen = useUIStore((s) => s.inspectorOpen);
   const toggleInspector = useUIStore((s) => s.toggleInspector);
+  const activityOpen = useUIStore((s) => s.activityOpen);
+  const toggleActivity = useUIStore((s) => s.toggleActivity);
   const sidebarSection = useUIStore((s) => s.sidebarSection);
   const setSidebarSection = useUIStore((s) => s.setSidebarSection);
   const theme = useUIStore((s) => s.theme);
@@ -442,7 +447,14 @@ export function AppShell({ children }: AppShellProps) {
   };
 
   const { data: workspaces } = useWorkspaces();
-  const { data: allRuns } = useRuns();
+  const { data: allRuns } = useRuns(undefined, { refetchInterval: 5000 });
+  const activeRunCount = (allRuns ?? []).filter(
+    (r) =>
+      r.status === "created" ||
+      r.status === "scanning" ||
+      r.status === "context_pick" ||
+      r.status === "generating",
+  ).length;
   const { data: chats } = useChats();
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
@@ -825,6 +837,21 @@ export function AppShell({ children }: AppShellProps) {
               </span>
             </>
           )}
+          {/* Activity panel toggle — live background tasks; always available ≥lg */}
+          <span className="hidden lg:flex">
+            <IconButton
+              label={t("nav.toggleActivity")}
+              description={t("nav.toggleActivity.desc")}
+              size="sm"
+              onClick={toggleActivity}
+            >
+              {activeRunCount > 0 ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Activity className="h-3.5 w-3.5" />
+              )}
+            </IconButton>
+          </span>
           {/* Inspector toggle — only where it has an effect, ≥lg */}
           {inspectorAvailable && (
             <span className="hidden lg:flex">
@@ -1162,6 +1189,8 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* Right Inspector — contextual; rendered ≥lg */}
         {showInspector && <Inspector />}
+        {/* Activity panel — live background tasks; toggled from the top bar */}
+        {activityOpen && <ActivityPanel />}
       </div>
 
       {/* Command Menu overlay — standard mode only */}
