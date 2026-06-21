@@ -23,7 +23,7 @@ import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { performSearch, fetchUrlText } from "./search.js";
 import { readUpload } from "./uploads.js";
-import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible, extractRelevantWithinBudget, type RerankFn } from "./retrieval.js";
+import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible, extractRelevantWithinBudget, extractRelevantWithinBudgetSemantic, type RerankFn } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 import { getWorkspaceContext, renderContextForPrompt } from "./workspaceContext.js";
 import { loadWorkspaceActions } from "./actions.js";
@@ -157,11 +157,18 @@ export async function buildChatContext(
         const overBudget = text.length > budget;
         // Over budget: don't head-truncate (that keeps the title/TOC and drops
         // the body). Keep the excerpts most relevant to THIS question, in
-        // document order. Within budget: send the whole file unchanged.
-        const capped = overBudget
-          ? extractRelevantWithinBudget(text, userMessage.content, budget) +
-            "\n[...trimmed to the most relevant excerpts — file exceeds the model's context budget...]"
-          : text;
+        // document order — semantic (embedding) ranking when an embedder is
+        // available (catches conceptual matches), else keyword. Within budget:
+        // send the whole file unchanged.
+        let capped = text;
+        if (overBudget) {
+          const extracted =
+            (await extractRelevantWithinBudgetSemantic(text, userMessage.content, budget)) ??
+            extractRelevantWithinBudget(text, userMessage.content, budget);
+          capped =
+            extracted +
+            "\n[...trimmed to the most relevant excerpts — file exceeds the model's context budget...]";
+        }
         // An over-budget file consumes the remaining budget; a fitting one
         // leaves the rest for any later attachments in the same message.
         budget = overBudget ? 0 : Math.max(0, budget - text.length);

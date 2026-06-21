@@ -485,11 +485,67 @@ export function extractRelevantWithinBudget(text: string, query: string, budget:
     index,
     score: scoreChunk(chunk, "", tokens),
   }));
+  return packByScore(scored, budget) ?? text.slice(0, budget);
+}
 
-  // Greedily take the highest-scoring chunks until the next one wouldn't fit.
-  // Stop at the first zero-score chunk: a chunk with no query term adds nothing
-  // but lost-in-the-middle distraction, so we'd rather leave the budget unspent.
-  const kept: typeof scored = [];
+/**
+ * Semantic sibling of extractRelevantWithinBudget: rank the over-budget
+ * document's chunks by EMBEDDING similarity to the query rather than keyword
+ * overlap, then keep the most relevant within budget, in original order. This
+ * catches conceptual matches the keyword version misses — the query's words
+ * needn't literally appear in the relevant passage ("methodological weakness"
+ * surfaces the methods section even if it never uses those words).
+ *
+ * Returns null — so the caller falls back to the keyword extractor — when the
+ * document fits, there's no embedding provider, the embed call fails, or nothing
+ * scored. Reuses the same chunker + cosine as workspace retrieval; embeds the
+ * chunks on the fly (no persistence in v1), so it only runs on the over-budget
+ * path, which is already the heavy/local case.
+ */
+export async function extractRelevantWithinBudgetSemantic(
+  text: string,
+  query: string,
+  budget: number,
+): Promise<string | null> {
+  if (text.length <= budget) return null;
+  const provider = await getEmbeddingProvider();
+  if (!provider) return null;
+
+  const chunks = chunkText(text, CHUNK_CHARS);
+  if (chunks.length === 0) return null;
+
+  let queryVec: Float32Array;
+  let vectors: number[][];
+  try {
+    queryVec = new Float32Array(await provider.embed(query));
+    vectors = await provider.embedMany(chunks);
+  } catch {
+    return null;
+  }
+  const qNorm = vectorNorm(queryVec);
+  if (qNorm === 0) return null;
+
+  const scored = chunks.map((chunk, index) => {
+    const v = vectors[index];
+    const score = v && v.length > 0 ? cosineSimilarity(queryVec, qNorm, new Float32Array(v)) : 0;
+    return { chunk, index, score };
+  });
+  return packByScore(scored, budget);
+}
+
+/**
+ * Greedily keep the highest-scoring chunks within `budget`, then emit them in
+ * ORIGINAL document order (order-preserving — relevance picks what to keep,
+ * position decides the order; OP-RAG arXiv:2409.01666). Stops at the first
+ * non-positive score: a chunk with no relevance signal adds only
+ * lost-in-the-middle distraction, so we'd rather leave the budget unspent.
+ * Returns null when nothing positive scored, so the caller can fall back.
+ */
+function packByScore(
+  scored: { chunk: string; index: number; score: number }[],
+  budget: number,
+): string | null {
+  const kept: { chunk: string; index: number; score: number }[] = [];
   let used = 0;
   for (const c of [...scored].sort((a, b) => b.score - a.score)) {
     if (c.score <= 0) break;
@@ -498,9 +554,7 @@ export function extractRelevantWithinBudget(text: string, query: string, budget:
     kept.push(c);
     used += cost;
   }
-  if (kept.length === 0) return text.slice(0, budget);
-
-  // Emit in original document order (order-preserving).
+  if (kept.length === 0) return null;
   kept.sort((a, b) => a.index - b.index);
   return kept.map((c) => c.chunk).join("\n\n");
 }
