@@ -1,10 +1,7 @@
 /**
- * Activity panel — live background tasks (template / action runs).
- *
- * A right-docked pane, toggled from the top bar, that polls the runs list so
- * in-progress work stays visible alongside chat without navigating away. Active
- * runs sort to the top; clicking a run opens its detail view. This is the first
- * pane of the side-panel; Code and Preview panes are the next stage.
+ * Activity tab — live background tasks (template / action runs). Content-only;
+ * the docking shell + tab bar live in SidePanel. Polls the runs list so
+ * in-progress work stays visible alongside chat. Active runs sort to the top.
  */
 import { useNavigate } from "react-router-dom";
 import { Activity as ActivityIcon, Loader2 } from "lucide-react";
@@ -40,7 +37,7 @@ function relTime(iso: string | null): string {
 export function ActivityPanel() {
   const { t } = useT();
   const navigate = useNavigate();
-  // Poll while the panel is mounted so in-progress runs update live.
+  // Poll while mounted so in-progress runs update live.
   const { data: runs } = useRuns(undefined, { refetchInterval: 3000 });
 
   const sorted = [...(runs ?? [])]
@@ -52,47 +49,40 @@ export function ActivityPanel() {
     .slice(0, 30);
   const activeCount = (runs ?? []).filter(isActive).length;
 
-  return (
-    <aside
-      className="hidden lg:flex flex-col w-72 shrink-0 border-l border-inspector-border bg-inspector overflow-y-auto"
-      aria-label={t("activity.title")}
-    >
-      <div className="h-10 shrink-0 flex items-center gap-2 px-3 border-b border-inspector-border">
-        <ActivityIcon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-xs font-semibold text-foreground">{t("activity.title")}</span>
-        {activeCount > 0 && (
-          <span className="ml-auto inline-flex items-center gap-1 text-2xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {t("activity.running", { n: activeCount })}
-          </span>
-        )}
+  if (sorted.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+        <ActivityIcon className="h-5 w-5 text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">{t("activity.empty")}</p>
       </div>
-      {sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-          <ActivityIcon className="h-5 w-5 text-muted-foreground" />
-          <p className="text-xs text-muted-foreground">{t("activity.empty")}</p>
-        </div>
-      ) : (
-        <div className="flex flex-col">
-          {sorted.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => navigate(`/runs/${r.id}`)}
-              className="flex flex-col gap-1.5 px-3 py-2.5 border-b border-inspector-border text-left hover:bg-foreground/5 transition-colors"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-foreground truncate">{r.templateName}</span>
-                <span className="text-2xs text-muted-foreground shrink-0">{relTime(r.createdAt)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={r.status} dot>{STATUS_LABEL[r.status]}</Badge>
-                <span className="text-2xs text-muted-foreground">{r.kind}</span>
-              </div>
-            </button>
-          ))}
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      {activeCount > 0 && (
+        <div className="flex items-center gap-1 px-3 py-1.5 text-2xs text-muted-foreground border-b border-inspector-border">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {t("activity.running", { n: activeCount })}
         </div>
       )}
-    </aside>
+      {sorted.map((r) => (
+        <button
+          key={r.id}
+          type="button"
+          onClick={() => navigate(`/runs/${r.id}`)}
+          className="flex flex-col gap-1.5 px-3 py-2.5 border-b border-inspector-border text-left hover:bg-foreground/5 transition-colors"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-foreground truncate">{r.templateName}</span>
+            <span className="text-2xs text-muted-foreground shrink-0">{relTime(r.createdAt)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={r.status} dot>{STATUS_LABEL[r.status]}</Badge>
+            <span className="text-2xs text-muted-foreground">{r.kind}</span>
+          </div>
+        </button>
+      ))}
+    </div>
   );
 }

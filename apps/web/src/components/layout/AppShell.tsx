@@ -86,7 +86,7 @@ import type { CommandItem } from "../ui/CommandMenu";
 import { FirstRunWizard } from "../../features/onboarding/FirstRunWizard";
 import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
-import { ActivityPanel } from "./ActivityPanel";
+import { SidePanel } from "./SidePanel";
 import { isBuiltinWorkspace } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
@@ -1189,8 +1189,8 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* Right Inspector — contextual; rendered ≥lg */}
         {showInspector && <Inspector />}
-        {/* Activity panel — live background tasks; toggled from the top bar */}
-        {activityOpen && <ActivityPanel />}
+        {/* Side panel — Activity / Code / Preview; toggled from the top bar */}
+        {activityOpen && <SidePanel />}
       </div>
 
       {/* Command Menu overlay — standard mode only */}
