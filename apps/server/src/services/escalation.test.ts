@@ -47,3 +47,10 @@ test("no escalation when the provider's strong rung equals the current model", (
   // claude-sonnet-4-6 IS Anthropic's resolvable strong rung → nothing higher.
   assert.equal(resolveEscalation(S("anthropic", "claude-sonnet-4-6"), true, []), null);
 });
+
+test("a non-Ollama local provider (vLLM) is never handed an Ollama model", () => {
+  // Regression: vLLM is local:true, but installedLocal is listOllamaModels() — the
+  // local branch must be Ollama-only, or a vLLM user would escalate to a qwen3 tag
+  // their server can't serve. vLLM has no strong rung above its default → null.
+  assert.equal(resolveEscalation(S("vllm", "Qwen/Qwen2.5-7B-Instruct"), true, ["qwen3:8b"]), null);
+});

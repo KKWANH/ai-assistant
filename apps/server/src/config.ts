@@ -181,9 +181,11 @@ export function resolveEscalation(
   const curMeta = PROVIDER_REGISTRY[current.provider].models.find((m) => m.id === current.model);
   if (curMeta?.costTier === "premium") return null;
 
-  // Local user → biggest installed local model (free + private). Respect the
-  // choice to stay local; never escalate them onto a paid cloud model here.
-  if (PROVIDER_REGISTRY[current.provider].local) {
+  // Local user → biggest installed local model (free + private). Ollama-specific:
+  // `installedLocal` is listOllamaModels(), so this only applies to Ollama. Other
+  // local providers (vLLM self-hosted, mock) fall through — escalating them to a
+  // qwen3 Ollama tag under their own provider would be a broken model id.
+  if (current.provider === "ollama") {
     const curSize = localParamSize(current.model);
     const biggest = installedLocal
       .filter((m) => localParamSize(m) > 0)
