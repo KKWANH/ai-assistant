@@ -26,6 +26,9 @@ export interface TriageNeeds {
   images: boolean;
   /** Workspace actions to match the message against (empty = skip). */
   actions: ActionDef[];
+  /** Decide whether the task is hard enough to escalate to a stronger model
+   *  (difficulty-aware routing — direct-answer path). */
+  hard: boolean;
 }
 
 export interface TriageResult {
@@ -38,6 +41,8 @@ export interface TriageResult {
    *  extracted/translated from the message. Empty when images is false. */
   imageQuery: string;
   actionIntent: { actionId: string; actionName: string; reason: string } | null;
+  /** True when the message is a hard reasoning/analysis task worth escalating. */
+  hard: boolean;
 }
 
 const TRIAGE_DEFAULTS: TriageResult = {
@@ -47,6 +52,7 @@ const TRIAGE_DEFAULTS: TriageResult = {
   images: false,
   imageQuery: "",
   actionIntent: null,
+  hard: false,
 };
 
 /** Tidy a title returned as a JSON string field (strip wrapping punctuation, cap length). */
@@ -99,7 +105,8 @@ export async function triage(
   const wantTitle = needs.title && trimmed.length >= 2;
   const wantAction = needs.actions.length > 0 && trimmed.length >= 8;
   const wantImages = needs.images && trimmed.length >= 6;
-  if (!wantAgent && !wantWeb && !wantTitle && !wantAction && !wantImages) return { ...TRIAGE_DEFAULTS };
+  const wantHard = needs.hard && trimmed.length >= 20;
+  if (!wantAgent && !wantWeb && !wantTitle && !wantAction && !wantImages && !wantHard) return { ...TRIAGE_DEFAULTS };
 
   const questions: string[] = [];
   const keys: string[] = [];
@@ -157,6 +164,17 @@ export async function triage(
     );
   }
 
+  if (wantHard) {
+    keys.push("hard");
+    questions.push(
+      '- "hard" (boolean): true ONLY when answering well needs careful multi-step reasoning, rigorous ' +
+        "analysis, or specialised expertise that a small fast model would likely get wrong — intricate " +
+        "math/logic, tricky algorithms or debugging, deep analysis or evaluation of a document or argument, " +
+        "multi-constraint planning. false for everyday questions, lookups, summaries, small talk, " +
+        "translation, and routine writing or coding that a quick answer handles well.",
+    );
+  }
+
   try {
     const { text } = await provider.complete({
       system:
@@ -183,6 +201,7 @@ export async function triage(
           ? (parsed["imageQuery"] as string).trim().slice(0, 200)
           : "";
     }
+    if (wantHard) result.hard = truthy(parsed["hard"]);
     return result;
   } catch {
     return { ...TRIAGE_DEFAULTS };

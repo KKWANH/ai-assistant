@@ -39,7 +39,7 @@ import { getProvider } from "../providers/index.js";
 import { meteringProvider } from "../runs/engine.js";
 import { createAlert } from "../services/alerts.js";
 import { accountOverLimit } from "../services/limits.js";
-import { getActiveSettings, getTriageSettings, isProviderConfigured } from "../config.js";
+import { getActiveSettings, getTriageSettings, isProviderConfigured, resolveEscalation } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import type { AttachmentRef } from "../services/chatContext.js";
@@ -49,7 +49,7 @@ import { runDeepAgent } from "../services/orchestrator.js";
 import { cleanChatStagedTrees } from "../services/attempts.js";
 import { extractAccountContextInBackground } from "../services/accountContext.js";
 import { generateChatTitle, triage, type TriageResult } from "../services/triage.js";
-import { resolveOllamaModel } from "../services/ollamaModels.js";
+import { resolveOllamaModel, listOllamaModels } from "../services/ollamaModels.js";
 import { isOwnerOrAdmin, canViewWorkspaceId } from "./workspaceGuard.js";
 import {
   beginGeneration,
@@ -214,6 +214,11 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       : settings.model;
   const rawProvider = await getProvider({ provider: settings.provider, model });
   const provider = meteringProvider(rawProvider, assistantMsgId, model, accountId, chat.workspaceId ?? null);
+  // Model actually used to produce the answer — updated if difficulty-aware
+  // escalation (D) bumps a hard question to a stronger model on the direct path.
+  // Returned as response metadata so the UI/metering reflect what really ran.
+  let producedProvider = settings.provider;
+  let producedModel = model;
 
   // Instant mode short-circuit. Skip every upstream classifier
   // (agent, web-search, action-intent), skip workspace retrieval +
@@ -303,9 +308,11 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     title: shouldGenerateTitle && hasContent,
     images: hasContent && mayAnswerDirectly,
     actions: triageActions,
+    // Difficulty for escalation — only meaningful on the direct-answer path.
+    hard: hasContent && mayAnswerDirectly,
   };
   let triagePromise: Promise<TriageResult | null> | null = null;
-  if (triageNeeds.agent || triageNeeds.webSearch || triageNeeds.title || triageNeeds.images || triageNeeds.actions.length > 0) {
+  if (triageNeeds.agent || triageNeeds.webSearch || triageNeeds.title || triageNeeds.images || triageNeeds.actions.length > 0 || triageNeeds.hard) {
     const triageSettings = getTriageSettings();
     const triageModelName =
       triageSettings.provider === "ollama"
@@ -427,6 +434,37 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       }
     }
   } else {
+    // D — difficulty-aware escalation: a hard question (per triage) on a cheap
+    // or local tier is answered by a STRONGER model. Local users bump to a bigger
+    // LOCAL model (free/private); cheaper-cloud users to the strong cloud rung;
+    // premium models are left alone. Falls back to the user's model when nothing
+    // stronger is available. Answer path only (agent path unchanged); the extra
+    // model listing only runs on a hard verdict, so normal chat pays nothing.
+    let answerProvider = provider;
+    const triageHard = triagePromise ? (await triagePromise)?.hard ?? false : false;
+    if (triageHard) {
+      const esc = resolveEscalation(settings, true, await listOllamaModels().catch(() => []));
+      if (esc) {
+        const escModel =
+          esc.provider === "ollama" ? await resolveOllamaModel(esc.model) : esc.model;
+        answerProvider = meteringProvider(
+          await getProvider({ provider: esc.provider, model: escModel }),
+          assistantMsgId,
+          escModel,
+          accountId,
+          chat.workspaceId ?? null,
+        );
+        producedProvider = esc.provider;
+        producedModel = escModel;
+        emit({
+          type: "status",
+          text: accountLocale?.startsWith("ko")
+            ? "어려운 질문이라 더 강한 모델로 답변합니다…"
+            : "Escalating to a stronger model for this one…",
+        });
+      }
+    }
+
     const webMode = webSearchMode ?? "off";
     let webSearchInput: boolean | Promise<boolean>;
     if (webMode === "auto" && hasContent) {
@@ -443,9 +481,9 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         content: userContent,
         attachments: attachmentRefs,
         webSearch: webSearchInput,
-        // Reranker built from the active (metered) provider; buildChatContext
-        // applies it to workspace retrieval only for substantive queries.
-      }, accountContext, provider.id, makeReranker(provider));
+        // Reranker + attachment budget keyed to the ANSWER provider (which may be
+        // the escalated one) so a stronger model gets its larger context budget.
+      }, accountContext, answerProvider.id, makeReranker(answerProvider));
     } catch (err) {
       logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
       contextResult = {
@@ -463,8 +501,8 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     emit({ type: "status", text: "Generating…" });
     try {
       const hasImages = contextResult.images.length > 0;
-      if (hasImages && provider.completeWithImages) {
-        const result = await provider.completeWithImages({
+      if (hasImages && answerProvider.completeWithImages) {
+        const result = await answerProvider.completeWithImages({
           system: contextResult.system,
           prompt: contextResult.prompt,
           images: contextResult.images,
@@ -473,7 +511,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         assistantContent = result.text;
         emit({ type: "delta", text: assistantContent });
       } else {
-        await provider.completeStream(
+        await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },
           (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
           (status) => { emit({ type: "status", text: status }); },
@@ -510,8 +548,8 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     agentTrace,
     searchResults: agentSearchResults ?? contextSearchResults,
     titlePromise: chatTitlePromise,
-    provider: settings.provider,
-    model,
+    provider: producedProvider,
+    model: producedModel,
   };
 }
 

@@ -141,6 +141,60 @@ export function resolveTierSettings(tier: ModelTier): Settings {
   return buildSettings(provider, pickTierModel(provider, tier === "frontier-strong" ? "strong" : "frontier"));
 }
 
+/** Parse a local model's parameter size from its tag — the last "Nb" token:
+ *  "qwen3:8b" → 8, "qwen3:0.6b" → 0.6, "llama3.1:70b" → 70. 0 when there's no
+ *  size tag (e.g. an embedding model), so those never win the "biggest" pick. */
+function localParamSize(model: string): number {
+  const matches = [...model.matchAll(/(\d+(?:\.\d+)?)\s*b\b/gi)];
+  const last = matches[matches.length - 1];
+  return last ? Number.parseFloat(last[1]!) : 0;
+}
+
+/**
+ * Difficulty-aware escalation (D). Given the user's current chat settings and
+ * triage's `hard` verdict, return STRONGER settings to answer with — or null to
+ * leave the answer on the user's model. Safe by construction:
+ *   - Already on a premium model → null (nothing stronger to reach for).
+ *   - Local (Ollama) user → escalate WITHIN local to the biggest installed model
+ *     (free, private). Never auto-jumps a local user onto a paid cloud model
+ *     they didn't pick for chat.
+ *   - Cheaper cloud user → escalate to the strong cloud rung (frontier-strong),
+ *     when that's a genuine upgrade (not a degrade-to-local, not the same model).
+ *   - Nothing genuinely stronger available → null.
+ * `installedLocal` is the list from listOllamaModels() (pass [] off the hot path).
+ */
+export function resolveEscalation(
+  current: Settings,
+  hard: boolean,
+  installedLocal: string[],
+): { provider: ProviderId; model: string } | null {
+  if (!hard) return null;
+
+  // Already premium → there's nothing above it to escalate to.
+  const curMeta = PROVIDER_REGISTRY[current.provider].models.find((m) => m.id === current.model);
+  if (curMeta?.costTier === "premium") return null;
+
+  // Local user → biggest installed local model (free + private). Respect the
+  // choice to stay local; never escalate them onto a paid cloud model here.
+  if (PROVIDER_REGISTRY[current.provider].local) {
+    const curSize = localParamSize(current.model);
+    const biggest = installedLocal
+      .filter((m) => localParamSize(m) > 0)
+      .sort((a, b) => localParamSize(b) - localParamSize(a))[0];
+    return biggest && localParamSize(biggest) > curSize
+      ? { provider: current.provider, model: biggest }
+      : null;
+  }
+
+  // Cheaper cloud user → the strong cloud rung, when it's a real upgrade.
+  const strong = resolveTierSettings("frontier-strong");
+  if (strong.provider === current.provider && strong.model === current.model) return null;
+  // frontier-strong degrades to local with no cloud key — don't push a cloud
+  // user down onto a local model and call it an escalation.
+  if (PROVIDER_REGISTRY[strong.provider].local) return null;
+  return { provider: strong.provider, model: strong.model };
+}
+
 export function saveSettings(provider: ProviderId, model: string): Settings {
   dbSetSetting("provider", provider);
   dbSetSetting("model", model);
