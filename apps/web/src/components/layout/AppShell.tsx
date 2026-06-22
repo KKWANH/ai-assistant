@@ -72,7 +72,6 @@ import {
   useDeleteEmptyChats,
   useUpdateChat,
   useUpdateWorkspace,
-  useDeleteWorkspace,
   useUpdateMode,
   qk,
 } from "../../lib/queries";
@@ -87,6 +86,7 @@ import { FirstRunWizard } from "../../features/onboarding/FirstRunWizard";
 import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
 import { SidePanel } from "./SidePanel";
+import { DeleteWorkspaceDialog } from "../../features/workspace/DeleteWorkspaceDialog";
 import { isBuiltinWorkspace } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
@@ -462,7 +462,6 @@ export function AppShell({ children }: AppShellProps) {
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
   const logout = useLogout();
-  const deleteWorkspace = useDeleteWorkspace();
   const updateWorkspace = useUpdateWorkspace();
   const deleteEmptyChats = useDeleteEmptyChats();
   const qc = useQueryClient();
@@ -494,6 +493,7 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Desktop sidebar collapse — a focus/reading mode that hides the left nav
   // (mobile already has the off-canvas drawer). Toggled from the top bar.
@@ -1005,9 +1005,7 @@ export function AppShell({ children }: AppShellProps) {
                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
                           onClick={(e) => {
                             e.stopPropagation();
-                            void deleteWorkspace.mutateAsync(ws.id).then(() => {
-                              if (activeWorkspaceId === ws.id) navigate("/");
-                            });
+                            setDeleteTarget(ws);
                           }}
                           aria-label={t("nav.deleteWorkspace")}
                         >
@@ -1211,6 +1209,15 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Desktop first-run onboarding — no-op on web / after a key is set. */}
       <FirstRunWizard />
+
+      {/* Workspace delete confirm — with the opt-in to also remove files on disk. */}
+      <DeleteWorkspaceDialog
+        workspace={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={(id) => {
+          if (activeWorkspaceId === id) navigate("/");
+        }}
+      />
     </div>
   );
 }

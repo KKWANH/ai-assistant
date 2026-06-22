@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import type { FastifyInstance } from "fastify";
 import { CreateWorkspaceSchema, UpdateWorkspaceSchema } from "@ariadne/shared";
 import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE, isBuiltinWorkspace } from "@ariadne/shared";
@@ -298,32 +299,66 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(updated);
   });
 
-  // DELETE /api/workspaces/:id — LOCAL access only (workspace files are left intact)
-  app.delete<{ Params: { id: string } }>("/workspaces/:id", async (req, reply) => {
-    if (
-      await rejectRemoteAccess(
-        "Deleting a workspace is not permitted from remote access. Connect locally to manage workspaces.",
-        req,
-        reply,
+  // DELETE /api/workspaces/:id — LOCAL access only. By default the workspace's
+  // files on disk are LEFT INTACT (only the DB row + transient staged trees are
+  // removed). Pass ?deleteFiles=true to also delete the rootPath contents — an
+  // explicit, destructive opt-in surfaced as a checkbox in the confirm dialog.
+  app.delete<{ Params: { id: string }; Querystring: { deleteFiles?: string } }>(
+    "/workspaces/:id",
+    async (req, reply) => {
+      if (
+        await rejectRemoteAccess(
+          "Deleting a workspace is not permitted from remote access. Connect locally to manage workspaces.",
+          req,
+          reply,
+        )
       )
-    )
-      return;
+        return;
 
-    const workspace = await requireWorkspace(req.params.id, req, reply);
-    if (!workspace) return;
+      const workspace = await requireWorkspace(req.params.id, req, reply);
+      if (!workspace) return;
 
-    if (isBuiltinWorkspace(workspace.id)) {
-      return reply
-        .status(403)
-        .send({ error: "Built-in workspaces cannot be deleted." });
-    }
+      if (isBuiltinWorkspace(workspace.id)) {
+        return reply
+          .status(403)
+          .send({ error: "Built-in workspaces cannot be deleted." });
+      }
 
-    // Wipe transient staged trees on disk before the row (and rootPath) are gone.
-    const { clearAllStaged } = await import("../services/stagedEdits.js");
-    clearAllStaged(req.params.id);
-    dbDeleteWorkspace(req.params.id);
-    return reply.send({ ok: true });
-  });
+      const deleteFiles = req.query.deleteFiles === "true";
+
+      // Wipe transient staged trees on disk before the row (and rootPath) are gone.
+      const { clearAllStaged } = await import("../services/stagedEdits.js");
+      clearAllStaged(req.params.id);
+      dbDeleteWorkspace(req.params.id);
+
+      let filesDeleted = false;
+      if (deleteFiles) {
+        // A workspace can be rooted anywhere on the host, so an rm -rf of its
+        // root is genuinely dangerous. Refuse obviously-catastrophic targets —
+        // the filesystem root, the user's home directory, or any top-level
+        // (single-segment) directory like /Users or /tmp — even though the user
+        // opted in. Anything deeper is removed.
+        try {
+          const resolved = path.resolve(workspace.rootPath);
+          const segments = resolved.split(path.sep).filter(Boolean);
+          const isUnsafe =
+            resolved === path.parse(resolved).root ||
+            resolved === path.resolve(os.homedir()) ||
+            segments.length < 2;
+          if (isUnsafe) {
+            logger.warn({ rootPath: resolved }, "Refused to delete workspace files — unsafe root path");
+          } else if (fs.existsSync(resolved)) {
+            fs.rmSync(resolved, { recursive: true, force: true });
+            filesDeleted = true;
+          }
+        } catch (err) {
+          logger.warn({ err, rootPath: workspace.rootPath }, "Failed to delete workspace files on disk");
+        }
+      }
+
+      return reply.send({ ok: true, filesDeleted });
+    },
+  );
 
   // POST /api/workspaces/:id/scan
   app.post<{ Params: { id: string } }>("/workspaces/:id/scan", async (req, reply) => {

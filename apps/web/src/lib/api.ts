@@ -72,8 +72,11 @@ export const getWorkspace = (id: string) =>
 export const updateWorkspace = (id: string, input: UpdateWorkspaceInput) =>
   request<Workspace>("PATCH", `/workspaces/${id}`, input);
 
-export const deleteWorkspace = (id: string) =>
-  request<{ ok: boolean }>("DELETE", `/workspaces/${id}`);
+export const deleteWorkspace = (id: string, deleteFiles = false) =>
+  request<{ ok: boolean; filesDeleted: boolean }>(
+    "DELETE",
+    `/workspaces/${id}${deleteFiles ? "?deleteFiles=true" : ""}`,
+  );
 
 // Project context — user-authored standing instructions for the workspace,
 // injected into every chat + deck/script generation.

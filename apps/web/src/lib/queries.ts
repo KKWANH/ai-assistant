@@ -164,7 +164,8 @@ export function useUpdateWorkspace() {
 export function useDeleteWorkspace() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.deleteWorkspace(id),
+    mutationFn: ({ id, deleteFiles }: { id: string; deleteFiles?: boolean }) =>
+      api.deleteWorkspace(id, deleteFiles),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.workspaces });
     },
