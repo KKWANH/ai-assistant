@@ -14,7 +14,7 @@
  */
 
 import crypto from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult, ImageResult } from "@ariadne/shared";
 import { searchImages } from "../services/imageSearch.js";
 import { CreateChatSchema, UpdateChatSchema, PostMessageSchema, PROVIDER_LABELS } from "@ariadne/shared";
@@ -88,6 +88,18 @@ const RIGOROUS_REVISE_GUIDANCE =
   "weak reasoning, vagueness. Then output ONLY the improved final answer that fixes those issues — " +
   "do not show the critique, do not say it is a revision, do not apologise. Keep what was already " +
   "correct, ground every claim in the provided context, and reply in the user's language.";
+
+/** Can the requester see/reach this chat? Owner-or-admin AND — because guests
+ *  share ONE account — additionally scoped to the session that created it, so
+ *  one guest can't see or reach another guest's chats. Non-guests are unaffected. */
+function canAccessChat(
+  chat: { createdBy: string | null; sessionId?: string | null },
+  req: FastifyRequest,
+): boolean {
+  if (!isOwnerOrAdmin(chat.createdBy, req.account)) return false;
+  if (req.account?.role === "guest") return !!chat.sessionId && chat.sessionId === req.sessionId;
+  return true;
+}
 
 /** Plain-language message when the active provider has no API key. */
 function noProviderKeyMessage(provider: ProviderId, locale: string | undefined): string {
@@ -610,7 +622,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // -------------------------------------------------------------------------
   app.get("/chats", async (req, reply) => {
     // Private by default — an account sees only its own chats; admin sees all.
-    return reply.send(dbListChats().filter((c) => isOwnerOrAdmin(c.createdBy, req.account)));
+    return reply.send(dbListChats().filter((c) => canAccessChat(c, req)));
   });
 
   // -------------------------------------------------------------------------
@@ -635,6 +647,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       workspaceId: workspaceId ?? null,
       createdBy: req.account?.id ?? null,
       createdByName: req.account?.displayName ?? null,
+      sessionId: req.sessionId ?? null,
       createdAt: ts,
       updatedAt: ts,
     };
@@ -648,7 +661,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/chats/:id", async (req, reply) => {
     const chat = dbGetChat(req.params.id);
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
-    if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+    if (!canAccessChat(chat, req)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
     return reply.send(chat);
@@ -660,7 +673,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string }; Body: unknown }>("/chats/:id", async (req, reply) => {
     const existing = dbGetChat(req.params.id);
     if (!existing) return reply.status(404).send({ error: "Chat not found" });
-    if (!isOwnerOrAdmin(existing.createdBy, req.account)) {
+    if (!canAccessChat(existing, req)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
 
@@ -688,7 +701,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>("/chats/:id", async (req, reply) => {
     const existing = dbGetChat(req.params.id);
     if (!existing) return reply.status(404).send({ error: "Chat not found" });
-    if (!isOwnerOrAdmin(existing.createdBy, req.account)) {
+    if (!canAccessChat(existing, req)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
     // Wipe the attempts' on-disk staged trees BEFORE the rows are gone.
@@ -717,7 +730,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const chat = dbGetChat(req.params.id);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });
-      if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+      if (!canAccessChat(chat, req)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
       // A chat may only carry a workspace its owner can view. The context
@@ -994,7 +1007,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const chat = dbGetChat(req.params.id);
       if (!chat) return reply.status(404).send({ error: "Chat not found" });
-      if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+      if (!canAccessChat(chat, req)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
       const existing = dbGetMessage(req.params.messageId);
@@ -1154,7 +1167,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>("/chats/:id/stop", async (req, reply) => {
     const chat = dbGetChat(req.params.id);
     if (!chat) return reply.status(404).send({ error: "Chat not found" });
-    if (!isOwnerOrAdmin(chat.createdBy, req.account)) {
+    if (!canAccessChat(chat, req)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
     abortGeneration(req.params.id);
@@ -1170,7 +1183,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     // the whole message list on every poll, competing with the streaming worker).
     const meta = dbGetChatMeta(req.params.id);
     if (!meta) return reply.status(404).send({ error: "Chat not found" });
-    if (!isOwnerOrAdmin(meta.createdBy, req.account)) {
+    if (!canAccessChat(meta, req)) {
       return reply.status(403).send({ error: "Forbidden" });
     }
     return reply.send({ active: getGenerationStatus(req.params.id) });

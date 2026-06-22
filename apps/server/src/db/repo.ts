@@ -547,9 +547,9 @@ export function dbGetWorkspaceUsage(workspaceId: string): UsageSummary {
 export function dbCreateChat(c: Chat): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO chats (id, title, workspace_id, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(c.id, c.title, c.workspaceId ?? null, c.createdBy ?? null, c.createdAt, c.updatedAt);
+    `INSERT INTO chats (id, title, workspace_id, created_by, created_at, updated_at, session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(c.id, c.title, c.workspaceId ?? null, c.createdBy ?? null, c.createdAt, c.updatedAt, c.sessionId ?? null);
 }
 
 const CHAT_SELECT = `
@@ -587,12 +587,12 @@ export function dbGetChat(id: string): Chat | null {
 /** Just the ownership fields — for guards that don't need the messages (the
  *  /active endpoint is polled every 2s). Avoids the full message load +
  *  per-row JSON.parse that dbGetChat does. */
-export function dbGetChatMeta(id: string): { id: string; createdBy: string | null } | null {
+export function dbGetChatMeta(id: string): { id: string; createdBy: string | null; sessionId: string | null } | null {
   const db = getDb();
-  const row = db.prepare("SELECT id, created_by FROM chats WHERE id = ?").get(id) as
-    | { id: string; created_by: string | null }
+  const row = db.prepare("SELECT id, created_by, session_id FROM chats WHERE id = ?").get(id) as
+    | { id: string; created_by: string | null; session_id: string | null }
     | undefined;
-  return row ? { id: row.id, createdBy: row.created_by } : null;
+  return row ? { id: row.id, createdBy: row.created_by, sessionId: row.session_id } : null;
 }
 
 export function dbUpdateChat(
@@ -684,6 +684,7 @@ function rowToChat(row: Record<string, unknown>): Chat {
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
     sortOrder: (row["sort_order"] as number | null) ?? null,
+    sessionId: (row["session_id"] as string | null) ?? null,
   };
 }
 

@@ -704,6 +704,9 @@ export interface Chat {
   createdBy: string | null;
   /** Display name of the account that started the chat (JOIN-resolved). */
   createdByName: string | null;
+  /** Session that created the chat — scopes shared-account (guest) chats per
+   *  session so one guest can't see another's. null for older / non-guest chats. */
+  sessionId?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Manual sidebar order (drag-to-reorder). null = unset → falls back to

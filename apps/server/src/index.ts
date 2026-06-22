@@ -35,6 +35,9 @@ declare module "fastify" {
   interface FastifyRequest {
     account: Account;
     accessContext: AccessContext;
+    /** Session token (cookie) — present on remote/cookie auth; scopes shared-
+     *  account (guest) chats per session. Undefined for local/admin. */
+    sessionId?: string;
   }
 }
 
@@ -163,6 +166,9 @@ async function bootstrap(): Promise<void> {
         }
 
         req.account = account;
+        // Per-session scoping for shared-account (guest) chats — the cookie
+        // token uniquely identifies this browser session.
+        req.sessionId = unsigned.value;
       });
 
       // Register every core API route from the registry — index.ts no longer

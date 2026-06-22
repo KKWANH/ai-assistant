@@ -391,6 +391,7 @@ function runMigrations(db: DatabaseSync): void {
   // chats gain sort_order for manual drag-reorder (NULL → recency fallback).
   const chats = addColumnIfMissing(db, "chats");
   chats("sort_order", "REAL");
+  chats("session_id", "TEXT");
 
   const runs = addColumnIfMissing(db, "runs");
   runs("created_by", "TEXT");
