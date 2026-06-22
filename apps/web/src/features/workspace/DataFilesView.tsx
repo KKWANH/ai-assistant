@@ -2,10 +2,10 @@
  * DataFilesView — browse and edit a workspace's CSV data files as tables.
  *
  * Lists the CSV files from the latest snapshot; the selected file is loaded,
- * parsed into a grid and rendered in an editable TableSheet. Saving now
- * stages the change for review (same staged-diff + apply flow the AI's
- * edit_file uses) instead of writing directly — keeps the "review before
- * applying" invariant uniform across the app.
+ * parsed into a grid and rendered in an editable TableSheet. Saving writes the
+ * file directly (local-only — the edit is immediate); a secondary "Stage edit"
+ * still routes the change through the staged-diff + apply review flow for users
+ * who want to see the diff before it lands.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +17,7 @@ import {
   useScanWorkspace,
   useWorkspaceFile,
   useStageWorkspaceFile,
+  useSaveWorkspaceFile,
   useMe,
 } from "../../lib/queries";
 import { useT } from "../../lib/i18n";
@@ -35,6 +36,7 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
   const { data: snapshot } = useSnapshot(workspaceId);
   const scan = useScanWorkspace();
   const stageFile = useStageWorkspaceFile(workspaceId);
+  const saveFile = useSaveWorkspaceFile(workspaceId);
 
   const dataFiles = useMemo(
     () =>
@@ -92,6 +94,21 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
       toast({ title: t("workspace.scanComplete"), variant: "success" });
     } catch {
       toast({ title: t("workspace.scanFailed"), variant: "error" });
+    }
+  };
+
+  // Direct save — writes the file immediately (no staged-diff round-trip). The
+  // PUT endpoint is local-only, which matches the !isRemote gate on the button.
+  const handleSaveDirect = async () => {
+    if (!activePath) return;
+    try {
+      await saveFile.mutateAsync({ path: activePath, content: toCsv(grid) });
+      setDirty(false);
+      setLastStaged(null);
+      toast({ title: t("workspace.data.saved"), variant: "success" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t("workspace.data.saveFailed");
+      toast({ title: t("workspace.data.saveFailed"), description: msg, variant: "error" });
     }
   };
 
@@ -260,16 +277,28 @@ export function DataFilesView({ workspaceId }: { workspaceId: string }) {
                   </span>
                 )}
                 {!isRemote && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    leftIcon={<Save className="h-3.5 w-3.5" />}
-                    disabled={!dirty}
-                    loading={stageFile.isPending}
-                    onClick={() => void handleSave()}
-                  >
-                    {t("workspace.data.stage")}
-                  </Button>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      leftIcon={<FileDiff className="h-3.5 w-3.5" />}
+                      disabled={!dirty}
+                      loading={stageFile.isPending}
+                      onClick={() => void handleSave()}
+                    >
+                      {t("workspace.data.stage")}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Save className="h-3.5 w-3.5" />}
+                      disabled={!dirty}
+                      loading={saveFile.isPending}
+                      onClick={() => void handleSaveDirect()}
+                    >
+                      {t("workspace.data.save")}
+                    </Button>
+                  </>
                 )}
               </div>
 
