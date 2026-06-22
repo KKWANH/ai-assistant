@@ -709,8 +709,11 @@ export function WorkspaceOverview() {
   useEffect(() => {
     if (!workspaceAdvanced && ["standard", "edit", "actions", "schedules", "memory", "hooks", "git", "terminal"].includes(activeTab)) {
       setActiveTab("chats");
+    } else if (ws?.focusMode && ["hooks", "git", "terminal"].includes(activeTab)) {
+      // Focus mode hides the developer tabs entirely — never strand on one.
+      setActiveTab("chats");
     }
-  }, [workspaceAdvanced, activeTab]);
+  }, [workspaceAdvanced, activeTab, ws?.focusMode]);
 
   if (wsLoading) {
     return (
@@ -1315,7 +1318,7 @@ export function WorkspaceOverview() {
                     {t("memory.tab")}
                   </span>
                 </TabsTrigger>
-                {!isSimple && (
+                {!isSimple && !ws.focusMode && (
                   <TabsTrigger value="hooks">
                     <span className="flex items-center gap-1.5">
                       <Workflow className="h-3.5 w-3.5" />
@@ -1323,7 +1326,7 @@ export function WorkspaceOverview() {
                     </span>
                   </TabsTrigger>
                 )}
-                {!isSimple && (
+                {!isSimple && !ws.focusMode && (
                   <TabsTrigger value="git">
                     <span className="flex items-center gap-1.5">
                       <GitBranch className="h-3.5 w-3.5" />
@@ -1331,7 +1334,7 @@ export function WorkspaceOverview() {
                     </span>
                   </TabsTrigger>
                 )}
-                {!isSimple && !isRemote && (
+                {!isSimple && !isRemote && !ws.focusMode && (
                   <TabsTrigger value="terminal">
                     <span className="flex items-center gap-1.5">
                       <SquareTerminal className="h-3.5 w-3.5" />

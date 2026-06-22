@@ -387,6 +387,8 @@ function runMigrations(db: DatabaseSync): void {
   workspaces("default_skill_id", "TEXT");
   // sort_order (NULL → fall back to creation order; set → manual drag-reorder)
   workspaces("sort_order", "REAL");
+  // focus_mode (1 → hide developer/power tabs; NULL/0 → full workspace UI)
+  workspaces("focus_mode", "INTEGER");
 
   // chats gain sort_order for manual drag-reorder (NULL → recency fallback).
   const chats = addColumnIfMissing(db, "chats");

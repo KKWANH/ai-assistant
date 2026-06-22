@@ -41,6 +41,8 @@ export const UpdateWorkspaceSchema = z.object({
   defaultSkillId: z.string().min(1).max(80).nullable().optional(),
   // Manual sidebar order (drag-to-reorder); null clears the override.
   sortOrder: z.number().nullable().optional(),
+  // Focus mode — hide the developer/power affordances; confine to the curated parts.
+  focusMode: z.boolean().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 

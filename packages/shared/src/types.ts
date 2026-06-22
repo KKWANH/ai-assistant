@@ -37,6 +37,13 @@ export interface Workspace {
   /** Manual sidebar order (drag-to-reorder). null = unset → falls back to
    *  creation order. */
   sortOrder?: number | null;
+  /** Focus mode — present the workspace as a purpose-built app: hide the
+   *  developer/power affordances (terminal, git, hooks, scripts) so a project
+   *  (e.g. lecture prep) stays within its sanctioned parts — the custom screen,
+   *  data, chat, and defined actions — and can't be driven off-scope. Defaulted
+   *  from the project on create; toggleable in workspace Settings. undefined =
+   *  off. */
+  focusMode?: boolean;
 }
 
 export type WorkspaceHomeView = "overview" | "surface" | null;

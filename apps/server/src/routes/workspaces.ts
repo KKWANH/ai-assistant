@@ -123,6 +123,10 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       defaultProvider: null,
       defaultModel: null,
       defaultSkillId: null,
+      // A project can declare its workspaces app-like (focus mode) by default;
+      // the owner can still toggle it off in Settings.
+      focusMode:
+        (starter && starter !== "blank" ? STARTERS[starter]?.focusByDefault : false) ?? false,
     };
 
     dbInsertWorkspace(workspace);

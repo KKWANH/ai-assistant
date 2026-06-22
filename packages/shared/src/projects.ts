@@ -24,6 +24,10 @@ export interface ProjectStarter {
   surface?: string;
   /** actions.yaml contents, if any. */
   actions?: string;
+  /** Default this project's workspaces to focus mode — present only the custom
+   *  screen, data, chat and defined actions, hiding the developer/power tools
+   *  (terminal, git, hooks, scripts). The owner can still toggle it in Settings. */
+  focusByDefault?: boolean;
 }
 
 /** Server-side contribution of an example project. */

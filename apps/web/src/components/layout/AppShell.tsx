@@ -1015,8 +1015,10 @@ export function AppShell({ children }: AppShellProps) {
                         </button>
                       )}
                     </div>
-                    {/* Scripts link — standard mode only */}
+                    {/* Scripts link — standard mode only; hidden in focus mode
+                        (arbitrary scripts are an off-scope escape hatch). */}
                     {!isSimple &&
+                      !ws.focusMode &&
                       activeWorkspaceId === ws.id &&
                       location.pathname.startsWith("/workspaces/") && (
                         <SidebarItem

@@ -308,6 +308,11 @@ function HomeScreenSection({ ws }: { ws: Workspace }) {
       .mutateAsync({ id: ws.id, input: { homeView: v as "overview" | "surface" } })
       .catch(() => toast({ title: t("workspaceSettings.saveFailed"), variant: "error" }));
 
+  const setFocus = (v: string) =>
+    update
+      .mutateAsync({ id: ws.id, input: { focusMode: v === "on" } })
+      .catch(() => toast({ title: t("workspaceSettings.saveFailed"), variant: "error" }));
+
   return (
     <section>
       <SectionHeading icon={<Layout className="h-3.5 w-3.5" />}>
@@ -323,6 +328,18 @@ function HomeScreenSection({ ws }: { ws: Workspace }) {
             options={[
               { value: "overview", label: t("workspaceSettings.home.overview") },
               { value: "surface", label: t("workspaceSettings.home.fullscreen") },
+            ]}
+          />
+        </Field>
+        <Field label={t("workspaceSettings.home.focusLabel")} hint={t("workspaceSettings.home.focusHint")}>
+          <SegmentedControl
+            value={ws.focusMode ? "on" : "off"}
+            onChange={setFocus}
+            disabled={update.isPending}
+            ariaLabel={t("workspaceSettings.home.focusLabel")}
+            options={[
+              { value: "off", label: t("workspaceSettings.home.focusOff") },
+              { value: "on", label: t("workspaceSettings.home.focusOn") },
             ]}
           />
         </Field>

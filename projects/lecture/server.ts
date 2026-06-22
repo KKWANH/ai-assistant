@@ -12,7 +12,9 @@ export const project: ProjectServerModule = {
   // A starter with no files to scaffold — a lecture project starts empty and
   // the lecturer fills it with course/week folders. The category routes its
   // create-flow + opens it to the lecture view (see web.ts resolveHome).
-  starter: { id: "lecture", category: "lecture" },
+  // App-like by default: a lecture workspace opens to its screen + actions, with
+  // the developer/power tools hidden (focus mode) so it stays on-task.
+  starter: { id: "lecture", category: "lecture", focusByDefault: true },
   // The lecture-brief run template (the create-&-run brief generator), merged
   // into core's template list at boot via the registry.
   templates: [lectureBriefTemplate],
