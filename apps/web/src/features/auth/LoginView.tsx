@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -147,6 +148,18 @@ export function LoginView() {
             )}
           </div>
         </Card>
+
+        {/* Public API docs — reachable without an account (the /developers site
+            renders outside the auth gate). Gives logged-out visitors a way to
+            explore what Ariadne exposes before signing in. */}
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          <Link
+            to="/developers"
+            className="underline underline-offset-2 hover:text-foreground transition-colors"
+          >
+            {t("nav.apiDocs")}
+          </Link>
+        </p>
       </div>
     </div>
   );

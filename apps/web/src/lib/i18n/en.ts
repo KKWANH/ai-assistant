@@ -51,6 +51,7 @@ const en = {
   "nav.search": "Search",
   "nav.search.desc": "Or press ⌘K to open from anywhere",
   "nav.developers": "Developers",
+  "nav.apiDocs": "API Docs",
   "nav.settings": "Settings",
   "nav.noConversations": "No conversations yet",
   "nav.chats": "Chats",
