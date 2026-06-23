@@ -1,18 +1,14 @@
-// Ariadne desktop — Phase 1 (macOS-first, see DESKTOP_APP_PLAN §7).
+// Ariadne desktop — Tauri shell (macOS-first; Windows/Linux now wired too).
 //
-// The shell stays tiny: pick a free loopback port, spawn the EXISTING Node
-// server (unchanged — it already honours ARIADNE_PORT + ARIADNE_HOME), wait
-// until it answers, then point a WKWebView at it. The sidecar pattern keeps
-// every line of server code identical.
-//
-// Phase 1 vs the Phase 0 spike: instead of `npm run start:server` from the
-// repo, we run a BUNDLED Node 22 binary (Tauri externalBin) against a staged,
-// self-contained server tree shipped in the app's Resources — so it runs with
-// no repo, no npm, no system Node. User data (DB/logs/run) is redirected to the
-// OS app-data dir, outside the read-only bundle.
+// The shell stays tiny: connect-or-spawn the EXISTING Node server on a fixed
+// loopback port, wait until it answers, then point a webview at it. The sidecar
+// pattern keeps every line of server code identical across platforms; the only
+// OS-specific bits are path resolution (handled via Tauri's path API), the node
+// binary name, the dev target-triple, and how we open an external URL.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::env::consts::{ARCH, OS};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -30,14 +26,12 @@ struct Sidecar(Mutex<Option<Child>>);
 
 /// The canonical Ariadne port — the web/ops server uses it too. Fixed (not a
 /// random free port) so the desktop ATTACHES to an already-running server and
-/// shares its data, and so the webview origin is stable (localStorage persists
-/// across launches, and is shared with a browser tab on the same port).
+/// shares its data, and so the webview origin is stable (localStorage persists).
 const PORT: u16 = 4319;
 
 /// Is a real Ariadne server already answering on this port? A bare TCP connect
-/// isn't enough (something else could hold the port), so probe an API route and
-/// look for an HTTP status line — a live server answers 200 (loopback admin) or
-/// 401. Avoids starting a SECOND server on a separate DB.
+/// isn't enough, so probe an API route and look for an HTTP status line — a live
+/// server answers 200 (loopback admin) or 401. Avoids a second server.
 fn server_alive(port: u16) -> bool {
     use std::io::{Read, Write};
     let Ok(mut s) = TcpStream::connect(("127.0.0.1", port)) else { return false };
@@ -54,8 +48,7 @@ fn server_alive(port: u16) -> bool {
     head.starts_with("HTTP/1.") && (head.contains(" 200") || head.contains(" 401"))
 }
 
-/// Poll until the server accepts TCP connections (a good-enough readiness
-/// signal that avoids pulling in an HTTP client crate for the spike).
+/// Poll until the server accepts TCP connections (a good-enough readiness signal).
 fn wait_until_ready(port: u16, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
@@ -67,32 +60,65 @@ fn wait_until_ready(port: u16, timeout: Duration) -> bool {
     false
 }
 
-/// Where the server keeps user data — the OS app-data dir, NOT the read-only
-/// app bundle. macOS convention; matches Tauri's app_data_dir for our
-/// identifier. (Windows/Linux are a later phase.)
-fn app_data_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(home).join("Library/Application Support/Ariadne")
+/// nodejs.org-style target-triple suffix for the dev sidecar binary, per host
+/// OS/arch — matches what scripts/fetch-node-sidecar.sh writes into binaries/.
+fn dev_triple() -> &'static str {
+    match (OS, ARCH) {
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc",
+        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        _ => "aarch64-apple-darwin",
+    }
 }
 
-/// Locate the Node runtime + server entry + working dir for both bundled and
-/// dev runs:
-///   bundled .app → Contents/MacOS/node + Contents/Resources/server/
-///   dev (cargo)  → the fetched sidecar binary + the repo's source tree
-/// Returns None if neither layout is present (the caller surfaces the error).
-fn resolve_runtime() -> Option<(PathBuf, PathBuf, PathBuf)> {
-    let exe = std::env::current_exe().ok()?;
-    let bin_dir = exe.parent()?.to_path_buf(); // Contents/MacOS | target/<profile>
+/// The sidecar node filename. Tauri strips the triple on install; only the
+/// platform extension remains (node.exe on Windows, node elsewhere).
+fn node_bin_name() -> &'static str {
+    if cfg!(windows) { "node.exe" } else { "node" }
+}
 
-    // Bundled layout first: the sidecar node sits next to the app binary, the
-    // staged server lives in ../Resources/server.
-    let bundled_node = bin_dir.join("node");
-    if bundled_node.exists() {
-        if let Some(contents) = bin_dir.parent() {
-            let server_root = contents.join("Resources").join("server");
-            let entry = server_root.join("apps/server/src/index.ts");
-            if entry.exists() {
-                return Some((bundled_node, entry, server_root));
+/// Where the server keeps user data — the OS app-data dir (NOT the read-only
+/// bundle). Tauri resolves this per-platform (macOS Application Support,
+/// Windows %APPDATA%, Linux XDG_DATA_HOME); we fall back manually if it can't.
+fn data_dir(app: &tauri::AppHandle) -> PathBuf {
+    if let Ok(dir) = app.path().app_data_dir() {
+        return dir;
+    }
+    let base = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA").unwrap_or_else(|_| ".".into())
+    } else if cfg!(target_os = "macos") {
+        format!(
+            "{}/Library/Application Support",
+            std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
+        )
+    } else {
+        std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
+            format!("{}/.local/share", std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
+        })
+    };
+    PathBuf::from(base).join("Ariadne")
+}
+
+/// Locate the Node runtime + server entry + working dir for both bundled and dev
+/// runs, cross-platform:
+///   bundled → sidecar node next to the app binary + staged server in the
+///             resource dir (Tauri resolves the per-OS resource location).
+///   dev     → the fetched sidecar binary + the repo's source tree.
+/// Returns None if neither layout is present (the caller surfaces the error).
+fn resolve_runtime(app: &tauri::AppHandle) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    // Bundled layout: the externalBin sidecar sits next to the main executable;
+    // the staged server tree is shipped as a resource (mapped to "server").
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin_dir) = exe.parent() {
+            let node = bin_dir.join(node_bin_name());
+            if let Ok(res) = app.path().resource_dir() {
+                let server_root = res.join("server");
+                let entry = server_root.join("apps/server/src/index.ts");
+                if node.exists() && entry.exists() {
+                    return Some((node, entry, server_root));
+                }
             }
         }
     }
@@ -100,7 +126,8 @@ fn resolve_runtime() -> Option<(PathBuf, PathBuf, PathBuf)> {
     // Dev fallback: the fetched sidecar binary + the repo's source (run via tsx
     // exactly like the bundle, so dev and prod take the same path).
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")); // apps/desktop/src-tauri
-    let dev_node = manifest.join("binaries/node-aarch64-apple-darwin");
+    let dev_name = format!("node-{}{}", dev_triple(), if cfg!(windows) { ".exe" } else { "" });
+    let dev_node = manifest.join("binaries").join(dev_name);
     let repo = manifest.join("../../..").canonicalize().ok()?;
     let entry = repo.join("apps/server/src/index.ts");
     if dev_node.exists() && entry.exists() {
@@ -109,10 +136,55 @@ fn resolve_runtime() -> Option<(PathBuf, PathBuf, PathBuf)> {
     None
 }
 
-/// Stop the Node sidecar *gracefully* so its SIGTERM handler runs — the server
-/// tears down MCP child processes on SIGTERM (`index.ts`), so a plain SIGKILL
-/// would orphan every `npx @modelcontextprotocol/server-*` worker. On Unix:
-/// SIGTERM, give it a moment to clean up, then force-kill as a backstop.
+/// Spawn the bundled Node server with user-data env redirected outside the
+/// (read-only) bundle. Returns the child so it can be torn down on exit.
+fn spawn_server(app: &tauri::AppHandle) -> Option<Child> {
+    let data = data_dir(app);
+    for sub in ["data", "logs", "run"] {
+        let _ = std::fs::create_dir_all(data.join(sub));
+    }
+    match resolve_runtime(app) {
+        Some((node, entry, cwd)) => Command::new(&node)
+            .arg("--import")
+            .arg("tsx")
+            .arg(&entry)
+            .current_dir(&cwd)
+            .env("ARIADNE_PORT", PORT.to_string())
+            .env("ARIADNE_DESKTOP", "1")
+            // Loopback-only: the desktop webview is the only client.
+            .env("ARIADNE_BIND", "127.0.0.1")
+            .env("ARIADNE_HOME", data.join("data"))
+            .env("ARIADNE_LOG_DIR", data.join("logs"))
+            .env("ARIADNE_RUN_DIR", data.join("run"))
+            .spawn()
+            .map_err(|e| eprintln!("Ariadne: failed to start the Node server: {e}"))
+            .ok(),
+        None => {
+            eprintln!("Ariadne: could not locate the bundled Node runtime or server entry");
+            None
+        }
+    }
+}
+
+/// Open a URL in the user's default browser, cross-platform.
+fn open_url(url: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(url).spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
+/// Stop the Node sidecar *gracefully* so its SIGTERM handler runs (the server
+/// tears down MCP child processes on SIGTERM). On Unix: SIGTERM, pause, then
+/// force-kill as a backstop. Elsewhere: a plain kill.
 #[cfg(unix)]
 fn stop_sidecar(child: &mut Child) {
     // SAFETY: `child.id()` is a live PID this process owns; SIGTERM is safe.
@@ -129,65 +201,36 @@ fn stop_sidecar(child: &mut Child) {
 }
 
 fn main() {
-    // Connect-or-spawn. If a server (the web/ops one) is already up on the fixed
-    // port, ATTACH to it — the desktop window becomes one more client on the
-    // same data, so it shows the same workspaces and shares localStorage with a
-    // browser tab. Only when nothing is there do we start our own bundled server.
-    let attach = server_alive(PORT);
-
-    let sidecar = if attach {
-        None // we don't own this server — never kill it on exit.
-    } else {
-        // Redirect user data outside the (read-only) bundle; create the dirs so a
-        // first run on a clean machine has somewhere to write.
-        let data = app_data_dir();
-        for sub in ["data", "logs", "run"] {
-            let _ = std::fs::create_dir_all(data.join(sub));
-        }
-        // Spawn the bundled Node server. `--import tsx` strips types on the fly so
-        // the same source the web build runs from boots here unchanged.
-        // ARIADNE_DESKTOP marks this as a trusted single-user loopback context.
-        match resolve_runtime() {
-            Some((node, entry, cwd)) => Command::new(&node)
-                .arg("--import")
-                .arg("tsx")
-                .arg(&entry)
-                .current_dir(&cwd)
-                .env("ARIADNE_PORT", PORT.to_string())
-                .env("ARIADNE_DESKTOP", "1")
-                // Loopback-only: the desktop webview is the only client. The server
-                // already defaults to 127.0.0.1, but set it explicitly so a stray
-                // ARIADNE_BIND in the user's shell env can't expose the sidecar.
-                .env("ARIADNE_BIND", "127.0.0.1")
-                .env("ARIADNE_HOME", data.join("data"))
-                .env("ARIADNE_LOG_DIR", data.join("logs"))
-                .env("ARIADNE_RUN_DIR", data.join("run"))
-                .spawn()
-                .map_err(|e| eprintln!("Ariadne: failed to start the Node server: {e}"))
-                .ok(),
-            None => {
-                eprintln!("Ariadne: could not locate the bundled Node runtime or server entry");
-                None
-            }
-        }
-    };
-
-    // Already-alive servers are ready by definition; a freshly spawned one we
-    // wait for.
-    let ready = attach || wait_until_ready(PORT, Duration::from_secs(30));
     let url = format!("http://127.0.0.1:{PORT}");
 
     tauri::Builder::default()
-        .manage(Sidecar(Mutex::new(sidecar)))
+        .manage(Sidecar(Mutex::new(None)))
         .setup(move |app| {
+            // Connect-or-spawn. If a server is already up on the fixed port,
+            // ATTACH to it (shared data + localStorage). Only otherwise do we
+            // start our own bundled server. Done in setup so the per-platform
+            // resource/app-data paths resolve via Tauri's path API.
+            let handle = app.handle().clone();
+            let attach = server_alive(PORT);
+            if !attach {
+                let child = spawn_server(&handle);
+                if let Some(state) = app.try_state::<Sidecar>() {
+                    if let Ok(mut guard) = state.0.lock() {
+                        *guard = child;
+                    }
+                }
+            }
+            let ready = attach || wait_until_ready(PORT, Duration::from_secs(30));
             if !ready {
                 eprintln!("Ariadne: server did not become ready on port {PORT} within 30s");
             }
 
-            // Menu-bar tray — the app lives here; the window is just one client
-            // onto the server. Status line, then open/browser, then quit.
+            // Menu-bar tray — the app lives here; the window is one client onto
+            // the server. "Reload window" recovers a blank/stuck webview without
+            // quitting (the server + tray keep running).
             let status = MenuItem::with_id(app, "status", format!("Ariadne · running on :{PORT}"), false, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open window", true, None::<&str>)?;
+            let reload = MenuItem::with_id(app, "reload", "Reload window", true, None::<&str>)?;
             let browser = MenuItem::with_id(app, "browser", "Open in browser", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Ariadne", true, None::<&str>)?;
             let menu = Menu::with_items(
@@ -196,14 +239,13 @@ fn main() {
                     &status,
                     &PredefinedMenuItem::separator(app)?,
                     &open,
+                    &reload,
                     &browser,
                     &PredefinedMenuItem::separator(app)?,
                     &quit,
                 ],
             )?;
             TrayIconBuilder::new()
-                // A monochrome glyph on transparent — marked as a template so
-                // macOS recolors it to match the menu bar (no black box).
                 .icon(tauri::include_image!("icons/trayTemplate.png"))
                 .icon_as_template(true)
                 .menu(&menu)
@@ -215,18 +257,21 @@ fn main() {
                             let _ = w.set_focus();
                         }
                     }
-                    "browser" => {
-                        let _ = Command::new("open")
-                            .arg(format!("http://127.0.0.1:{PORT}"))
-                            .spawn();
+                    "reload" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.eval("window.location.reload()");
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
                     }
+                    "browser" => open_url(&format!("http://127.0.0.1:{PORT}")),
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .build(app)?;
 
-            // The window is shown on launch, but its close button HIDES it (the
-            // tray + server keep running) instead of quitting the app.
+            // The window shows on launch; its close button HIDES it (the tray +
+            // server keep running) instead of quitting.
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
                 .title("Ariadne")
                 .inner_size(1280.0, 860.0)
@@ -244,8 +289,7 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building the Ariadne desktop shell")
         .run(|app, event| match event {
-            // Tear down ONLY a sidecar we started (None when we attached to an
-            // existing server — never kill that one).
+            // Tear down ONLY a sidecar we started (None when we attached).
             RunEvent::ExitRequested { .. } => {
                 if let Some(state) = app.try_state::<Sidecar>() {
                     if let Ok(mut guard) = state.0.lock() {
