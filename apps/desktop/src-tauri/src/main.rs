@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
@@ -205,6 +205,34 @@ fn main() {
 
     tauri::Builder::default()
         .manage(Sidecar(Mutex::new(None)))
+        // App menu with keyboard recovery: Cmd+R reloads the page; Cmd+Shift+H
+        // does a NATIVE navigate back to the light home — which escapes even a
+        // hung/blank webview (a heavy surface that wedged WebContent), where an
+        // in-page reload can't run. Built on the standard menu so copy/paste/quit
+        // survive.
+        .menu(|handle| {
+            let menu = Menu::default(handle)?;
+            let reload = MenuItem::with_id(handle, "menu_reload", "Reload", true, Some("CmdOrCtrl+R"))?;
+            let home = MenuItem::with_id(handle, "menu_home", "Home (recover)", true, Some("CmdOrCtrl+Shift+H"))?;
+            let view = Submenu::with_items(handle, "View", true, &[&reload, &home])?;
+            menu.append(&view)?;
+            Ok(menu)
+        })
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "menu_reload" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.eval("window.location.reload()");
+                }
+            }
+            "menu_home" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    if let Ok(u) = format!("http://127.0.0.1:{PORT}/").parse() {
+                        let _ = w.navigate(u);
+                    }
+                }
+            }
+            _ => {}
+        })
         .setup(move |app| {
             // Connect-or-spawn. If a server is already up on the fixed port,
             // ATTACH to it (shared data + localStorage). Only otherwise do we
@@ -259,7 +287,11 @@ fn main() {
                     }
                     "reload" => {
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.eval("window.location.reload()");
+                            // Native navigate to the light home — escapes even a
+                            // hung/blank webview (where an in-page reload can't run).
+                            if let Ok(u) = format!("http://127.0.0.1:{PORT}/").parse() {
+                                let _ = w.navigate(u);
+                            }
                             let _ = w.show();
                             let _ = w.set_focus();
                         }
