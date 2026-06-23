@@ -14,10 +14,11 @@
  */
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles, TrendingUp } from "lucide-react";
-import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS } from "@ariadne/shared";
+import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles, TrendingUp, Users, Trash2 } from "lucide-react";
+import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS, isBuiltinWorkspace } from "@ariadne/shared";
 import type { ProviderId, Workspace } from "@ariadne/shared";
-import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills, useWorkspaceUsage } from "../../lib/queries";
+import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills, useWorkspaceUsage, useMe, useWorkspaceAccess, useSetWorkspaceAccess } from "../../lib/queries";
+import { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
 import { useT } from "../../lib/i18n";
 import { useToast } from "../../components/ui/Toast";
 import { useUIStore, type FloatingChatMode } from "../../lib/store";
@@ -86,8 +87,10 @@ export function WorkspaceSettings() {
           <ChatModelSection ws={ws} />
           <SkillsSection ws={ws} />
           {hasScreen && <HomeScreenSection ws={ws} />}
+          <AccessSection ws={ws} />
           <UsageSection ws={ws} />
           <FilesSection ws={ws} />
+          <DangerSection ws={ws} />
         </div>
       </div>
     </div>
@@ -472,6 +475,113 @@ function FilesSection({ ws }: { ws: Workspace }) {
           </Button>
         </div>
       </Card>
+    </section>
+  );
+}
+
+// ── Access (per-user roles) ────────────────────────────────────────────────────
+// Admin/owner only — a user table assigning each account a role on this
+// workspace (Owner / Editor / Viewer / Non-Viewer). Grants open a private
+// workspace to specific people (e.g. share 강의 준비 with a family account).
+function AccessSection({ ws }: { ws: Workspace }) {
+  const { t } = useT();
+  const { toast } = useToast();
+  const { data: me } = useMe();
+  const canManage = me?.account.role === "admin" || ws.createdBy === me?.account.id;
+  const { data, isLoading } = useWorkspaceAccess(ws.id, canManage);
+  const setAccess = useSetWorkspaceAccess(ws.id);
+  if (!canManage) return null;
+
+  const change = (accountId: string, role: string) =>
+    void setAccess
+      .mutateAsync({ accountId, role })
+      .catch(() => toast({ title: t("workspaceSettings.saveFailed"), variant: "error" }));
+
+  return (
+    <section>
+      <SectionHeading icon={<Users className="h-3.5 w-3.5" />}>
+        {t("workspaceSettings.access.heading")}
+      </SectionHeading>
+      <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-2">
+        <p className="text-2xs text-muted-foreground leading-relaxed mb-1">
+          {t("workspaceSettings.access.hint")}
+        </p>
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-border">
+            {(data?.entries ?? []).map((e) => (
+              <div key={e.accountId} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm text-foreground truncate">{e.displayName}</div>
+                  <div className="text-2xs text-muted-foreground font-mono truncate">@{e.username}</div>
+                </div>
+                {e.isOwner ? (
+                  <span className="text-2xs font-medium text-accent px-2 shrink-0">
+                    {t("workspaceSettings.access.owner")}
+                  </span>
+                ) : e.isAdmin ? (
+                  <span className="text-2xs text-muted-foreground px-2 shrink-0">
+                    {t("workspaceSettings.access.admin")}
+                  </span>
+                ) : (
+                  <Select
+                    value={e.role ?? "none"}
+                    onChange={(ev) => change(e.accountId, ev.target.value)}
+                    disabled={setAccess.isPending}
+                    className="w-36 shrink-0"
+                    options={[
+                      { value: "none", label: t("workspaceSettings.access.none") },
+                      { value: "viewer", label: t("workspaceSettings.access.viewer") },
+                      { value: "editor", label: t("workspaceSettings.access.editor") },
+                      { value: "owner", label: t("workspaceSettings.access.ownerRole") },
+                    ]}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+// ── Danger zone (delete) ───────────────────────────────────────────────────────
+function DangerSection({ ws }: { ws: Workspace }) {
+  const { t } = useT();
+  const navigate = useNavigate();
+  const { data: me } = useMe();
+  const [confirming, setConfirming] = useState(false);
+  const canManage = me?.account.role === "admin" || ws.createdBy === me?.account.id;
+  // Built-ins can't be deleted; only owner/admin see the control.
+  if (isBuiltinWorkspace(ws.id) || !canManage) return null;
+
+  return (
+    <section>
+      <SectionHeading icon={<Trash2 className="h-3.5 w-3.5 text-destructive" />}>
+        {t("workspaceSettings.danger.heading")}
+      </SectionHeading>
+      <Card className="px-4 py-3 border-destructive/30 bg-destructive/5 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{t("workspaceSettings.danger.deleteLabel")}</p>
+          <p className="text-2xs text-muted-foreground">{t("workspaceSettings.danger.deleteHint")}</p>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+          onClick={() => setConfirming(true)}
+          className="shrink-0"
+        >
+          {t("workspaceSettings.danger.deleteBtn")}
+        </Button>
+      </Card>
+      <DeleteWorkspaceDialog
+        workspace={confirming ? ws : null}
+        onClose={() => setConfirming(false)}
+        onDeleted={() => navigate("/")}
+      />
     </section>
   );
 }

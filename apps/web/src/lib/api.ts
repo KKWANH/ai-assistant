@@ -78,6 +78,19 @@ export const deleteWorkspace = (id: string, deleteFiles = false) =>
     `/workspaces/${id}${deleteFiles ? "?deleteFiles=true" : ""}`,
   );
 
+export interface WorkspaceAccessEntry {
+  accountId: string;
+  username: string;
+  displayName: string;
+  isAdmin: boolean;
+  isOwner: boolean;
+  role: "owner" | "editor" | "viewer" | null;
+}
+export const getWorkspaceAccess = (id: string) =>
+  request<{ entries: WorkspaceAccessEntry[] }>("GET", `/workspaces/${id}/access`);
+export const setWorkspaceAccess = (id: string, accountId: string, role: string) =>
+  request<{ ok: boolean }>("PUT", `/workspaces/${id}/access`, { accountId, role });
+
 // Project context — user-authored standing instructions for the workspace,
 // injected into every chat + deck/script generation.
 export const getWorkspaceContext = (id: string) =>

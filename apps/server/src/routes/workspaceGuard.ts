@@ -21,7 +21,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { Workspace, Account } from "@ariadne/shared";
 import { isBuiltinWorkspace } from "@ariadne/shared";
-import { dbGetWorkspace } from "../db/repo.js";
+import { dbGetWorkspace, dbGetWorkspaceRole } from "../db/repo.js";
 
 /**
  * Owner-or-admin check — the basis for "private by default" content access.
@@ -36,7 +36,10 @@ export function isOwnerOrAdmin(createdBy: string | null, account: Account): bool
 export function canViewWorkspace(workspace: Workspace, account: Account): boolean {
   if (isBuiltinWorkspace(workspace.id)) return true;
   if (workspace.visibility === "public") return true;
-  return isOwnerOrAdmin(workspace.createdBy, account);
+  if (isOwnerOrAdmin(workspace.createdBy, account)) return true;
+  // A per-user access grant (viewer/editor/owner) opens a private workspace —
+  // e.g. an admin shares 강의 준비 with a specific account.
+  return dbGetWorkspaceRole(workspace.id, account.id) != null;
 }
 
 /**
@@ -60,7 +63,10 @@ export function canModifyWorkspace(workspace: Workspace, account: Account): bool
   // edit/scan/delete, triggers/schedules) for the guest role centrally.
   if (account?.role === "guest") return false;
   if (isBuiltinWorkspace(workspace.id)) return true;
-  return isOwnerOrAdmin(workspace.createdBy, account);
+  if (isOwnerOrAdmin(workspace.createdBy, account)) return true;
+  // An editor/owner grant may modify; a viewer grant may not.
+  const role = dbGetWorkspaceRole(workspace.id, account.id);
+  return role === "editor" || role === "owner";
 }
 
 /**

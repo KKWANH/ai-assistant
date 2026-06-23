@@ -172,6 +172,26 @@ export function useDeleteWorkspace() {
   });
 }
 
+export function useWorkspaceAccess(workspaceId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["workspace-access", workspaceId] as const,
+    queryFn: () => api.getWorkspaceAccess(workspaceId),
+    enabled: !!workspaceId && enabled,
+  });
+}
+
+export function useSetWorkspaceAccess(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ accountId, role }: { accountId: string; role: string }) =>
+      api.setWorkspaceAccess(workspaceId, accountId, role),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["workspace-access", workspaceId] });
+      void qc.invalidateQueries({ queryKey: qk.workspaces });
+    },
+  });
+}
+
 // ── Templates ────────────────────────────────────────────────────────────────
 export function useTemplates() {
   return useQuery({

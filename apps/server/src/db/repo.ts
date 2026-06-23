@@ -27,6 +27,7 @@ import type {
   ScheduleFrequency,
   AgentAttempt,
   AttemptStatus,
+  WorkspaceRole,
 } from "@ariadne/shared";
 import { getDb } from "./index.js";
 
@@ -191,8 +192,50 @@ export function dbDeleteWorkspace(id: string): void {
     db.prepare("DELETE FROM agent_attempts WHERE workspace_id = ?").run(id);
     // Only workspace-scoped skills; account-global skills have workspace_id NULL.
     db.prepare("DELETE FROM skills WHERE workspace_id = ?").run(id);
+    db.prepare("DELETE FROM workspace_access WHERE workspace_id = ?").run(id);
     db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Workspace access grants — per-user view/edit roles on a workspace.
+// ---------------------------------------------------------------------------
+
+export function dbSetWorkspaceAccess(
+  workspaceId: string,
+  accountId: string,
+  role: WorkspaceRole,
+  createdAt: string,
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO workspace_access (workspace_id, account_id, role, created_at)
+       VALUES (?,?,?,?)
+       ON CONFLICT(workspace_id, account_id) DO UPDATE SET role = excluded.role`,
+    )
+    .run(workspaceId, accountId, role, createdAt);
+}
+
+export function dbRemoveWorkspaceAccess(workspaceId: string, accountId: string): void {
+  getDb()
+    .prepare("DELETE FROM workspace_access WHERE workspace_id = ? AND account_id = ?")
+    .run(workspaceId, accountId);
+}
+
+export function dbGetWorkspaceRole(workspaceId: string, accountId: string): WorkspaceRole | null {
+  const row = getDb()
+    .prepare("SELECT role FROM workspace_access WHERE workspace_id = ? AND account_id = ?")
+    .get(workspaceId, accountId) as { role: string } | undefined;
+  return (row?.role as WorkspaceRole | undefined) ?? null;
+}
+
+export function dbListWorkspaceAccess(
+  workspaceId: string,
+): { accountId: string; role: WorkspaceRole }[] {
+  const rows = getDb()
+    .prepare("SELECT account_id, role FROM workspace_access WHERE workspace_id = ?")
+    .all(workspaceId) as { account_id: string; role: string }[];
+  return rows.map((r) => ({ accountId: r.account_id, role: r.role as WorkspaceRole }));
 }
 
 function rowToWorkspace(row: Record<string, unknown>): Workspace {

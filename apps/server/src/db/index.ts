@@ -115,6 +115,14 @@ function runMigrations(db: DatabaseSync): void {
       expires_at  TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS workspace_access (
+      workspace_id TEXT NOT NULL,
+      account_id   TEXT NOT NULL,
+      role         TEXT NOT NULL,
+      created_at   TEXT NOT NULL,
+      PRIMARY KEY (workspace_id, account_id)
+    );
+
     CREATE VIRTUAL TABLE IF NOT EXISTS file_index USING fts5(
       workspace_id UNINDEXED,
       path,

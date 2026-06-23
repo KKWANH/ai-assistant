@@ -44,9 +44,18 @@ export interface Workspace {
    *  from the project on create; toggleable in workspace Settings. undefined =
    *  off. */
   focusMode?: boolean;
+  /** Whether the requesting account may modify this workspace (owner/admin/editor).
+   *  Decorated by the API per request — undefined in raw DB rows. Lets the UI
+   *  hide edit/delete affordances for viewers. */
+  editable?: boolean;
 }
 
 export type WorkspaceHomeView = "overview" | "surface" | null;
+
+/** Per-user access level on a workspace (admin-managed). Absence of a grant =
+ *  "non-viewer" (no access to a private workspace). Owner = full incl. managing
+ *  access + delete; editor = view + modify; viewer = view only. */
+export type WorkspaceRole = "owner" | "editor" | "viewer";
 
 /* ------------------------------------------------------------------ *
  * Custom workspace actions (tools the agent planner may use)

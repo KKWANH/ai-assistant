@@ -1000,7 +1000,7 @@ export function AppShell({ children }: AppShellProps) {
                           </span>
                         ) : undefined}
                       />
-                      {hoveredWorkspaceId === ws.id && !isBuiltinWorkspace(ws.id) && (
+                      {hoveredWorkspaceId === ws.id && !isBuiltinWorkspace(ws.id) && ws.editable !== false && (
                         <button
                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
                           onClick={(e) => {

@@ -13,7 +13,11 @@ import {
   dbDeleteWorkspace,
   dbGetLatestSnapshot,
   dbGetWorkspaceUsage,
+  dbSetWorkspaceAccess,
+  dbRemoveWorkspaceAccess,
+  dbListWorkspaceAccess,
 } from "../db/repo.js";
+import { listAccounts } from "../auth/accounts.js";
 import { scanWorkspace } from "../workspace/scanner.js";
 import { ensureAriadneFolder, writeSurface } from "../ariadneFolder.js";
 import { fireHooksDetached } from "../services/hooks.js";
@@ -26,7 +30,7 @@ import { seedPortfolioV2Surface } from "../surface/portfolioV2Template.js";
 import type { ProjectStarter } from "@ariadne/shared";
 import { projectStarters } from "../projects/index.js";
 import logger from "../logger.js";
-import { canViewWorkspace, requireWorkspace, rejectRemoteAccess, rejectGuest } from "./workspaceGuard.js";
+import { canViewWorkspace, canModifyWorkspace, isOwnerOrAdmin, requireWorkspace, rejectRemoteAccess, rejectGuest } from "./workspaceGuard.js";
 
 /**
  * The full starter set for the create flow. The example projects come from
@@ -71,7 +75,11 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   // public rows are still gated at the per-route level via mode="write".
   app.get("/workspaces", async (req, reply) => {
     const all = dbListWorkspaces();
-    const visible = all.filter((w) => canViewWorkspace(w, req.account));
+    const visible = all
+      .filter((w) => canViewWorkspace(w, req.account))
+      // Decorate with the requester's modify-rights so the UI can hide
+      // edit/delete affordances for viewers (read-only grants).
+      .map((w) => ({ ...w, editable: canModifyWorkspace(w, req.account) }));
     return reply.send(visible);
   });
 
@@ -484,6 +492,61 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         warnings: result.warnings,
         fileCount: snapshot.files.length,
       });
+    },
+  );
+
+  // GET /api/workspaces/:id/access — the per-user role table for the access
+  // settings UI. Owner-or-admin only (a viewer can read the workspace but not
+  // manage who else can). Returns every non-guest account with its effective
+  // role: the creator is always "owner", admins are flagged (full access via
+  // role), everyone else shows their grant or null (= non-viewer).
+  app.get<{ Params: { id: string } }>("/workspaces/:id/access", async (req, reply) => {
+    const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+    if (!workspace) return;
+    if (!isOwnerOrAdmin(workspace.createdBy, req.account)) {
+      return reply.status(403).send({ error: "Forbidden" });
+    }
+    const grants = new Map(dbListWorkspaceAccess(workspace.id).map((g) => [g.accountId, g.role]));
+    const entries = listAccounts()
+      .filter((a) => a.role !== "guest")
+      .map((a) => ({
+        accountId: a.id,
+        username: a.username,
+        displayName: a.displayName,
+        isAdmin: a.role === "admin",
+        isOwner: a.id === workspace.createdBy,
+        role: a.id === workspace.createdBy ? "owner" : (grants.get(a.id) ?? null),
+      }));
+    return reply.send({ entries });
+  });
+
+  // PUT /api/workspaces/:id/access — set or clear one account's role.
+  // Owner-or-admin only. role: "viewer" | "editor" | "owner" | "none" (clear).
+  app.put<{ Params: { id: string }; Body: { accountId?: string; role?: string } }>(
+    "/workspaces/:id/access",
+    async (req, reply) => {
+      const workspace = await requireWorkspace(req.params.id, req, reply, "read");
+      if (!workspace) return;
+      if (!isOwnerOrAdmin(workspace.createdBy, req.account)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const accountId = req.body?.accountId;
+      const role = req.body?.role;
+      if (typeof accountId !== "string" || !accountId) {
+        return reply.status(400).send({ error: "accountId is required" });
+      }
+      // The creator is permanently the owner — its access can't be reassigned.
+      if (accountId === workspace.createdBy) {
+        return reply.status(400).send({ error: "The owner's access can't be changed." });
+      }
+      if (role === "none" || role == null) {
+        dbRemoveWorkspaceAccess(workspace.id, accountId);
+      } else if (role === "viewer" || role === "editor" || role === "owner") {
+        dbSetWorkspaceAccess(workspace.id, accountId, role, new Date().toISOString());
+      } else {
+        return reply.status(400).send({ error: "Invalid role" });
+      }
+      return reply.send({ ok: true });
     },
   );
 }

@@ -49,6 +49,15 @@ export function findAccountById(id: string): Account | null {
   return rowToAccount(row);
 }
 
+/** All accounts, oldest first — for the admin workspace-access table. */
+export function listAccounts(): Account[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM accounts ORDER BY created_at ASC")
+    .all() as Record<string, unknown>[];
+  return rows.map(rowToAccount);
+}
+
 export function createAccount(
   username: string,
   password: string,
