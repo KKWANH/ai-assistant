@@ -465,13 +465,29 @@ export default function App() {
     const acPxOf = (p: any) => (p.avg_cost && per[p.cost_currency] ? p.avg_cost * (per[p.currency] / per[p.cost_currency]) : (p.price_native || 0));
     let costB = cashB;
     for (const p of view.positions) costB += toBase(p.shares * acPxOf(p), p.currency);
-    const priceOn = (sym: string, d: string) => { const e = hist1y[sym]; if (!e || !e.length) return null; let v: number | null = null; for (const r of e) { if (r.date <= d) v = r.close; else break; } return v; };
     const dates = spx.map((r: any) => r.date).filter((d: string) => d >= "2026-01-01");
+    // Pre-align each position's price history to `dates` in ONE merge pass (both
+    // are date-sorted ascending), carrying the last close ≤ each date. This makes
+    // the per-date net-worth sum O(dates × positions) instead of re-scanning each
+    // full history per date — O(dates × positions × historyPoints) — which froze
+    // the webview on large portfolios. Output is identical.
+    const aligned = view.positions.map((p: any) => {
+      const e = hist1y[p.quote_symbol] || [];
+      const fallback = acPxOf(p);
+      const prices: number[] = new Array(dates.length);
+      let j = 0;
+      let last: number | null = null;
+      for (let di = 0; di < dates.length; di++) {
+        while (j < e.length && e[j].date <= dates[di]) { last = e[j].close; j++; }
+        prices[di] = last != null ? last : fallback;
+      }
+      return { p, prices };
+    });
     const out: any[] = [];
-    for (const d of dates) {
+    for (let di = 0; di < dates.length; di++) {
       let val = cashB;
-      for (const p of view.positions) { const px = priceOn(p.quote_symbol, d); val += toBase(p.shares * (px != null ? px : acPxOf(p)), p.currency); }
-      out.push({ d, label: d.slice(5), value: val, cost: costB });
+      for (const a of aligned) val += toBase(a.p.shares * a.prices[di], a.p.currency);
+      out.push({ d: dates[di], label: dates[di].slice(5), value: val, cost: costB });
     }
     return out;
   }, [view, hist1y, base, spx]);
