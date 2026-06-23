@@ -380,10 +380,17 @@ export default function App() {
       const yrAgo = Date.now() - 365 * 864e5;
       const out: Record<string, number> = {};
       const ph: Record<string, any[]> = {};
-      await Promise.all(syms.map(async (s: any) => {
-        try { const h = await ariadne.getDividendHistory(s, "2y"); const sum = (h || []).filter((d: any) => new Date(d.date).getTime() >= yrAgo).reduce((a: number, b: any) => a + (b.amount || 0), 0); if (sum > 0) out[s] = sum; } catch {}
-        try { ph[s] = await ariadne.getQuoteHistory(s, "1y", "1d"); } catch {}
-      }));
+      // Bounded concurrency: fetching dividend + 1y history for EVERY position at
+      // once is 2×N requests (~82 for a 41-position portfolio) — that network +
+      // memory spike on load helped wedge the webview. Process in small batches;
+      // same data, set once at the end.
+      const LIMIT = 6;
+      for (let i = 0; i < syms.length && alive; i += LIMIT) {
+        await Promise.all(syms.slice(i, i + LIMIT).map(async (s: any) => {
+          try { const h = await ariadne.getDividendHistory(s, "2y"); const sum = (h || []).filter((d: any) => new Date(d.date).getTime() >= yrAgo).reduce((a: number, b: any) => a + (b.amount || 0), 0); if (sum > 0) out[s] = sum; } catch {}
+          try { ph[s] = await ariadne.getQuoteHistory(s, "1y", "1d"); } catch {}
+        }));
+      }
       if (alive) { setDiv(out); setHist1y(ph); }
     })();
     return () => { alive = false; };
