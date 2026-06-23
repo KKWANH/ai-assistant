@@ -24,7 +24,7 @@ import { startScheduler } from "./services/scheduler.js";
 import { seedAdmin, seedGuest } from "./auth/accounts.js";
 import { ensureTutorialWorkspace } from "./tutorialWorkspace.js";
 import { ensureDemoWorkspace } from "./demoWorkspace.js";
-import { ensureNetWorthSample } from "./sampleNetWorth.js";
+import { ensureAssetsSample } from "./sampleAssets.js";
 import { validateSession } from "./auth/sessions.js";
 import { accessContext } from "./auth/context.js";
 
@@ -81,7 +81,7 @@ async function bootstrap(): Promise<void> {
   seedGuest();
   ensureTutorialWorkspace();
   await ensureDemoWorkspace();
-  await ensureNetWorthSample();
+  await ensureAssetsSample();
 
   // Retrieve or generate cookie signing secret
   let cookieSecret = dbGetSetting("cookie_secret");

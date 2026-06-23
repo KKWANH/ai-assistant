@@ -1,0 +1,21 @@
+{
+ "as_of": "2026-06-22",
+ "net_worth_krw": 333500000,
+ "note": "Sample plan — fabricated.",
+ "major": [
+  "VWCE",
+  "IWDA",
+  "AAPL"
+ ],
+ "accounts": [
+  "brk",
+  "tax",
+  "ret"
+ ],
+ "cats": {
+  "equity": 72,
+  "bonds": 10,
+  "cash": 15,
+  "gold": 3
+ }
+}

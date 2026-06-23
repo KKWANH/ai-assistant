@@ -1,0 +1,11 @@
+id,ticker,name,asset_class,currency,quote_symbol
+vwce,VWCE,Vanguard FTSE All-World,etf,EUR,VWCE.DE
+iwda,IWDA,iShares Core MSCI World,etf,EUR,IWDA.AS
+eimi,EIMI,iShares Core MSCI EM IMI,etf,EUR,EIMI.AS
+aggh,AGGH,iShares Core Global Aggregate Bond,etf,EUR,AGGH.MI
+aapl,AAPL,Apple Inc.,stock,USD,AAPL
+msft,MSFT,Microsoft Corp.,stock,USD,MSFT
+nvda,NVDA,NVIDIA Corp.,stock,USD,NVDA
+vusa,VUSA,Vanguard S&P 500,etf,USD,VUSA.L
+brk_b,BRK-B,Berkshire Hathaway B,stock,USD,BRK-B
+phau,PHAU,WisdomTree Physical Gold,etf,USD,PHAU.L

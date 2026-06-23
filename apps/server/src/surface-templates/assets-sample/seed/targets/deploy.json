@@ -1,0 +1,115 @@
+{
+ "updated": "2026-06-22",
+ "market": "neutral",
+ "principle": "Diversify first, DCA the rest. Sample plan — all values fabricated.",
+ "rule_accelerate": [
+  {
+   "trig": "−10% drawdown",
+   "act": "Deploy 1 extra month"
+  },
+  {
+   "trig": "−20% drawdown",
+   "act": "Deploy 2 extra months"
+  },
+  {
+   "trig": "Cash > 25%",
+   "act": "Bring forward DCA"
+  }
+ ],
+ "eur": {
+  "pool": 25000,
+  "now_pct": 40,
+  "dca_months": 7,
+  "currency": "EUR",
+  "note": "Core-satellite, sample.",
+  "sleeves": [
+   {
+    "name": "Global core",
+    "ticker": "VWCE",
+    "target": 12000,
+    "now": 8000,
+    "monthly": 800,
+    "kind": "etf"
+   },
+   {
+    "name": "World ex-core",
+    "ticker": "IWDA",
+    "target": 6000,
+    "now": 4000,
+    "monthly": 400,
+    "kind": "etf"
+   },
+   {
+    "name": "Emerging mkts",
+    "ticker": "EIMI",
+    "target": 3000,
+    "now": 1500,
+    "monthly": 200,
+    "kind": "etf"
+   },
+   {
+    "name": "Bonds",
+    "ticker": "AGGH",
+    "target": 2500,
+    "now": 1500,
+    "monthly": 150,
+    "kind": "etf"
+   },
+   {
+    "name": "Gold",
+    "ticker": "PHAU",
+    "target": 1500,
+    "now": 800,
+    "monthly": 100,
+    "kind": "etf"
+   },
+   {
+    "name": "Cash buffer",
+    "ticker": "-",
+    "target": 0,
+    "now": 0,
+    "monthly": 0,
+    "kind": "cash"
+   }
+  ]
+ },
+ "krw": {
+  "pool": 18,
+  "currency": "KRW",
+  "note": "Secondary-currency pool, sample.",
+  "sleeves": [
+   {
+    "name": "Monthly DCA",
+    "ticker": "VWCE",
+    "target": 6,
+    "now": 3,
+    "monthly": 30,
+    "kind": "etf"
+   },
+   {
+    "name": "Long-term",
+    "ticker": "VUSA",
+    "target": 5,
+    "now": 2,
+    "monthly": 20,
+    "kind": "etf"
+   },
+   {
+    "name": "Satellite",
+    "ticker": "NVDA",
+    "target": 2,
+    "now": 1,
+    "monthly": 0,
+    "kind": "etf"
+   },
+   {
+    "name": "Reserve",
+    "ticker": "-",
+    "target": 3,
+    "now": 3,
+    "monthly": 0,
+    "kind": "cash"
+   }
+  ]
+ }
+}

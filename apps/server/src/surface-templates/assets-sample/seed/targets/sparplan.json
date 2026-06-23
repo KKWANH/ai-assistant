@@ -1,0 +1,14 @@
+{
+ "plans": [
+  {
+   "ticker": "VWCE",
+   "monthly": 800,
+   "day": 1
+  },
+  {
+   "ticker": "IWDA",
+   "monthly": 400,
+   "day": 1
+  }
+ ]
+}

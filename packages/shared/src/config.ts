@@ -261,17 +261,18 @@ export const TUTORIAL_WORKSPACE_ID = "ariadne-tutorial";
 /** Id of the built-in, non-deletable demo workspace (the Portfolio showcase). */
 export const DEMO_WORKSPACE_ID = "ariadne-demo-portfolio";
 
-/** Id of the built-in, public "Net Worth" sample workspace — fabricated data
- *  showcasing the data-driven dashboard + in-place editing to logged-out
- *  visitors and guests, without exposing any real finances. */
-export const NETWORTH_SAMPLE_WORKSPACE_ID = "ariadne-sample-networth";
+/** Id of the built-in, public "자산 현황" sample workspace — a copy of the real
+ *  net-worth dashboard view with fully fabricated data (no real finances), so
+ *  logged-out visitors and guests can explore the data-driven dashboard +
+ *  in-place editing. */
+export const ASSETS_SAMPLE_WORKSPACE_ID = "ariadne-sample-assets";
 
 /** Whether a workspace id is one of the built-in (seeded, non-deletable) ones. */
 export function isBuiltinWorkspace(id: string): boolean {
   return (
     id === TUTORIAL_WORKSPACE_ID ||
     id === DEMO_WORKSPACE_ID ||
-    id === NETWORTH_SAMPLE_WORKSPACE_ID
+    id === ASSETS_SAMPLE_WORKSPACE_ID
   );
 }
 
