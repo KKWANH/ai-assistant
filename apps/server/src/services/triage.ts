@@ -126,10 +126,15 @@ export async function triage(
   if (wantWeb) {
     keys.push("webSearch");
     questions.push(
-      '- "webSearch" (boolean): true ONLY when answering needs a live internet search — current ' +
-        "events, recent or time-sensitive data, prices, news, or facts released after training. false " +
-        "for greetings, tests, small talk, opinions, or any coding / writing / reasoning / " +
-        "general-knowledge task.",
+      '- "webSearch" (boolean): true when answering well needs facts from the live internet — EITHER ' +
+        "(a) current / time-sensitive info (events, news, prices, data or releases after training), OR " +
+        "(b) a SPECIFIC CHECKABLE FACT the user needs correct: a date, attribution, name, place, " +
+        "statistic, definition, or historical / biographical / scientific detail — where a confident " +
+        "WRONG answer would mislead, so grounding it in a source prevents hallucination (e.g. \"when was " +
+        'this painted?\", "who composed X?", "what year did Y happen?"). false for: greetings, tests, ' +
+        "small talk, opinions, reasoning, coding, writing, translation — AND for anything answerable " +
+        "from the attached files, images, or workspace context already provided (those ARE the source; " +
+        "do not web-search them).",
     );
   }
   if (wantTitle) {
