@@ -232,7 +232,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.ollamaNotRunning": "Ollama가 실행되지 않음",
   "chat.composer.startOllama": "Ollama를 실행하면 설치된 모델이 표시됩니다",
   "chat.composer.noModels": "모델 목록 없음",
-  "chat.composer.hint": "⌘↵ 전송 · ↵ 줄바꿈",
+  "chat.composer.hint": "↵ 전송 · ⇧↵ 줄바꿈",
   "chat.composer.waiting": "대기 중…",
   "chat.composer.send": "메시지 전송",
   "chat.composer.stop": "중지",

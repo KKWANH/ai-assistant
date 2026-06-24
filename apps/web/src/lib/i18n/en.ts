@@ -239,7 +239,7 @@ const en = {
   "chat.composer.ollamaNotRunning": "Ollama not running",
   "chat.composer.startOllama": "Start Ollama to see installed models",
   "chat.composer.noModels": "No models listed",
-  "chat.composer.hint": "⌘↵ send · ↵ newline",
+  "chat.composer.hint": "↵ send · ⇧↵ newline",
   "chat.composer.waiting": "Waiting…",
   "chat.composer.send": "Send message",
   "chat.composer.stop": "Stop",

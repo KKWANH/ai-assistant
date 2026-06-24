@@ -1,6 +1,6 @@
 /**
  * ChatComposer — textarea + attach + web-search toggle + workspace selector.
- * Cmd/Ctrl+Enter sends, Enter inserts newline.
+ * Enter sends, Shift+Enter inserts a newline (IME-safe for Korean/CJK input).
  * Files are read to base64 before sending.
  */
 import { useRef, useState, useCallback, useEffect } from "react";
@@ -740,12 +740,20 @@ export function ChatComposer({
   const canSend = (content.trim().length > 0 || attachments.length > 0) && !disabled && !pending && !visionBlocked;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Cmd/Ctrl+Enter sends; a bare Enter inserts a newline so long, multi-line
-    // messages are easy to compose. Honors the same gates the Send button does.
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      if (canSend) handleSend();
-    }
+    // Enter sends; Shift+Enter inserts a newline for multi-line messages — the
+    // universal chat convention (the prior Cmd+Enter-to-send tripped up users,
+    // who hit Enter and only got newlines). Cmd/Ctrl+Enter still sends too.
+    // Two guards matter:
+    //   - isComposing: during Korean/CJK IME assembly, Enter COMMITS the
+    //     in-progress syllable — it must NOT send (else it fires mid-word).
+    //   - skillsOpenMode "slash": let a half-typed "/cmd" keep composing rather
+    //     than sending the literal slash text.
+    if (e.key !== "Enter") return;
+    if (e.nativeEvent.isComposing) return;
+    if (e.shiftKey) return;
+    if (skillsOpenMode === "slash") return;
+    e.preventDefault();
+    if (canSend) handleSend();
   };
   const editingAtt = editingIndex !== null ? attachments[editingIndex] ?? null : null;
 
