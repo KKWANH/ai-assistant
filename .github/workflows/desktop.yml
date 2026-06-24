@@ -1,0 +1,87 @@
+name: Desktop build
+
+# Build the Tauri desktop app for macOS + Windows + Linux. Native node_modules
+# aren't portable, so each OS is built on its own runner (this is the only way
+# to produce all three from one push). Trigger manually, or on a v* tag.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+            bundles: app,dmg
+          - os: windows-latest
+            target: win-x64
+            bundles: nsis
+          - os: ubuntu-22.04
+            target: linux-x64
+            bundles: deb,appimage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+
+      - name: Linux build deps (WebKitGTK etc.)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install JS deps (builds native modules for THIS OS)
+        run: npm ci
+
+      - name: Fetch Node sidecar for this OS
+        shell: bash
+        run: TARGET=${{ matrix.target }} bash apps/desktop/scripts/fetch-node-sidecar.sh
+
+      - name: Stage server + build web SPA
+        shell: bash
+        run: bash apps/desktop/scripts/stage-server.sh
+
+      - name: Bundle the app
+        shell: bash
+        run: cd apps/desktop && npx -y @tauri-apps/cli@2 build --bundles ${{ matrix.bundles }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: ariadne-${{ matrix.target }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/**/*.app
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+          retention-days: 14
+          if-no-files-found: warn

@@ -72,7 +72,8 @@ inner="${file%.$EXT}" # the top-level dir inside the archive (node-vX.Y.Z-<slug>
 case "$EXT" in
   tar.gz) tar -xzf "$tmp/$file" -C "$tmp" ;;
   tar.xz) tar -xJf "$tmp/$file" -C "$tmp" ;;
-  zip)    ( cd "$tmp" && unzip -q "$file" ) ;;
+  zip)    # bsdtar (macOS + Windows tar) extracts zip; fall back to unzip
+          tar -xf "$tmp/$file" -C "$tmp" 2>/dev/null || ( cd "$tmp" && unzip -q "$file" ) ;;
 esac
 cp "$tmp/$inner/$BINREL" "$DEST"
 chmod +x "$DEST" 2>/dev/null || true

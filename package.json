@@ -19,6 +19,7 @@
   },
   "scripts": {
     "build:web": "npm run build --workspace @ariadne/web",
+    "build:desktop": "bash apps/desktop/scripts/build-app.sh",
     "check:bundle": "tsx scripts/check-bundle-budgets.ts",
     "gen:api": "node scripts/gen-api-inventory.mjs",
     "gen:api:check": "node scripts/gen-api-inventory.mjs --check",

@@ -17,30 +17,41 @@ you cannot produce a Windows or Linux app from macOS by copying files.
 So: macOS app → build on macOS · Windows app → build on Windows · Linux app →
 build on Linux. A CI matrix is the practical way to ship all three (below).
 
+## Dev loop: edit once → reflected on web AND desktop
+
+You do **not** rebuild the desktop app to see code changes during development —
+the shell just points a webview at the same `127.0.0.1:4319` server, so whatever
+the server serves, the app shows on reload. A full `build:desktop` is only for
+producing a shippable installer.
+
+| You changed…        | To see it                                                                 |
+|---------------------|---------------------------------------------------------------------------|
+| Web SPA (`apps/web`)| `npm run build:web` — `@fastify/static` (`wildcard:true`) serves the fresh `dist/` live; reload the app (Cmd+R) or browser. For instant HMR while iterating, `npm run dev:web` (Vite, `:5174`). |
+| Server (`apps/server`, `projects/*`) | `./ops/ariadne.sh restart` (runs the working tree via `tsx`). Reload the app. |
+
+The desktop app is then just one of the clients of that running server — no
+per-edit rebuild. Rebuild (`npm run build:desktop`) only to cut a new installer.
+
 ## Per-OS build steps (run on the target OS)
 
-Prereqs on each host: Rust (stable) + the Tauri CLI (`cargo install
-tauri-cli --version "^2"` or `npm i -g @tauri-apps/cli`) + Node 22.
-Bash is required for the two scripts (on Windows use **Git Bash** or WSL).
+Prereqs on each host: Rust (stable) + Node 22 + Bash (on Windows use **Git
+Bash**). The Tauri CLI is fetched on demand via `npx @tauri-apps/cli@2` — no
+global install needed.
+
+**One command** (from the repo root) does the whole pipeline for the current OS:
 
 ```bash
-# 1. Install JS deps — compiles native modules FOR THIS OS/arch.
-npm install
+npm run build:desktop                      # → native installer(s) for THIS OS
+npm run build:desktop -- --bundles app     # …skip the .dmg (its bundle_dmg.sh needs a GUI)
+```
 
-# 2. Build the web SPA the server serves.
-npm run build -w apps/web
+It runs these (each can be invoked on its own):
 
-# 3. Fetch the official Node sidecar for this host (auto-detects the target;
-#    or pass TARGET=win-x64 | linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64).
-apps/desktop/scripts/fetch-node-sidecar.sh
-
-# 4. Stage the self-contained server tree (incl. THIS OS's node_modules) into
-#    src-tauri/.bundle.
-apps/desktop/scripts/stage-server.sh
-
-# 5. Bundle. `tauri.conf.json` has bundle.targets:"all", so each OS emits its
-#    native installers.
-cd apps/desktop/src-tauri && cargo tauri build
+```bash
+npm install                                  # native modules for THIS OS/arch
+apps/desktop/scripts/fetch-node-sidecar.sh   # Node sidecar (auto-detects target; or TARGET=win-x64 …)
+apps/desktop/scripts/stage-server.sh         # builds the web SPA + stages the self-contained server
+cd apps/desktop && npx -y @tauri-apps/cli@2 build   # bundle (targets:"all" → this OS's installers)
 ```
 
 Outputs (under `src-tauri/target/release/bundle/`):
@@ -59,25 +70,19 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 ```
 
 ### Icons
-`tauri.conf.json` references `icons/icon.png`. To regenerate the full
-platform icon set (Windows needs `.ico`, macOS `.icns`):
+`tauri.conf.json` references the generated `icons/` set. To regenerate it from a
+source PNG (Windows needs `.ico`, macOS `.icns`):
 ```bash
-cd apps/desktop/src-tauri && cargo tauri icon icons/icon.png
+cd apps/desktop && npx -y @tauri-apps/cli@2 icon src-tauri/icons/icon.png
 ```
 
-## CI (recommended): GitHub Actions matrix
+## CI: build all three OSes from one push
 
-One job per OS, each running steps 1–5 above:
-
-```yaml
-strategy:
-  matrix:
-    os: [macos-latest, windows-latest, ubuntu-22.04]
-runs-on: ${{ matrix.os }}
-```
-
-`tauri-apps/tauri-action` handles step 5 + release upload; run steps 1–4 before
-it. On `ubuntu-22.04` install the Linux deps above first.
+`.github/workflows/desktop.yml` runs the one-command pipeline on a
+macOS + Windows + Linux matrix and uploads each OS's installers as artifacts.
+Native `node_modules` aren't portable, so this matrix is the only way to produce
+all three from a single trigger. Trigger it manually (Actions → **Desktop build**
+→ Run workflow) or by pushing a `v*` tag.
 
 ## Signing / notarization (deferred)
 
