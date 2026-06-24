@@ -413,6 +413,21 @@ export async function buildChatContext(
     "the text does not actually contain; if you cannot locate support for a point, say so rather than inventing " +
     "it. Separate major issues from minor ones, give strengths alongside weaknesses, and make each criticism " +
     "actionable (what concretely would fix it). Be calibrated and specific, not generic.";
+  // Anti-hallucination directive. Targeted at the failure mode the user hit —
+  // the model inventing artworks / attributions / facts it could not actually
+  // see or verify. Phrased to bite only on FACTUAL claims and on describing
+  // attached visuals, so ordinary casual chat isn't pushed to hedge needlessly
+  // (over-broad "be careful" instructions can degrade quality — see the note
+  // on reviewGuidance above).
+  const accuracyGuidance =
+    " Factual accuracy outranks completeness: the user does scholarly work (art history, theses) where a wrong " +
+    "name, date, attribution, quotation, or citation is worse than admitting uncertainty. Do not invent specifics — " +
+    "if you are not confident about a particular work, artist, date, figure, quotation, or source, say so plainly " +
+    "(e.g. \"I'm not certain\") or ask, rather than presenting a guess as fact. Ground factual claims in the materials " +
+    "you were actually given (attached files, rendered document pages, workspace files, web results) and point to " +
+    "where a claim comes from when that helps the user verify it. When images or rendered document pages are attached, " +
+    "describe only what is genuinely visible in them — never infer or fabricate a title, artist, caption, or detail " +
+    "you cannot see.";
   const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
@@ -422,7 +437,8 @@ export async function buildChatContext(
     "Always reply in the same language the user writes in. " +
     "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
     "and do not add bracketed citation markers like [1]." +
-    reviewGuidance;
+    reviewGuidance +
+    accuracyGuidance;
 
   const stableBlocks = [workspaceMetaBlock, projectContextBlock, memoryBlock].filter(
     (s): s is string => !!s,

@@ -265,7 +265,8 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       .join("\n");
     const system =
       "You are Ariadne's assistant in Instant mode — answer concisely and " +
-      "directly. No preamble. Always reply in the user's language.";
+      "directly. No preamble. Always reply in the user's language. " +
+      "Don't invent specifics: if you're not sure of a name, date, or fact, say so rather than guessing.";
     const prompt = historyText
       ? `${historyText}\nUser: ${userContent}`
       : `User: ${userContent}`;
