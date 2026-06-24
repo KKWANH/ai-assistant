@@ -24,32 +24,24 @@
   "note": "Core-satellite, sample.",
   "sleeves": [
    {
-    "name": "Global core",
-    "ticker": "VWCE",
+    "name": "US core",
+    "ticker": "VOO",
     "target": 12000,
     "now": 8000,
     "monthly": 800,
     "kind": "etf"
    },
    {
-    "name": "World ex-core",
-    "ticker": "IWDA",
+    "name": "Intl ex-US",
+    "ticker": "VXUS",
     "target": 6000,
     "now": 4000,
     "monthly": 400,
     "kind": "etf"
    },
    {
-    "name": "Emerging mkts",
-    "ticker": "EIMI",
-    "target": 3000,
-    "now": 1500,
-    "monthly": 200,
-    "kind": "etf"
-   },
-   {
     "name": "Bonds",
-    "ticker": "AGGH",
+    "ticker": "BND",
     "target": 2500,
     "now": 1500,
     "monthly": 150,
@@ -57,7 +49,7 @@
    },
    {
     "name": "Gold",
-    "ticker": "PHAU",
+    "ticker": "GLD",
     "target": 1500,
     "now": 800,
     "monthly": 100,
@@ -80,7 +72,7 @@
   "sleeves": [
    {
     "name": "Monthly DCA",
-    "ticker": "VWCE",
+    "ticker": "VOO",
     "target": 6,
     "now": 3,
     "monthly": 30,
@@ -88,7 +80,7 @@
    },
    {
     "name": "Long-term",
-    "ticker": "VUSA",
+    "ticker": "VXUS",
     "target": 5,
     "now": 2,
     "monthly": 20,
