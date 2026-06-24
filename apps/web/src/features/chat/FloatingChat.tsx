@@ -99,7 +99,11 @@ export function FloatingChat({ workspaceId }: { workspaceId: string }) {
               </button>
             </div>
           </div>
-          <div className="min-h-0 flex-1">
+          {/* Must be a flex column: ThreadView fills its parent via flex-1, and
+              its message list scrolls within that bounded height. Without
+              `flex flex-col` here the list had no height cap and couldn't scroll
+              (the top of long answers was unreachable in the floating panel). */}
+          <div className="flex min-h-0 flex-1 flex-col">
             <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner size="sm" label="Loading" /></div>}>
               <ThreadView chatId={chatId} />
             </Suspense>
