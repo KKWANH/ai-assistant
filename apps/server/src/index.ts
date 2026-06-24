@@ -196,7 +196,15 @@ async function bootstrap(): Promise<void> {
     await app.register(fastifyStatic, {
       root: WEB_DIST,
       prefix: "/",
-      wildcard: false,
+      // Serve files dynamically (per-request), NOT a snapshot of the dir taken
+      // at startup. With `wildcard: false` the plugin registered one route per
+      // file AT BOOT, so rebuilding the web bundle (new hashed asset names) while
+      // the server ran left the new /assets/index-*.js 404ing — the SPA's main
+      // module couldn't load and the app rendered a blank/black screen until a
+      // restart. Dynamic serving picks up a fresh build with no restart. Missing
+      // files still fall through to the notFoundHandler below (404 for assets,
+      // index.html for SPA routes).
+      wildcard: true,
     });
 
     // SPA fallback: non-/api GET requests → index.html.
