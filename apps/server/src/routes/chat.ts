@@ -506,7 +506,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         webSearch: webSearchInput,
         // Reranker + attachment budget keyed to the ANSWER provider (which may be
         // the escalated one) so a stronger model gets its larger context budget.
-      }, accountContext, answerProvider.id, makeReranker(answerProvider));
+      }, accountContext, answerProvider.id, producedModel, makeReranker(answerProvider));
     } catch (err) {
       logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
       contextResult = {

@@ -17,12 +17,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Chat, ChatMessage, SearchResult, FileMeta } from "@ariadne/shared";
+import { modelHasVision } from "@ariadne/shared";
+import { PATHS } from "../config.js";
 import type { AiProvider, ProviderImage } from "../providers/index.js";
 import { safeResolveUnderRoot } from "../security/pathGuard.js";
 import { tryParseDocument } from "./safeParse.js";
 import { dbGetLatestSnapshot, dbGetWorkspace, dbListMcpServers } from "../db/repo.js";
 import { performSearch, fetchUrlText } from "./search.js";
-import { readUpload } from "./uploads.js";
+import { readUpload, resolveUploadPath } from "./uploads.js";
+import { renderPdfPages } from "./pdfScreenshot.js";
+import { LO_FORMATS, convertToPdfCached, getLibreofficeStatus } from "./libreoffice.js";
+import logger from "../logger.js";
 import { retrieveRelevantChunks, formatChunksForPrompt, isRetrievalEligible, extractRelevantWithinBudget, extractRelevantWithinBudgetSemantic, type RerankFn } from "./retrieval.js";
 import { listMemories, renderMemoryForPrompt } from "./workspaceMemory.js";
 import { getWorkspaceContext, renderContextForPrompt } from "./workspaceContext.js";
@@ -46,6 +51,14 @@ const ATTACHMENT_BUDGET_BY_PROVIDER: Record<string, number> = {
   mock: 4_000,
 };
 const DEFAULT_ATTACHMENT_BUDGET = 24_000;
+
+// Vision: how many pages of a page-based attachment (PDF, or Office file
+// converted to PDF) to render as images for a vision-capable model, and the
+// hard cap across ALL attachments in one message — bounds render time and
+// request size. A typical lecture deck (~25 slides) fits under the cap; larger
+// files are truncated and the model is told so in the attachment note.
+const VISION_PAGE_CAP = 30;
+const VISION_MAX_TOTAL_IMAGES = 40;
 
 // ---------------------------------------------------------------------------
 // Public return type
@@ -97,6 +110,11 @@ export async function buildChatContext(
   /** Active provider id — picks the attachment text budget (a 1M-context model
    *  can hold a whole document; a local model can't). */
   providerId?: string,
+  /** Active model id. When it's vision-capable, page-based attachments (PDF, or
+   *  Office files convertible to PDF) are ALSO rendered to images so the model
+   *  sees the actual slides/figures/artwork — text extraction alone drops every
+   *  embedded image (why "describe the artworks in this PDF" used to fail). */
+  model?: string,
   /** Optional second-pass reranker (built from the active provider). Applied
    *  to workspace retrieval only for substantive queries — see the gate at the
    *  retrieval call below. Unset → retrieval is unchanged. */
@@ -173,6 +191,40 @@ export async function buildChatContext(
         // leaves the rest for any later attachments in the same message.
         budget = overBudget ? 0 : Math.max(0, budget - text.length);
         fileParts.push(`--- Attached file: ${upload.meta.name} ---\n${capped}`);
+
+        // Vision: text extraction drops every embedded image, so for page-based
+        // documents ALSO render the pages and hand them to a vision model — it
+        // can then analyse the actual slides / figures / artwork (e.g. "identify
+        // each painting in this exam") instead of replying "there are no images."
+        // Best-effort: any failure leaves the extracted text we just pushed.
+        if (model && modelHasVision(model) && images.length < VISION_MAX_TOTAL_IMAGES) {
+          const ext = (upload.meta.name.split(".").pop() ?? "").toLowerCase();
+          try {
+            let pdfPath: string | null = null;
+            if (ext === "pdf") {
+              pdfPath = resolveUploadPath(att.uploadId);
+            } else if (LO_FORMATS.has(`.${ext}`) && getLibreofficeStatus().available) {
+              const src = resolveUploadPath(att.uploadId);
+              if (src) pdfPath = await convertToPdfCached(PATHS.home, src);
+            }
+            if (pdfPath) {
+              const cap = Math.min(VISION_PAGE_CAP, VISION_MAX_TOTAL_IMAGES - images.length);
+              const { pages, totalPages } = await renderPdfPages(pdfPath, { maxPages: cap });
+              for (const pg of pages) {
+                images.push({ mediaType: "image/png", dataBase64: pg.buffer.toString("base64") });
+              }
+              if (pages.length > 0) {
+                fileParts.push(
+                  totalPages > pages.length
+                    ? `[Rendered the first ${pages.length} of ${totalPages} pages of "${upload.meta.name}" as images for visual analysis — pages ${pages.length + 1}–${totalPages} were omitted to fit limits.]`
+                    : `[Rendered all ${pages.length} page(s) of "${upload.meta.name}" as images for visual analysis.]`,
+                );
+              }
+            }
+          } catch (err) {
+            logger.warn({ name: upload.meta.name, err: String(err) }, "attachment page-render for vision failed — using extracted text only");
+          }
+        }
       }
     }
     if (fileParts.length > 0) {

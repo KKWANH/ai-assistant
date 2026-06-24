@@ -16,6 +16,8 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import logger from "../logger.js";
 
@@ -26,6 +28,29 @@ function loadPdfjs(): Promise<typeof import("pdfjs-dist/legacy/build/pdf.mjs")> 
     pdfjsPromise = import("pdfjs-dist/legacy/build/pdf.mjs");
   }
   return pdfjsPromise;
+}
+
+// Point pdfjs at its bundled standard fonts + CMaps (as filesystem paths — a
+// file:// URL fails because Node's fetch can't load it). Without these, pdfjs
+// skips every text glyph: only shapes/images render, so slide titles, labels,
+// and Korean captions vanish from the page image. Resolved once from the
+// installed pdfjs-dist (works in dev and in the bundled desktop server).
+let pdfAssetOpts: { standardFontDataUrl: string; cMapUrl: string; cMapPacked: true } | null = null;
+function pdfAssets(): { standardFontDataUrl: string; cMapUrl: string; cMapPacked: true } {
+  if (!pdfAssetOpts) {
+    let root = "";
+    try {
+      root = path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
+    } catch {
+      /* leave empty — pdfjs falls back to glyph-less rendering (shapes/images only) */
+    }
+    pdfAssetOpts = {
+      standardFontDataUrl: root ? `${path.join(root, "standard_fonts")}/` : "",
+      cMapUrl: root ? `${path.join(root, "cmaps")}/` : "",
+      cMapPacked: true,
+    };
+  }
+  return pdfAssetOpts;
 }
 
 export interface ScreenshotResult {
@@ -50,9 +75,11 @@ export async function renderPdfPage(
   const doc = await pdfjs.getDocument({
     data: new Uint8Array(buf),
     // The legacy build already runs on the main thread (no worker). Disable
-    // eval + remote font fetches we can't fulfil server-side.
+    // eval; disableFontFace renders glyphs via paths from the standard-font
+    // data below (so text shows up, not just shapes/images).
     isEvalSupported: false,
     disableFontFace: true,
+    ...pdfAssets(),
   }).promise;
   try {
     const totalPages = doc.numPages;
@@ -88,6 +115,52 @@ export async function renderPdfPage(
       heightPx,
       scale: safeScale,
     };
+  } finally {
+    await doc.destroy();
+  }
+}
+
+/**
+ * Render the first `maxPages` pages of a PDF as PNG buffers, opening the
+ * document ONCE (renderPdfPage re-parses the whole PDF per call — wasteful when
+ * a chat attachment needs every slide). Returns the rendered pages in order
+ * plus the PDF's true page count, so the caller can tell the user when the set
+ * was capped. Used to let a vision model SEE attached slides/figures that text
+ * extraction drops.
+ */
+export async function renderPdfPages(
+  absPath: string,
+  opts: { maxPages?: number; scale?: number } = {},
+): Promise<{ pages: { page: number; buffer: Buffer }[]; totalPages: number }> {
+  const safeScale = Math.min(Math.max(opts.scale ?? 2, 1), 4);
+  const buf = await readFile(absPath);
+  const pdfjs = await loadPdfjs();
+  const doc = await pdfjs.getDocument({
+    data: new Uint8Array(buf),
+    isEvalSupported: false,
+    disableFontFace: true,
+    ...pdfAssets(),
+  }).promise;
+  try {
+    const totalPages = doc.numPages;
+    const n = Math.min(opts.maxPages ?? totalPages, totalPages);
+    const pages: { page: number; buffer: Buffer }[] = [];
+    for (let p = 1; p <= n; p++) {
+      const pageProxy = await doc.getPage(p);
+      const viewport = pageProxy.getViewport({ scale: safeScale });
+      const widthPx = Math.ceil(viewport.width);
+      const heightPx = Math.ceil(viewport.height);
+      const canvas = createCanvas(widthPx, heightPx);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, widthPx, heightPx);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await pageProxy.render({ canvasContext: ctx as any, viewport }).promise;
+      pages.push({ page: p, buffer: Buffer.from(await canvas.encode("png")) });
+      pageProxy.cleanup();
+    }
+    logger.info({ absPath, rendered: pages.length, totalPages }, "pdf pages rendered (multi)");
+    return { pages, totalPages };
   } finally {
     await doc.destroy();
   }

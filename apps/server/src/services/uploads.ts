@@ -35,7 +35,7 @@ function ensureUploadsDir(): void {
  * so a `..`-laced id would otherwise let path.join walk the filesystem. Returns
  * null on escape; the sidecar `.json` lives next to the returned path.
  */
-function resolveUploadPath(uploadId: string): string | null {
+export function resolveUploadPath(uploadId: string): string | null {
   return safeResolveUnderRoot(uploadsDir(), uploadId);
 }
 

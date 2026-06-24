@@ -1095,7 +1095,7 @@ export function ChatComposer({
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,.pdf,.docx,.xlsx,.txt,.md,.csv"
+            accept="image/*,.pdf,.docx,.pptx,.ppt,.xlsx,.txt,.md,.csv"
             className="hidden"
             onChange={(e) => {
               if (e.target.files) void handleFiles(e.target.files);
