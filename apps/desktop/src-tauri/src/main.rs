@@ -332,6 +332,9 @@ fn main() {
                 }
             }
             // Dock-icon click after the window was hidden — bring it back.
+            // macOS-only: RunEvent::Reopen doesn't exist on Linux/Windows, so the
+            // arm must be cfg'd out there or the match fails to compile.
+            #[cfg(target_os = "macos")]
             RunEvent::Reopen { .. } => {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
