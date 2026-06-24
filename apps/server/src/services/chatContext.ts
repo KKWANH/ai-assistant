@@ -134,6 +134,7 @@ export async function buildChatContext(
   let memoryBlock: string | undefined;
   let projectContextBlock: string | undefined;
   let workspaceMetaBlock: string | undefined;
+  let workspaceSection: string | null = null; // academic (lecture/thesis) → stronger accuracy posture
   let workspaceBlock: string | undefined;
   let historyBlock: string | undefined;
   let searchResults: SearchResult[] | null = null;
@@ -252,6 +253,7 @@ export async function buildChatContext(
     // no block, no padding.
     const ws = dbGetWorkspace(chat.workspaceId);
     if (ws) {
+      workspaceSection = ws.section;
       // Read memories once; used twice (full text for the block, count
       // for the workspace-meta preamble). Each call scans the memories
       // dir, so the prior double-call burned a directory walk per
@@ -428,6 +430,16 @@ export async function buildChatContext(
     "where a claim comes from when that helps the user verify it. When images or rendered document pages are attached, " +
     "describe only what is genuinely visible in them — never infer or fabricate a title, artist, caption, or detail " +
     "you cannot see.";
+  // Extra accuracy posture for academic workspaces (lecture prep / thesis
+  // advising) — verifiability matters even more there, and a confidently wrong
+  // attribution or date is a real cost to scholarly work.
+  const academicGuidance =
+    workspaceSection === "lecture" || workspaceSection === "thesis"
+      ? " This is academic work, so verifiability is paramount: be especially careful with names, dates, " +
+        "attributions, terminology, and citations — give them only when you are confident or can ground them " +
+        "in the provided materials, and otherwise flag the uncertainty rather than smoothing over it. When a " +
+        "claim rests on your general knowledge rather than the user's materials, say so, so they can check it."
+      : "";
   const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
@@ -438,7 +450,8 @@ export async function buildChatContext(
     "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
     "and do not add bracketed citation markers like [1]." +
     reviewGuidance +
-    accuracyGuidance;
+    accuracyGuidance +
+    academicGuidance;
 
   const stableBlocks = [workspaceMetaBlock, projectContextBlock, memoryBlock].filter(
     (s): s is string => !!s,
