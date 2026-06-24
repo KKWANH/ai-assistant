@@ -12,6 +12,9 @@ export const CreateWorkspaceSchema = z.object({
    *  core "blank"/"portfolio"/"lecture"; the create handler ignores unknowns. */
   starter: z.string().min(1).max(60).optional(),
   visibility: z.enum(["private", "public"]).optional(),
+  /** Sidebar section (a WORKSPACE_SECTIONS id, or null to ungroup). Omitted →
+   *  the create handler derives a default from the starter. */
+  section: z.string().max(40).nullable().optional(),
 });
 export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceSchema>;
 

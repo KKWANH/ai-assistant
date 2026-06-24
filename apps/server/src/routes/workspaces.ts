@@ -101,7 +101,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", detail: parsed.error.message });
     }
-    const { name, rootPath, include, exclude, starter, visibility } = parsed.data;
+    const { name, rootPath, include, exclude, starter, visibility, section: bodySection } = parsed.data;
 
     if (!fs.existsSync(rootPath)) {
       return reply.status(400).send({ error: "rootPath does not exist", detail: rootPath });
@@ -114,10 +114,13 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     // starter's own definition (a registry project, or core portfolio).
     const category =
       !starter || starter === "blank" ? null : STARTERS[starter]?.category ?? null;
-    // Sensible default sidebar grouping from the starter (the owner can change
-    // it in Settings); unknown starters land ungrouped.
+    // Sidebar grouping: an explicit choice from the create dialog wins;
+    // otherwise derive a sensible default from the starter (changeable later in
+    // Settings); unknown starters land ungrouped.
     const section =
-      starter === "lecture" ? "lecture" : category === "finance" ? "investment" : null;
+      bodySection !== undefined
+        ? bodySection
+        : starter === "lecture" ? "lecture" : category === "finance" ? "investment" : null;
 
     const workspace: Workspace = {
       id: crypto.randomUUID(),

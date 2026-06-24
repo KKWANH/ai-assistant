@@ -6,11 +6,12 @@ import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { Select } from "../../components/ui/Select";
 import { useCreateWorkspace } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
-import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
+import { DEFAULT_INCLUDE, DEFAULT_EXCLUDE, WORKSPACE_SECTIONS } from "@ariadne/shared";
 import { FolderPicker } from "./FolderPicker";
 import type { WorkspaceVisibility } from "@ariadne/shared";
 
@@ -59,6 +60,8 @@ export function CreateWorkspaceDialog() {
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [starter, setStarter] = useState<Starter>("blank");
   const [visibility, setVisibility] = useState<WorkspaceVisibility>("private");
+  // "" → let the starter pick a default section; else an explicit section id.
+  const [section, setSection] = useState<string>("");
 
   const errors: Record<string, string> = {};
   if (name.trim() === "") errors["name"] = t("workspace.dialog.nameRequired");
@@ -75,6 +78,8 @@ export function CreateWorkspaceDialog() {
         exclude: exclude.split("\n").filter(Boolean),
         starter,
         visibility,
+        // Omit when "" so the server derives a default from the starter.
+        section: section || undefined,
       });
       setCreateWorkspaceOpen(false);
       setActiveWorkspaceId(ws.id);
@@ -86,6 +91,7 @@ export function CreateWorkspaceDialog() {
       setShowAdvanced(false);
       setStarter("blank");
       setVisibility("private");
+      setSection("");
     } catch (err) {
       toast({
         title: t("workspace.dialog.failed"),
@@ -211,6 +217,21 @@ export function CreateWorkspaceDialog() {
               </div>
             </Card>
           </div>
+        </div>
+
+        {/* Section — which sidebar group this workspace lands in. */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            {t("workspaceSettings.general.sectionLabel")}
+          </label>
+          <Select
+            value={section}
+            onChange={(e) => setSection(e.target.value)}
+            options={[
+              { value: "", label: t("section.none") },
+              ...WORKSPACE_SECTIONS.map((s) => ({ value: s.id, label: t(s.labelKey) })),
+            ]}
+          />
         </div>
 
         <button
