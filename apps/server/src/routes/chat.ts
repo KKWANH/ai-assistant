@@ -42,6 +42,7 @@ import { accountOverLimit } from "../services/limits.js";
 import { getActiveSettings, getTriageSettings, isProviderConfigured, resolveEscalation } from "../config.js";
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
+import { groundCheckVision } from "../services/groundCheck.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { makeReranker } from "../services/reranker.js";
 import { runAgent } from "../services/agent.js";
@@ -535,7 +536,22 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
           images: contextResult.images,
           signal: controller.signal,
         });
-        assistantContent = result.text;
+        // Structural grounding: re-read the SAME source images alongside the
+        // draft and correct any claim that isn't actually visible — the
+        // "invented what's in the file" failure a system prompt only nudges.
+        // Best-effort + bounded; keeps the draft if the check can't run.
+        emit({
+          type: "status",
+          text: accountLocale?.startsWith("ko") ? "이미지와 대조해 검증하는 중…" : "Verifying against the source images…",
+        });
+        const grounded = await groundCheckVision(
+          answerProvider,
+          result.text,
+          contextResult.prompt,
+          contextResult.images,
+          controller.signal,
+        );
+        assistantContent = grounded ?? result.text;
         emit({ type: "delta", text: assistantContent });
       } else if (mode === "rigorous") {
         // Two-pass: a draft, then a grounded self-critique + single revision.
