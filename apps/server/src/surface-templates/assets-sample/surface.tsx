@@ -346,9 +346,14 @@ export default function App() {
           const rows = csv.trim().split("\n").slice(1).map((l: string) => { const [date, krw, usd, eur] = l.split(","); return { date, krw: +krw, usd: +usd, eur: +eur }; });
           setHist(rows);
         } catch {}
-        try { setSpx(await ariadne.getQuoteHistory("^GSPC", "1y", "1d")); } catch {}
-        try { setKs(await ariadne.getQuoteHistory("^KS11", "1y", "1d")); } catch {}
-        try { const h: Record<string, any[]> = {}; for (const i of IDX) { try { h[i.sym] = await ariadne.getQuoteHistory(i.sym, "1mo", "1d"); } catch {} } setIdxHist(h); } catch {}
+        // Benchmark histories feed only the trend + analysis charts (never first
+        // paint) and are mutually independent — fetch concurrently instead of as
+        // 6 sequential round-trips after the dashboard has already painted.
+        await Promise.all([
+          (async () => { try { setSpx(await ariadne.getQuoteHistory("^GSPC", "1y", "1d")); } catch {} })(),
+          (async () => { try { setKs(await ariadne.getQuoteHistory("^KS11", "1y", "1d")); } catch {} })(),
+          (async () => { try { const h: Record<string, any[]> = {}; await Promise.all(IDX.map(async (i) => { try { h[i.sym] = await ariadne.getQuoteHistory(i.sym, "1mo", "1d"); } catch {} })); setIdxHist(h); } catch {} })(),
+        ]);
       } catch (e: any) { setErr(String(e?.message || e)); }
     })();
   }, []);
