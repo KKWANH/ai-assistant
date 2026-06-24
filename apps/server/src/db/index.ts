@@ -397,6 +397,8 @@ function runMigrations(db: DatabaseSync): void {
   workspaces("sort_order", "REAL");
   // focus_mode (1 → hide developer/power tabs; NULL/0 → full workspace UI)
   workspaces("focus_mode", "INTEGER");
+  // section (NULL → ungrouped "기타"; else a WORKSPACE_SECTIONS id → sidebar group)
+  workspaces("section", "TEXT");
 
   // chats gain sort_order for manual drag-reorder (NULL → recency fallback).
   const chats = addColumnIfMissing(db, "chats");

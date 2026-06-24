@@ -114,6 +114,10 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     // starter's own definition (a registry project, or core portfolio).
     const category =
       !starter || starter === "blank" ? null : STARTERS[starter]?.category ?? null;
+    // Sensible default sidebar grouping from the starter (the owner can change
+    // it in Settings); unknown starters land ungrouped.
+    const section =
+      starter === "lecture" ? "lecture" : category === "finance" ? "investment" : null;
 
     const workspace: Workspace = {
       id: crypto.randomUUID(),
@@ -128,6 +132,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       createdByName: req.account?.displayName ?? null,
       visibility: visibility ?? "private",
       category,
+      section,
       homeView: null,
       defaultProvider: null,
       defaultModel: null,

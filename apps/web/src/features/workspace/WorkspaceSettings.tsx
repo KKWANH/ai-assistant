@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles, TrendingUp, Users, Trash2 } from "lucide-react";
-import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS, isBuiltinWorkspace } from "@ariadne/shared";
+import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS, isBuiltinWorkspace, WORKSPACE_SECTIONS } from "@ariadne/shared";
 import type { ProviderId, Workspace } from "@ariadne/shared";
 import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills, useWorkspaceUsage, useMe, useWorkspaceAccess, useSetWorkspaceAccess } from "../../lib/queries";
 import { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
@@ -141,6 +141,11 @@ function GeneralSection({ ws }: { ws: Workspace }) {
       .mutateAsync({ id: ws.id, input: { visibility: v as "private" | "public" } })
       .catch(() => toast({ title: t("workspaceSettings.saveFailed"), variant: "error" }));
 
+  const setSection = (v: string) =>
+    update
+      .mutateAsync({ id: ws.id, input: { section: v || null } })
+      .catch(() => toast({ title: t("workspaceSettings.saveFailed"), variant: "error" }));
+
   return (
     <section>
       <SectionHeading icon={<SettingsIcon className="h-3.5 w-3.5" />}>
@@ -171,6 +176,17 @@ function GeneralSection({ ws }: { ws: Workspace }) {
             options={[
               { value: "private", label: t("workspace.visibility.private") },
               { value: "public", label: t("workspace.visibility.public") },
+            ]}
+          />
+        </Field>
+        <Field label={t("workspaceSettings.general.sectionLabel")} hint={t("workspaceSettings.general.sectionHint")}>
+          <Select
+            value={ws.section ?? ""}
+            onChange={(e) => void setSection(e.target.value)}
+            disabled={update.isPending}
+            options={[
+              { value: "", label: t("section.none") },
+              ...WORKSPACE_SECTIONS.map((s) => ({ value: s.id, label: t(s.labelKey) })),
             ]}
           />
         </Field>

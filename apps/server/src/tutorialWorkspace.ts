@@ -84,6 +84,7 @@ export function ensureTutorialWorkspace(): void {
       createdByName: null,
       visibility: "public",
       category: null,
+      section: null,
       homeView: null,
       defaultProvider: null,
       defaultModel: null,

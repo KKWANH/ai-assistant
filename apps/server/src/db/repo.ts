@@ -97,8 +97,8 @@ const WORKSPACE_SELECT = `
 export function dbInsertWorkspace(w: Workspace): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category,home_view,default_provider,default_model,default_skill_id,focus_mode)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO workspaces (id,name,root_path,include_globs,exclude_globs,created_at,last_scan_at,file_count,created_by,visibility,category,home_view,default_provider,default_model,default_skill_id,focus_mode,section)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     w.id,
     w.name,
@@ -115,7 +115,8 @@ export function dbInsertWorkspace(w: Workspace): void {
     w.defaultProvider ?? null,
     w.defaultModel ?? null,
     w.defaultSkillId ?? null,
-    w.focusMode ? 1 : 0
+    w.focusMode ? 1 : 0,
+    w.section ?? null
   );
 }
 
@@ -158,6 +159,7 @@ export function dbUpdateWorkspace(id: string, fields: Partial<Workspace>): Works
   if (fields.defaultSkillId !== undefined) { sets.push("default_skill_id = ?"); vals.push(fields.defaultSkillId ?? null); }
   if (fields.sortOrder !== undefined) { sets.push("sort_order = ?"); vals.push(fields.sortOrder ?? null); }
   if (fields.focusMode !== undefined) { sets.push("focus_mode = ?"); vals.push(fields.focusMode ? 1 : 0); }
+  if (fields.section !== undefined) { sets.push("section = ?"); vals.push(fields.section ?? null); }
   // rootPath is intentionally NOT exposed via the public PATCH route
   // (UpdateWorkspaceSchema doesn't list it) — repointing has snapshot/
   // index implications and shouldn't be a casual user action. It IS
@@ -252,6 +254,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     createdByName: (row["created_by_name"] as string | null) ?? null,
     visibility: ((row["visibility"] as string | null) ?? "private") as WorkspaceVisibility,
     category: (row["category"] as string | null) ?? null,
+    section: (row["section"] as string | null) ?? null,
     homeView: (row["home_view"] as string | null ?? null) as Workspace["homeView"],
     defaultProvider: (row["default_provider"] as string | null ?? null) as Workspace["defaultProvider"],
     defaultModel: (row["default_model"] as string | null) ?? null,

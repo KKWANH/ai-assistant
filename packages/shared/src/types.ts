@@ -21,6 +21,10 @@ export interface Workspace {
   visibility: WorkspaceVisibility;
   /** Scopes which templates this workspace surfaces; null = show all. */
   category: string | null;
+  /** User-facing sidebar grouping (the user's areas: lecture / thesis /
+   *  investment / writing — see WORKSPACE_SECTIONS). Distinct from `category`
+   *  (which scopes templates). null = ungrouped ("기타"). Set in Settings. */
+  section: string | null;
   /** Where entering the workspace lands. null/"overview" = the tabbed
    *  overview (default); "surface" = the custom screen as an immersive home
    *  (no tabs), like lecture prep. General to all workspaces. */

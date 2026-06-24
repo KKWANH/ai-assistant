@@ -97,6 +97,7 @@ export async function ensureAssetsSample(): Promise<void> {
         createdByName: null,
         visibility: "public",
         category: "finance",
+        section: null,
         // Open straight to the immersive dashboard — it's a showcase screen.
         homeView: "surface",
         defaultProvider: null,

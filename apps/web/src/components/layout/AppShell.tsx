@@ -87,7 +87,7 @@ import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
 import { SidePanel } from "./SidePanel";
 import { DeleteWorkspaceDialog } from "../../features/workspace/DeleteWorkspaceDialog";
-import { isBuiltinWorkspace } from "@ariadne/shared";
+import { isBuiltinWorkspace, WORKSPACE_SECTIONS } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
 export interface AppShellProps {
@@ -567,6 +567,100 @@ export function AppShell({ children }: AppShellProps) {
       ? activeWorkspaceId
       : activeChat?.workspaceId ?? null;
 
+  // Sidebar workspace grouping by the user's areas (WORKSPACE_SECTIONS), then a
+  // trailing "기타" bucket for anything ungrouped. When the only bucket is the
+  // ungrouped one (nothing assigned yet — the default), the list stays flat and
+  // header-less, exactly as before. Collapse state is per section.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
+  const toggleSection = (key: string) =>
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  const workspaceGroups = useMemo(() => {
+    const list = workspaces ?? [];
+    const known = new Set<string>(WORKSPACE_SECTIONS.map((s) => s.id));
+    const groups: { key: string; label: string | null; items: Workspace[] }[] = [];
+    for (const s of WORKSPACE_SECTIONS) {
+      const items = list.filter((w) => w.section === s.id);
+      if (items.length) groups.push({ key: s.id, label: t(s.labelKey), items });
+    }
+    const ungrouped = list.filter((w) => !w.section || !known.has(w.section));
+    if (ungrouped.length) {
+      // Only label it "기타" when there's at least one real section to contrast with.
+      groups.push({ key: "_other", label: groups.length ? t("section.other") : null, items: ungrouped });
+    }
+    return groups;
+  }, [workspaces, t]);
+
+  // One workspace nav row (the item + hover-delete + scripts link + nested
+  // chats). Shared by the flat and grouped renderings so they stay identical.
+  const renderWorkspaceItem = (ws: Workspace) => (
+    <>
+      <div
+        className="relative group"
+        onMouseEnter={() => setHoveredWorkspaceId(ws.id)}
+        onMouseLeave={() => setHoveredWorkspaceId(null)}
+      >
+        <SidebarItem
+          label={ws.name}
+          icon={<FolderOpen className="h-3.5 w-3.5" />}
+          active={activeWorkspaceId === ws.id && location.pathname.startsWith("/workspaces/")}
+          to={ws.homeView === "surface" ? `/workspaces/${ws.id}/screen` : `/workspaces/${ws.id}`}
+          onClick={() => {
+            setActiveWorkspaceId(ws.id);
+            setSidebarSection("workspaces");
+            setMobileNavOpen(false);
+          }}
+          meta={ws.visibility === "public" && hoveredWorkspaceId !== ws.id ? (
+            <span className="flex items-center gap-0.5 text-2xs text-accent font-medium">
+              <Globe className="h-2.5 w-2.5" />
+              {t("workspace.visibility.publicBadge")}
+            </span>
+          ) : undefined}
+        />
+        {hoveredWorkspaceId === ws.id && !isBuiltinWorkspace(ws.id) && ws.editable !== false && (
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeleteTarget(ws);
+            }}
+            aria-label={t("nav.deleteWorkspace")}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      {!isSimple &&
+        !ws.focusMode &&
+        activeWorkspaceId === ws.id &&
+        location.pathname.startsWith("/workspaces/") && (
+          <SidebarItem
+            label={t("nav.scripts")}
+            icon={<Terminal className="h-3 w-3" />}
+            to={`/workspaces/${ws.id}/scripts`}
+            onClick={() => setMobileNavOpen(false)}
+            className="pl-5 text-2xs"
+          />
+        )}
+      {expandedWorkspaceId === ws.id && (chatsByWorkspace.get(ws.id)?.length ?? 0) > 0 && (
+        <div className="pl-3">
+          {chatsByWorkspace.get(ws.id)!.slice(0, 10).map((chat) => (
+            <ChatRow
+              key={chat.id}
+              chat={chat}
+              active={activeChatId === chat.id}
+              workspaces={workspaces}
+              closeMobileNav={() => setMobileNavOpen(false)}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+
   const commandItems: CommandItem[] = [
     {
       id: "new-chat",
@@ -964,87 +1058,42 @@ export function AppShell({ children }: AppShellProps) {
                 </IconButton>
               </div>
               {workspaces && workspaces.length > 0 ? (
-                <SortableList items={workspaces} getId={(w) => w.id} onReorder={reorderWorkspaces}>
-                {workspaces.map((ws) => (
-                  <SortableItem key={ws.id} id={ws.id}>
-                    <div
-                      className="relative group"
-                      onMouseEnter={() => setHoveredWorkspaceId(ws.id)}
-                      onMouseLeave={() => setHoveredWorkspaceId(null)}
-                    >
-                      <SidebarItem
-                        label={ws.name}
-                        icon={<FolderOpen className="h-3.5 w-3.5" />}
-                        active={
-                          activeWorkspaceId === ws.id &&
-                          location.pathname.startsWith("/workspaces/")
-                        }
-                        // Open the workspace hub. A project's home (e.g. lecture)
-                        // now renders INSIDE the hub's screen tab — same chrome as
-                        // any workspace — so projects no longer bypass it. A custom
-                        // screen set as the immersive main still opens to /screen.
-                        to={
-                          ws.homeView === "surface"
-                            ? `/workspaces/${ws.id}/screen`
-                            : `/workspaces/${ws.id}`
-                        }
-                        onClick={() => {
-                          setActiveWorkspaceId(ws.id);
-                          setSidebarSection("workspaces");
-                          setMobileNavOpen(false);
-                        }}
-                        meta={ws.visibility === "public" && hoveredWorkspaceId !== ws.id ? (
-                          <span className="flex items-center gap-0.5 text-2xs text-accent font-medium">
-                            <Globe className="h-2.5 w-2.5" />
-                            {t("workspace.visibility.publicBadge")}
-                          </span>
-                        ) : undefined}
-                      />
-                      {hoveredWorkspaceId === ws.id && !isBuiltinWorkspace(ws.id) && ws.editable !== false && (
-                        <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(ws);
-                          }}
-                          aria-label={t("nav.deleteWorkspace")}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                    {/* Scripts link — standard mode only; hidden in focus mode
-                        (arbitrary scripts are an off-scope escape hatch). */}
-                    {!isSimple &&
-                      !ws.focusMode &&
-                      activeWorkspaceId === ws.id &&
-                      location.pathname.startsWith("/workspaces/") && (
-                        <SidebarItem
-                          label={t("nav.scripts")}
-                          icon={<Terminal className="h-3 w-3" />}
-                          to={`/workspaces/${ws.id}/scripts`}
-                          onClick={() => setMobileNavOpen(false)}
-                          className="pl-5 text-2xs"
-                        />
-                      )}
-                    {/* Workspace chats — nested under the expanded workspace */}
-                    {expandedWorkspaceId === ws.id &&
-                      (chatsByWorkspace.get(ws.id)?.length ?? 0) > 0 && (
-                        <div className="pl-3">
-                          {chatsByWorkspace.get(ws.id)!.slice(0, 10).map((chat) => (
-                            <ChatRow
-                              key={chat.id}
-                              chat={chat}
-                              active={activeChatId === chat.id}
-                              workspaces={workspaces}
-                              closeMobileNav={() => setMobileNavOpen(false)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                  </SortableItem>
-                ))}
-                </SortableList>
+                workspaceGroups.length > 1 ? (
+                  // Grouped by section (the user's areas) — each a collapsible
+                  // header + its own reorderable list. Mirrors the Recent Runs
+                  // collapse pattern below.
+                  workspaceGroups.map((g) => {
+                    const collapsed = collapsedSections.has(g.key);
+                    return (
+                      <div key={g.key} className="mb-1">
+                        {g.label && (
+                          <button
+                            type="button"
+                            onClick={() => toggleSection(g.key)}
+                            className="flex w-full items-center gap-1 px-1 py-0.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground/80 hover:text-foreground transition-colors"
+                          >
+                            <ChevronRight className={`h-3 w-3 shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+                            <span className="truncate">{g.label}</span>
+                            <span className="ml-1 font-normal text-muted-foreground/60">{g.items.length}</span>
+                          </button>
+                        )}
+                        {!collapsed && (
+                          <SortableList items={g.items} getId={(w) => w.id} onReorder={reorderWorkspaces}>
+                            {g.items.map((ws) => (
+                              <SortableItem key={ws.id} id={ws.id}>{renderWorkspaceItem(ws)}</SortableItem>
+                            ))}
+                          </SortableList>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <SortableList items={workspaces} getId={(w) => w.id} onReorder={reorderWorkspaces}>
+                    {workspaces.map((ws) => (
+                      <SortableItem key={ws.id} id={ws.id}>{renderWorkspaceItem(ws)}</SortableItem>
+                    ))}
+                  </SortableList>
+                )
               ) : (
                 <button
                   className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md"

@@ -43,6 +43,8 @@ export const UpdateWorkspaceSchema = z.object({
   sortOrder: z.number().nullable().optional(),
   // Focus mode — hide the developer/power affordances; confine to the curated parts.
   focusMode: z.boolean().optional(),
+  // Sidebar grouping (one of WORKSPACE_SECTIONS ids, or null to ungroup).
+  section: z.string().max(40).nullable().optional(),
 });
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 

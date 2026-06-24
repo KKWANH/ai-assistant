@@ -222,6 +222,18 @@ export function modelHasVision(model: string): boolean {
   return /vision|llava|bakllava|moondream/i.test(model);
 }
 
+/** User-facing workspace groupings shown as collapsible sidebar sections — the
+ *  user's areas of work. A workspace's `section` field holds one of these ids;
+ *  null = ungrouped (rendered under a trailing "기타 / Other" group). The order
+ *  here is the sidebar order. Labels are i18n keys (resolved in the web app). */
+export const WORKSPACE_SECTIONS = [
+  { id: "lecture", labelKey: "section.lecture" },
+  { id: "thesis", labelKey: "section.thesis" },
+  { id: "investment", labelKey: "section.investment" },
+  { id: "writing", labelKey: "section.writing" },
+] as const;
+export type WorkspaceSection = (typeof WORKSPACE_SECTIONS)[number]["id"];
+
 /**
  * Read an env var safely. This module is imported by the browser bundle too,
  * where `process` does not exist — so every access must be guarded.

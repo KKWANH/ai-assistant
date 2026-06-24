@@ -135,6 +135,7 @@ export async function ensureDemoWorkspace(): Promise<void> {
         createdByName: null,
         visibility: "public",
         category: "finance",
+        section: null,
         homeView: null,
         defaultProvider: null,
         defaultModel: null,
