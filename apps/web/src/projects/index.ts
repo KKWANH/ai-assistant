@@ -9,7 +9,7 @@
  */
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Wallet, BookOpen, ChefHat, Code2, ClipboardList, Microscope, GraduationCap, FileText } from "lucide-react";
+import { Wallet, BookOpen, ChefHat, Code2, ClipboardList, Microscope, GraduationCap, PenLine, FileText } from "lucide-react";
 import type { ProjectWebModule, ProjectStarterCard, ProjectChatStarter, Workspace } from "@ariadne/shared";
 import { project as budget } from "@projects/budget/web";
 import { project as reading } from "@projects/reading/web";
@@ -19,6 +19,7 @@ import { project as decisions } from "@projects/decisions/web";
 import { project as papers } from "@projects/papers/web";
 import { project as lecture } from "@projects/lecture/web";
 import { lectureRoutes, lectureHome } from "@projects/lecture/web/routes";
+import { project as writing } from "@projects/writing/web";
 
 export const WEB_PROJECTS: ProjectWebModule[] = [
   budget,
@@ -28,6 +29,7 @@ export const WEB_PROJECTS: ProjectWebModule[] = [
   decisions,
   papers,
   lecture,
+  writing,
 ];
 
 /** Lucide icons projects may name (string keeps lucide out of shared). */
@@ -39,6 +41,7 @@ const ICONS: Record<string, LucideIcon> = {
   ClipboardList,
   Microscope,
   GraduationCap,
+  PenLine,
 };
 
 export function resolveProjectIcon(name: string): LucideIcon {

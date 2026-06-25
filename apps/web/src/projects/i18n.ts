@@ -7,8 +7,9 @@
  * this; a project view imports the provider's useT()).
  */
 import { lectureMessages } from "@projects/lecture/web/i18n";
+import { writingMessages } from "@projects/writing/web/i18n";
 
 export const PROJECT_MESSAGES: { en: Record<string, string>; ko: Record<string, string> } = {
-  en: { ...lectureMessages.en },
-  ko: { ...lectureMessages.ko },
+  en: { ...lectureMessages.en, ...writingMessages.en },
+  ko: { ...lectureMessages.ko, ...writingMessages.ko },
 };

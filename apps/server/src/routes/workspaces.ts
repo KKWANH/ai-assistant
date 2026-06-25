@@ -120,7 +120,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const section =
       bodySection !== undefined
         ? bodySection
-        : starter === "lecture" ? "lecture" : category === "finance" ? "investment" : null;
+        : starter === "lecture" ? "lecture"
+        : starter === "writing" ? "writing"
+        : category === "finance" ? "investment" : null;
 
     const workspace: Workspace = {
       id: crypto.randomUUID(),

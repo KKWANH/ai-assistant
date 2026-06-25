@@ -21,6 +21,7 @@ import { project as code } from "../../../../projects/code/server.js";
 import { project as decisions } from "../../../../projects/decisions/server.js";
 import { project as papers } from "../../../../projects/papers/server.js";
 import { project as lecture } from "../../../../projects/lecture/server.js";
+import { project as writing } from "../../../../projects/writing/server.js";
 
 export const PROJECTS: ProjectServerModule[] = [
   budget,
@@ -30,6 +31,7 @@ export const PROJECTS: ProjectServerModule[] = [
   decisions,
   papers,
   lecture,
+  writing,
 ];
 
 /** All project-contributed starters, keyed by id, for the create flow. */

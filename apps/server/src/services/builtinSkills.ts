@@ -98,6 +98,32 @@ const BUILTINS: Skill[] = [
     updatedAt: FIXED_TIMESTAMP,
   },
   {
+    id: "builtin:critique-outline",
+    accountId: null,
+    name: "비평 구조",
+    description: "Outline a critique — central claim, evidence, counter-argument, conclusion.",
+    category: "writing",
+    prompt:
+      "Outline a critical essay on the work or topic below. Structure it as: (1) one clear central claim/thesis, (2) 3–5 supporting points, each with concrete evidence, (3) the strongest counter-argument and a response to it, (4) a conclusion. Be specific to this subject, not generic.\n\nSubject:\n{subject}",
+    variables: [{ key: "subject", label: "Work or topic to critique" }],
+    builtin: true,
+    createdAt: FIXED_TIMESTAMP,
+    updatedAt: FIXED_TIMESTAMP,
+  },
+  {
+    id: "builtin:transcript",
+    accountId: null,
+    name: "강연록 정리",
+    description: "Turn a raw lecture transcript into clean, structured prose.",
+    category: "writing",
+    prompt:
+      "Turn the raw lecture transcript or notes below into clean, readable prose: remove filler and false starts, fix punctuation, and group it into paragraphs by topic with short headings — keeping the speaker's meaning and key emphases intact. Do NOT add facts that aren't there. Return only the cleaned text.\n\nTranscript:\n{transcript}",
+    variables: [{ key: "transcript", label: "Raw transcript or notes" }],
+    builtin: true,
+    createdAt: FIXED_TIMESTAMP,
+    updatedAt: FIXED_TIMESTAMP,
+  },
+  {
     id: "builtin:review-code",
     accountId: null,
     name: "review-code",
