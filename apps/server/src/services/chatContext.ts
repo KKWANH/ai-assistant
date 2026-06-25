@@ -74,11 +74,9 @@ export interface ChatContextResult {
    *  a folder shows what it drew on (the web-search path already exposes its
    *  sources via searchResults; this is the symmetric workspace-file signal). */
   contextSources: string[];
-  /** This chat's workspace is academic (lecture/thesis section) — the answer
-   *  path uses this to gate a stronger, structural grounding pass. */
-  academic: boolean;
   /** Real source text (web results and/or workspace excerpts) was fed into the
-   *  prompt this turn — i.e. there is something to verify the answer against. */
+   *  prompt this turn — i.e. there is something to verify the answer against.
+   *  Gates the structural grounding pass on the answer path. */
   hasSources: boolean;
 }
 
@@ -484,7 +482,6 @@ export async function buildChatContext(
     images,
     searchResults,
     contextSources,
-    academic: workspaceSection === "lecture" || workspaceSection === "thesis",
     hasSources: (searchResults?.length ?? 0) > 0 || contextSources.length > 0,
   };
 }

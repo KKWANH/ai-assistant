@@ -520,7 +520,6 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         images: [],
         searchResults: null,
         contextSources: [],
-        academic: false,
         hasSources: false,
       };
     }
@@ -589,13 +588,15 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
             emit({ type: "delta", text: assistantContent });
           }
         }
-      } else if (contextResult.academic && contextResult.hasSources) {
-        // H2 — structural grounding for ACADEMIC answers that rest on sources
-        // (web results / workspace excerpts). Buffer a draft, re-verify its
-        // factual claims against those same sources, then emit the corrected
-        // answer. Streaming is preserved for every other case (this gate is
-        // narrow: lecture/thesis workspace AND sources present). Best-effort —
-        // groundCheckText fails safe to the draft.
+      } else if (contextResult.hasSources) {
+        // H2 — structural grounding for ANY answer that rests on real sources
+        // this turn (web results from the factual-search gate, and/or workspace
+        // file excerpts). Buffer a draft, re-verify its factual claims against
+        // those same sources, then emit the corrected answer. Streaming is still
+        // preserved for source-less chat (greetings, opinions, coding, reasoning
+        // — there's nothing to verify against). Best-effort — groundCheckText
+        // fails safe to the draft. (Academic workspaces additionally carry the
+        // stronger accuracy directive from H3.)
         const draft = await answerProvider.complete({
           system: contextResult.system,
           prompt: contextResult.prompt,
