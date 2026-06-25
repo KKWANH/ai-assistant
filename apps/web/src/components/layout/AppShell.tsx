@@ -57,6 +57,7 @@ import {
   X,
   Sparkles,
   SlidersHorizontal,
+  Layers,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUIStore, type ChatSort } from "../../lib/store";
@@ -87,6 +88,7 @@ import { useToast } from "../ui/Toast";
 import { Inspector } from "./Inspector";
 import { SidePanel } from "./SidePanel";
 import { DeleteWorkspaceDialog } from "../../features/workspace/DeleteWorkspaceDialog";
+import { SectionManagerDialog } from "../../features/workspace/SectionManagerDialog";
 import { isBuiltinWorkspace, WORKSPACE_SECTIONS } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
@@ -494,6 +496,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const [hoveredWorkspaceId, setHoveredWorkspaceId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
+  const [sectionManagerOpen, setSectionManagerOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Desktop sidebar collapse — a focus/reading mode that hides the left nav
   // (mobile already has the off-canvas drawer). Toggled from the top bar.
@@ -1045,6 +1048,16 @@ export function AppShell({ children }: AppShellProps) {
                 <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
                   {t("nav.workspaces")}
                 </span>
+                <div className="flex items-center gap-0.5">
+                {workspaces && workspaces.length > 1 && (
+                  <IconButton
+                    label={t("section.manage.button")}
+                    size="xs"
+                    onClick={() => setSectionManagerOpen(true)}
+                  >
+                    <Layers className="h-3 w-3" />
+                  </IconButton>
+                )}
                 <IconButton
                   label={t("nav.newWorkspace")}
                   size="xs"
@@ -1056,6 +1069,7 @@ export function AppShell({ children }: AppShellProps) {
                 >
                   <Plus className="h-3 w-3" />
                 </IconButton>
+                </div>
               </div>
               {workspaces && workspaces.length > 0 ? (
                 workspaceGroups.length > 1 ? (
@@ -1266,6 +1280,10 @@ export function AppShell({ children }: AppShellProps) {
         onDeleted={(id) => {
           if (activeWorkspaceId === id) navigate("/");
         }}
+      />
+      <SectionManagerDialog
+        open={sectionManagerOpen}
+        onClose={() => setSectionManagerOpen(false)}
       />
     </div>
   );
