@@ -43,7 +43,7 @@ import { getActiveSettings, getTriageSettings, isProviderConfigured, resolveEsca
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import { groundCheckVision } from "../services/groundCheck.js";
-import { groundCheckText } from "../services/groundCheckText.js";
+import { groundCheckNote } from "../services/groundCheckText.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { makeReranker } from "../services/reranker.js";
 import { runAgent } from "../services/agent.js";
@@ -588,52 +588,48 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
             emit({ type: "delta", text: assistantContent });
           }
         }
-      } else if (contextResult.hasSources) {
-        // H2 — structural grounding for ANY answer that rests on real sources
-        // this turn (web results from the factual-search gate, and/or workspace
-        // file excerpts). Buffer a draft, re-verify its factual claims against
-        // those same sources, then emit the corrected answer. Streaming is still
-        // preserved for source-less chat (greetings, opinions, coding, reasoning
-        // — there's nothing to verify against). Best-effort — groundCheckText
-        // fails safe to the draft. (Academic workspaces additionally carry the
-        // stronger accuracy directive from H3.)
-        const draft = await answerProvider.complete({
-          system: contextResult.system,
-          prompt: contextResult.prompt,
-          signal: controller.signal,
-        });
-        emit({
-          type: "status",
-          text: accountLocale?.startsWith("ko") ? "출처와 대조해 검증하는 중…" : "Verifying against the sources…",
-        });
-        // Verify on the fast triage tier — checking a draft against the given
-        // sources is reading comprehension, not generation, so a small/cheap
-        // model keeps this extra pass quick (and far cheaper when the answer was
-        // escalated to a strong model). Falls back to the active model when no
-        // separate fast tier is configured.
-        const vs = getTriageSettings();
-        const vModel = vs.provider === "ollama" ? await resolveOllamaModel(vs.model) : vs.model;
-        const verifyProvider = meteringProvider(
-          await getProvider({ provider: vs.provider, model: vModel }),
-          assistantMsgId,
-          vModel,
-          accountId,
-          chat.workspaceId ?? null,
-        );
-        const grounded = await groundCheckText(
-          verifyProvider,
-          draft.text,
-          contextResult.prompt,
-          controller.signal,
-        );
-        assistantContent = grounded ?? draft.text;
-        emit({ type: "delta", text: assistantContent });
       } else {
         await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },
           (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
           (status) => { emit({ type: "status", text: status }); },
         );
+        // H2 (optimistic grounding) — the answer already streamed (fast). If it
+        // rested on real sources this turn (web results from the factual-search
+        // gate, and/or workspace file excerpts), cross-check it in the background
+        // and append a SHORT correction only when a specific claim isn't
+        // supported. Most answers pass → nothing extra; the rare fabrication gets
+        // a "🔎 정정" note. Runs on the fast triage tier (a claim-vs-source check
+        // needs a small model, and it's far cheaper when the answer escalated);
+        // fails safe (no note on error/abort). Academic workspaces additionally
+        // carry the stronger accuracy directive from H3.
+        if (contextResult.hasSources && assistantContent.trim() && !controller.signal.aborted) {
+          emit({
+            type: "status",
+            text: accountLocale?.startsWith("ko") ? "출처와 대조 중…" : "Cross-checking the sources…",
+          });
+          const vs = getTriageSettings();
+          const vModel = vs.provider === "ollama" ? await resolveOllamaModel(vs.model) : vs.model;
+          const verifyProvider = meteringProvider(
+            await getProvider({ provider: vs.provider, model: vModel }),
+            assistantMsgId,
+            vModel,
+            accountId,
+            chat.workspaceId ?? null,
+          );
+          const note = await groundCheckNote(
+            verifyProvider,
+            assistantContent,
+            contextResult.prompt,
+            controller.signal,
+          );
+          if (note && !controller.signal.aborted) {
+            const label = accountLocale?.startsWith("ko") ? "정정(출처 대조)" : "Correction (checked against sources)";
+            const corr = `\n\n---\n🔎 **${label}:** ${note}`;
+            assistantContent += corr;
+            emit({ type: "delta", text: corr });
+          }
+        }
       }
       // Surface the workspace files behind the answer — symmetric with the web
       // search sources the UI already shows. Only when retrieval actually fed

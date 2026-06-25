@@ -1,41 +1,36 @@
 /**
- * groundCheckText — the text analogue of groundCheck (images). When an answer
- * rests on source materials fed into the prompt (web-search results and/or
- * excerpts from the user's files), re-read those sources alongside the draft and
- * rewrite any factual claim they don't actually support. This catches the
- * "confidently wrong date / attribution / number" failure a system prompt only
- * nudges — the structural lever the user asked for on the text path.
+ * groundCheckNote — the "optimistic" text grounding check. The answer is
+ * streamed to the user immediately (fast); THEN this re-reads the source
+ * materials it rested on (web results / workspace excerpts) and returns a SHORT
+ * correction only when a specific claim isn't supported. Most answers are right,
+ * so most of the time it returns null and the user just got a fast streamed
+ * answer; the occasional fabrication gets a "🔎 correction" note appended.
  *
- * Used ONLY for academic workspaces (lecture/thesis) that have sources this turn
- * — so the cost (one buffered draft + one verify call, losing token streaming
- * for that answer) is paid only where scholarly accuracy is worth it. Everywhere
- * else the answer streams as before. Modelled on the reranker / image
- * ground-check: bounded, hard timeout, FAILS SAFE (returns null → keep draft).
+ * This replaces a full-rewrite pass (which would have to buffer the whole answer
+ * and lose streaming). Runs on the fast triage tier; bounded; FAILS SAFE
+ * (returns null → no note, the streamed answer stands).
  */
 import type { AiProvider } from "../providers/index.js";
 import logger from "../logger.js";
 
-const GROUND_CHECK_TIMEOUT_MS = 40_000;
+const GROUND_CHECK_TIMEOUT_MS = 30_000;
 
-const GROUND_CHECK_SYSTEM =
-  "You verify an answer against the source materials it was given and return a corrected version. The " +
-  "context below holds the user's request plus the SOURCE MATERIALS the answer must rest on (web-search " +
-  "results and/or excerpts from the user's files). Rewrite the DRAFT so it asserts only what those " +
-  "sources actually support. Rules:\n" +
-  "- Keep every claim the sources support, in the draft's original language, structure, and level of detail.\n" +
-  "- For a specific factual claim the sources do NOT support — a date, name, number, attribution, " +
-  "quotation, or statistic — correct it if a source gives the right value; otherwise remove it or mark it " +
-  "uncertain (e.g. \"출처에서 확인되지 않음\" / \"not stated in the sources\"). Never invent a replacement.\n" +
-  "- Add no new facts beyond the sources, and do not fabricate citations.\n" +
-  "- If the draft is already fully supported, return it essentially unchanged.\n" +
-  "Output only the corrected answer — no preamble, no notes about what you changed.";
+const GROUND_NOTE_SYSTEM =
+  "You fact-check an answer against the source materials given in the context (web-search results " +
+  "and/or excerpts from the user's files). Check every SPECIFIC claim in the draft — dates, names, " +
+  "attributions, numbers, quotations — against those sources.\n" +
+  "- If every such claim is supported by the sources, reply with exactly: OK\n" +
+  "- If one or more is wrong, contradicted, or unsupported, reply starting with 'FIX:' then a ONE or " +
+  "TWO line correction IN THE USER'S LANGUAGE — give the correct fact and name what the draft got " +
+  "wrong. Be concise; do NOT restate the whole answer.\n" +
+  "Judge only against the provided sources, not your own memory. When in doubt, prefer OK (don't " +
+  "manufacture a correction).";
 
 /**
- * Re-ground a draft text answer against the sources embedded in `contextPrompt`.
- * Returns the corrected answer, or null when it can't run / fails / times out
- * (caller keeps the original draft).
+ * Returns a concise correction string when the draft contradicts its sources, or
+ * null when it's supported (or the check can't run / fails / times out).
  */
-export async function groundCheckText(
+export async function groundCheckNote(
   provider: AiProvider,
   draft: string,
   contextPrompt: string,
@@ -45,21 +40,24 @@ export async function groundCheckText(
 
   const prompt =
     `--- Context (the user's request + the source materials) ---\n${contextPrompt}\n\n` +
-    `--- DRAFT ANSWER (verify against the sources above and correct) ---\n${draft}\n--- END DRAFT ---\n\n` +
-    "Return the corrected, source-grounded answer.";
+    `--- DRAFT ANSWER (fact-check against the sources above) ---\n${draft}\n--- END DRAFT ---\n\n` +
+    'Reply "OK", or "FIX: <one–two line correction>".';
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const result = await Promise.race([
-      provider.complete({ system: GROUND_CHECK_SYSTEM, prompt, signal }),
+      provider.complete({ system: GROUND_NOTE_SYSTEM, prompt, signal }),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("text ground-check timeout")), GROUND_CHECK_TIMEOUT_MS);
+        timer = setTimeout(() => reject(new Error("ground-note timeout")), GROUND_CHECK_TIMEOUT_MS);
       }),
     ]);
     const text = result.text.trim();
-    return text.length > 0 ? text : null;
+    const fix = /^fix:\s*([\s\S]+)/i.exec(text);
+    // Only a clear "FIX: …" produces a note; "OK" or anything unexpected → no
+    // note (fail safe — never append a confusing message to a good answer).
+    return fix ? fix[1]!.trim() : null;
   } catch (err) {
-    logger.warn({ err: String(err) }, "text ground-check failed — keeping original draft");
+    logger.warn({ err: String(err) }, "text ground-note failed — leaving the answer as-is");
     return null;
   } finally {
     if (timer) clearTimeout(timer);
