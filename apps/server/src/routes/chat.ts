@@ -606,8 +606,22 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
           type: "status",
           text: accountLocale?.startsWith("ko") ? "출처와 대조해 검증하는 중…" : "Verifying against the sources…",
         });
+        // Verify on the fast triage tier — checking a draft against the given
+        // sources is reading comprehension, not generation, so a small/cheap
+        // model keeps this extra pass quick (and far cheaper when the answer was
+        // escalated to a strong model). Falls back to the active model when no
+        // separate fast tier is configured.
+        const vs = getTriageSettings();
+        const vModel = vs.provider === "ollama" ? await resolveOllamaModel(vs.model) : vs.model;
+        const verifyProvider = meteringProvider(
+          await getProvider({ provider: vs.provider, model: vModel }),
+          assistantMsgId,
+          vModel,
+          accountId,
+          chat.workspaceId ?? null,
+        );
         const grounded = await groundCheckText(
-          answerProvider,
+          verifyProvider,
           draft.text,
           contextResult.prompt,
           controller.signal,
