@@ -43,6 +43,7 @@ import { getActiveSettings, getTriageSettings, isProviderConfigured, resolveEsca
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import { groundCheckVision } from "../services/groundCheck.js";
+import { groundCheckText } from "../services/groundCheckText.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { makeReranker } from "../services/reranker.js";
 import { runAgent } from "../services/agent.js";
@@ -519,6 +520,8 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         images: [],
         searchResults: null,
         contextSources: [],
+        academic: false,
+        hasSources: false,
       };
     }
     contextSearchResults = contextResult.searchResults;
@@ -586,6 +589,30 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
             emit({ type: "delta", text: assistantContent });
           }
         }
+      } else if (contextResult.academic && contextResult.hasSources) {
+        // H2 — structural grounding for ACADEMIC answers that rest on sources
+        // (web results / workspace excerpts). Buffer a draft, re-verify its
+        // factual claims against those same sources, then emit the corrected
+        // answer. Streaming is preserved for every other case (this gate is
+        // narrow: lecture/thesis workspace AND sources present). Best-effort —
+        // groundCheckText fails safe to the draft.
+        const draft = await answerProvider.complete({
+          system: contextResult.system,
+          prompt: contextResult.prompt,
+          signal: controller.signal,
+        });
+        emit({
+          type: "status",
+          text: accountLocale?.startsWith("ko") ? "출처와 대조해 검증하는 중…" : "Verifying against the sources…",
+        });
+        const grounded = await groundCheckText(
+          answerProvider,
+          draft.text,
+          contextResult.prompt,
+          controller.signal,
+        );
+        assistantContent = grounded ?? draft.text;
+        emit({ type: "delta", text: assistantContent });
       } else {
         await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },

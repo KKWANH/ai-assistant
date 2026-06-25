@@ -74,6 +74,12 @@ export interface ChatContextResult {
    *  a folder shows what it drew on (the web-search path already exposes its
    *  sources via searchResults; this is the symmetric workspace-file signal). */
   contextSources: string[];
+  /** This chat's workspace is academic (lecture/thesis section) — the answer
+   *  path uses this to gate a stronger, structural grounding pass. */
+  academic: boolean;
+  /** Real source text (web results and/or workspace excerpts) was fed into the
+   *  prompt this turn — i.e. there is something to verify the answer against. */
+  hasSources: boolean;
 }
 
 /** Append the user's saved profile to a system prompt (no-op when empty). */
@@ -472,7 +478,15 @@ export async function buildChatContext(
     dynamicBlocks.length > 0 ? dynamicBlocks.join("\n\n") + "\n\n" : "";
   const prompt = `${contextBlock}User: ${userMessage.content}`;
 
-  return { system, prompt, images, searchResults, contextSources };
+  return {
+    system,
+    prompt,
+    images,
+    searchResults,
+    contextSources,
+    academic: workspaceSection === "lecture" || workspaceSection === "thesis",
+    hasSources: (searchResults?.length ?? 0) > 0 || contextSources.length > 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
