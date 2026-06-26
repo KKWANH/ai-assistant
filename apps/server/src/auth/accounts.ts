@@ -142,25 +142,37 @@ export function seedAdmin(): void {
 // ---------------------------------------------------------------------------
 
 const GUEST_USERNAME = "guest";
-const GUEST_DAILY_TOKENS = 10_000;
-const GUEST_WEEKLY_TOKENS = 30_000;
+// Shared across ALL guests (one account) — a cost ceiling for an exposed/demo
+// instance, not a per-visitor budget. Raised modestly so a public "try as guest"
+// demo survives some traffic before capping; still a firm bound (~$1–2/wk worst
+// case on a cheap model). Bump higher if a launch needs more headroom.
+const GUEST_DAILY_TOKENS = 40_000;
+const GUEST_WEEKLY_TOKENS = 120_000;
 
 /** Seed the shared, passwordless guest account (idempotent). "Try as guest"
  *  starts a session for this account. Role "guest" is read + chat only (see
  *  canModifyWorkspace — it can't run actions/scripts/runs or mutate projects)
  *  and is capped by a tiny token limit so an exposed instance can't be drained. */
 export function seedGuest(): void {
-  if (findAccountByUsername(GUEST_USERNAME)) return;
+  // Find-or-create, then ALWAYS (re)apply the caps — so a constant change here
+  // takes effect on the already-seeded account at the next boot. The limits
+  // UPSERT only updates the cap values, not usage (tracked separately by date),
+  // so re-applying never refills a guest's spent budget.
+  const existing = findAccountByUsername(GUEST_USERNAME);
   // Random, unusable password — the guest is reached via POST /auth/guest,
   // never by password login.
-  const account = createAccount(
-    GUEST_USERNAME,
-    crypto.randomBytes(24).toString("base64url"),
-    "Guest",
-    "guest",
-    "en",
-    "simple",
-  );
+  const account =
+    existing ??
+    createAccount(
+      GUEST_USERNAME,
+      crypto.randomBytes(24).toString("base64url"),
+      "Guest",
+      "guest",
+      "en",
+      "simple",
+    );
+  if (!existing) {
+    logger.info({ username: GUEST_USERNAME }, "Guest account seeded (read + chat only, token-capped)");
+  }
   dbSetAccountLimits(account.id, GUEST_DAILY_TOKENS, GUEST_WEEKLY_TOKENS, new Date().toISOString());
-  logger.info({ username: GUEST_USERNAME }, "Guest account seeded (read + chat only, token-capped)");
 }

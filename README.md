@@ -2,15 +2,19 @@
 
 # Ariadne
 
-**Local-first AI workspace for your folders.**
+**The local-first AI workspace you can see into.**
 
-Ask questions over PDFs, CSVs, notes, and code. Automate repeatable work.
-Review every AI edit as a staged diff. Never train on your data.
+Ask questions over your PDFs, slides, CSVs, notes, and code — and get
+answers that **cite their source**, **read the actual images** on your
+slides (not just the text), and are **fact-checked against those sources**
+before you trust them. Automate repeatable work; review every AI edit as a
+staged diff. Runs on your machine — your files and keys never leave, and it
+never trains on your data.
 
-A batteries-included app today (the **Portfolio cockpit**), and a
-platform you can build on — ship your own dashboard as a sandboxed
-React surface the host feeds with files, live data, retrieval, and the
-model.
+One app that's both a power-user IDE and an approachable assistant
+(toggle per workspace), and a platform you build on — ship your own
+dashboard as a sandboxed React surface the host feeds with files, live
+data, retrieval, and the model.
 
 <img src="docs/diagrams/hero.svg" alt="Local files become evidence-backed work" width="520">
 
