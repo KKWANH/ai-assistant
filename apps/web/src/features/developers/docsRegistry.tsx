@@ -12,7 +12,7 @@ import { ApiReference } from "./ApiReference";
 import { DocsLanding } from "./docsLanding";
 import { extractHeadings, type Heading } from "./docsKit";
 import {
-  QUICKSTART, PROJECT_LAYOUT,
+  QUICKSTART, API_KEYS, PROJECT_LAYOUT,
   ARCHITECTURE_OVERVIEW, REQUEST_LIFECYCLE, DATA_MODEL, AUTH_MODEL,
   SURFACES, RUNS_AND_TEMPLATES, MEMORY,
   ADD_A_ROUTE, ADD_A_PROVIDER, ADD_AN_AGENT_TOOL, BUILD_A_SURFACE, ADD_A_SETTING,
@@ -54,6 +54,7 @@ export const DOC_SECTIONS: DocSection[] = [
     pages: [
       { slug: "introduction", title: "Introduction", description: "A local-first AI workspace you can see into — and extend.", hero: true, content: { kind: "node", render: () => <DocsLanding /> } },
       { slug: "quickstart", title: "Quickstart", description: "Install, run, and develop with hot reload.", content: md(QUICKSTART) },
+      { slug: "api-keys", title: "API keys & models", description: "Get a provider key, add it, and pick a model — step by step.", content: md(API_KEYS) },
       { slug: "project-layout", title: "Project layout", description: "The monorepo, and where each kind of change goes.", content: md(PROJECT_LAYOUT) },
     ],
   },

@@ -107,6 +107,15 @@ machine.
 - **Hybrid retrieval**: BM25/FTS5 + cosine embeddings + symbol index,
   fused via reciprocal-rank fusion. Auto-pulled `nomic-embed-text`
   on first scan if Ollama is the active provider.
+- **Sees your documents**: attached PDFs / PPTX / DOCX are rendered to
+  page images for a vision model — so it reads slides, figures, and
+  scanned pages, not just extracted text (a model literally describes
+  the artwork on a slide, not a guess from the filename).
+- **Grounded, not confident-wrong**: factual answers that rest on
+  sources are cross-checked against those sources after drafting — a
+  wrong date / name / attribution gets corrected (or flagged
+  uncertain), and visual claims are re-checked against the actual
+  image. Accuracy over fluency.
 - **Plan-and-execute agent**: planner uses JSON-schema guided decoding
   so silent parse-failure → empty-plan can't happen. Re-plans on
   tool failure or low-information results.

@@ -49,6 +49,81 @@ schema-correct output so runs complete end to end offline. Add a real key in
 **Settings → Providers** when you want live answers.
 `;
 
+export const API_KEYS = `
+Ariadne runs **keyless** out of the box — the built-in **mock** provider (and
+local **Ollama**, if installed) let you click around and complete runs offline.
+For real answers you point it at a model provider with **your own API key**. The
+key is stored locally on this machine and is sent only to the provider you chose
+— never to us, never to a middleman.
+
+This is a one-key, ~2-minute setup. **Gemini is the easiest start** — it has a
+free tier and is *vision-capable*, so it can read your slides and figures, not
+just their text.
+
+## 1 · Get an API key
+
+Pick one provider. Each link goes straight to its key page:
+
+| Provider | Get a key | Notes |
+| --- | --- | --- |
+| **Google Gemini** | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) | Free tier · vision · the recommended default |
+| **Anthropic (Claude)** | [console.anthropic.com → Keys](https://console.anthropic.com/settings/keys) | Strong reasoning + vision |
+| **OpenAI** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | GPT-4o and others |
+| **Moonshot / Kimi** | [platform.moonshot.ai → Keys](https://platform.moonshot.ai/console/api-keys) | Cost-effective, long context |
+| **Ollama (local)** | [ollama.com/download](https://ollama.com/download) | No key — runs on your machine, free + private |
+
+> [!TIP]
+> On Google AI Studio: sign in → **Get API key** → **Create API key** → copy the
+> string (it starts with \`AIza…\`). Free to start.
+
+## 2 · Add the key to Ariadne
+
+Either way works; a key set in Settings takes precedence over the env var.
+
+**A — in the app (easiest).** Open **Settings → API keys**, find your provider,
+and click **Get a key →** if you still need one (it jumps to that provider's
+console). Paste the key, hit **Save** — a green check means it's live. The key is
+stored in this machine's local database, write-only (never shown back).
+
+**B — in \`.env\`** (for a server / self-host). Copy the example and set the one
+variable for your provider, then restart:
+
+\`\`\`bash
+cp .env.example .env
+# add ONE of these to .env:
+#   GEMINI_API_KEY=AIza...
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   OPENAI_API_KEY=sk-...
+#   MOONSHOT_API_KEY=sk-...
+./ops/ariadne.sh restart
+\`\`\`
+
+## 3 · Pick the model
+
+In the chat box, click the **model chip** (it shows the current model) — it lists
+every provider you've configured. Pick one, e.g. **Gemini Flash** for fast,
+cheap, vision-capable answers. A workspace can also pin its own model in its
+**Settings → Chat & model**.
+
+## 4 · Try it
+
+Ask a question — or attach a **PDF / slide deck** and ask about it. With a
+vision-capable model Ariadne renders each page so the model actually *sees* the
+figures and slides, then cross-checks factual claims against the sources and
+flags anything it can't support.
+
+## Troubleshooting
+
+- **"key required" / no answer** — that provider has no key yet. Add one in
+  **Settings → API keys** (step 2).
+- **Key saved but still erroring** — make sure you pasted the whole key *and*
+  selected that provider's model in the picker; re-copy it from the console.
+- **Don't want any key** — switch the provider to **Mock** (offline stub) or run
+  **Ollama** locally (free, private).
+- **Rate-limit / quota errors** — that's the provider's cap on your key, not
+  Ariadne. Check usage in their console, or switch providers in the picker.
+`;
+
 export const PROJECT_LAYOUT = `
 Everything lives in one repository. Two workspaces (\`apps/*\`, \`packages/*\`) plus
 a \`projects/\` folder of self-contained example apps.
