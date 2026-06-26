@@ -1374,6 +1374,7 @@ const ko: Record<TranslationKey, string> = {
   "model.trait.minimax": "빠르고 저렴한 OpenAI 호환 모델 — 코딩·오피스 작업에 강함",
   "settings.apiKeys.heading": "API 키",
   "settings.apiKeys.subtitle": "셸 환경변수 없이 키를 붙여넣어 바로 사용합니다. 이 기기에 로컬 저장되며 환경변수보다 우선합니다.",
+  "settings.apiKeys.getKey": "키 발급받기",
   "settings.apiKeys.save": "저장",
   "settings.apiKeys.clear": "지우기",
   "settings.apiKeys.saved": "API 키를 저장했습니다",

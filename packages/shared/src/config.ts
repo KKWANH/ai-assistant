@@ -53,6 +53,10 @@ export interface ProviderDescriptor {
   /** Env var holding the API key; also the settings-table key id
    *  (`providerKey:<id>`). Omit for keyless providers (ollama/mock). */
   envKey?: string;
+  /** Where to GET an API key — the provider's console/key page. Surfaced as a
+   *  "Get a key →" link next to the key field so setup is one click, not a
+   *  search. Omit for keyless providers. */
+  keyUrl?: string;
   /** Base URL for openai-compatible providers. */
   baseURL?: string;
   /** Runs on the user's own machine/network — no API-key billing. */
@@ -75,7 +79,7 @@ export interface ProviderDescriptor {
  */
 export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
   anthropic: {
-    id: "anthropic", label: "Anthropic (Claude)", kind: "anthropic", envKey: "ANTHROPIC_API_KEY",
+    id: "anthropic", label: "Anthropic (Claude)", kind: "anthropic", envKey: "ANTHROPIC_API_KEY", keyUrl: "https://console.anthropic.com/settings/keys",
     defaultModel: "claude-sonnet-4-6",
     models: [
       { id: "claude-sonnet-4-6", label: "Claude Sonnet", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 3, outUsd: 15 } },
@@ -84,7 +88,7 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     ],
   },
   openai: {
-    id: "openai", label: "OpenAI", kind: "openai", envKey: "OPENAI_API_KEY",
+    id: "openai", label: "OpenAI", kind: "openai", envKey: "OPENAI_API_KEY", keyUrl: "https://platform.openai.com/api-keys",
     defaultModel: "gpt-4o",
     models: [
       { id: "gpt-4o", label: "GPT-4o", traitKey: "model.trait.gpt4o", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 2.5, outUsd: 10 } },
@@ -93,7 +97,7 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     ],
   },
   gemini: {
-    id: "gemini", label: "Google Gemini", kind: "gemini", envKey: "GEMINI_API_KEY",
+    id: "gemini", label: "Google Gemini", kind: "gemini", envKey: "GEMINI_API_KEY", keyUrl: "https://aistudio.google.com/app/apikey",
     defaultModel: "gemini-3.5-flash",
     models: [
       { id: "gemini-3.5-flash", label: "Gemini Flash", traitKey: "model.trait.geminiFlash", speed: "fast", costTier: "mid", vision: true, pricing: { inUsd: 1.5, outUsd: 9 } },
@@ -103,7 +107,7 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     ],
   },
   moonshot: {
-    id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY",
+    id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY", keyUrl: "https://platform.moonshot.ai/console/api-keys",
     defaultModel: "kimi-k2.6",
     models: [
       { id: "kimi-k2.6", label: "Kimi K2", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.55, outUsd: 2.65 } },

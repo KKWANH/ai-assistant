@@ -76,16 +76,29 @@ function ApiKeyRow({ id, label, configured }: { id: ProviderId; label: string; c
     }
   };
 
+  const keyUrl = PROVIDER_REGISTRY[id]?.keyUrl;
   return (
     <Card className="flex items-center gap-3 px-4 py-2.5">
-      <span className="flex items-center gap-1.5 text-sm text-foreground w-40 shrink-0">
-        {configured ? (
-          <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
-        ) : (
-          <KeyRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      <div className="w-40 shrink-0 flex flex-col gap-0.5">
+        <span className="flex items-center gap-1.5 text-sm text-foreground">
+          {configured ? (
+            <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
+          ) : (
+            <KeyRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          )}
+          {label}
+        </span>
+        {keyUrl && !configured && (
+          <a
+            href={keyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pl-5 text-2xs text-accent hover:underline"
+          >
+            {t("settings.apiKeys.getKey")} →
+          </a>
         )}
-        {label}
-      </span>
+      </div>
       <Input
         type="password"
         autoComplete="off"
