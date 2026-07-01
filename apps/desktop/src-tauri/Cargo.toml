@@ -11,8 +11,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # tray-icon: the app lives in the menu bar; the window is optional (close =
 # hide, the tray + server keep running). std covers the sidecar spawn + the
-# connect probe.
-tauri = { version = "2", features = ["tray-icon"] }
+# connect probe. webview-data-url: lets the window open on an inline data: URL
+# (the boot splash) before the server is up — Tauri gates that behind a feature.
+tauri = { version = "2", features = ["tray-icon", "webview-data-url"] }
 
 # SIGTERM the Node sidecar on exit so its cleanup (MCP child shutdown) runs;
 # std's Child::kill is SIGKILL only, which would orphan MCP workers. Unix-only —

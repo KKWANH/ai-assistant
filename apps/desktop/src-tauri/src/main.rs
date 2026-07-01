@@ -29,6 +29,18 @@ struct Sidecar(Mutex<Option<Child>>);
 /// shares its data, and so the webview origin is stable (localStorage persists).
 const PORT: u16 = 4319;
 
+/// A self-contained dark splash (base64 data URL) shown the instant the window
+/// opens, so a cold launch reads as "starting…" instead of a blank/white screen
+/// while the Node backend boots. The boot thread navigates to the app over it
+/// once the server answers — a different (data:) origin, so it never touches the
+/// app's localStorage. Kept tiny + inline so there's no asset to ship or resolve.
+const SPLASH_B64: &str = "PCFkb2N0eXBlIGh0bWw+PG1ldGEgY2hhcnNldD11dGYtOD48dGl0bGU+QXJpYWRuZTwvdGl0bGU+PGJvZHkgc3R5bGU9Im1hcmdpbjowO2hlaWdodDoxMDB2aDtkaXNwbGF5OmZsZXg7ZmxleC1kaXJlY3Rpb246Y29sdW1uO2FsaWduLWl0ZW1zOmNlbnRlcjtqdXN0aWZ5LWNvbnRlbnQ6Y2VudGVyO2JhY2tncm91bmQ6IzBiMGIwYztjb2xvcjojZTZlNmU2O2ZvbnQtZmFtaWx5Oi1hcHBsZS1zeXN0ZW0sc3lzdGVtLXVpLHNhbnMtc2VyaWYiPjxkaXYgc3R5bGU9ImZvbnQtc2l6ZToyNHB4O2ZvbnQtd2VpZ2h0OjcwMDtsZXR0ZXItc3BhY2luZzotLjAyZW0iPkFyaWFkbmU8L2Rpdj48ZGl2IGlkPW0gc3R5bGU9Im1hcmdpbi10b3A6OHB4O2ZvbnQtc2l6ZToxM3B4O2NvbG9yOiM3YTdhN2EiPlN0YXJ0aW5nIHRoZSBsb2NhbCBzZXJ2ZXLigKY8L2Rpdj48ZGl2IHN0eWxlPSJtYXJnaW4tdG9wOjIwcHg7d2lkdGg6MjRweDtoZWlnaHQ6MjRweDtib3JkZXI6Mi41cHggc29saWQgIzJhMmEyYztib3JkZXItdG9wLWNvbG9yOiM5YTlhOWE7Ym9yZGVyLXJhZGl1czo1MCU7YW5pbWF0aW9uOnNwaW4gLjhzIGxpbmVhciBpbmZpbml0ZSI+PC9kaXY+PHN0eWxlPkBrZXlmcmFtZXMgc3Bpbnt0b3t0cmFuc2Zvcm06cm90YXRlKDM2MGRlZyl9fTwvc3R5bGU+PC9ib2R5Pgo=";
+
+/// The splash as a navigable data URL.
+fn splash_url() -> String {
+    format!("data:text/html;base64,{SPLASH_B64}")
+}
+
 /// Is a real Ariadne server already answering on this port? A bare TCP connect
 /// isn't enough, so probe an API route and look for an HTTP status line — a live
 /// server answers 200 (loopback admin) or 401. Avoids a second server.
@@ -48,14 +60,17 @@ fn server_alive(port: u16) -> bool {
     head.starts_with("HTTP/1.") && (head.contains(" 200") || head.contains(" 401"))
 }
 
-/// Poll until the server accepts TCP connections (a good-enough readiness signal).
-fn wait_until_ready(port: u16, timeout: Duration) -> bool {
+/// Poll until the server actually answers an HTTP request (not just opens the
+/// port — `server_alive` does the real probe). Used as the gate before we
+/// navigate the webview off the splash, so the app loads against a server that's
+/// genuinely serving, not one mid-boot.
+fn wait_until_alive(port: u16, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+        if server_alive(port) {
             return true;
         }
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(250));
     }
     false
 }
@@ -149,6 +164,12 @@ fn spawn_server(app: &tauri::AppHandle) -> Option<Child> {
             .arg("tsx")
             .arg(&entry)
             .current_dir(&cwd)
+            // tsx auto-detects tsconfig from the CWD, but the one carrying the
+            // @ariadne/* path aliases lives at apps/server/tsconfig.json (not the
+            // server root). Point tsx straight at it, or the sidecar dies on a
+            // bare `@ariadne/shared` import — which is exactly why a cold launch
+            // with no server to attach to used to hang on a blank screen.
+            .env("TSX_TSCONFIG_PATH", cwd.join("apps/server/tsconfig.json"))
             .env("ARIADNE_PORT", PORT.to_string())
             .env("ARIADNE_DESKTOP", "1")
             // Loopback-only: the desktop webview is the only client.
@@ -200,6 +221,51 @@ fn stop_sidecar(child: &mut Child) {
     let _ = child.kill();
 }
 
+/// Point the main window at `url`, dispatched onto the UI thread so it's safe to
+/// call from a background boot/restart thread.
+fn navigate_main(handle: &tauri::AppHandle, url: &str) {
+    if let Some(w) = handle.get_webview_window("main") {
+        let url = url.to_string();
+        let _ = handle.run_on_main_thread(move || {
+            if let Ok(u) = url.parse() {
+                let _ = w.navigate(u);
+            }
+        });
+    }
+}
+
+/// Tray "Restart server": flip the window back to the splash, then on a worker
+/// thread stop the sidecar we own, start a fresh one, and navigate back to the
+/// app once it answers. For an ATTACHED server (we don't own it) there's nothing
+/// to restart — we just wait for it to answer and reload, never killing it.
+fn restart_server(handle: &tauri::AppHandle, app_url: &str) {
+    navigate_main(handle, &splash_url());
+    let handle = handle.clone();
+    let app_url = app_url.to_string();
+    thread::spawn(move || {
+        // Take the child OUT of the lock before the (blocking) stop, so a
+        // concurrent quit isn't stuck waiting on the mutex during teardown.
+        let mut owned = None;
+        if let Some(state) = handle.try_state::<Sidecar>() {
+            if let Ok(mut guard) = state.0.lock() {
+                owned = guard.take();
+            }
+        }
+        if let Some(mut child) = owned {
+            stop_sidecar(&mut child);
+            thread::sleep(Duration::from_millis(600)); // let the port free
+            let fresh = spawn_server(&handle);
+            if let Some(state) = handle.try_state::<Sidecar>() {
+                if let Ok(mut guard) = state.0.lock() {
+                    *guard = fresh;
+                }
+            }
+        }
+        wait_until_alive(PORT, Duration::from_secs(60));
+        navigate_main(&handle, &app_url);
+    });
+}
+
 fn main() {
     let url = format!("http://127.0.0.1:{PORT}");
 
@@ -234,31 +300,34 @@ fn main() {
             _ => {}
         })
         .setup(move |app| {
-            // Connect-or-spawn. If a server is already up on the fixed port,
-            // ATTACH to it (shared data + localStorage). Only otherwise do we
-            // start our own bundled server. Done in setup so the per-platform
-            // resource/app-data paths resolve via Tauri's path API.
-            let handle = app.handle().clone();
-            let attach = server_alive(PORT);
-            if !attach {
-                let child = spawn_server(&handle);
-                if let Some(state) = app.try_state::<Sidecar>() {
-                    if let Ok(mut guard) = state.0.lock() {
-                        *guard = child;
-                    }
+            // Show the window with a splash IMMEDIATELY — a cold launch then
+            // reads as "starting…" instead of a blank/white window while the Node
+            // backend boots. Its close button HIDES the window (tray + server keep
+            // running) rather than quitting.
+            let win = WebviewWindowBuilder::new(
+                app,
+                "main",
+                WebviewUrl::External(splash_url().parse().unwrap()),
+            )
+            .title("Ariadne")
+            .inner_size(1280.0, 860.0)
+            .min_inner_size(900.0, 600.0)
+            .build()?;
+            let hide_handle = win.clone();
+            win.on_window_event(move |event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = hide_handle.hide();
                 }
-            }
-            let ready = attach || wait_until_ready(PORT, Duration::from_secs(30));
-            if !ready {
-                eprintln!("Ariadne: server did not become ready on port {PORT} within 30s");
-            }
+            });
 
             // Menu-bar tray — the app lives here; the window is one client onto
-            // the server. "Reload window" recovers a blank/stuck webview without
-            // quitting (the server + tray keep running).
+            // the server. "Restart server" reboots the sidecar; "Reload window"
+            // recovers a blank/stuck webview — both without quitting.
             let status = MenuItem::with_id(app, "status", format!("Ariadne · running on :{PORT}"), false, None::<&str>)?;
             let open = MenuItem::with_id(app, "open", "Open window", true, None::<&str>)?;
             let reload = MenuItem::with_id(app, "reload", "Reload window", true, None::<&str>)?;
+            let restart = MenuItem::with_id(app, "restart", "Restart server", true, None::<&str>)?;
             let browser = MenuItem::with_id(app, "browser", "Open in browser", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Ariadne", true, None::<&str>)?;
             let menu = Menu::with_items(
@@ -268,17 +337,19 @@ fn main() {
                     &PredefinedMenuItem::separator(app)?,
                     &open,
                     &reload,
+                    &restart,
                     &browser,
                     &PredefinedMenuItem::separator(app)?,
                     &quit,
                 ],
             )?;
+            let tray_url = url.clone();
             TrayIconBuilder::new()
                 .icon(tauri::include_image!("icons/trayTemplate.png"))
                 .icon_as_template(true)
                 .menu(&menu)
                 .tooltip("Ariadne")
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
@@ -296,26 +367,42 @@ fn main() {
                             let _ = w.set_focus();
                         }
                     }
+                    "restart" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                        restart_server(app, &tray_url);
+                    }
                     "browser" => open_url(&format!("http://127.0.0.1:{PORT}")),
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .build(app)?;
 
-            // The window shows on launch; its close button HIDES it (the tray +
-            // server keep running) instead of quitting.
-            let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
-                .title("Ariadne")
-                .inner_size(1280.0, 860.0)
-                .min_inner_size(900.0, 600.0)
-                .build()?;
-            let hide_handle = win.clone();
-            win.on_window_event(move |event| {
-                if let WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = hide_handle.hide();
+            // Connect-or-spawn the server on a BACKGROUND thread, then navigate
+            // the window off the splash to the app once it answers HTTP. Done off
+            // the setup thread so the splash actually paints during boot (a
+            // blocking wait here would freeze the window before it could render).
+            let boot_handle = app.handle().clone();
+            let boot_url = url.clone();
+            thread::spawn(move || {
+                let attach = server_alive(PORT);
+                if !attach {
+                    let child = spawn_server(&boot_handle);
+                    if let Some(state) = boot_handle.try_state::<Sidecar>() {
+                        if let Ok(mut guard) = state.0.lock() {
+                            *guard = child;
+                        }
+                    }
                 }
+                let ready = attach || wait_until_alive(PORT, Duration::from_secs(60));
+                if !ready {
+                    eprintln!("Ariadne: server did not become ready on :{PORT} within 60s");
+                }
+                navigate_main(&boot_handle, &boot_url);
             });
+
             Ok(())
         })
         .build(tauri::generate_context!())

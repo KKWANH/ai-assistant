@@ -7,6 +7,7 @@
     "paths": {
       "@ariadne/shared": ["../../packages/shared/src/index.ts"],
       "@ariadne/surface": ["./src/surface/runtime.js"],
+      "@ariadne/server/*": ["./*"],
       "@projects/*": ["../../projects/*"]
     }
   },
