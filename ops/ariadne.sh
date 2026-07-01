@@ -258,6 +258,13 @@ cmd_status() {
     dim "  Tunnel URL: not yet available"
   fi
 
+  # Auto-start watchdog
+  if autostart_installed; then
+    ok "Auto-start ON      (cron watchdog, every 60s)"
+  else
+    dim "  Auto-start off     (enable: $(basename "${BASH_SOURCE[0]}") autostart)"
+  fi
+
   printf "\n"
   printf "  Admin dashboard:  ${CYAN}http://localhost:7459${RESET}\n"
   printf "\n"
@@ -279,19 +286,79 @@ cmd_admin() {
   open "http://localhost:7459"
 }
 
+# ── Auto-start (cron watchdog) ───────────────────────────────────────────────
+# $HOME is on an external volume (/Volumes/...), and launchd REFUSES to bootstrap
+# a LaunchAgent whose plist lives there ("Bootstrap failed: 5: I/O error"), so a
+# LaunchAgent is out. cron works here, so the watchdog is a once-a-minute cron
+# entry that runs `ariadne.sh start` — which is idempotent (an instant no-op when
+# already healthy). It recovers a dead server/supervisor within ~60s (the "server
+# just stopped on its own" case) and brings Ariadne back after a reboot once you
+# log in. A comment tag scopes install/remove to our own line so the user's other
+# cron jobs are never touched.
+WATCHDOG_TAG="# ariadne-watchdog"
+# Health-GATED: a cheap curl to /healthz first, and only run `start` (which logs)
+# when it FAILS. So a healthy minute is silent — no per-minute heartbeat piling
+# up in watchdog.log — while a dead server is recovered within ~60s.
+# NB: `export PATH=…;` (a statement), NOT `PATH=… curl` (a prefix) — a prefix
+# assignment binds only to curl, so `start` after `||` would run with cron's bare
+# PATH and die on `env: node: No such file or directory`. Homebrew node lives in
+# /opt/homebrew/bin, which cron does not include by default.
+watchdog_line() {
+  printf '* * * * * export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; curl -sf -m 5 http://127.0.0.1:4319/healthz >/dev/null 2>&1 || %s/ops/ariadne.sh start >> %s/watchdog.log 2>&1  %s' \
+    "${ARIADNE_ROOT}" "${ARIADNE_LOG_DIR}" "${WATCHDOG_TAG}"
+}
+autostart_installed() { crontab -l 2>/dev/null | grep -qF "${WATCHDOG_TAG}"; }
+
+cmd_autostart() {
+  mkdir -p "${ARIADNE_LOG_DIR}"
+  # Keep every existing cron line EXCEPT a prior watchdog, then append a fresh one.
+  # Built via command substitution (not a bare pipe) so an empty crontab / no-match
+  # grep returning non-zero can't trip `set -e`/pipefail before we install.
+  local kept
+  kept="$(crontab -l 2>/dev/null | grep -vF "${WATCHDOG_TAG}" || true)"
+  printf '%s\n%s\n' "${kept}" "$(watchdog_line)" | sed '/^[[:space:]]*$/d' | crontab -
+  if autostart_installed; then
+    ok "Auto-start ON (cron watchdog, every 60s)."
+    printf "  Runs '%s start' each minute — no-op when healthy; recovers a dead server within\n" \
+      "$(basename "${BASH_SOURCE[0]}")"
+    printf "  ~60s, and after a reboot once you log in.  Log: %s/watchdog.log\n" "${ARIADNE_LOG_DIR}"
+    printf "  Disable:  %s autostart-off\n" "$(basename "${BASH_SOURCE[0]}")"
+  else
+    err "Failed to install the cron watchdog."
+    exit 1
+  fi
+}
+
+cmd_autostart_off() {
+  if autostart_installed; then
+    local kept
+    kept="$(crontab -l 2>/dev/null | grep -vF "${WATCHDOG_TAG}" || true)"
+    if [[ -n "${kept}" ]]; then
+      printf '%s\n' "${kept}" | crontab -
+    else
+      crontab -r 2>/dev/null || true   # watchdog was the only entry
+    fi
+    ok "Auto-start removed. (This only stops the watchdog; a running Ariadne stays up.)"
+  else
+    warn "Auto-start was not installed (no watchdog cron entry)."
+  fi
+}
+
 # ── Dispatch ───────────────────────────────────────────────────────────────
 
 VERB="${1:-help}"
 
 case "$VERB" in
-  start)   cmd_start ;;
-  stop)    cmd_stop ;;
-  restart) cmd_restart ;;
-  status)  cmd_status ;;
-  logs)    cmd_logs "${2:-server}" ;;
-  admin)   cmd_admin ;;
+  start)        cmd_start ;;
+  stop)         cmd_stop ;;
+  restart)      cmd_restart ;;
+  status)       cmd_status ;;
+  logs)         cmd_logs "${2:-server}" ;;
+  admin)        cmd_admin ;;
+  autostart)    cmd_autostart ;;
+  autostart-off) cmd_autostart_off ;;
   *)
-    printf "Usage: %s <start|stop|restart|status|logs [server|tunnel|supervisor]|admin>\n" \
+    printf "Usage: %s <start|stop|restart|status|logs [server|tunnel|supervisor]|admin|autostart|autostart-off>\n" \
       "$(basename "${BASH_SOURCE[0]}")"
     exit 1
     ;;
