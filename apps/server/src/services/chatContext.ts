@@ -444,6 +444,19 @@ export async function buildChatContext(
         "in the provided materials, and otherwise flag the uncertainty rather than smoothing over it. When a " +
         "claim rests on your general knowledge rather than the user's materials, say so, so they can check it."
       : "";
+  // Inline visualization: the chat renders a ```svg / ```html fenced block as a
+  // live sandboxed preview, so the model can literally DRAW an answer (chart,
+  // diagram, figure) when that communicates better than prose. Conditional — it
+  // only fires when the user asks to see something graphically, so ordinary
+  // answers stay prose; self-contained to match the offline sandbox.
+  const visualizationGuidance =
+    " When the user asks you to draw, sketch, chart, plot, graph, diagram, map out, or otherwise SHOW something " +
+    "visually (a chart, graph, diagram, flowchart, timeline, tree, geometric figure, or UI mockup), you may render " +
+    "it by emitting a fenced code block tagged ```svg (best for diagrams, charts, and figures) or ```html (for " +
+    "richer or interactive layouts) — it displays live inline as a preview, not as a code listing. Make it " +
+    "SELF-CONTAINED: inline SVG/CSS/JS only, with NO external scripts, stylesheets, images, or fonts (the sandbox " +
+    "is offline and cannot load them). Size it sensibly and add a one-line explanation alongside it. Only reach for " +
+    "this when a picture genuinely helps — keep ordinary answers as prose.";
   const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
@@ -455,7 +468,8 @@ export async function buildChatContext(
     "and do not add bracketed citation markers like [1]." +
     reviewGuidance +
     accuracyGuidance +
-    academicGuidance;
+    academicGuidance +
+    visualizationGuidance;
 
   const stableBlocks = [workspaceMetaBlock, projectContextBlock, memoryBlock].filter(
     (s): s is string => !!s,
