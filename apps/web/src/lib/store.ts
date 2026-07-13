@@ -4,6 +4,7 @@
  */
 import { create } from "zustand";
 import { applyTheme } from "./theme";
+import { applyWallpaper, DEFAULT_WALLPAPER } from "./wallpaper";
 
 // Per-workspace "Advanced view" memory — persisted to localStorage so a
 // workspace reopens in the view you left it in (a coding workspace stays
@@ -81,6 +82,26 @@ function loadChatSort(): ChatSort {
   }
 }
 
+// Appearance — theme (dark/light) + wallpaper preset, both persisted so a
+// reload keeps the user's choice (theme previously always reset to dark).
+// Exported so main.tsx can apply them before first paint.
+const THEME_KEY = "ariadne.theme.v1";
+export function loadTheme(): "dark" | "light" {
+  try {
+    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+const WALLPAPER_KEY = "ariadne.wallpaper.v1";
+export function loadWallpaper(): string {
+  try {
+    return localStorage.getItem(WALLPAPER_KEY) || DEFAULT_WALLPAPER;
+  } catch {
+    return DEFAULT_WALLPAPER;
+  }
+}
+
 export type SidebarSection =
   | "chat"
   | "workspaces"
@@ -153,6 +174,8 @@ export interface UIStore {
   theme: "dark" | "light";
   setTheme: (t: "dark" | "light") => void;
   toggleTheme: () => void;
+  wallpaper: string;
+  setWallpaper: (key: string) => void;
 
   // Create workspace dialog
   createWorkspaceOpen: boolean;
@@ -270,14 +293,22 @@ export const useUIStore = create<UIStore>((set, get) => ({
   resetContextToggles: () =>
     set({ contextExcludes: new Set(), contextIncludes: new Set() }),
 
-  theme: "dark",
+  theme: loadTheme(),
   setTheme: (t) => {
     applyTheme(t);
+    applyWallpaper(get().wallpaper, t);
+    try { localStorage.setItem(THEME_KEY, t); } catch { /* ignore */ }
     set({ theme: t });
   },
   toggleTheme: () => {
     const next = get().theme === "dark" ? "light" : "dark";
     get().setTheme(next);
+  },
+  wallpaper: loadWallpaper(),
+  setWallpaper: (key) => {
+    applyWallpaper(key, get().theme);
+    try { localStorage.setItem(WALLPAPER_KEY, key); } catch { /* ignore */ }
+    set({ wallpaper: key });
   },
 
   createWorkspaceOpen: false,

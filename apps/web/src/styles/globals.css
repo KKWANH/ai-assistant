@@ -187,7 +187,12 @@ html.light {
 }
 
 body {
-  background-color: rgb(var(--background));
+  /* Subtle "wallpaper" so the glass nav layer (top bar, sidebar, composer)
+     has something to frost against — backdrop-blur over a flat opaque canvas
+     shows nothing. Near-black by default (the dark/black theme); themed
+     wallpapers swap this via --wallpaper later. Tokens only → no white flash. */
+  background: var(--wallpaper,
+    radial-gradient(135% 118% at 12% -10%, rgb(var(--surface-2)), rgb(var(--background)) 58%));
   color: rgb(var(--foreground));
   margin: 0;
   padding: 0;
@@ -227,6 +232,58 @@ body {
 /* ── Mono utility for paths / IDs ── */
 .font-mono {
   font-family: var(--font-mono);
+}
+
+/* ── Liquid glass (navigation layer only) ────────────────────────────────
+   Apple HIG: glass is reserved for the nav layer that floats above content
+   (top bar, sidebar, composer) — content itself stays opaque and readable.
+   The element keeps its own translucent semantic fill (bg-topbar/70 etc.) —
+   a DARK translucent tint, never a milky white one — and .glass adds the
+   frost blur + a delicate rim light. WebKit-safe (no Chrome-only SVG
+   filters), so it renders the same in the desktop app's WKWebView. */
+.glass {
+  /* Frost blur is applied via Tailwind's `backdrop-blur-*` / `backdrop-saturate-*`
+     utilities ON each element — a raw `backdrop-filter` written here gets dropped
+     by the CSS build pipeline, whereas the utility form (emitted in @layer
+     utilities as var()-based declarations) survives. `.glass` carries the rim. */
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.13),
+    inset 0 -1px 0 0 rgb(255 255 255 / 0.05);
+}
+/* Cursor-reactive specular — SMALL controls only (top bar, composer): a soft
+   light tracks the pointer, revealed on hover. Deliberately NOT on the
+   sidebar — on a large surface the moving highlight reads as too much (and
+   Apple puts specular on controls, not big panes). --gx/--gy are written by
+   the pointer handler in lib/glass.ts. */
+.glass-control {
+  position: relative;
+}
+.glass-control::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--ease-out);
+  background: radial-gradient(
+    170px circle at var(--gx, 50%) var(--gy, 50%),
+    rgb(255 255 255 / 0.11),
+    transparent 62%
+  );
+}
+.glass-control:hover::after {
+  opacity: 1;
+}
+/* Accessibility — honour Reduce Transparency: drop the frost + specular. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .glass-control::after {
+    display: none;
+  }
 }
 
 /* ── Markdown content ── */

@@ -5,10 +5,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { ToastProvider } from "./components/ui/Toast";
 import { applyTheme } from "./lib/theme";
+import { applyWallpaper } from "./lib/wallpaper";
+import { loadTheme, loadWallpaper } from "./lib/store";
+import { initGlassPointer } from "./lib/glass";
 import "./styles/globals.css";
 
-// Apply dark theme tokens on boot so CSS vars are set before first paint.
-applyTheme("dark");
+// Apply the persisted theme + wallpaper on boot so CSS vars are set before
+// first paint (both default to dark / midnight on a fresh install).
+const bootTheme = loadTheme();
+applyTheme(bootTheme);
+applyWallpaper(loadWallpaper(), bootTheme);
+// Cursor-tracked specular for glass controls (top bar, composer).
+initGlassPointer();
 
 const queryClient = new QueryClient({
   defaultOptions: {

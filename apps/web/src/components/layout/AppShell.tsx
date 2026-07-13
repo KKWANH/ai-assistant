@@ -775,7 +775,7 @@ export function AppShell({ children }: AppShellProps) {
       {/* Top Bar */}
       <header
         data-tauri-drag-region
-        className="h-10 shrink-0 flex items-center justify-between gap-2 px-2 sm:px-3 border-b border-topbar-border bg-topbar"
+        className="h-10 shrink-0 flex items-center justify-between gap-2 px-2 sm:px-3 border-b border-topbar-border/70 bg-topbar/50 glass glass-control backdrop-blur-xl backdrop-saturate-150"
       >
         <div className="flex items-center gap-1 min-w-0">
           {/* Mobile drawer toggle */}
@@ -992,7 +992,7 @@ export function AppShell({ children }: AppShellProps) {
         <nav
           style={{ "--sidebar-w": `${sidebarWidth}px` } as CSSProperties}
           className={[
-            "shrink-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden md:w-[var(--sidebar-w)]",
+            "shrink-0 flex flex-col border-r border-sidebar-border/70 bg-sidebar/50 glass backdrop-blur-xl backdrop-saturate-150 overflow-hidden md:w-[var(--sidebar-w)]",
             "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:w-64 max-md:shadow-2xl",
             "max-md:transition-transform max-md:duration-200 max-md:ease-out",
             mobileNavOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full",

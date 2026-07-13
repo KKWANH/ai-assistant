@@ -1020,7 +1020,7 @@ export function ChatComposer({
       {/* Main composer box */}
       <div
         ref={composerRef}
-        className={`relative flex flex-col gap-2 rounded-xl border bg-surface-2 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors ${
+        className={`glass glass-control backdrop-blur-xl backdrop-saturate-150 relative flex flex-col gap-2 rounded-xl border bg-surface-2/55 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors ${
           isDragOver ? "border-accent bg-accent/5" : "border-border"
         }`}
       >

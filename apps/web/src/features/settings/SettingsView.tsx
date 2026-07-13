@@ -13,6 +13,7 @@ import {
   Brain,
   Sparkles,
   KeyRound,
+  Palette,
 } from "lucide-react";
 import { PROVIDERS, SELECTABLE_PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { AccountMode, ProviderId } from "@ariadne/shared";
@@ -37,6 +38,8 @@ import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useToast } from "../../components/ui/Toast";
 import { McpServersPanel } from "../mcp/McpServersPanel";
+import { useUIStore } from "../../lib/store";
+import { WALLPAPERS } from "../../lib/wallpaper";
 
 /** Compact section heading shared by every block in the settings page. */
 function SectionHeading({
@@ -152,6 +155,10 @@ export function SettingsView() {
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
   const updateContext = useUpdateContext();
+  const wallpaper = useUIStore((s) => s.wallpaper);
+  const setWallpaper = useUIStore((s) => s.setWallpaper);
+  const theme = useUIStore((s) => s.theme);
+  const setTheme = useUIStore((s) => s.setTheme);
   const [contextDraft, setContextDraft] = useState("");
   // Sync the editable draft when the saved profile loads or changes.
   useEffect(() => {
@@ -378,6 +385,53 @@ export function SettingsView() {
               { value: "simple", label: t("settings.mode.simple") },
             ]}
           />
+        </Card>
+      </section>
+
+      {/* Appearance — theme + liquid-glass wallpaper */}
+      <section>
+        <SectionHeading icon={<Palette className="h-3.5 w-3.5" />}>
+          {locale === "ko" ? "화면" : "Appearance"}
+        </SectionHeading>
+        <Card className="px-4 py-3 bg-surface-2 flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm">{locale === "ko" ? "테마" : "Theme"}</p>
+              <p className="text-2xs text-muted-foreground">{locale === "ko" ? "다크 / 라이트" : "Dark / light"}</p>
+            </div>
+            <SegmentedControl<"dark" | "light">
+              ariaLabel={locale === "ko" ? "테마" : "Theme"}
+              value={theme}
+              onChange={(next) => setTheme(next)}
+              options={[
+                { value: "dark", label: locale === "ko" ? "다크" : "Dark" },
+                { value: "light", label: locale === "ko" ? "라이트" : "Light" },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-2xs text-muted-foreground">
+              {locale === "ko"
+                ? "배경 — 유리 패널(사이드바·상단바·입력창)이 이 위에서 빛을 머금어요 (다크 모드)"
+                : "Background — the glass panels (sidebar, top bar, composer) frost over this (dark mode)"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {WALLPAPERS.map((w) => (
+                <button
+                  key={w.key}
+                  type="button"
+                  onClick={() => setWallpaper(w.key)}
+                  title={w.label}
+                  aria-label={w.label}
+                  aria-pressed={wallpaper === w.key}
+                  className={`h-9 w-9 rounded-lg border transition-transform hover:scale-110 ${
+                    wallpaper === w.key ? "border-accent ring-2 ring-accent" : "border-border"
+                  }`}
+                  style={{ background: w.swatch }}
+                />
+              ))}
+            </div>
+          </div>
         </Card>
       </section>
 
