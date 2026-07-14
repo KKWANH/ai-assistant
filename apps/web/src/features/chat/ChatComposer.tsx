@@ -1059,7 +1059,12 @@ export function ChatComposer({
           onPaste={handlePaste}
           disabled={disabled}
         />
+      </div>
 
+      {/* Controls live in a SEPARATE glass bar below the input capsule (B layout)
+          — the many pickers + send read as their own glass element floating over
+          the chat glass, not one crowded box. */}
+      <div className="glass glass-control backdrop-blur-2xl backdrop-saturate-[1.8] rounded-xl border border-border/60 bg-surface-2/35 px-2.5 py-1.5">
         {/* Toolbar */}
         <div className="flex items-end gap-1.5">
           {/* Controls — wrap to a second row on narrow screens */}

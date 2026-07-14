@@ -288,6 +288,13 @@ function MessageList({
         atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}
       className="flex-1 min-h-0 overflow-y-auto"
+      // Fade messages to transparent as they pass under the floating glass
+      // composer, so text dissolves into the frost instead of showing sharp
+      // (backdrop-filter can't reliably blur a sibling scroller's content).
+      style={{
+        maskImage: "linear-gradient(to top, transparent 8px, black 132px)",
+        WebkitMaskImage: "linear-gradient(to top, transparent 8px, black 132px)",
+      }}
     >
       <div ref={listRef} className="flex flex-col gap-6 px-3 sm:px-5 pt-4 sm:pt-5 pb-32 max-w-4xl mx-auto">
         {chat && (
