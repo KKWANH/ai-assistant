@@ -80,57 +80,69 @@ export interface ProviderDescriptor {
 export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
   anthropic: {
     id: "anthropic", label: "Anthropic (Claude)", kind: "anthropic", envKey: "ANTHROPIC_API_KEY", keyUrl: "https://console.anthropic.com/settings/keys",
-    defaultModel: "claude-sonnet-4-6",
+    defaultModel: "claude-sonnet-5",
+    // Pricing USD/1M tokens, list price (platform.claude.com, ~2026-07).
     models: [
-      { id: "claude-sonnet-4-6", label: "Claude Sonnet", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 3, outUsd: 15 } },
-      { id: "claude-opus-4-7", label: "Claude Opus", traitKey: "model.trait.opus", speed: "slow", costTier: "premium", vision: true, pricing: { inUsd: 15, outUsd: 75 } },
-      { id: "claude-haiku-4-5", label: "Claude Haiku", traitKey: "model.trait.haiku", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.8, outUsd: 4 } },
+      { id: "claude-sonnet-5", label: "Claude Sonnet", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 3, outUsd: 15 } },
+      { id: "claude-opus-4-8", label: "Claude Opus", traitKey: "model.trait.opus", speed: "slow", costTier: "premium", vision: true, pricing: { inUsd: 5, outUsd: 25 } },
+      { id: "claude-haiku-4-5", label: "Claude Haiku", traitKey: "model.trait.haiku", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 1, outUsd: 5 } },
+      // Prior generation — hidden from the picker, kept so historical usage still costs out.
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", traitKey: "model.trait.sonnet", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 3, outUsd: 15 }, hidden: true },
+      { id: "claude-opus-4-7", label: "Claude Opus 4.7", traitKey: "model.trait.opus", speed: "slow", costTier: "premium", vision: true, pricing: { inUsd: 5, outUsd: 25 }, hidden: true },
     ],
   },
   openai: {
     id: "openai", label: "OpenAI", kind: "openai", envKey: "OPENAI_API_KEY", keyUrl: "https://platform.openai.com/api-keys",
-    defaultModel: "gpt-4o",
+    defaultModel: "gpt-5.4",
+    // Pricing USD/1M tokens, list price (platform.openai.com, ~2026-07).
     models: [
-      { id: "gpt-4o", label: "GPT-4o", traitKey: "model.trait.gpt4o", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 2.5, outUsd: 10 } },
-      { id: "gpt-4o-mini", label: "GPT-4o mini", traitKey: "model.trait.gpt4oMini", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.15, outUsd: 0.6 } },
-      { id: "o3-mini", label: "o3-mini", traitKey: "model.trait.o3mini", speed: "normal", costTier: "low", pricing: { inUsd: 1.1, outUsd: 4.4 } },
+      { id: "gpt-5.4", label: "GPT-5.4", traitKey: "model.trait.gpt4o", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 2.5, outUsd: 15 } },
+      { id: "gpt-5.4-nano", label: "GPT-5.4 nano", traitKey: "model.trait.gpt4oMini", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.2, outUsd: 1.25 } },
+      // Prior generation — hidden from the picker, kept so historical usage still costs out.
+      { id: "gpt-4o", label: "GPT-4o", traitKey: "model.trait.gpt4o", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 2.5, outUsd: 10 }, hidden: true },
+      { id: "gpt-4o-mini", label: "GPT-4o mini", traitKey: "model.trait.gpt4oMini", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.15, outUsd: 0.6 }, hidden: true },
+      { id: "o3-mini", label: "o3-mini", traitKey: "model.trait.o3mini", speed: "normal", costTier: "low", pricing: { inUsd: 1.1, outUsd: 4.4 }, hidden: true },
     ],
   },
   gemini: {
     id: "gemini", label: "Google Gemini", kind: "gemini", envKey: "GEMINI_API_KEY", keyUrl: "https://aistudio.google.com/app/apikey",
     defaultModel: "gemini-3.5-flash",
+    // Pricing USD/1M tokens, list price (ai.google.dev, ~2026-07).
     models: [
       { id: "gemini-3.5-flash", label: "Gemini Flash", traitKey: "model.trait.geminiFlash", speed: "fast", costTier: "mid", vision: true, pricing: { inUsd: 1.5, outUsd: 9 } },
-      { id: "gemini-3.1-flash-lite", label: "Gemini Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.1, outUsd: 0.4 } },
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", traitKey: "model.trait.geminiFlash", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.15, outUsd: 0.6 }, hidden: true },
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", traitKey: "model.trait.geminiFlash", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.3, outUsd: 2.5 } },
+      { id: "gemini-3.1-flash-lite", label: "Gemini Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.25, outUsd: 1.5 } },
+      { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", traitKey: "model.trait.geminiFlash", speed: "normal", costTier: "premium", vision: true, pricing: { inUsd: 2, outUsd: 12 } },
       { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", traitKey: "model.trait.geminiFlash", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 1.25, outUsd: 10 }, hidden: true },
+      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", traitKey: "model.trait.geminiFlashLite", speed: "fast", costTier: "low", vision: true, pricing: { inUsd: 0.1, outUsd: 0.4 }, hidden: true },
     ],
   },
   moonshot: {
     id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY", keyUrl: "https://platform.kimi.ai/console/api-keys",
     defaultModel: "kimi-k2.6",
+    // Pricing USD/1M tokens, list cache-miss input (platform.kimi.ai, ~2026-07). Cached input is far cheaper.
     models: [
-      { id: "kimi-k2.6", label: "Kimi K2", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.55, outUsd: 2.65 } },
-      { id: "moonshot-v1-128k", label: "Moonshot v1 128k", traitKey: "model.trait.kimi", speed: "normal", costTier: "mid", pricing: { inUsd: 1.63, outUsd: 6.53 } },
-      { id: "moonshot-v1-32k", label: "Moonshot v1 32k", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.81, outUsd: 3.26 } },
+      { id: "kimi-k2.6", label: "Kimi K2.6", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", vision: true, pricing: { inUsd: 0.95, outUsd: 4 } },
+      { id: "kimi-k2.5", label: "Kimi K2.5", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.6, outUsd: 3 } },
       { id: "kimi-for-coding", label: "Kimi for Coding", traitKey: "model.trait.kimiCoding", speed: "normal", costTier: "low", pricing: { inUsd: 0, outUsd: 0 } },
+      // Legacy / preview — hidden, kept so historical usage still costs out.
+      { id: "moonshot-v1-128k", label: "Moonshot v1 128k", traitKey: "model.trait.kimi", speed: "normal", costTier: "mid", pricing: { inUsd: 1.63, outUsd: 6.53 }, hidden: true },
+      { id: "moonshot-v1-32k", label: "Moonshot v1 32k", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.81, outUsd: 3.26 }, hidden: true },
       { id: "kimi-k2-0711-preview", label: "Kimi K2 (preview)", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.6, outUsd: 2.5 }, hidden: true },
     ],
   },
   minimax: {
     id: "minimax", label: "MiniMax", kind: "openai-compatible", envKey: "MINIMAX_API_KEY", keyUrl: "https://platform.minimax.io/user-center/basic-information/interface-key",
     baseURL: "https://api.minimax.io/v1",
-    defaultModel: "MiniMax-M2.5",
-    // Pricing USD/1M tokens (minimax.io, 2026): M2.5 = 0.15/1.15 and M2 =
-    // 0.26/1.00 are confirmed list prices; M3/M2.7/M2.1 are approximated to the
-    // M2.5 tier (verify on the pricing page if exact cost reporting matters for
-    // those). Without an entry costOf() would report $0 for this paid provider.
+    defaultModel: "MiniMax-M3",
+    // Pricing USD/1M tokens, list price (platform.minimax.io, ~2026-07). M3 is the
+    // current flagship (≤512k context); older M2.x kept hidden for historical cost.
     models: [
-      { id: "MiniMax-M2.5", label: "MiniMax M2.5", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 } },
-      { id: "MiniMax-M3", label: "MiniMax M3", traitKey: "model.trait.minimax", speed: "normal", costTier: "mid", pricing: { inUsd: 0.15, outUsd: 1.15 } },
-      { id: "MiniMax-M2.7", label: "MiniMax M2.7", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 } },
-      { id: "MiniMax-M2.1", label: "MiniMax M2.1", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 } },
-      { id: "MiniMax-M2", label: "MiniMax M2", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.26, outUsd: 1.0 } },
+      { id: "MiniMax-M3", label: "MiniMax M3", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.3, outUsd: 1.2 } },
+      { id: "MiniMax-M2.7", label: "MiniMax M2.7", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.3, outUsd: 1.2 } },
+      { id: "MiniMax-M2.5", label: "MiniMax M2.5", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 }, hidden: true },
+      { id: "MiniMax-M2.1", label: "MiniMax M2.1", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.15, outUsd: 1.15 }, hidden: true },
+      { id: "MiniMax-M2", label: "MiniMax M2", traitKey: "model.trait.minimax", speed: "normal", costTier: "low", pricing: { inUsd: 0.26, outUsd: 1.0 }, hidden: true },
     ],
   },
   ollama: {
