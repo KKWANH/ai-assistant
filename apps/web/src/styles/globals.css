@@ -249,11 +249,11 @@ body {
      wash + rim: a faint white veil over the dark token fill gives the frosted
      "stands off the page" look without going full opaque-plastic; the layered
      inset shadows are the edge light (lensing) + a soft inner glow. */
-  background-image: linear-gradient(rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.06));
+  background-image: linear-gradient(rgb(255 255 255 / 0.028), rgb(255 255 255 / 0.028));
   box-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.20),
-    inset 0 -1px 0 0 rgb(255 255 255 / 0.06),
-    inset 0 0 32px 0 rgb(255 255 255 / 0.035);
+    inset 0 1px 0 0 rgb(255 255 255 / 0.13),
+    inset 0 -1px 0 0 rgb(255 255 255 / 0.04),
+    inset 0 0 30px 0 rgb(255 255 255 / 0.018);
 }
 /* Cursor-reactive specular — SMALL controls only (top bar, composer): a soft
    light tracks the pointer, revealed on hover. Deliberately NOT on the
