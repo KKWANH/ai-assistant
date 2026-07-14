@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   Settings as SettingsIcon,
   CheckCircle,
@@ -14,6 +15,7 @@ import {
   Sparkles,
   KeyRound,
   Palette,
+  ExternalLink,
 } from "lucide-react";
 import { PROVIDERS, SELECTABLE_PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { AccountMode, ProviderId } from "@ariadne/shared";
@@ -96,9 +98,10 @@ function ApiKeyRow({ id, label, configured }: { id: ProviderId; label: string; c
             href={keyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="pl-5 text-2xs text-accent hover:underline"
+            title={keyUrl}
+            className="ml-5 inline-flex w-fit items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-2xs font-medium text-accent transition-colors hover:bg-accent/20"
           >
-            {t("settings.apiKeys.getKey")} →
+            {t("settings.apiKeys.getKey")} <ExternalLink className="h-2.5 w-2.5" />
           </a>
         )}
       </div>
@@ -298,7 +301,12 @@ export function SettingsView() {
         <SectionHeading icon={<KeyRound className="h-3.5 w-3.5" />}>
           {t("settings.apiKeys.heading")}
         </SectionHeading>
-        <p className="text-xs text-muted-foreground mb-2">{t("settings.apiKeys.subtitle")}</p>
+        <p className="text-xs text-muted-foreground mb-2">
+          {t("settings.apiKeys.subtitle")}{" "}
+          <Link to="/developers/api-keys" className="text-accent hover:underline">
+            {t("settings.apiKeys.guide")} →
+          </Link>
+        </p>
         <div className="flex flex-col gap-1.5">
           {PROVIDERS.filter((pid) => PROVIDER_REGISTRY[pid].envKey).map((pid) => {
             const live = liveProviders?.find((p) => p.id === pid);

@@ -1374,6 +1374,7 @@ const en = {
   "settings.apiKeys.heading": "API keys",
   "settings.apiKeys.subtitle": "Paste a provider key to use it without a shell env var. Stored locally on this machine; used over the env var.",
   "settings.apiKeys.getKey": "Get a key",
+  "settings.apiKeys.guide": "Which model & how to connect",
   "settings.apiKeys.save": "Save",
   "settings.apiKeys.clear": "Clear",
   "settings.apiKeys.saved": "API key saved",

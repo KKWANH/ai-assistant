@@ -56,37 +56,79 @@ For real answers you point it at a model provider with **your own API key**. The
 key is stored locally on this machine and is sent only to the provider you chose
 — never to us, never to a middleman.
 
-This is a one-key, ~2-minute setup. **Gemini is the easiest start** — it has a
-free tier and is *vision-capable*, so it can read your slides and figures, not
-just their text.
+Setup is one key and about two minutes. **Gemini is the easiest start** — free
+tier, and *vision-capable*, so it can read your slides and figures, not just
+their text.
 
-## 1 · Get an API key
+## Which model should I pick?
 
-Pick one provider. Each link goes straight to its key page:
+You don't need to know the lineup — here's the short version by what you care
+about. (List prices, USD per **1M tokens**, input → output, ~July 2026;
+providers change these, so treat them as ballpark for *choosing a tier*.)
 
-| Provider | Get a key | Notes |
-| --- | --- | --- |
-| **Google Gemini** | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) | Free tier · vision · the recommended default |
-| **Anthropic (Claude)** | [console.anthropic.com → Keys](https://console.anthropic.com/settings/keys) | Strong reasoning + vision |
-| **OpenAI** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | GPT-4o and others |
-| **Moonshot / Kimi** | [platform.moonshot.ai → Keys](https://platform.moonshot.ai/console/api-keys) | Cost-effective, long context |
-| **Ollama (local)** | [ollama.com/download](https://ollama.com/download) | No key — runs on your machine, free + private |
+| You want… | Pick | Price (in → out) | Why |
+| --- | --- | --- | --- |
+| 🏆 **Best all-round** | **Claude Sonnet 5** | $3 → $15 | Near top-tier quality at a mid price; strong reasoning + vision |
+| 💸 **Cheapest that's still great** | **Gemini 2.5 Flash** · **MiniMax M3** | $0.30 → $2.50 · $0.30 → $1.20 | Pennies per chat; vision (Gemini), huge 512K context (MiniMax) |
+| ⚡ **Fastest / lowest cost** | **Gemini 2.5 Flash-Lite** | $0.10 → $0.40 | Cheapest capable option for quick, high-volume tasks |
+| 🧠 **Maximum capability** | **Claude Opus 4.8** · **Gemini 3.1 Pro** | $5 → $25 · $2 → $12 | Hardest reasoning, long-horizon and agentic work |
+| 👁️ **Reads slides / PDFs** | Gemini · Claude · GPT (any) | — | Renders each page so the model *sees* figures, not just text |
+| 🖥️ **Free & private (no key)** | **Ollama** (Qwen 3) | free | Runs on your own machine; nothing leaves it |
+
+**Not sure?** Start with **Gemini** (free tier, vision) to try things, then add
+**Claude Sonnet 5** when you want the best answers.
+
+## Providers at a glance
+
+Each provider's current picks — model id in \`code\`, list price USD / 1M tokens
+(in → out):
+
+**Google Gemini** — free tier, vision, cheapest to start. → [Get a key](https://aistudio.google.com/app/apikey)
+- **Gemini 2.5 Flash** \`gemini-2.5-flash\` — $0.30 → $2.50 — the value sweet spot
+- **Gemini 3.5 Flash** \`gemini-3.5-flash\` — $1.50 → $9 — newer, smarter balanced
+- **Gemini 3.1 Pro** \`gemini-3.1-pro-preview\` — $2 → $12 — most capable
+- **Gemini 2.5 Flash-Lite** \`gemini-2.5-flash-lite\` — $0.10 → $0.40 — cheapest, fastest
+
+**Anthropic (Claude)** — best reasoning + vision. → [Get a key](https://console.anthropic.com/settings/keys)
+- **Claude Sonnet 5** \`claude-sonnet-5\` — $3 → $15 — **best value**, near-Opus quality
+- **Claude Opus 4.8** \`claude-opus-4-8\` — $5 → $25 — top capability, agentic + coding
+- **Claude Haiku 4.5** \`claude-haiku-4-5\` — $1 → $5 — fast, cheap, still vision
+
+**OpenAI** — the GPT-5 family. → [Get a key](https://platform.openai.com/api-keys)
+- **GPT-5.4** \`gpt-5.4\` — $2.50 → $15 — balanced default
+- **GPT-5.4 nano** \`gpt-5.4-nano\` — $0.20 → $1.25 — fast and cheap
+- **GPT-5.5 Pro** \`gpt-5.5-pro\` — $30 → $180 — deepest reasoning (premium; use sparingly)
+
+**Moonshot / Kimi** — long context, low cost. → [Get a key](https://platform.kimi.ai/console/api-keys)
+- **Kimi K2.6** \`kimi-k2.6\` — ~$0.95 → $4 — flagship, 256K context, vision; cached input is far cheaper
+- **Kimi K2.5** \`kimi-k2.5\` — $0.60 → $3 — cheaper, still strong
+
+**MiniMax** — cheapest capable, huge context. → [Get a key](https://platform.minimax.io/user-center/basic-information/interface-key)
+- **MiniMax M3** \`MiniMax-M3\` — $0.30 → $1.20 — flagship, up to **512K** context, very low cost
+
+**Ollama (local)** — free, private, no key. → [Install](https://ollama.com/download)
+- Runs models like **Qwen 3** on your own machine — nothing is sent anywhere.
+
+> [!NOTE]
+> Prices are the providers' list prices around July 2026 and shift often — use
+> them to pick a *tier*, not to predict a bill. Ariadne shows the real per-run
+> cost inside each chat.
+
+## Get a key & connect (about 2 minutes)
+
+1. **Pick a provider above and open its key page** (the *Get a key* links). Sign in.
+2. **Create a key** and copy the whole string — Gemini keys start with \`AIza…\`, Anthropic \`sk-ant-…\`, OpenAI \`sk-…\`.
+3. **Paste it into Ariadne:** open **Settings → API keys**, find that provider, paste, and hit **Save**. A green check means it's live.
+4. **Pick the model:** in the chat box click the **model chip** and choose one of the picks above. A workspace can also pin its own model in **Settings → Chat & model**.
+
+Your key is stored write-only in this machine's local database — never shown back, never sent to us.
 
 > [!TIP]
-> On Google AI Studio: sign in → **Get API key** → **Create API key** → copy the
-> string (it starts with \`AIza…\`). Free to start.
+> On **Google AI Studio**: sign in → **Get API key** → **Create API key** → copy the \`AIza…\` string. Free to start, no card needed.
 
-## 2 · Add the key to Ariadne
+## Prefer \`.env\`? (server / self-host)
 
-Either way works; a key set in Settings takes precedence over the env var.
-
-**A — in the app (easiest).** Open **Settings → API keys**, find your provider,
-and click **Get a key →** if you still need one (it jumps to that provider's
-console). Paste the key, hit **Save** — a green check means it's live. The key is
-stored in this machine's local database, write-only (never shown back).
-
-**B — in \`.env\`** (for a server / self-host). Copy the example and set the one
-variable for your provider, then restart:
+A key set in Settings takes precedence, but you can also set one variable and restart:
 
 \`\`\`bash
 cp .env.example .env
@@ -95,27 +137,21 @@ cp .env.example .env
 #   ANTHROPIC_API_KEY=sk-ant-...
 #   OPENAI_API_KEY=sk-...
 #   MOONSHOT_API_KEY=sk-...
+#   MINIMAX_API_KEY=...
 ./ops/ariadne.sh restart
 \`\`\`
 
-## 3 · Pick the model
-
-In the chat box, click the **model chip** (it shows the current model) — it lists
-every provider you've configured. Pick one, e.g. **Gemini Flash** for fast,
-cheap, vision-capable answers. A workspace can also pin its own model in its
-**Settings → Chat & model**.
-
-## 4 · Try it
+## Try it
 
 Ask a question — or attach a **PDF / slide deck** and ask about it. With a
-vision-capable model Ariadne renders each page so the model actually *sees* the
-figures and slides, then cross-checks factual claims against the sources and
-flags anything it can't support.
+vision-capable model (Gemini, Claude, GPT) Ariadne renders each page so the model
+actually *sees* the figures and slides, then cross-checks factual claims against
+the sources and flags anything it can't support.
 
 ## Troubleshooting
 
 - **"key required" / no answer** — that provider has no key yet. Add one in
-  **Settings → API keys** (step 2).
+  **Settings → API keys**.
 - **Key saved but still erroring** — make sure you pasted the whole key *and*
   selected that provider's model in the picker; re-copy it from the console.
 - **Don't want any key** — switch the provider to **Mock** (offline stub) or run

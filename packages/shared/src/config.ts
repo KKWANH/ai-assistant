@@ -107,7 +107,7 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     ],
   },
   moonshot: {
-    id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY", keyUrl: "https://platform.moonshot.ai/console/api-keys",
+    id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY", keyUrl: "https://platform.kimi.ai/console/api-keys",
     defaultModel: "kimi-k2.6",
     models: [
       { id: "kimi-k2.6", label: "Kimi K2", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.55, outUsd: 2.65 } },
@@ -118,7 +118,7 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
     ],
   },
   minimax: {
-    id: "minimax", label: "MiniMax", kind: "openai-compatible", envKey: "MINIMAX_API_KEY",
+    id: "minimax", label: "MiniMax", kind: "openai-compatible", envKey: "MINIMAX_API_KEY", keyUrl: "https://platform.minimax.io/user-center/basic-information/interface-key",
     baseURL: "https://api.minimax.io/v1",
     defaultModel: "MiniMax-M2.5",
     // Pricing USD/1M tokens (minimax.io, 2026): M2.5 = 0.15/1.15 and M2 =
