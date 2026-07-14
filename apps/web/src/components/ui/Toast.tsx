@@ -98,7 +98,7 @@ export function ToastList() {
         // AV polish: variant-coloured left border + slide-in animation
         // (animation defined in Toast.module.css). Close button is
         // inline so the slide-out can play before unmount (future).
-        const cls = [styles["toast"]!, styles[variant] ?? ""].filter(Boolean).join(" ");
+        const cls = [styles["toast"]!, styles[variant] ?? "", "backdrop-blur-xl backdrop-saturate-[1.8]"].filter(Boolean).join(" ");
         return (
           <div key={item.id} className={cls} role="alert">
             {icons[variant]}

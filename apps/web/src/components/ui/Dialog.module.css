@@ -34,10 +34,13 @@
   flex-direction: column;
   border-radius: var(--radius-2xl);
   border: 1px solid rgb(var(--border));
-  background-color: rgb(var(--card));
-  /* BB — elevation token (was an ad-hoc one-off shadow) + scale-in
-     entrance so the modal settles in rather than popping. */
-  box-shadow: var(--elevation-3);
+  /* Frosted glass — translucent card fill (frost added on the JSX via Tailwind
+     backdrop utilities, which the build keeps; a raw backdrop-filter here would
+     be dropped) + a top rim highlight layered over the elevation drop shadow. */
+  background-color: rgb(var(--card) / 0.85);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.12),
+    var(--elevation-3);
   animation: ariadne-modal-in var(--motion-slow) var(--ease-out) both;
 }
 

@@ -333,7 +333,7 @@ function ChatRow({
       {menuMounted && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-          <div className={`absolute left-1 top-9 z-30 w-48 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg py-1 text-xs origin-top-left transition-all duration-100 ${menuLeaving ? "opacity-0 scale-95" : "animate-fade-in"}`}>
+          <div className={`absolute left-1 top-9 z-30 w-48 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs origin-top-left transition-all duration-100 ${menuLeaving ? "opacity-0 scale-95" : "animate-fade-in"}`}>
             <button
               className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
               onClick={() => {
@@ -865,7 +865,7 @@ export function AppShell({ children }: AppShellProps) {
                     className="fixed inset-0 z-30"
                     onClick={() => setHelpMenuOpen(false)}
                   />
-                  <div className="absolute right-0 top-9 z-40 w-52 rounded-lg border border-border bg-card shadow-lg py-1 text-xs">
+                  <div className="absolute right-0 top-9 z-40 w-52 rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs">
                     <button
                       className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
                       onClick={() => {

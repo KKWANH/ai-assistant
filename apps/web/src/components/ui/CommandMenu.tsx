@@ -129,7 +129,7 @@ export function CommandMenu({ items }: CommandMenuProps) {
         aria-hidden="true"
       />
       <div
-        className={`relative z-10 w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl overflow-hidden transition-all duration-150 ${leaving ? "opacity-0 scale-95" : "animate-modal-in"}`}
+        className={`relative z-10 w-full max-w-lg rounded-xl border border-border/60 bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-2xl overflow-hidden transition-all duration-150 ${leaving ? "opacity-0 scale-95" : "animate-modal-in"}`}
         role="dialog"
         aria-label={t("commandMenu.ariaLabel")}
         aria-modal="true"

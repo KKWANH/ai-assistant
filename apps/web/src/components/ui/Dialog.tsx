@@ -129,7 +129,7 @@ export function Dialog({
       aria-labelledby={title ? "dialog-title" : undefined}
     >
       <div
-        className={styles["backdrop"]! + lv}
+        className={styles["backdrop"]! + lv + " backdrop-blur-md"}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -137,6 +137,7 @@ export function Dialog({
         ref={dialogRef}
         className={[
           styles["panel"]!,
+          "backdrop-blur-xl backdrop-saturate-[1.8]",
           sizeClass[size],
           leaving ? styles["leaving"]! : "",
           className,

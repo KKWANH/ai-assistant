@@ -23,7 +23,7 @@
   padding: 0.75rem 1rem;
   border-radius: var(--radius-xl);
   border: 1px solid rgb(var(--border));
-  background-color: rgb(var(--card));
+  background-color: rgb(var(--card) / 0.8);
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
   /* AV polish: slide in from the right on mount, optional slide-out on
      exit (driven by the `.leaving` class set by the Toast manager). */
