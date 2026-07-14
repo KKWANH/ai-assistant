@@ -1020,7 +1020,7 @@ export function ChatComposer({
       {/* Main composer box */}
       <div
         ref={composerRef}
-        className={`glass glass-control backdrop-blur-2xl backdrop-saturate-[1.8] relative flex flex-col gap-2 rounded-xl border bg-surface-2/35 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors ${
+        className={`order-last glass glass-control backdrop-blur-2xl backdrop-saturate-[1.8] relative flex flex-col gap-2 rounded-xl border bg-surface-2/35 px-3 pt-3 pb-2 focus-within:border-border-strong transition-colors ${
           isDragOver ? "border-accent bg-accent/5" : "border-border"
         }`}
       >
@@ -1034,7 +1034,7 @@ export function ChatComposer({
         <textarea
           ref={textareaRef}
           rows={1}
-          className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none leading-relaxed"
+          className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none leading-relaxed pr-11"
           style={{ minHeight: "40px", maxHeight: "200px", overflow: "auto" }}
           placeholder={t("chat.composer.placeholder")}
           value={content}
@@ -1059,6 +1059,31 @@ export function ChatComposer({
           onPaste={handlePaste}
           disabled={disabled}
         />
+        {/* Send / Stop lives INSIDE the input capsule, bottom-right (B layout). */}
+        <div className="absolute bottom-2 right-2">
+          {pending && onStop ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onStop}
+              aria-label={t("chat.composer.stop")}
+              title={t("chat.composer.stop")}
+            >
+              <Square className="h-3 w-3 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSend}
+              disabled={!canSend}
+              loading={pending}
+              aria-label={t("chat.composer.send")}
+            >
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Controls live in a SEPARATE glass bar below the input capsule (B layout)
@@ -1430,31 +1455,6 @@ export function ChatComposer({
             {pending ? t("chat.composer.waiting") : t("chat.composer.hint")}
           </span>
 
-          {/* Send / Stop button */}
-          {pending && onStop ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="shrink-0"
-              onClick={onStop}
-              aria-label={t("chat.composer.stop")}
-              title={t("chat.composer.stop")}
-            >
-              <Square className="h-3 w-3 fill-current" />
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              className="shrink-0"
-              onClick={handleSend}
-              disabled={!canSend}
-              loading={pending}
-              aria-label={t("chat.composer.send")}
-            >
-              <Send className="h-3.5 w-3.5" />
-            </Button>
-          )}
         </div>
       </div>
     </div>

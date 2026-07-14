@@ -266,8 +266,8 @@ body {
   pointer-events: none;
   background: linear-gradient(
     135deg,
-    rgb(255 255 255 / 0.055),
-    rgb(255 255 255 / 0.012) 38%,
+    rgb(255 255 255 / 0.09),
+    rgb(255 255 255 / 0.022) 38%,
     transparent 62%
   );
 }

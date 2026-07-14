@@ -288,15 +288,21 @@ function MessageList({
         atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}
       className="flex-1 min-h-0 overflow-y-auto"
-      // Fade messages to transparent as they pass under the floating glass
-      // composer, so text dissolves into the frost instead of showing sharp
-      // (backdrop-filter can't reliably blur a sibling scroller's content).
+      // Fully dissolve messages under the floating glass composer: transparent
+      // through the whole composer zone (sized to --composer-h), then a short
+      // fade to sharp above it, so no text bleeds through the glass.
       style={{
-        maskImage: "linear-gradient(to top, transparent 8px, black 132px)",
-        WebkitMaskImage: "linear-gradient(to top, transparent 8px, black 132px)",
+        maskImage:
+          "linear-gradient(to top, transparent 0, transparent calc(var(--composer-h, 120px) - 20px), black calc(var(--composer-h, 120px) + 24px))",
+        WebkitMaskImage:
+          "linear-gradient(to top, transparent 0, transparent calc(var(--composer-h, 120px) - 20px), black calc(var(--composer-h, 120px) + 24px))",
       }}
     >
-      <div ref={listRef} className="flex flex-col gap-6 px-3 sm:px-5 pt-4 sm:pt-5 pb-32 max-w-4xl mx-auto">
+      <div
+        ref={listRef}
+        className="flex flex-col gap-6 px-3 sm:px-5 pt-4 sm:pt-5 max-w-4xl mx-auto"
+        style={{ paddingBottom: "calc(var(--composer-h, 120px) + 16px)" }}
+      >
         {chat && (
           <div className="flex flex-col items-center gap-1.5">
             <div className="text-center text-xs text-muted-foreground">
@@ -411,6 +417,21 @@ export function ThreadView({ chatId }: { chatId: string }) {
     }
   }, [activeGen, messages, chatId, qc]);
 
+  // Measure the floating composer so the message list fades EXACTLY its height
+  // of content out beneath it (text fully dissolves under the glass, whatever
+  // the composer's current height — single line, tall draft, etc.).
+  const composerFloatRef = useRef<HTMLDivElement>(null);
+  const [composerH, setComposerH] = useState(120);
+  useEffect(() => {
+    const el = composerFloatRef.current;
+    if (!el) return;
+    const update = () => setComposerH(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [chat]);
+
   if (isLoading) {
     return <ChatSkeleton />;
   }
@@ -489,12 +510,19 @@ export function ThreadView({ chatId }: { chatId: string }) {
   };
 
   return (
-    <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div
+      className="relative flex flex-col flex-1 min-h-0 overflow-hidden"
+      style={{ "--composer-h": `${composerH}px` } as React.CSSProperties}
+    >
       <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
       {/* Composer FLOATS over the message list (Liquid Glass): messages scroll
-          under the translucent glass; MessageList's bottom padding keeps the last
-          message clear of it. The wrapper is click-through except its children. */}
-      <div className="absolute bottom-0 inset-x-0 z-[var(--z-raised)] pointer-events-none [&>*]:pointer-events-auto px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
+          under the translucent glass; MessageList's bottom padding + fade (both
+          sized to --composer-h) keep the last message clear and dissolve any text
+          under the glass. The wrapper is click-through except its children. */}
+      <div
+        ref={composerFloatRef}
+        className="absolute bottom-0 inset-x-0 z-[var(--z-raised)] pointer-events-none [&>*]:pointer-events-auto px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
         <OpenAttemptChip chatId={chatId} />
         <ChatComposer
           key={chatId}
