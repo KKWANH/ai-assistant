@@ -57,7 +57,7 @@ export function Tooltip({
       {visible && (
         <div
           role="tooltip"
-          className={[styles["bubble"]!, sideClass[side], rich ? styles["rich"]! : ""]
+          className={[styles["bubble"]!, "backdrop-blur-md backdrop-saturate-[1.8]", sideClass[side], rich ? styles["rich"]! : ""]
             .filter(Boolean)
             .join(" ")}
         >

@@ -73,7 +73,7 @@ export function ContextMenu({
       <div
         role="menu"
         style={{ left, top, minWidth: W }}
-        className={`fixed z-[var(--z-command)] rounded-lg border border-border bg-card shadow-xl py-1 text-xs origin-top-left transition-all duration-100 ${
+        className={`fixed z-[var(--z-command)] rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-xl py-1 text-xs origin-top-left transition-all duration-100 ${
           leaving ? "opacity-0 scale-95" : "animate-fade-in"
         }`}
       >
