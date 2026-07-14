@@ -289,7 +289,7 @@ function MessageList({
       }}
       className="flex-1 min-h-0 overflow-y-auto"
     >
-      <div ref={listRef} className="flex flex-col gap-6 px-3 sm:px-5 py-4 sm:py-5 max-w-4xl mx-auto">
+      <div ref={listRef} className="flex flex-col gap-6 px-3 sm:px-5 pt-4 sm:pt-5 pb-32 max-w-4xl mx-auto">
         {chat && (
           <div className="flex flex-col items-center gap-1.5">
             <div className="text-center text-xs text-muted-foreground">
@@ -482,9 +482,12 @@ export function ThreadView({ chatId }: { chatId: string }) {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
       <MessageList messages={messages} streaming={streaming} reconnectGen={reconnectGen} chat={chat} />
-      <div className="shrink-0 px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
+      {/* Composer FLOATS over the message list (Liquid Glass): messages scroll
+          under the translucent glass; MessageList's bottom padding keeps the last
+          message clear of it. The wrapper is click-through except its children. */}
+      <div className="absolute bottom-0 inset-x-0 z-[var(--z-raised)] pointer-events-none [&>*]:pointer-events-auto px-3 sm:px-4 pt-2 max-w-4xl mx-auto w-full pb-[max(1rem,env(safe-area-inset-bottom))]">
         <OpenAttemptChip chatId={chatId} />
         <ChatComposer
           key={chatId}
