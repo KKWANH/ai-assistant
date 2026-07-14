@@ -28,7 +28,7 @@ export function SidePanel() {
 
   return (
     <aside
-      className="hidden lg:flex flex-col w-80 shrink-0 border-l border-inspector-border bg-inspector overflow-hidden"
+      className="hidden lg:flex flex-col w-80 shrink-0 border-l border-inspector-border/70 bg-inspector/45 glass glass-control backdrop-blur-xl backdrop-saturate-150 overflow-hidden"
       aria-label={t("sidePanel.title")}
     >
       <div className="h-10 shrink-0 flex items-stretch border-b border-inspector-border">

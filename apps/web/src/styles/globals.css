@@ -245,10 +245,15 @@ body {
   /* Frost blur is applied via Tailwind's `backdrop-blur-*` / `backdrop-saturate-*`
      utilities ON each element — a raw `backdrop-filter` written here gets dropped
      by the CSS build pipeline, whereas the utility form (emitted in @layer
-     utilities as var()-based declarations) survives. `.glass` carries the rim. */
+     utilities as var()-based declarations) survives. `.glass` carries the milk
+     wash + rim: a faint white veil over the dark token fill gives the frosted
+     "stands off the page" look without going full opaque-plastic; the layered
+     inset shadows are the edge light (lensing) + a soft inner glow. */
+  background-image: linear-gradient(rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.06));
   box-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.13),
-    inset 0 -1px 0 0 rgb(255 255 255 / 0.05);
+    inset 0 1px 0 0 rgb(255 255 255 / 0.20),
+    inset 0 -1px 0 0 rgb(255 255 255 / 0.06),
+    inset 0 0 32px 0 rgb(255 255 255 / 0.035);
 }
 /* Cursor-reactive specular — SMALL controls only (top bar, composer): a soft
    light tracks the pointer, revealed on hover. Deliberately NOT on the
