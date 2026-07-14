@@ -230,7 +230,7 @@ function BlockTypeMenu({
   return (
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} aria-hidden="true" />
-      <div className={`absolute ${pos} top-full mt-1 z-40 w-64 rounded-lg border border-border bg-card shadow-lg py-1`}>
+      <div className={`absolute ${pos} top-full mt-1 z-40 w-64 rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1`}>
         {BLOCK_TYPES.map((ty) => {
           const m = BLOCK_META[ty];
           const Icon = m.icon;
@@ -937,7 +937,7 @@ function SymbolInput({
         onFocus={() => matches.length > 0 && setOpen(true)}
       />
       {open && matches.length > 0 && (
-        <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-xl">
+        <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] py-1 shadow-xl">
           {matches.map((m) => (
             <button
               key={m.symbol}

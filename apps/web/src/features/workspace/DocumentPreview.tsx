@@ -135,7 +135,7 @@ export function DocumentPreview({ workspaceId, path, onClose }: PreviewProps) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-xl border border-border bg-card shadow-elevation-3 animate-modal-in overflow-hidden"
+        className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-xl border border-border bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-elevation-3 animate-modal-in overflow-hidden"
       >
         <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2 min-w-0">

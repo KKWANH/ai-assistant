@@ -179,7 +179,7 @@ export function TutorialOverlay() {
             }
           />
         )}
-        <div className="relative rounded-2xl border border-border bg-card shadow-2xl">
+        <div className="relative rounded-2xl border border-border bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-2xl">
           <div className="flex items-start justify-between gap-4 px-5 pt-4">
             <div className="flex items-center gap-2">
               <span className="text-2xs font-mono text-accent">

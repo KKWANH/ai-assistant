@@ -67,7 +67,7 @@ export function FloatingChat({ workspaceId }: { workspaceId: string }) {
       {/* Glass panel — anchored to the screen, above the FAB. Full-width on
           phones, a fixed 440px card on larger screens. */}
       {open && chatId && (
-        <div className="absolute inset-x-3 bottom-[5.25rem] z-30 flex h-[min(70vh,560px)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-2xl backdrop-blur-xl animate-fade-in sm:inset-x-auto sm:right-4 sm:w-[440px]">
+        <div className="absolute inset-x-3 bottom-[5.25rem] z-30 flex h-[min(70vh,560px)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/70 backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-2xl backdrop-blur-xl animate-fade-in sm:inset-x-auto sm:right-4 sm:w-[440px]">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-surface-2/50 px-3 py-2">
             <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
               <MessageSquare className="h-3.5 w-3.5 text-accent" /> {t("chat.floating.label")}

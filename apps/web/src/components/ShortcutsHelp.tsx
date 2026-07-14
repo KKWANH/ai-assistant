@@ -75,7 +75,7 @@ export function ShortcutsHelp() {
     >
       <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
       <div
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl animate-modal-in"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-border bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-2xl animate-modal-in"
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}

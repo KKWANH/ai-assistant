@@ -151,7 +151,7 @@ function ChatSortControl() {
       {mounted && (
         <div
           role="menu"
-          className={`absolute right-0 top-full z-20 mt-1 min-w-[120px] origin-top-right rounded-lg border border-border bg-card py-1 shadow-xl transition-all duration-100 ${
+          className={`absolute right-0 top-full z-20 mt-1 min-w-[120px] origin-top-right rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] py-1 shadow-xl transition-all duration-100 ${
             leaving ? "opacity-0 scale-95" : "animate-fade-in"
           }`}
         >

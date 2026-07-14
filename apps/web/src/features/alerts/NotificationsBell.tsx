@@ -62,7 +62,7 @@ export function NotificationsBell() {
         <>
           {/* click-away backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-80 max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-surface-1 shadow-elevation-3 z-50 animate-fade-in">
+          <div className="absolute right-0 top-full mt-1 w-80 max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-surface-1/80 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-elevation-3 z-50 animate-fade-in">
             <div className="flex items-center justify-between px-3 py-2 border-b border-border sticky top-0 bg-surface-1">
               <span className="text-xs font-semibold text-foreground">{t("alerts.title")}</span>
               {hasUnread && (

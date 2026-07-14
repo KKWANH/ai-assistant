@@ -90,7 +90,7 @@ function SearchBox() {
         />
       </div>
       {open && q && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg">
           {hits.length === 0 ? (
             <p className="px-3 py-2.5 text-2xs text-muted-foreground">No matches for “{q}”.</p>
           ) : (

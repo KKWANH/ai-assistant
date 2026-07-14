@@ -183,7 +183,7 @@ function SkillFillModal({
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-md rounded-xl border border-border bg-card shadow-xl p-4 flex flex-col gap-3 max-h-[85vh] overflow-y-auto">
+        <div className="pointer-events-auto w-full max-w-md rounded-xl border border-border/60 bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-xl p-4 flex flex-col gap-3 max-h-[85vh] overflow-y-auto">
           <div>
             <p className="text-sm font-semibold text-foreground">/{skill.name}</p>
             {skill.description && (

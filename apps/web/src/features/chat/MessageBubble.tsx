@@ -244,7 +244,7 @@ function AttachmentViewer({ att, onClose }: { att: ChatAttachment; onClose: () =
       aria-modal="true"
     >
       <div
-        className="flex flex-col w-full max-w-3xl max-h-[85vh] rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
+        className="flex flex-col w-full max-w-3xl max-h-[85vh] rounded-xl border border-border bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 h-11 shrink-0 border-b border-border">
@@ -599,7 +599,7 @@ function RevisionHistoryPopover({
     <>
       {/* click-outside scrim */}
       <div className="fixed inset-0 z-20" onClick={onClose} />
-      <div className="absolute right-0 top-full mt-1 z-30 w-[420px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card shadow-lg p-2">
+      <div className="absolute right-0 top-full mt-1 z-30 w-[420px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg p-2">
         <div className="flex items-center justify-between px-1 mb-2">
           <span className="text-xs font-medium text-foreground">
             {t("chat.message.editHistory")}

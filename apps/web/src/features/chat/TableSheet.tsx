@@ -184,7 +184,7 @@ export function TableEditorModal({
       aria-modal="true"
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-[min(95vw,1100px)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-[min(95vw,1100px)] flex-col overflow-hidden rounded-xl border border-border bg-card/85 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.1] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
