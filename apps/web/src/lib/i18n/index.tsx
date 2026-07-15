@@ -20,19 +20,36 @@ import {
 } from "react";
 import type { TranslationKey } from "./en";
 import en from "./en";
-import ko from "./ko";
 import { PROJECT_MESSAGES } from "../../projects/i18n";
 
 // ── Supported locales ─────────────────────────────────────────────────────────
 export const LOCALES = ["en", "ko"] as const;
 export type Locale = (typeof LOCALES)[number];
 
-// Core dictionaries, each merged with every example project's owned strings
-// (see ../../projects/i18n) so no vertical-specific copy lives in en.ts/ko.ts.
-const DICTIONARIES: Record<Locale, Record<string, string>> = {
-  en: { ...en, ...PROJECT_MESSAGES.en },
-  ko: { ...ko, ...PROJECT_MESSAGES.ko },
+// English ships in the entry chunk — it's the fallback every t() call resolves
+// against. Every other locale's dictionary (ko is ~95 KB of source) is code-split
+// and fetched on demand: at boot for the active locale, and on switch. A session
+// in one language never downloads the others', trimming the entry bundle.
+const LOCALE_LOADERS: Partial<Record<Locale, () => Promise<{ default: Record<string, string> }>>> = {
+  ko: () => import("./ko"),
 };
+
+// Each dictionary is merged with every example project's owned strings (see
+// ../../projects/i18n). Non-English entries are filled in lazily by ensureLocale.
+const DICTIONARIES: Partial<Record<Locale, Record<string, string>>> = {
+  en: { ...en, ...PROJECT_MESSAGES.en },
+};
+
+/** Load (once) a locale's dictionary so t() can resolve it synchronously.
+ *  English is always present; a locale with no loader resolves immediately. */
+export async function ensureLocale(locale: Locale): Promise<void> {
+  if (DICTIONARIES[locale]) return;
+  const loader = LOCALE_LOADERS[locale];
+  if (!loader) return;
+  const mod = await loader();
+  const projectMsgs = (PROJECT_MESSAGES as Record<string, Record<string, string>>)[locale] ?? {};
+  DICTIONARIES[locale] = { ...mod.default, ...projectMsgs };
+}
 
 const STORAGE_KEY = "ariadne.locale";
 
@@ -84,20 +101,33 @@ export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
       : "en";
   });
 
-  // Mirror initial locale to localStorage on first render
+  // Bumps when a lazily-loaded dictionary arrives, forcing t() to re-resolve.
+  const [, setDictVersion] = useState(0);
+
+  // Mirror the locale to localStorage, and make sure its dictionary is loaded.
+  // English is always present, so if the active locale wasn't preloaded at boot
+  // t() falls back to English until this resolves, then re-renders with the real
+  // strings. (main.tsx preloads the boot locale, so this is a no-op there.)
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, locale);
+    if (DICTIONARIES[locale]) return;
+    let cancelled = false;
+    void ensureLocale(locale).then(() => {
+      if (!cancelled) setDictVersion((v) => v + 1);
+    });
+    return () => { cancelled = true; };
   }, [locale]);
 
   const setLocale = async (next: Locale): Promise<void> => {
+    await ensureLocale(next); // load before switching so there's no fallback flash
     setLocaleState(next);
     localStorage.setItem(STORAGE_KEY, next);
     await updateLocaleOnServer(next);
   };
 
   const t = (key: TranslationKey, params?: Record<string, string | number>): string => {
-    const dict = DICTIONARIES[locale];
-    const raw = dict[key] ?? DICTIONARIES.en[key] ?? key;
+    const dict = DICTIONARIES[locale] ?? DICTIONARIES.en!;
+    const raw = dict[key] ?? DICTIONARIES.en![key] ?? key;
     return interpolate(raw, params);
   };
 

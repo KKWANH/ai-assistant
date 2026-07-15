@@ -8,6 +8,7 @@ import { applyTheme } from "./lib/theme";
 import { applyWallpaper } from "./lib/wallpaper";
 import { loadTheme, loadWallpaper } from "./lib/store";
 import { initGlassPointer } from "./lib/glass";
+import { ensureLocale, type Locale } from "./lib/i18n";
 import "./styles/globals.css";
 
 // Apply the persisted theme + wallpaper on boot so CSS vars are set before
@@ -30,14 +31,24 @@ const queryClient = new QueryClient({
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element not found");
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>
-);
+// Preload the active locale's dictionary before first paint — English is bundled
+// in the entry chunk as the fallback, other locales are code-split, so this
+// fetches ko (etc.) up front to avoid an English flash for non-English users.
+async function boot() {
+  const bootLocale = (localStorage.getItem("ariadne.locale") as Locale | null) ?? "en";
+  await ensureLocale(bootLocale);
+
+  ReactDOM.createRoot(root!).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+}
+
+void boot();
