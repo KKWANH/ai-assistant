@@ -354,6 +354,15 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     triagePromise = triage(triageProvider, userContent, triageNeeds, controller.signal).catch(() => null);
   }
 
+  // R2 — kick off history compaction concurrently with triage. Both are
+  // independent LLM calls; running them in parallel (instead of awaiting triage,
+  // then compacting) keeps a long chat from paying them serially before the first
+  // token. Awaited below, right before the answer needs the compacted history.
+  const compactionPromise: Promise<typeof history> | null =
+    hasContent && shouldCompactHistory(history)
+      ? buildSummarizedHistory(history, provider, controller.signal).catch(() => history)
+      : null;
+
   // Resolve agent mode: explicit on/off keeps its value; "auto" reads the triage
   // verdict and only enters the loop for multi-step prompts. Legacy boolean
   // callers (true/false) map to on/off.
@@ -429,9 +438,9 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   // call) for short chats. Both the agent and the direct-chat path use the
   // compacted history.
   let convoHistory = history;
-  if (hasContent && shouldCompactHistory(history)) {
+  if (compactionPromise) {
     emit({ type: "status", text: "Compacting earlier conversation…" });
-    convoHistory = await buildSummarizedHistory(history, provider, controller.signal);
+    convoHistory = await compactionPromise;
   }
 
   if (agentMode) {

@@ -154,7 +154,10 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const bundlePath = surfaceBundlePath(workspace.rootPath);
-      if (!fs.existsSync(bundlePath)) {
+      let stat: import("fs").Stats;
+      try {
+        stat = await fs.promises.stat(bundlePath);
+      } catch {
         return reply
           .status(404)
           .type("application/javascript")
@@ -162,9 +165,21 @@ export async function surfaceHostRoutes(app: FastifyInstance): Promise<void> {
           .send(`// Bundle not built yet. POST /api/workspaces/${req.params.workspaceId}/surface/build to compile.`);
       }
 
-      // The bundle is rebuilt in place at a stable URL — never cache it.
-      const js = fs.readFileSync(bundlePath, "utf-8");
-      return reply.type("application/javascript").header("Cache-Control", "no-store").send(js);
+      // The bundle lives at a stable, mutable URL (rebuilt in place), so we can't
+      // cache it immutably — but re-downloading ~1 MB on every iframe mount was the
+      // dominant surface-transition lag. Revalidate with an mtime/size ETag instead:
+      // `no-cache` makes the browser send If-None-Match and we return a bodyless 304
+      // whenever the bundle is unchanged, so edits still show up immediately.
+      const etag = `W/"${stat.size}-${Math.round(stat.mtimeMs)}"`;
+      if (req.headers["if-none-match"] === etag) {
+        return reply.status(304).header("ETag", etag).header("Cache-Control", "no-cache").send();
+      }
+      const js = await fs.promises.readFile(bundlePath, "utf-8");
+      return reply
+        .type("application/javascript")
+        .header("Cache-Control", "no-cache")
+        .header("ETag", etag)
+        .send(js);
     }
   );
 }

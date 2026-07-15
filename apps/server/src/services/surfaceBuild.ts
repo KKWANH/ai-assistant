@@ -78,6 +78,10 @@ mountSurface(Component, { apiVersion: __surface.apiVersion });
         loader: "tsx",
       },
       bundle: true,
+      // Minify: these bundles ship React + ReactDOM + the surface and were going
+      // out unminified at ~1.2 MB, re-downloaded on every iframe mount. Minifying
+      // drops them to ~250-300 KB. No source maps are emitted, so nothing to lose.
+      minify: true,
       format: "iife",
       jsx: "automatic",
       platform: "browser",
