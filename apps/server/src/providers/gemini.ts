@@ -59,7 +59,7 @@ export class GeminiProvider implements AiProvider {
     const raw = result.text ?? "";
     const meta = result.usageMetadata;
     const usage = meta
-      ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: meta.candidatesTokenCount ?? 0 }
+      ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0) }
       : undefined;
     return { text: wantsJson ? extractJson(raw) : raw, usage };
   }
@@ -99,7 +99,7 @@ export class GeminiProvider implements AiProvider {
       if (meta) {
         usage = {
           inputTokens: meta.promptTokenCount ?? 0,
-          outputTokens: meta.candidatesTokenCount ?? 0,
+          outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
         };
       }
     }
@@ -135,7 +135,7 @@ export class GeminiProvider implements AiProvider {
     const raw = result.text ?? "";
     const meta = result.usageMetadata;
     const usage = meta
-      ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: meta.candidatesTokenCount ?? 0 }
+      ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0) }
       : undefined;
     return { text: req.json ? extractJson(raw) : raw, usage };
   }

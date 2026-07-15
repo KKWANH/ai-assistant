@@ -36,15 +36,23 @@ import type { Snapshot } from "@ariadne/shared";
  */
 export function meteringProvider(inner: AiProvider, runId: string, model: string, accountId: string | null = null, workspaceId: string | null = null): AiProvider {
   const recordUsage = (usage: import("../providers/index.js").ProviderUsage) => {
-    const { inputTokens, outputTokens } = usage;
-    const costUsd = costOf(model, inputTokens, outputTokens);
+    const { inputTokens, outputTokens, cacheReadTokens = 0, cacheCreationTokens = 0 } = usage;
+    const costUsd = costOf(model, inputTokens, outputTokens, {
+      readTokens: cacheReadTokens,
+      creationTokens: cacheCreationTokens,
+    });
+    // Fold cached tokens into the recorded input tally so usage totals + quota
+    // reflect every token the model processed (the cost above already prices the
+    // cache read discount / write premium). Anthropic's inputTokens excludes them,
+    // so without this a long cached chat under-reports its input each turn.
+    const recordedInput = inputTokens + cacheReadTokens + cacheCreationTokens;
     try {
       dbInsertUsageEvent({
         id: crypto.randomUUID(),
         runId,
         provider: inner.id,
         model,
-        inputTokens,
+        inputTokens: recordedInput,
         outputTokens,
         costUsd,
         accountId,

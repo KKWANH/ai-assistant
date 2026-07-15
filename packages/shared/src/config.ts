@@ -210,10 +210,23 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
 /**
  * Compute USD cost for a given model and token counts.
  * If the model is not in the pricing table it is treated as free (returns 0).
+ *
+ * `cache` accounts for prompt caching: Anthropic reports cached tokens
+ * separately from `inputTokens` (which excludes them), so we price cache reads
+ * at ~0.1x the input rate and cache writes at ~1.25x. These fields are only
+ * populated by the Anthropic adapter, so its multipliers apply. Omitting `cache`
+ * keeps the original two-arg behaviour for every other caller.
  */
-export function costOf(model: string, inputTokens: number, outputTokens: number): number {
+export function costOf(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cache?: { readTokens?: number; creationTokens?: number },
+): number {
   const price = MODEL_PRICING[model] ?? { input: 0, output: 0 };
-  return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
+  const cacheRead = (cache?.readTokens ?? 0) * price.input * 0.1;
+  const cacheWrite = (cache?.creationTokens ?? 0) * price.input * 1.25;
+  return (inputTokens * price.input + outputTokens * price.output + cacheRead + cacheWrite) / 1_000_000;
 }
 
 /**
