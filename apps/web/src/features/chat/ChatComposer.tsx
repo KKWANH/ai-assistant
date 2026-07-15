@@ -26,6 +26,7 @@ import type { PostAttachmentInput } from "@ariadne/shared";
 import {
   SELECTABLE_PROVIDERS,
   PROVIDER_LABELS,
+  PROVIDER_REGISTRY,
   MODEL_CHOICES,
   DEFAULT_MODELS,
   modelHasVision,
@@ -1371,27 +1372,37 @@ export function ChatComposer({
                         const status = providerStatus?.find((s) => s.id === p);
                         const reachable = status?.configured ?? false;
                         const isActive = p === currentProvider;
+                        const isLocal = PROVIDER_REGISTRY[p]?.local ?? false;
+                        // A hosted provider with no key can't answer — its models
+                        // would just error — so don't let it be selected. Local
+                        // providers (Ollama/vLLM) keep their own reachability flow,
+                        // and the active provider is never disabled (so you can see
+                        // your current pick even if its key was cleared).
+                        const selectable = reachable || isLocal || isActive;
                         return (
                           <button
                             key={p}
+                            disabled={!selectable}
+                            title={!selectable ? t("chat.composer.providerNoKey") : undefined}
                             className={[
                               "flex items-center justify-between w-full px-2 py-1 rounded transition-colors",
                               isActive
                                 ? "bg-accent/10 text-accent"
-                                : "text-foreground hover:bg-surface-3",
+                                : selectable
+                                  ? "text-foreground hover:bg-surface-3"
+                                  : "text-muted-foreground/40 cursor-not-allowed",
                             ].join(" ")}
-                            onClick={() => void handleProviderChange(p)}
+                            onClick={() => { if (selectable) void handleProviderChange(p); }}
                           >
                             <span>{PROVIDER_LABELS[p]}</span>
                             {p !== "mock" && (
-                              <span
-                                className={[
-                                  "text-2xs",
-                                  reachable ? "text-success" : "text-muted-foreground",
-                                ].join(" ")}
-                              >
-                                {reachable ? "✓" : "—"}
-                              </span>
+                              reachable ? (
+                                <span className="text-2xs text-success">✓</span>
+                              ) : isLocal ? (
+                                <span className="text-2xs text-muted-foreground">—</span>
+                              ) : (
+                                <span className="text-2xs text-muted-foreground/70">{t("chat.composer.needsKey")}</span>
+                              )
                             )}
                           </button>
                         );

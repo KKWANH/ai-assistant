@@ -244,6 +244,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.composer.enableWebSearch": "웹 검색 사용",
   "chat.composer.webSearchCycle": "웹 검색: 끔 → 자동 → 켬",
   "chat.composer.providerNoKey": "이 AI 공급자에 등록된 API 키가 없습니다 — .env에 키를 추가하거나 Ollama / Mock을 선택하세요.",
+  "chat.composer.needsKey": "키 필요",
   "chat.composer.agent": "에이전트",
   "chat.composer.agentAuto": "에이전트: 자동",
   "chat.composer.agentOn": "에이전트 켜짐",

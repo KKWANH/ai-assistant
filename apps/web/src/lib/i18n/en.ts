@@ -251,6 +251,7 @@ const en = {
   "chat.composer.enableWebSearch": "Enable web search",
   "chat.composer.webSearchCycle": "Web search: Off → Auto → On",
   "chat.composer.providerNoKey": "This provider has no API key — add one in .env, or pick Ollama / Mock.",
+  "chat.composer.needsKey": "needs key",
   "chat.composer.agent": "Agent",
   "chat.composer.agentAuto": "Agent: auto",
   "chat.composer.agentOn": "Agent on",
