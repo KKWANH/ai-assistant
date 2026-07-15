@@ -820,14 +820,7 @@ export function AppShell({ children }: AppShellProps) {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {/* API docs — visible link to the public /developers site, available
-              to everyone (admin + guests) straight from the top bar. */}
-          <Link
-            to="/developers"
-            className="hidden sm:flex items-center px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-surface-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {t("nav.apiDocs")}
-          </Link>
+          {/* API docs live in the sidebar (Developers) — no duplicate top-bar link. */}
           {/* ⌘K hint — standard mode, ≥md */}
           {!isSimple && (
             <kbd
