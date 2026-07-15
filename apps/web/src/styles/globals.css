@@ -306,6 +306,17 @@ body {
     display: none;
   }
 }
+/* Mobile drawer fix — below md the sidebar is an off-canvas drawer (Tailwind
+   `max-md:fixed` + a `translate` slide). But `.glass`/`.glass-control` set
+   `position: relative` as unlayered CSS, which outranks the utility, so the nav
+   stayed IN FLOW and reserved its full width — squeezing the main canvas to a
+   sliver on phones. `nav.glass-control` (higher specificity) restores `fixed`;
+   a fixed element still anchors the sheen/specular pseudo-elements. */
+@media (width < 48rem) {
+  nav.glass-control {
+    position: fixed;
+  }
+}
 
 /* ── Markdown content ── */
 .prose {
