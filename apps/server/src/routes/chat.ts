@@ -363,6 +363,36 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       ? buildSummarizedHistory(history, provider, controller.signal).catch(() => history)
       : null;
 
+  // Web-search decision, computed once. On "auto" it rides the triage verdict (a
+  // promise); buildChatContext awaits it internally, so it never blocks the
+  // concurrent retrieval below.
+  const webMode = webSearchMode ?? "off";
+  const webSearchInput: boolean | Promise<boolean> =
+    webMode === "auto" && hasContent
+      ? (triagePromise ?? Promise.resolve(null)).then((t) => t?.webSearch ?? false)
+      : webMode === "on";
+
+  // TTFT — buildChatContext's retrieval (embed + rerank) depends only on the
+  // query, not on triage, so start it CONCURRENTLY with triage on the direct
+  // answer path instead of serially after the image-intent gate + escalation.
+  // Uses the base provider's reranker (a hard verdict escalates only the ANSWER
+  // model, never retrieval) and the uncompacted history (so it's reused only when
+  // no compaction runs). Discarded below if the turn becomes an agent run, an
+  // image search, or gets difficulty-escalated — wasted work in those minority
+  // cases, a whole serial triage round-trip saved on the common one.
+  const contextPrefetch =
+    mayAnswerDirectly && !compactionPromise && hasContent && mode !== "instant"
+      ? buildChatContext(
+          chat,
+          history,
+          { content: userContent, attachments: attachmentRefs, webSearch: webSearchInput },
+          accountContext,
+          provider.id,
+          model,
+          makeReranker(provider),
+        ).catch(() => null)
+      : null;
+
   // Resolve agent mode: explicit on/off keeps its value; "auto" reads the triage
   // verdict and only enters the loop for multi-step prompts. Legacy boolean
   // callers (true/false) map to on/off.
@@ -500,25 +530,24 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       }
     }
 
-    const webMode = webSearchMode ?? "off";
-    let webSearchInput: boolean | Promise<boolean>;
-    if (webMode === "auto" && hasContent) {
-      emit({ type: "status", text: "Checking whether a web search helps…" });
-      webSearchInput = (triagePromise ?? Promise.resolve(null)).then((t) => t?.webSearch ?? false);
-    } else {
-      webSearchInput = webMode === "on";
-    }
-
     emit({ type: "status", text: "Building context…" });
     let contextResult;
     try {
-      contextResult = await buildChatContext(chat, convoHistory, {
-        content: userContent,
-        attachments: attachmentRefs,
-        webSearch: webSearchInput,
-        // Reranker + attachment budget keyed to the ANSWER provider (which may be
-        // the escalated one) so a stronger model gets its larger context budget.
-      }, accountContext, answerProvider.id, producedModel, makeReranker(answerProvider));
+      // Reuse the retrieval we kicked off alongside triage when the final params
+      // still match it — i.e. no difficulty escalation (which wants the stronger
+      // model's reranker/budget). Compaction was already excluded at prefetch, so
+      // whenever contextPrefetch is set, convoHistory === history here.
+      const prefetched =
+        contextPrefetch && answerProvider === provider ? await contextPrefetch : null;
+      contextResult =
+        prefetched ??
+        (await buildChatContext(chat, convoHistory, {
+          content: userContent,
+          attachments: attachmentRefs,
+          webSearch: webSearchInput,
+          // Reranker + attachment budget keyed to the ANSWER provider (which may be
+          // the escalated one) so a stronger model gets its larger context budget.
+        }, accountContext, answerProvider.id, producedModel, makeReranker(answerProvider)));
     } catch (err) {
       logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
       contextResult = {
