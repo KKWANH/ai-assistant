@@ -168,25 +168,36 @@ export class GeminiProvider implements AiProvider {
 
     const config: GenerateContentConfig = { toolConfig: GeminiProvider.NO_TOOLS };
     if (req.signal) config.abortSignal = req.signal;
-    const result = await this.client.models.generateContent({
-      model: this.model,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            ...imageParts,
-            { text: `${req.system}\n\n${req.prompt}` },
-          ],
-        },
-      ],
-      config,
-    });
-
-    const raw = result.text ?? "";
-    const meta = result.usageMetadata;
-    const usage = meta
-      ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0) }
-      : undefined;
-    return { text: req.json ? extractJson(raw) : raw, usage };
+    const call = () =>
+      this.client.models.generateContent({
+        model: this.model,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              ...imageParts,
+              { text: `${req.system}\n\n${req.prompt}` },
+            ],
+          },
+        ],
+        config,
+      });
+    let result = await call();
+    let raw = result.text ?? "";
+    let inTok = result.usageMetadata?.promptTokenCount ?? 0;
+    let outTok = (result.usageMetadata?.candidatesTokenCount ?? 0) + (result.usageMetadata?.thoughtsTokenCount ?? 0);
+    // Same thinking-only/empty flake as the text paths — without this the
+    // vision answer (and its ground-check) came back silently blank.
+    if (!raw.trim() && !req.signal?.aborted) {
+      logger.warn(
+        { model: this.model, finishReason: result.candidates?.[0]?.finishReason },
+        "gemini vision returned no text — retrying once",
+      );
+      result = await call();
+      raw = result.text ?? "";
+      inTok += result.usageMetadata?.promptTokenCount ?? 0;
+      outTok += (result.usageMetadata?.candidatesTokenCount ?? 0) + (result.usageMetadata?.thoughtsTokenCount ?? 0);
+    }
+    return { text: req.json ? extractJson(raw) : raw, usage: { inputTokens: inTok, outputTokens: outTok } };
   }
 }
