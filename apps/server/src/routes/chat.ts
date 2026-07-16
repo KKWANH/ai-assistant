@@ -332,7 +332,11 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     agent: rawAgentMode === "auto" && hasContent,
     webSearch: webSearchMode === "auto" && hasContent && mayAnswerDirectly,
     title: shouldGenerateTitle && hasContent,
-    images: hasContent && mayAnswerDirectly,
+    // Only ask the image-search question when the message plausibly mentions
+    // images at all — without this gate, short follow-ups (6–19 chars, below
+    // every other floor) paid a full triage round-trip solely for this ask.
+    // High-recall keyword net; triage still makes the actual yes/no call.
+    images: hasContent && mayAnswerDirectly && /이미지|사진|그림|짤|image|photo|picture/i.test(userContent),
     actions: triageActions,
     // Difficulty for escalation — only meaningful on the direct-answer path.
     hard: hasContent && mayAnswerDirectly,
@@ -391,25 +395,46 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       ? (triagePromise ?? Promise.resolve(null)).then((t) => t?.webSearch ?? false)
       : webMode === "on";
 
+  // Rerank runs on the FAST triage tier: listwise reordering is a small-model
+  // task by design (the reranker prompt is noThink-tuned and was proven on a
+  // 4B local model), while on a hosted ANSWER model the reorder round-trip
+  // added up to ~4s of pre-stream latency. Falls back to the chat tier when no
+  // separate triage tier is configured (getTriageSettings returns the active
+  // settings then), so behaviour only changes where a fast tier exists.
+  const makeFastReranker = async () => {
+    const rs = getTriageSettings();
+    const rm = rs.provider === "ollama" ? await resolveOllamaModel(rs.model) : rs.model;
+    return makeReranker(
+      meteringProvider(
+        await getProvider({ provider: rs.provider, model: rm }),
+        assistantMsgId,
+        rm,
+        accountId,
+        chat.workspaceId ?? null,
+      ),
+    );
+  };
+
   // TTFT — buildChatContext's retrieval (embed + rerank) depends only on the
   // query, not on triage, so start it CONCURRENTLY with triage on the direct
   // answer path instead of serially after the image-intent gate + escalation.
-  // Uses the base provider's reranker (a hard verdict escalates only the ANSWER
+  // Uses the fast-tier reranker (a hard verdict escalates only the ANSWER
   // model, never retrieval) and the uncompacted history (so it's reused only when
   // no compaction runs). Discarded below if the turn becomes an agent run, an
   // image search, or gets difficulty-escalated — wasted work in those minority
   // cases, a whole serial triage round-trip saved on the common one.
   const contextPrefetch =
     mayAnswerDirectly && !compactionPromise && hasContent && mode !== "instant"
-      ? buildChatContext(
-          chat,
-          history,
-          { content: userContent, attachments: attachmentRefs, webSearch: webSearchInput },
-          accountContext,
-          provider.id,
-          model,
-          makeReranker(provider),
-        ).catch(() => null)
+      ? (async () =>
+          buildChatContext(
+            chat,
+            history,
+            { content: userContent, attachments: attachmentRefs, webSearch: webSearchInput },
+            accountContext,
+            provider.id,
+            model,
+            await makeFastReranker(),
+          ))().catch(() => null)
       : null;
 
   // Resolve agent mode: explicit on/off keeps its value; "auto" reads the triage
@@ -579,9 +604,10 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
           content: userContent,
           attachments: attachmentRefs,
           webSearch: webSearchInput,
-          // Reranker + attachment budget keyed to the ANSWER provider (which may be
-          // the escalated one) so a stronger model gets its larger context budget.
-        }, accountContext, answerProvider.id, producedModel, makeReranker(answerProvider)));
+          // Attachment budget keyed to the ANSWER provider (which may be the
+          // escalated one) so a stronger model gets its larger context budget;
+          // the reranker always runs on the fast tier (see makeFastReranker).
+        }, accountContext, answerProvider.id, producedModel, await makeFastReranker()));
     } catch (err) {
       logger.warn({ chatId: chat.id, err }, "Failed to build chat context");
       contextResult = {
