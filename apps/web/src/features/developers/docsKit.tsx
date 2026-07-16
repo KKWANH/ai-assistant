@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import remarkCjkFriendly from "remark-cjk-friendly";
 import { Check, Copy, Hash, Info, Lightbulb, AlertTriangle, AlertOctagon } from "lucide-react";
 import { SystemDiagram, RequestLifecycleDiagram, DataModelDiagram } from "./diagrams";
+import { baseMarkdownComponents } from "../../lib/markdownBase";
 
 /** Diagrams embeddable from markdown via a ```diagram fenced block (first line =
  *  id, the rest = an optional caption). Keeps architecture pages pure markdown. */
@@ -223,13 +224,13 @@ function heading(depth: 2 | 3, idForLine: (line: number | undefined) => string) 
 }
 
 const components: Components = {
+  // Shared body prose (paragraphs, lists, tables, quotes, rules) — one theme with
+  // the chat renderer. Docs layer their extras on top: a larger anchored heading
+  // hierarchy, GitHub callouts, embedded diagrams + copy-able code, SPA routing.
+  ...baseMarkdownComponents,
   h1: ({ children }) => <h1 className="text-2xl font-bold tracking-tight text-foreground">{children}</h1>,
   // h2/h3 are injected per-render in DocsMarkdown (they need the de-duped ids).
   h4: ({ children }) => <h4 className="mt-5 mb-1 text-sm font-semibold text-foreground">{children}</h4>,
-  p: ({ children }) => <p className="my-3 text-sm leading-7 text-foreground/90">{children}</p>,
-  ul: ({ children }) => <ul className="my-3 ml-5 list-disc space-y-1.5 text-sm leading-7 marker:text-muted-foreground/60 text-foreground/90">{children}</ul>,
-  ol: ({ children }) => <ol className="my-3 ml-5 list-decimal space-y-1.5 text-sm leading-7 marker:text-muted-foreground text-foreground/90">{children}</ol>,
-  li: ({ children }) => <li className="pl-1 leading-7">{children}</li>,
   a: ({ href, children }) => {
     const internal = href?.startsWith("/") ?? false;
     if (internal) {
@@ -288,16 +289,6 @@ const components: Components = {
       </blockquote>
     );
   },
-  table: ({ children }) => (
-    <div className="my-4 overflow-x-auto rounded-xl border border-border">
-      <table className="w-full border-collapse text-sm">{children}</table>
-    </div>
-  ),
-  thead: ({ children }) => <thead className="bg-surface-2">{children}</thead>,
-  th: ({ children }) => <th className="border-b border-border px-3 py-2 text-left text-xs font-semibold text-foreground">{children}</th>,
-  td: ({ children }) => <td className="border-b border-border/60 px-3 py-2 align-top text-foreground/85">{children}</td>,
-  hr: () => <hr className="my-8 border-border" />,
-  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
 };
 
 /** Remove the leading `[!KIND]` token from rendered blockquote children. */
