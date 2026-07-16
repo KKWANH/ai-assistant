@@ -177,6 +177,7 @@ const en = {
   "chat.empty.noProvider.action": "Connect a provider in Settings",
   "chat.empty.startNew": "Or start a new conversation",
   "chat.empty.sendToStart": "Send a message to start the conversation.",
+  "chat.loadEarlier": "Show {count} earlier messages",
   "chat.empty.projectSubtitle": "What can I help you with?",
   "chat.floating.label": "Chat",
   "chat.floating.newChat": "New chat",

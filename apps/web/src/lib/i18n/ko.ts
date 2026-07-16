@@ -170,6 +170,7 @@ const ko: Record<TranslationKey, string> = {
   "chat.empty.noProvider.action": "설정에서 제공자 연결",
   "chat.empty.startNew": "새 대화 시작하기",
   "chat.empty.sendToStart": "메시지를 보내면 대화가 시작됩니다.",
+  "chat.loadEarlier": "이전 메시지 {count}개 더 보기",
   "chat.empty.projectSubtitle": "무엇을 도와드릴까요?",
   "chat.floating.label": "채팅",
   "chat.floating.newChat": "새 채팅",

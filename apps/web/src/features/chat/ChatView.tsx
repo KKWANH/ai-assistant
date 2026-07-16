@@ -8,7 +8,7 @@
  * Single source of truth = TanStack Query cache for the chat.
  * No local message arrays — streaming writes directly to the cache.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
@@ -203,6 +203,23 @@ function MessageList({
   // Stick to the bottom only when the user is already there — so streaming
   // tokens don't yank them away while they've scrolled up to read history.
   const atBottomRef = useRef(true);
+  // Windowing — a long thread renders only its most recent slice on open, so
+  // mounting + markdown-parsing hundreds of old bubbles doesn't stall the view.
+  // "Load earlier" grows the window; the bottom (where new + streaming messages
+  // land) is always inside it, so auto-scroll and streaming are unaffected.
+  const WINDOW_STEP = 40;
+  const [windowSize, setWindowSize] = useState(WINDOW_STEP);
+  useEffect(() => { setWindowSize(WINDOW_STEP); }, [chat?.id]);
+  // Keep the reading position stable when "load earlier" prepends older messages:
+  // record the pre-grow scroll height, then re-anchor scrollTop after paint.
+  const growAnchorRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (growAnchorRef.current != null && el) {
+      el.scrollTop += el.scrollHeight - growAnchorRef.current;
+      growAnchorRef.current = null;
+    }
+  }, [windowSize]);
   // Smoothly animate messages in/out (sent, streamed, edited) instead of
   // popping — the app's core surface should feel fluid.
   const [listRef] = useAutoAnimate<HTMLDivElement>();
@@ -319,21 +336,39 @@ function MessageList({
           // One pass: for each assistant message, attach the text of the
           // most recent preceding user message. The eval-case promotion
           // modal uses it as the question to file. O(n) instead of the
-          // n × n/2 backwards walk per render.
+          // n × n/2 backwards walk per render. Computed over the FULL list so a
+          // shown message still points at its (possibly out-of-window) question.
           const hints: (string | undefined)[] = [];
           let lastUserContent: string | undefined;
           for (const m of messages) {
             if (m.role === "user") lastUserContent = m.content;
             hints.push(m.role === "assistant" ? lastUserContent : undefined);
           }
-          return messages.map((msg, i) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              workspaceId={chat?.workspaceId ?? null}
-              queryHint={hints[i]}
-            />
-          ));
+          const hiddenCount = Math.max(0, messages.length - windowSize);
+          return (
+            <>
+              {hiddenCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (scrollRef.current) growAnchorRef.current = scrollRef.current.scrollHeight;
+                    setWindowSize((n) => n + WINDOW_STEP);
+                  }}
+                  className="mx-auto rounded-full border border-border bg-surface-2 px-3 py-1 text-2xs text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground"
+                >
+                  {t("chat.loadEarlier", { count: hiddenCount })}
+                </button>
+              )}
+              {messages.slice(hiddenCount).map((msg, i) => (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  workspaceId={chat?.workspaceId ?? null}
+                  queryHint={hints[hiddenCount + i]}
+                />
+              ))}
+            </>
+          );
         })()}
         {synthetic && <MessageBubble key={synthetic.id} message={synthetic} />}
         {streaming && messages.length === 0 && <StreamingIndicator statusText="" />}
