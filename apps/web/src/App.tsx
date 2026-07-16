@@ -2,9 +2,6 @@ import { lazy, Suspense, type ComponentType } from "react";
 import { Routes, Route, Navigate, useParams, useLocation } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { PROJECT_ROUTES } from "./projects";
-import { CreateWorkspaceDialog } from "./features/workspace/CreateWorkspaceDialog";
-import { ReportDialog } from "./features/reports/ReportDialog";
-import { TutorialOverlay } from "./components/tutorial/TutorialOverlay";
 import { GlobalCommands } from "./components/GlobalCommands";
 import { WorkspaceCommands } from "./components/WorkspaceCommands";
 import { ShortcutsHelp } from "./components/ShortcutsHelp";
@@ -153,6 +150,21 @@ const DevelopersView = lazyWithReload(() =>
   }))
 );
 
+// Root-level overlays that stay mounted but aren't needed for first paint — the
+// new-workspace / report / tutorial dialogs. Code-split out of the entry chunk;
+// they load in the background after mount (Suspense fallback is null, and each
+// renders null when its store flag is closed anyway). Kept mounted so mount-time
+// effects still run (e.g. the tutorial's auto-open for first-time users).
+const CreateWorkspaceDialog = lazyWithReload(() =>
+  import("./features/workspace/CreateWorkspaceDialog").then((m) => ({ default: m.CreateWorkspaceDialog }))
+);
+const ReportDialog = lazyWithReload(() =>
+  import("./features/reports/ReportDialog").then((m) => ({ default: m.ReportDialog }))
+);
+const TutorialOverlay = lazyWithReload(() =>
+  import("./components/tutorial/TutorialOverlay").then((m) => ({ default: m.TutorialOverlay }))
+);
+
 /** Centered spinner — used as the Suspense fallback while a route chunk loads. */
 function RouteFallback() {
   return (
@@ -230,9 +242,11 @@ function AppContent() {
           </ErrorBoundary>
         </Suspense>
       </AppShell>
-      <CreateWorkspaceDialog />
-      <ReportDialog />
-      <TutorialOverlay />
+      <Suspense fallback={null}>
+        <CreateWorkspaceDialog />
+        <ReportDialog />
+        <TutorialOverlay />
+      </Suspense>
       <GlobalCommands />
       <WorkspaceCommands />
       <ShortcutsHelp />
