@@ -41,7 +41,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     }
     if (isBlock) {
       return (
-        <pre className="my-2 rounded-md bg-surface-3 border border-border px-3 py-2 text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+        <pre className="my-2 rounded-md bg-surface-3 border border-border px-3 py-2 text-[13px] font-mono overflow-x-auto whitespace-pre-wrap">
           <code className={className} {...props}>
             {children}
           </code>
@@ -50,7 +50,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     }
     return (
       <code
-        className="px-1 rounded bg-surface-3 border border-border font-mono text-xs text-foreground"
+        className="px-1 rounded bg-surface-3 border border-border font-mono text-[0.9em] text-foreground"
         {...props}
       >
         {children}
@@ -58,21 +58,23 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     );
   },
   // Headings — compact, message-scale (docs override these with a larger,
-  // anchored hierarchy).
+  // anchored hierarchy). One step above the 15px body so structure is scannable.
   h1({ children }) {
-    return <h1 className="text-base font-semibold mt-4 mb-2 text-foreground">{children}</h1>;
+    return <h1 className="text-lg font-semibold mt-4 mb-2 text-foreground">{children}</h1>;
   },
   h2({ children }) {
-    return <h2 className="text-sm font-semibold mt-3 mb-1 text-foreground">{children}</h2>;
+    return <h2 className="text-base font-semibold mt-3.5 mb-1.5 text-foreground">{children}</h2>;
   },
   h3({ children }) {
-    return <h3 className="text-sm font-semibold mt-2 mb-1 text-foreground">{children}</h3>;
+    return <h3 className="text-[15px] font-semibold mt-2.5 mb-1 text-foreground">{children}</h3>;
   },
 };
 
 const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
   return (
-    <div className="text-sm text-foreground leading-relaxed">
+    // 15px body (up from 14) with a roomier line height — assistant answers are
+    // long-form reading, and the denser size read as cramped (user feedback).
+    <div className="text-[15px] text-foreground leading-[1.75]">
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={markdownComponents}>
         {content}
       </ReactMarkdown>

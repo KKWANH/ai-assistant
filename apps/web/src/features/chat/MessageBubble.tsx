@@ -55,7 +55,7 @@ const MarkdownContent = lazy(() => import("./MarkdownContent"));
 // so the layout doesn't jump once the styled version mounts.
 function MarkdownFallback({ content }: { content: string }) {
   return (
-    <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{content}</div>
+    <div className="text-[15px] text-foreground leading-[1.75] whitespace-pre-wrap">{content}</div>
   );
 }
 
@@ -554,7 +554,7 @@ function UserMessageBubble({
           </button>
           <span className="text-2xs text-muted-foreground px-1">{time}</span>
         </div>
-        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-sm leading-relaxed whitespace-pre-wrap break-words">
+        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-[15px] leading-[1.7] whitespace-pre-wrap break-words">
           {message.content}
           {message.webSearch && (
             <Badge variant="default" className="ml-2 text-2xs opacity-70">
