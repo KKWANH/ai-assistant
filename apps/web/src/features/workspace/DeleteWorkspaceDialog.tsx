@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { Trash2, AlertTriangle } from "lucide-react";
 import type { Workspace } from "@ariadne/shared";
+import { isBuiltinWorkspace } from "@ariadne/shared";
 import { Dialog } from "../../components/ui/Dialog";
 import { Button } from "../../components/ui/Button";
 import { useDeleteWorkspace } from "../../lib/queries";
@@ -37,9 +38,13 @@ export function DeleteWorkspaceDialog({
 
   if (!workspace) return null;
 
+  // Built-in samples live under the app's data dir and are re-seedable — the
+  // server ignores deleteFiles for them, so don't offer the checkbox at all.
+  const builtin = isBuiltinWorkspace(workspace.id);
+
   const handleDelete = async () => {
     try {
-      const res = await del.mutateAsync({ id: workspace.id, deleteFiles });
+      const res = await del.mutateAsync({ id: workspace.id, deleteFiles: !builtin && deleteFiles });
       toast({
         title: t("workspace.delete.done", { name: workspace.name }),
         description: res.filesDeleted
@@ -67,6 +72,7 @@ export function DeleteWorkspaceDialog({
       size="md"
     >
       <div className="flex flex-col gap-4">
+        {!builtin && (
         <label
           className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
             deleteFiles ? "border-destructive/50 bg-destructive/5" : "border-border hover:bg-surface-3"
@@ -90,8 +96,9 @@ export function DeleteWorkspaceDialog({
             </span>
           </span>
         </label>
+        )}
 
-        {deleteFiles && (
+        {deleteFiles && !builtin && (
           <div className="flex items-start gap-2 text-2xs text-destructive">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <span>{t("workspace.delete.irreversible")}</span>

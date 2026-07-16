@@ -19,7 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ASSETS_SAMPLE_WORKSPACE_ID, DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import type { Workspace } from "@ariadne/shared";
-import { dbGetWorkspace, dbInsertWorkspace, dbDeleteWorkspace } from "./db/repo.js";
+import { dbGetWorkspace, dbInsertWorkspace, dbDeleteWorkspace, dbGetSetting } from "./db/repo.js";
 import { PATHS } from "./config.js";
 import { ensureAriadneFolder, writeSurface } from "./ariadneFolder.js";
 import { buildSurface } from "./services/surfaceBuild.js";
@@ -50,6 +50,9 @@ function copyTreeIfMissing(src: string, dst: string): void {
 /** Seed the built-in public "자산 현황 (샘플)" workspace at data/sample-assets/. */
 export async function ensureAssetsSample(): Promise<void> {
   try {
+    // The user deleted this sample — the tombstone (written by the workspace
+    // DELETE route) means "don't recreate it at boot".
+    if (dbGetSetting(`builtinDeleted:${ASSETS_SAMPLE_WORKSPACE_ID}`)) return;
     // One-time cleanup — remove the earlier "Net Worth" sample this replaces
     // (it was a transient showcase added in the same development cycle).
     if (dbGetWorkspace(OLD_NETWORTH_ID)) {

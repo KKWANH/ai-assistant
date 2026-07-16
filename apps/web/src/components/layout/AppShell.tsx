@@ -89,7 +89,7 @@ import { Inspector } from "./Inspector";
 import { SidePanel } from "./SidePanel";
 import { DeleteWorkspaceDialog } from "../../features/workspace/DeleteWorkspaceDialog";
 import { SectionManagerDialog } from "../../features/workspace/SectionManagerDialog";
-import { isBuiltinWorkspace, WORKSPACE_SECTIONS } from "@ariadne/shared";
+import { WORKSPACE_SECTIONS } from "@ariadne/shared";
 import type { AccountMode, Chat, Workspace } from "@ariadne/shared";
 
 export interface AppShellProps {
@@ -623,7 +623,9 @@ export function AppShell({ children }: AppShellProps) {
             </span>
           ) : undefined}
         />
-        {hoveredWorkspaceId === ws.id && !isBuiltinWorkspace(ws.id) && ws.editable !== false && (
+        {/* Built-in samples are deletable too — the server tombstones them so
+            they stay gone across restarts. */}
+        {hoveredWorkspaceId === ws.id && ws.editable !== false && (
           <button
             className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
             onClick={(e) => {

@@ -16,6 +16,7 @@ import {
   dbSetWorkspaceAccess,
   dbRemoveWorkspaceAccess,
   dbListWorkspaceAccess,
+  dbSetSetting,
 } from "../db/repo.js";
 import { listAccounts } from "../auth/accounts.js";
 import { scanWorkspace } from "../workspace/scanner.js";
@@ -336,13 +337,14 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       const workspace = await requireWorkspace(req.params.id, req, reply);
       if (!workspace) return;
 
-      if (isBuiltinWorkspace(workspace.id)) {
-        return reply
-          .status(403)
-          .send({ error: "Built-in workspaces cannot be deleted." });
-      }
+      // Built-in samples (tutorial / demo portfolio / assets sample) ARE
+      // deletable — a tombstone in the settings table stops the boot seeder from
+      // recreating them (delete the `builtinDeleted:<id>` row to get one back).
+      // Their folders live under the app's data dir, so never delete files.
+      const builtin = isBuiltinWorkspace(workspace.id);
+      if (builtin) dbSetSetting(`builtinDeleted:${workspace.id}`, "1");
 
-      const deleteFiles = req.query.deleteFiles === "true";
+      const deleteFiles = !builtin && req.query.deleteFiles === "true";
 
       // Wipe transient staged trees on disk before the row (and rootPath) are gone.
       const { clearAllStaged } = await import("../services/stagedEdits.js");

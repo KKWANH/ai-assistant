@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { TUTORIAL_WORKSPACE_ID, DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import type { Workspace } from "@ariadne/shared";
-import { dbGetWorkspace, dbInsertWorkspace } from "./db/repo.js";
+import { dbGetWorkspace, dbInsertWorkspace, dbGetSetting } from "./db/repo.js";
 import { PATHS } from "./config.js";
 import { ensureAriadneFolder } from "./ariadneFolder.js";
 import logger from "./logger.js";
@@ -20,8 +20,8 @@ import logger from "./logger.js";
 export const SAMPLE_FILES: Record<string, string> = {
   "welcome.md":
     "# 튜토리얼 워크스페이스\n\n" +
-    "여기는 Ariadne에 기본으로 들어 있는 예시 워크스페이스입니다. 항상 이 자리에\n" +
-    "있고 삭제할 수 없으므로, 마음 놓고 이것저것 시험해 볼 수 있는 공간입니다.\n\n" +
+    "여기는 Ariadne에 기본으로 들어 있는 예시 워크스페이스입니다. 마음 놓고\n" +
+    "이것저것 시험해 볼 수 있고, 필요 없으면 설정에서 삭제해도 됩니다.\n\n" +
     "이 워크스페이스로 기본 흐름을 익혀 보세요:\n\n" +
     "- **만들기 및 실행** 탭을 열고, 이 폴더의 예시 메모를 대상으로 템플릿을\n" +
     "  실행해 보세요(예: 리서치 브리프).\n" +
@@ -61,6 +61,9 @@ export const SAMPLE_FILES: Record<string, string> = {
 /** Seed the tutorial workspace once, if it does not already exist. */
 export function ensureTutorialWorkspace(): void {
   try {
+    // The user deleted this sample — the tombstone (written by the workspace
+    // DELETE route) means "don't recreate it at boot".
+    if (dbGetSetting(`builtinDeleted:${TUTORIAL_WORKSPACE_ID}`)) return;
     if (dbGetWorkspace(TUTORIAL_WORKSPACE_ID)) return;
 
     const rootPath = path.join(PATHS.home, "tutorial-workspace");

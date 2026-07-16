@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DEMO_WORKSPACE_ID, DEFAULT_INCLUDE, DEFAULT_EXCLUDE } from "@ariadne/shared";
 import type { Workspace } from "@ariadne/shared";
-import { dbGetWorkspace, dbInsertWorkspace, dbUpdateWorkspace } from "./db/repo.js";
+import { dbGetWorkspace, dbInsertWorkspace, dbUpdateWorkspace, dbGetSetting } from "./db/repo.js";
 import { PATHS } from "./config.js";
 import { ensureAriadneFolder, writeSurface } from "./ariadneFolder.js";
 import { buildSurface } from "./services/surfaceBuild.js";
@@ -47,6 +47,9 @@ import logger from "./logger.js";
 /** Seed the built-in Portfolio workspace at data/portfolio/. */
 export async function ensureDemoWorkspace(): Promise<void> {
   try {
+    // The user deleted this sample — the tombstone (written by the workspace
+    // DELETE route) means "don't recreate it at boot".
+    if (dbGetSetting(`builtinDeleted:${DEMO_WORKSPACE_ID}`)) return;
     const exists = !!dbGetWorkspace(DEMO_WORKSPACE_ID);
     const rootPath = path.join(PATHS.home, "portfolio");
     fs.mkdirSync(rootPath, { recursive: true });

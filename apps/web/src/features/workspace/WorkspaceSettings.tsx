@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Settings as SettingsIcon, Cpu, Layout, FolderTree, Sparkles, TrendingUp, Users, Trash2 } from "lucide-react";
-import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS, isBuiltinWorkspace, WORKSPACE_SECTIONS } from "@ariadne/shared";
+import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, MODEL_CHOICES, DEFAULT_MODELS, WORKSPACE_SECTIONS } from "@ariadne/shared";
 import type { ProviderId, Workspace } from "@ariadne/shared";
 import { useWorkspace, useUpdateWorkspace, useSettings, useSurface, useSkills, useWorkspaceUsage, useMe, useWorkspaceAccess, useSetWorkspaceAccess } from "../../lib/queries";
 import { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
@@ -570,8 +570,9 @@ function DangerSection({ ws }: { ws: Workspace }) {
   const { data: me } = useMe();
   const [confirming, setConfirming] = useState(false);
   const canManage = me?.account.role === "admin" || ws.createdBy === me?.account.id;
-  // Built-ins can't be deleted; only owner/admin see the control.
-  if (isBuiltinWorkspace(ws.id) || !canManage) return null;
+  // Only owner/admin see the control. Built-in samples are deletable too — the
+  // server tombstones them so the boot seeder doesn't bring them back.
+  if (!canManage) return null;
 
   return (
     <section>
