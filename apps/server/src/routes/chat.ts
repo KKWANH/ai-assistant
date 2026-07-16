@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Chat, ChatMessage, ChatAttachment, ChatStreamEvent, SearchResult, ImageResult } from "@ariadne/shared";
 import { searchImages } from "../services/imageSearch.js";
-import { CreateChatSchema, UpdateChatSchema, PostMessageSchema, PROVIDER_LABELS } from "@ariadne/shared";
+import { CreateChatSchema, UpdateChatSchema, PostMessageSchema, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { PostAttachmentInput, ProviderId, ActionDef } from "@ariadne/shared";
 import {
   dbCreateChat,
@@ -358,9 +358,28 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   // independent LLM calls; running them in parallel (instead of awaiting triage,
   // then compacting) keeps a long chat from paying them serially before the first
   // token. Awaited below, right before the answer needs the compacted history.
+  // The digest itself must be trustworthy — a weak LOCAL chat model can blur the
+  // very facts compaction exists to preserve — so when the chat runs on a local
+  // provider, summarize on the (cloud) triage tier instead when one is configured.
   const compactionPromise: Promise<typeof history> | null =
     hasContent && shouldCompactHistory(history)
-      ? buildSummarizedHistory(history, provider, controller.signal).catch(() => history)
+      ? (async () => {
+          let compactor = provider;
+          if (PROVIDER_REGISTRY[settings.provider]?.local) {
+            const ts = getTriageSettings();
+            if (ts.provider !== settings.provider && !PROVIDER_REGISTRY[ts.provider]?.local) {
+              const tm = ts.provider === "ollama" ? await resolveOllamaModel(ts.model) : ts.model;
+              compactor = meteringProvider(
+                await getProvider({ provider: ts.provider, model: tm }),
+                assistantMsgId,
+                tm,
+                accountId,
+                chat.workspaceId ?? null,
+              );
+            }
+          }
+          return buildSummarizedHistory(history, compactor, controller.signal);
+        })().catch(() => history)
       : null;
 
   // Web-search decision, computed once. On "auto" it rides the triage verdict (a

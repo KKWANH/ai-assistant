@@ -570,17 +570,19 @@ async function readWorkspaceFiles(rootPath: string, files: FileMeta[]): Promise<
 }
 
 function buildHistoryText(history: ChatMessage[]): string {
-  // Keep last 20 messages; cap total chars at 8k
+  // Keep last 20 messages; cap total chars at 12k. The per-message clip was
+  // 800 chars, which truncated fact-dense assistant answers even in the recent
+  // window — follow-ups referencing the clipped tail invited gap-filling.
   const recent = history.slice(-20);
   const lines: string[] = [];
   let totalChars = 0;
 
   for (const msg of recent) {
     const role = msg.role === "user" ? "User" : "Assistant";
-    const content = msg.content.slice(0, 800); // per-message cap
+    const content = msg.content.slice(0, 1500); // per-message cap
     const line = `${role}: ${content}`;
     totalChars += line.length;
-    if (totalChars > 8000) break;
+    if (totalChars > 12_000) break;
     lines.push(line);
   }
 
@@ -622,10 +624,13 @@ export async function buildSummarizedHistory(
 
   const recent = history.slice(-KEEP_RECENT_MESSAGES);
   const older = history.slice(0, -KEEP_RECENT_MESSAGES);
+  // Keep the digest input generous (48k chars ≈ 12k tokens): a HEAD slice
+  // truncates the newest of the older turns, and at 24k a very long chat lost
+  // whole conversations before the digest even saw them.
   const olderText = older
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
     .join("\n")
-    .slice(0, 24_000);
+    .slice(0, 48_000);
 
   let digest: string;
   try {
