@@ -50,8 +50,10 @@ const CHUNK_OVERLAP = 80;
 const MAX_FILES_READ = 40;
 /** How much of any one file we read before truncating (~25 KB ≈ ~6k tokens). */
 const FILE_READ_BUDGET = 25_000;
-/** Default top-k chunks returned. */
-const DEFAULT_TOP_K = 6;
+/** Default top-k chunks returned. 10 × 800 chars ≈ 2k tokens of workspace
+ *  evidence — modest for today's 100k+ context models, and more correct
+ *  evidence in front of the model leaves less room to fabricate. */
+const DEFAULT_TOP_K = 10;
 /** When a reranker is supplied, how many fused candidates to hand it before
  *  the final top-k slice. Wide enough to give the rerank something to reorder,
  *  bounded so the rerank prompt stays cheap. */

@@ -317,12 +317,15 @@ export async function buildChatContext(
       // retriever can be substituted behind the same call later.
       let contentPart: string | undefined;
       if (ws && userMessage.content.trim()) {
-        // Rerank only substantive queries (≳ a sentence). A long, specific
-        // question earns one extra fast (noThink) model call to reorder the
-        // retrieved set for precision; a short "what's this?" doesn't — so
-        // quick chat stays quick. Unset reranker → unchanged retrieval.
+        // Rerank only substantive queries (≳ a short sentence — 40 chars covers
+        // most real Korean questions, which are denser than English; the old 80
+        // skipped them). A specific question earns one extra fast (noThink)
+        // model call to reorder the retrieved set for precision; a short
+        // "what's this?" doesn't — so quick chat stays quick. The call runs
+        // inside the context prefetch, overlapping triage. Unset reranker →
+        // unchanged retrieval.
         const useRerank =
-          rerank && userMessage.content.trim().length >= 80 ? rerank : undefined;
+          rerank && userMessage.content.trim().length >= 40 ? rerank : undefined;
         const ranked = await retrieveRelevantChunks(
           ws.rootPath,
           snapshot.files,
@@ -372,7 +375,9 @@ export async function buildChatContext(
     // table/detail the question often needs. The agent web_search path already
     // does this; chat web search was still snippet-only. Concurrent + best-
     // effort; a failed/blocked fetch falls back to that result's snippet.
-    const pages = await Promise.all(top.slice(0, 3).map((r) => fetchUrlText(r.url).catch(() => "")));
+    // 5 pages (was 3): more grounded evidence per answer — the fetches run in
+    // parallel so latency is unchanged, and each page is still capped below.
+    const pages = await Promise.all(top.slice(0, 5).map((r) => fetchUrlText(r.url).catch(() => "")));
     const resultText = top
       .map((r, i) => {
         const body = (pages[i] ?? "").trim();
@@ -426,14 +431,15 @@ export async function buildChatContext(
   // (over-broad "be careful" instructions can degrade quality — see the note
   // on reviewGuidance above).
   const accuracyGuidance =
-    " Factual accuracy outranks completeness: the user does scholarly work (art history, theses) where a wrong " +
-    "name, date, attribution, quotation, or citation is worse than admitting uncertainty. Do not invent specifics — " +
-    "if you are not confident about a particular work, artist, date, figure, quotation, or source, say so plainly " +
-    "(e.g. \"I'm not certain\") or ask, rather than presenting a guess as fact. Ground factual claims in the materials " +
-    "you were actually given (attached files, rendered document pages, workspace files, web results) and point to " +
-    "where a claim comes from when that helps the user verify it. When images or rendered document pages are attached, " +
-    "describe only what is genuinely visible in them — never infer or fabricate a title, artist, caption, or detail " +
-    "you cannot see.";
+    " Factual accuracy outranks completeness — on ANY factual question (health, medicine, finance and investing, " +
+    "law, history, art, current events, how-things-work), a wrong name, date, number, dosage, price, attribution, " +
+    "quotation, or citation is worse than admitting uncertainty. Do not invent specifics — if you are not confident " +
+    "about a fact, say so plainly (e.g. \"I'm not certain\" / \"잘 모르겠습니다\") or ask, rather than presenting a " +
+    "guess as fact. PREFER THE MATERIALS YOU WERE GIVEN over your own memory: when attached files, rendered document " +
+    "pages, workspace files, or web results are provided, ground factual claims in them first, and when a claim rests " +
+    "only on your general knowledge, make that visible so the user can check it. When images or rendered document " +
+    "pages are attached, describe only what is genuinely visible in them — never infer or fabricate a title, artist, " +
+    "caption, or detail you cannot see.";
   // Extra accuracy posture for academic workspaces (lecture prep / thesis
   // advising) — verifiability matters even more there, and a confidently wrong
   // attribution or date is a real cost to scholarly work.
@@ -457,15 +463,24 @@ export async function buildChatContext(
     "SELF-CONTAINED: inline SVG/CSS/JS only, with NO external scripts, stylesheets, images, or fonts (the sandbox " +
     "is offline and cannot load them). Size it sensibly and add a one-line explanation alongside it. Only reach for " +
     "this when a picture genuinely helps — keep ordinary answers as prose.";
+  // Date grounding — without it, "최근/latest/올해" questions get answered from
+  // the model's training-era sense of "now". Day-granular, so Anthropic prompt
+  // caching still works within a day.
+  const today = new Date();
+  const dateLine = ` Today is ${today.toISOString().slice(0, 10)} (${today.toLocaleDateString("en-US", { weekday: "long" })}).`;
   const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
     "When a workspace is attached you receive its file index plus the contents of its " +
     "key files — read them directly to answer; for a full structured deliverable, " +
     "suggest running the appropriate Template. " +
-    "Always reply in the same language the user writes in. " +
-    "Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block, " +
-    "and do not add bracketed citation markers like [1]." +
+    "Always reply in the same language the user writes in." +
+    dateLine +
+    " Be concise and direct. Write your answer as normal Markdown prose — never wrap the whole reply in a code block. " +
+    "Citations: when your answer draws on the numbered web results or named workspace files provided below, cite them " +
+    "inline — [1] for a numbered web result, or the file name — so the user can verify; NEVER emit a citation marker " +
+    "for a source that is not actually in the provided materials, and when no sources are provided use no citation " +
+    "markers at all." +
     reviewGuidance +
     accuracyGuidance +
     academicGuidance +
