@@ -43,7 +43,7 @@ import { getActiveSettings, getTriageSettings, isProviderConfigured, resolveEsca
 import { saveUpload, readUpload } from "../services/uploads.js";
 import { buildChatContext, buildSummarizedHistory, shouldCompactHistory } from "../services/chatContext.js";
 import { groundCheckVision } from "../services/groundCheck.js";
-import { groundCheckNote } from "../services/groundCheckText.js";
+import { groundCheckNote, selfCheckNote } from "../services/groundCheckText.js";
 import type { AttachmentRef } from "../services/chatContext.js";
 import { makeReranker } from "../services/reranker.js";
 import { runAgent } from "../services/agent.js";
@@ -530,6 +530,21 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       }
     }
 
+    // Hard questions auto-engage the two-pass draft→revise path (the manual
+    // "Rigorous" pick) — so the strong model AND the self-critique compose
+    // automatically on exactly the questions that need them, instead of the
+    // best-quality combination existing only behind a toggle. Explicit
+    // rigorous is unchanged; instant never reaches this branch.
+    const effectiveMode: typeof mode = triageHard && mode === "standard" ? "rigorous" : mode;
+    if (effectiveMode !== mode) {
+      emit({
+        type: "status",
+        text: accountLocale?.startsWith("ko")
+          ? "어려운 질문이라 초안을 만든 뒤 검토해 답합니다…"
+          : "Hard question — drafting, then self-reviewing…",
+      });
+    }
+
     emit({ type: "status", text: "Building context…" });
     let contextResult;
     try {
@@ -563,9 +578,53 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     }
     contextSearchResults = contextResult.searchResults;
 
+    // Post-answer verification note — shared by the vision / rigorous / standard
+    // branches (H2, optimistic grounding). The answer already streamed (fast);
+    // this appends a SHORT note only when something needs saying:
+    //  • sources present → cross-check the claims against them and append a
+    //    "🔎 정정" correction when a specific claim isn't supported.
+    //  • no sources at all (a memory-only answer — web off/declined, no
+    //    workspace/attachment material) → flag the consequential specifics worth
+    //    double-checking ("확인 권장"). This was the one answer shape with ZERO
+    //    verification. Annotation-only: ungrounded self-CORRECTION degrades
+    //    answers (arXiv 2310.01798), so it flags, never rewrites.
+    // Runs on the fast triage tier; fails safe (no note on error/abort).
+    const appendVerifyNote = async (): Promise<void> => {
+      if (!assistantContent.trim() || controller.signal.aborted) return;
+      // Micro-answers ("네, 맞아요") aren't worth a verification round-trip.
+      if (!contextResult.hasSources && assistantContent.trim().length < 60) return;
+      const ko = accountLocale?.startsWith("ko");
+      emit({
+        type: "status",
+        text: contextResult.hasSources
+          ? (ko ? "출처와 대조 중…" : "Cross-checking the sources…")
+          : (ko ? "핵심 사실 점검 중…" : "Double-checking key facts…"),
+      });
+      const vs = getTriageSettings();
+      const vModel = vs.provider === "ollama" ? await resolveOllamaModel(vs.model) : vs.model;
+      const verifyProvider = meteringProvider(
+        await getProvider({ provider: vs.provider, model: vModel }),
+        assistantMsgId,
+        vModel,
+        accountId,
+        chat.workspaceId ?? null,
+      );
+      const note = contextResult.hasSources
+        ? await groundCheckNote(verifyProvider, assistantContent, contextResult.prompt, controller.signal)
+        : await selfCheckNote(verifyProvider, assistantContent, userContent, controller.signal);
+      if (note && !controller.signal.aborted) {
+        const label = contextResult.hasSources
+          ? (ko ? "정정(출처 대조)" : "Correction (checked against sources)")
+          : (ko ? "확인 권장 — 출처 없이 답한 부분" : "Worth verifying — answered without sources");
+        const corr = `\n\n---\n🔎 **${label}:** ${note}`;
+        assistantContent += corr;
+        emit({ type: "delta", text: corr });
+      }
+    };
+
     emit({
       type: "status",
-      text: mode === "rigorous" ? (accountLocale?.startsWith("ko") ? "초안 작성 중…" : "Drafting…") : "Generating…",
+      text: effectiveMode === "rigorous" ? (accountLocale?.startsWith("ko") ? "초안 작성 중…" : "Drafting…") : "Generating…",
     });
     try {
       const hasImages = contextResult.images.length > 0;
@@ -593,7 +652,11 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         );
         assistantContent = grounded ?? result.text;
         emit({ type: "delta", text: assistantContent });
-      } else if (mode === "rigorous") {
+        // A vision answer can also lean on TEXT sources (web results, workspace
+        // excerpts) — cross-check those too; the images themselves were already
+        // ground-checked above, so the no-source flag doesn't apply here.
+        if (contextResult.hasSources) await appendVerifyNote();
+      } else if (effectiveMode === "rigorous") {
         // Two-pass: a draft, then a grounded self-critique + single revision.
         // Bounded to one revision; the user opted into the extra latency for a
         // higher-quality answer on analysis / writing / review tasks.
@@ -626,48 +689,18 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
             emit({ type: "delta", text: assistantContent });
           }
         }
+        // Rigorous answers get the same post-answer verification the standard
+        // path has — the revise pass critiques reasoning, not source fidelity.
+        await appendVerifyNote();
       } else {
         await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },
           (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
           (status) => { emit({ type: "status", text: status }); },
         );
-        // H2 (optimistic grounding) — the answer already streamed (fast). If it
-        // rested on real sources this turn (web results from the factual-search
-        // gate, and/or workspace file excerpts), cross-check it in the background
-        // and append a SHORT correction only when a specific claim isn't
-        // supported. Most answers pass → nothing extra; the rare fabrication gets
-        // a "🔎 정정" note. Runs on the fast triage tier (a claim-vs-source check
-        // needs a small model, and it's far cheaper when the answer escalated);
-        // fails safe (no note on error/abort). Academic workspaces additionally
-        // carry the stronger accuracy directive from H3.
-        if (contextResult.hasSources && assistantContent.trim() && !controller.signal.aborted) {
-          emit({
-            type: "status",
-            text: accountLocale?.startsWith("ko") ? "출처와 대조 중…" : "Cross-checking the sources…",
-          });
-          const vs = getTriageSettings();
-          const vModel = vs.provider === "ollama" ? await resolveOllamaModel(vs.model) : vs.model;
-          const verifyProvider = meteringProvider(
-            await getProvider({ provider: vs.provider, model: vModel }),
-            assistantMsgId,
-            vModel,
-            accountId,
-            chat.workspaceId ?? null,
-          );
-          const note = await groundCheckNote(
-            verifyProvider,
-            assistantContent,
-            contextResult.prompt,
-            controller.signal,
-          );
-          if (note && !controller.signal.aborted) {
-            const label = accountLocale?.startsWith("ko") ? "정정(출처 대조)" : "Correction (checked against sources)";
-            const corr = `\n\n---\n🔎 **${label}:** ${note}`;
-            assistantContent += corr;
-            emit({ type: "delta", text: corr });
-          }
-        }
+        // Cross-check against sources, or flag memory-only specifics — see
+        // appendVerifyNote above.
+        await appendVerifyNote();
       }
       // Surface the workspace files behind the answer — symmetric with the web
       // search sources the UI already shows. Only when retrieval actually fed

@@ -26,6 +26,66 @@ const GROUND_NOTE_SYSTEM =
   "Judge only against the provided sources, not your own memory. When in doubt, prefer OK (don't " +
   "manufacture a correction).";
 
+const SELF_CHECK_TIMEOUT_MS = 20_000;
+
+// The NO-SOURCE variant. When an answer was written purely from model memory
+// (web search off/declined, no workspace/attachment sources), there is nothing
+// to fact-check AGAINST — and ungrounded self-*correction* is known to degrade
+// answers (arXiv 2310.01798). So this pass only FLAGS: it names the specific,
+// consequential claims (dosages, figures, legal rules, dates, attributions…)
+// most worth verifying elsewhere, and never proposes corrections. Biased to
+// "OK" so casual answers don't grow a needless warning.
+const SELF_CHECK_SYSTEM =
+  "You review an answer that was written WITHOUT any source materials — purely from the assistant's own memory. " +
+  "Your ONLY job is to flag whether it asserts specific, consequential facts a careful reader should double-check " +
+  "elsewhere: medical/health guidance or numbers, drug names or dosages, financial figures, prices, returns, tax or " +
+  "legal rules, safety-critical instructions, precise statistics, dates, quotations, or attributions that are " +
+  "plausibly misremembered. Everyday common knowledge, opinions, general explanations, and clearly-hedged " +
+  "statements do NOT count.\n" +
+  "- If nothing needs flagging, reply with exactly: OK\n" +
+  "- Otherwise reply starting with 'NOTE:' then ONE line IN THE USER'S LANGUAGE naming the one to three specific " +
+  "claims most worth verifying. Do NOT propose corrections — you have no sources either. Do NOT restate the answer.\n" +
+  "When in doubt, prefer OK (a needless warning erodes trust).";
+
+/**
+ * Returns a one-line "worth double-checking: …" note when a memory-only answer
+ * contains consequential specifics, or null when it's fine (or the check can't
+ * run / fails / times out). Annotation-only — never modifies the answer.
+ */
+export async function selfCheckNote(
+  provider: AiProvider,
+  answer: string,
+  userQuestion: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (!answer.trim()) return null;
+
+  const prompt =
+    `--- User question ---\n${userQuestion}\n\n` +
+    `--- ANSWER (written without sources) ---\n${answer}\n--- END ---\n\n` +
+    'Reply "OK", or "NOTE: <one line>".';
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      provider.complete({ system: SELF_CHECK_SYSTEM, prompt, signal }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("self-check timeout")), SELF_CHECK_TIMEOUT_MS);
+      }),
+    ]);
+    const text = result.text.trim();
+    const note = /^note:\s*([\s\S]+)/i.exec(text);
+    // Only a clear "NOTE: …" produces a flag; "OK" or anything unexpected → no
+    // note (fail safe — never append a confusing warning to a good answer).
+    return note ? note[1]!.trim() : null;
+  } catch (err) {
+    logger.warn({ err: String(err) }, "self-check note failed — leaving the answer as-is");
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
  * Returns a concise correction string when the draft contradicts its sources, or
  * null when it's supported (or the check can't run / fails / times out).
