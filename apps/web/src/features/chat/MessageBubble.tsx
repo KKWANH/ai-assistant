@@ -55,7 +55,7 @@ const MarkdownContent = lazy(() => import("./MarkdownContent"));
 // so the layout doesn't jump once the styled version mounts.
 function MarkdownFallback({ content }: { content: string }) {
   return (
-    <div className="text-[15px] text-foreground leading-[1.75] whitespace-pre-wrap">{content}</div>
+    <div className="text-foreground leading-[1.75] whitespace-pre-wrap" style={{ fontSize: "var(--chat-font, 16px)" }}>{content}</div>
   );
 }
 
@@ -554,7 +554,7 @@ function UserMessageBubble({
           </button>
           <span className="text-2xs text-muted-foreground px-1">{time}</span>
         </div>
-        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground text-[15px] leading-[1.7] whitespace-pre-wrap break-words">
+        <div className="max-w-[540px] rounded-2xl rounded-br-sm border border-border px-3.5 py-2.5 bg-surface-3 text-foreground leading-[1.7] whitespace-pre-wrap break-words" style={{ fontSize: "var(--chat-font, 16px)" }}>
           {message.content}
           {message.webSearch && (
             <Badge variant="default" className="ml-2 text-2xs opacity-70">
@@ -599,7 +599,7 @@ function RevisionHistoryPopover({
     <>
       {/* click-outside scrim */}
       <div className="fixed inset-0 z-20" onClick={onClose} />
-      <div className="absolute right-0 top-full mt-1 z-30 w-[420px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg p-2">
+      <div className="absolute right-0 top-full mt-1 z-30 w-[420px] max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg p-2">
         <div className="flex items-center justify-between px-1 mb-2">
           <span className="text-xs font-medium text-foreground">
             {t("chat.message.editHistory")}

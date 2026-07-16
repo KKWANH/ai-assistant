@@ -18,7 +18,9 @@ export const baseMarkdownComponents: Components = {
   li: ({ children }) => <li className="leading-relaxed">{children}</li>,
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
-      <table className="w-full text-xs border-collapse border border-border">{children}</table>
+      {/* Em-based so tables track the container's text size (the chat font is
+          user-adjustable); ≈ the old fixed text-xs at the default sizes. */}
+      <table className="w-full text-[0.82em] border-collapse border border-border">{children}</table>
     </div>
   ),
   thead: ({ children }) => <thead className="bg-surface-3">{children}</thead>,

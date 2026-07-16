@@ -6,7 +6,7 @@ import App from "./App";
 import { ToastProvider } from "./components/ui/Toast";
 import { applyTheme } from "./lib/theme";
 import { applyWallpaper } from "./lib/wallpaper";
-import { loadTheme, loadWallpaper } from "./lib/store";
+import { loadTheme, loadWallpaper, loadChatFontSize, applyChatFontSize } from "./lib/store";
 import { initGlassPointer } from "./lib/glass";
 import { ensureLocale, type Locale } from "./lib/i18n";
 import "./styles/globals.css";
@@ -16,6 +16,7 @@ import "./styles/globals.css";
 const bootTheme = loadTheme();
 applyTheme(bootTheme);
 applyWallpaper(loadWallpaper(), bootTheme);
+applyChatFontSize(loadChatFontSize());
 // Cursor-tracked specular for glass controls (top bar, composer).
 initGlassPointer();
 

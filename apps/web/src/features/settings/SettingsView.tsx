@@ -162,6 +162,8 @@ export function SettingsView() {
   const setWallpaper = useUIStore((s) => s.setWallpaper);
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
+  const chatFontSize = useUIStore((s) => s.chatFontSize);
+  const setChatFontSize = useUIStore((s) => s.setChatFontSize);
   const [contextDraft, setContextDraft] = useState("");
   // Sync the editable draft when the saved profile loads or changes.
   useEffect(() => {
@@ -414,6 +416,25 @@ export function SettingsView() {
               options={[
                 { value: "dark", label: locale === "ko" ? "다크" : "Dark" },
                 { value: "light", label: locale === "ko" ? "라이트" : "Light" },
+              ]}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm">{locale === "ko" ? "채팅 글자 크기" : "Chat text size"}</p>
+              <p className="text-2xs text-muted-foreground">
+                {locale === "ko" ? "메시지 본문의 크기 (기본 보통)" : "Message body size (default Medium)"}
+              </p>
+            </div>
+            <SegmentedControl<"15" | "16" | "17" | "18">
+              ariaLabel={locale === "ko" ? "채팅 글자 크기" : "Chat text size"}
+              value={String(chatFontSize) as "15" | "16" | "17" | "18"}
+              onChange={(next) => setChatFontSize(Number(next))}
+              options={[
+                { value: "15", label: locale === "ko" ? "작게" : "S" },
+                { value: "16", label: locale === "ko" ? "보통" : "M" },
+                { value: "17", label: locale === "ko" ? "크게" : "L" },
+                { value: "18", label: locale === "ko" ? "최대" : "XL" },
               ]}
             />
           </div>

@@ -41,7 +41,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     }
     if (isBlock) {
       return (
-        <pre className="my-2 rounded-md bg-surface-3 border border-border px-3 py-2 text-[13px] font-mono overflow-x-auto whitespace-pre-wrap">
+        <pre className="my-2 rounded-md bg-surface-3 border border-border px-3 py-2 text-[0.85em] font-mono overflow-x-auto whitespace-pre-wrap">
           <code className={className} {...props}>
             {children}
           </code>
@@ -58,23 +58,26 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
     );
   },
   // Headings — compact, message-scale (docs override these with a larger,
-  // anchored hierarchy). One step above the 15px body so structure is scannable.
+  // anchored hierarchy). Em-based: one step above the adjustable body size so
+  // structure stays scannable at every chat-font setting.
   h1({ children }) {
-    return <h1 className="text-lg font-semibold mt-4 mb-2 text-foreground">{children}</h1>;
+    return <h1 className="text-[1.2em] font-semibold mt-4 mb-2 text-foreground">{children}</h1>;
   },
   h2({ children }) {
-    return <h2 className="text-base font-semibold mt-3.5 mb-1.5 text-foreground">{children}</h2>;
+    return <h2 className="text-[1.08em] font-semibold mt-3.5 mb-1.5 text-foreground">{children}</h2>;
   },
   h3({ children }) {
-    return <h3 className="text-[15px] font-semibold mt-2.5 mb-1 text-foreground">{children}</h3>;
+    return <h3 className="text-[1em] font-semibold mt-2.5 mb-1 text-foreground">{children}</h3>;
   },
 };
 
 const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
   return (
-    // 15px body (up from 14) with a roomier line height — assistant answers are
-    // long-form reading, and the denser size read as cramped (user feedback).
-    <div className="text-[15px] text-foreground leading-[1.75]">
+    // Body size comes from the --chat-font var (Settings → 화면, default 16px)
+    // with a roomier line height — assistant answers are long-form reading, and
+    // the old denser 14px read as cramped (user feedback). Headings/code inside
+    // are em-based so everything scales with the setting together.
+    <div className="text-foreground leading-[1.75]" style={{ fontSize: "var(--chat-font, 16px)" }}>
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={markdownComponents}>
         {content}
       </ReactMarkdown>

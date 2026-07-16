@@ -101,6 +101,21 @@ export function loadWallpaper(): string {
     return DEFAULT_WALLPAPER;
   }
 }
+// Chat message text size (px). Message bodies read it via the --chat-font CSS
+// var so every chat surface scales together; adjustable in Settings → 화면.
+const CHAT_FONT_KEY = "ariadne.chatFont.v1";
+export const DEFAULT_CHAT_FONT = 16;
+export function loadChatFontSize(): number {
+  try {
+    const n = Number(localStorage.getItem(CHAT_FONT_KEY));
+    return n >= 14 && n <= 20 ? n : DEFAULT_CHAT_FONT;
+  } catch {
+    return DEFAULT_CHAT_FONT;
+  }
+}
+export function applyChatFontSize(px: number): void {
+  document.documentElement.style.setProperty("--chat-font", `${px.toString()}px`);
+}
 
 export type SidebarSection =
   | "chat"
@@ -176,6 +191,10 @@ export interface UIStore {
   toggleTheme: () => void;
   wallpaper: string;
   setWallpaper: (key: string) => void;
+
+  // Chat message text size (px) — persisted; applied as the --chat-font var.
+  chatFontSize: number;
+  setChatFontSize: (px: number) => void;
 
   // Create workspace dialog
   createWorkspaceOpen: boolean;
@@ -309,6 +328,13 @@ export const useUIStore = create<UIStore>((set, get) => ({
     applyWallpaper(key, get().theme);
     try { localStorage.setItem(WALLPAPER_KEY, key); } catch { /* ignore */ }
     set({ wallpaper: key });
+  },
+
+  chatFontSize: loadChatFontSize(),
+  setChatFontSize: (px) => {
+    applyChatFontSize(px);
+    try { localStorage.setItem(CHAT_FONT_KEY, String(px)); } catch { /* ignore */ }
+    set({ chatFontSize: px });
   },
 
   createWorkspaceOpen: false,
