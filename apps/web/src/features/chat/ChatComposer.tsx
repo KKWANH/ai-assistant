@@ -287,7 +287,7 @@ function SkillsDropdown({
   return (
     <>
       <div className="fixed inset-0 z-20" onClick={onClose} />
-      <div className="absolute bottom-full mb-1 left-0 z-30 w-80 max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg p-1">
+      <div className="absolute bottom-full mb-1 left-0 z-30 w-80 max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto rounded-lg border border-border/60 bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg p-1">
         {filtered.length > 0 ? (
           <ul className="flex flex-col">
             {filtered.map((s) => {
@@ -1268,7 +1268,7 @@ export function ChatComposer({
                   className="fixed inset-0 z-10"
                   onClick={() => setWsMenuOpen(false)}
                 />
-                <div className="absolute bottom-full left-0 mb-1 z-20 w-52 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs">
+                <div className="absolute bottom-full left-0 mb-1 z-20 w-52 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border/60 bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs">
                   <button
                     className="w-full text-left px-3 py-1.5 text-muted-foreground hover:bg-surface-3 hover:text-foreground transition-colors"
                     onClick={() => {
@@ -1333,7 +1333,7 @@ export function ChatComposer({
                   className="fixed inset-0 z-10"
                   onClick={() => setModelMenuOpen(false)}
                 />
-                <div className="absolute bottom-full left-0 mb-1 z-20 w-64 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs">
+                <div className="absolute bottom-full left-0 mb-1 z-20 w-64 max-w-[calc(100vw-1.5rem)] max-h-[70vh] overflow-y-auto rounded-lg border border-border/60 bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs">
                   {/* Per-workspace model scope (P2): in a workspace chat the
                       picker edits THIS workspace's model, with a one-click
                       revert to the account default. */}

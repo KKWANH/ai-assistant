@@ -21,6 +21,7 @@
  * Right Inspector: contextual — only on workspace/template/run detail screens.
  */
 import { type ReactNode, type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useNavigate, useLocation, matchPath, Link } from "react-router-dom";
 import { NotificationsBell } from "../../features/alerts/NotificationsBell";
@@ -151,7 +152,7 @@ function ChatSortControl() {
       {mounted && (
         <div
           role="menu"
-          className={`absolute right-0 top-full z-20 mt-1 min-w-[120px] origin-top-right rounded-lg border border-border bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] py-1 shadow-xl transition-all duration-100 ${
+          className={`absolute right-0 top-full z-20 mt-1 min-w-[120px] origin-top-right rounded-lg border border-border bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] py-1 shadow-xl transition-all duration-100 ${
             leaving ? "opacity-0 scale-95" : "animate-fade-in"
           }`}
         >
@@ -333,7 +334,7 @@ function ChatRow({
       {menuMounted && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
-          <div className={`absolute left-1 top-9 z-30 w-48 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs origin-top-left transition-all duration-100 ${menuLeaving ? "opacity-0 scale-95" : "animate-fade-in"}`}>
+          <div className={`absolute left-1 top-9 z-30 w-48 max-w-[calc(100vw-2rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-border/60 bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs origin-top-left transition-all duration-100 ${menuLeaving ? "opacity-0 scale-95" : "animate-fade-in"}`}>
             <button
               className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
               onClick={() => {
@@ -506,6 +507,12 @@ export function AppShell({ children }: AppShellProps) {
   // too busy. The header stays as a one-tap toggle.
   const [runsExpanded, setRunsExpanded] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  // Anchor for the portaled help menu — the top bar's backdrop-blur creates a
+  // stacking context, so a dropdown rendered inside it paints UNDER later
+  // siblings (<main>, the workspace header): visible but unclickable. The menu
+  // is portaled to <body> and fixed-positioned from the button's rect instead.
+  const helpBtnRef = useRef<HTMLSpanElement>(null);
+  const [helpMenuRight, setHelpMenuRight] = useState(0);
 
   const accountMode: AccountMode = me?.account.mode ?? "standard";
   const isSimple = accountMode === "simple";
@@ -842,48 +849,60 @@ export function AppShell({ children }: AppShellProps) {
           >
             <Search className="h-3.5 w-3.5" />
           </IconButton>
-          {/* Help — guided tour or the full tutorial page; standard mode, ≥sm */}
+          {/* Help — guided tour or the full tutorial page; standard mode, ≥sm.
+              The menu is PORTALED to <body>: rendered inside the blurred top
+              bar it lands in the bar's stacking context and paints under the
+              main canvas / workspace header — visible but unclickable. */}
           {!isSimple && (
-            <span className="hidden sm:flex relative">
+            <span ref={helpBtnRef} className="hidden sm:flex relative">
               <IconButton
                 label={t("nav.helpAndTutorial")}
                 description={t("nav.helpAndTutorial.desc")}
                 size="sm"
-                onClick={() => setHelpMenuOpen((v) => !v)}
+                onClick={() => {
+                  const r = helpBtnRef.current?.getBoundingClientRect();
+                  if (r) setHelpMenuRight(Math.max(8, window.innerWidth - r.right));
+                  setHelpMenuOpen((v) => !v);
+                }}
                 data-tour="help-button"
               >
                 <HelpCircle className="h-3.5 w-3.5" />
               </IconButton>
-              {helpMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-30"
-                    onClick={() => setHelpMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 top-9 z-40 w-52 rounded-lg border border-border/60 bg-card/72 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs">
-                    <button
-                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
-                      onClick={() => {
-                        setHelpMenuOpen(false);
-                        setTutorialOpen(true);
-                      }}
+              {helpMenuOpen &&
+                createPortal(
+                  <>
+                    <div
+                      className="fixed inset-0 z-[var(--z-modal)]"
+                      onClick={() => setHelpMenuOpen(false)}
+                    />
+                    <div
+                      className="fixed top-11 z-[var(--z-modal)] w-52 rounded-lg border border-border/60 bg-card/90 backdrop-blur-xl backdrop-saturate-[1.8] ring-1 ring-inset ring-white/[0.08] shadow-lg py-1 text-xs"
+                      style={{ right: helpMenuRight }}
                     >
-                      <Compass className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      {t("nav.guidedTour")}
-                    </button>
-                    <button
-                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
-                      onClick={() => {
-                        setHelpMenuOpen(false);
-                        navigate("/tutorial");
-                      }}
-                    >
-                      <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      {t("nav.fullTutorial")}
-                    </button>
-                  </div>
-                </>
-              )}
+                      <button
+                        className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
+                        onClick={() => {
+                          setHelpMenuOpen(false);
+                          setTutorialOpen(true);
+                        }}
+                      >
+                        <Compass className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        {t("nav.guidedTour")}
+                      </button>
+                      <button
+                        className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-foreground hover:bg-surface-3 transition-colors"
+                        onClick={() => {
+                          setHelpMenuOpen(false);
+                          navigate("/tutorial");
+                        }}
+                      >
+                        <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        {t("nav.fullTutorial")}
+                      </button>
+                    </div>
+                  </>,
+                  document.body,
+                )}
             </span>
           )}
           {/* Report a problem — available to everyone */}

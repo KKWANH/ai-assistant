@@ -1124,9 +1124,10 @@ export function WorkspaceOverview() {
     /* h-full + flex-col so the surface tab can flex-1 fill */
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header strip — always visible, does NOT scroll. Full-width px-5 so its
-          left edge lines up with the tab bar below. Glass chrome like the top
-          bar: translucent over the wallpaper instead of an opaque slab. */}
-      <div className="shrink-0 px-5 pt-5 pb-3 border-b border-border/60 bg-background/40 glass">
+          left edge lines up with the tab bar below. No fill: the title sits
+          directly on the wallpaper (a tinted block here read as an off-theme
+          slab against the glass chrome). */}
+      <div className="shrink-0 px-5 pt-5 pb-3 border-b border-border/60">
         <PageHeader
           icon={<FolderOpen className="h-5 w-5" />}
           title={<WorkspaceTitle workspaceId={ws.id} name={ws.name} />}
