@@ -578,6 +578,10 @@ function buildHistoryText(history: ChatMessage[]): string {
   let totalChars = 0;
 
   for (const msg of recent) {
+    // Skip empty turns (an aborted/failed reply persists as "") — a bare
+    // "Assistant:" line adds nothing and degenerate history has been seen to
+    // derail some models.
+    if (!msg.content.trim()) continue;
     const role = msg.role === "user" ? "User" : "Assistant";
     const content = msg.content.slice(0, 1500); // per-message cap
     const line = `${role}: ${content}`;
