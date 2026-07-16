@@ -164,6 +164,12 @@ html {
   font-size: 20px;
   /* Hangul reads better with slightly looser leading than Latin. */
   line-height: 1.6;
+  /* Korean line-wrapping: break between words (어절), never inside one — the
+     single biggest Hangul readability fix. English is unaffected, and
+     overflow-wrap still lets unbroken runs (URLs, paths, long code tokens)
+     break rather than overflow. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Paint the canvas itself in the theme colour. Without this, the html

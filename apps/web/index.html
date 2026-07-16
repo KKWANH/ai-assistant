@@ -24,17 +24,11 @@
     <meta property="og:image" content="/icon-512.png" />
     <meta property="og:type" content="website" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
-    <!-- Pretendard — unified Latin + Hangul UI font (dynamic subset) -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
-    />
+    <!-- Fonts are SELF-HOSTED (Pretendard via src/main.tsx import — bundled by
+         Vite, served from this origin). No CDN font links: the app is
+         local-first and must render Korean identically offline / in the
+         desktop shell. Pretendard's Latin is Inter-derived, so it covers
+         English too; code falls back to the system mono stack. -->
   </head>
   <body>
     <div id="root"></div>

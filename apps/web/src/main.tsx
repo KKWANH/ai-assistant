@@ -9,6 +9,10 @@ import { applyWallpaper } from "./lib/wallpaper";
 import { loadTheme, loadWallpaper, loadChatFontSize, applyChatFontSize } from "./lib/store";
 import { initGlassPointer } from "./lib/glass";
 import { ensureLocale, type Locale } from "./lib/i18n";
+// Self-hosted Pretendard (variable, per-glyph-range subsets — only the ranges a
+// page actually uses are fetched). Bundled by Vite and served from this origin
+// so Korean renders identically offline / in the desktop shell (no CDN).
+import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./styles/globals.css";
 
 // Apply the persisted theme + wallpaper on boot so CSS vars are set before
