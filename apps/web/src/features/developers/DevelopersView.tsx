@@ -319,7 +319,11 @@ export function DevelopersView() {
           <PageBody content={page.content} />
         ) : (
           <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8 lg:px-10">
-            <article className="min-w-0 max-w-3xl flex-1">
+            {/* text-sm sets the docs body size (the shared markdownBase leaves
+                size to the container; docs headings carry their own larger
+                sizes). Without it the body inherited the 20px root and read
+                oversized after the chat/docs prose share. */}
+            <article className="min-w-0 max-w-3xl flex-1 text-sm leading-relaxed">
               <Breadcrumbs section={section} page={page} />
               <h1 className="text-2xl font-bold tracking-tight text-foreground">{page.title}</h1>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{page.description}</p>

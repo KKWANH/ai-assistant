@@ -466,8 +466,14 @@ export async function buildChatContext(
   // Date grounding — without it, "최근/latest/올해" questions get answered from
   // the model's training-era sense of "now". Day-granular, so Anthropic prompt
   // caching still works within a day.
+  // Use LOCAL calendar fields (not toISOString, which is UTC) so the date and
+  // weekday agree with each other and with the user — the server runs on the
+  // user's own machine, and a UTC date could read as "yesterday" before ~9am KST.
   const today = new Date();
-  const dateLine = ` Today is ${today.toISOString().slice(0, 10)} (${today.toLocaleDateString("en-US", { weekday: "long" })}).`;
+  const y = today.getFullYear();
+  const m = (today.getMonth() + 1).toString().padStart(2, "0");
+  const d = today.getDate().toString().padStart(2, "0");
+  const dateLine = ` Today is ${y.toString()}-${m}-${d} (${today.toLocaleDateString("en-US", { weekday: "long" })}).`;
   const baseSystem =
     "You are Ariadne's assistant — a calm, precise, local-first AI workspace assistant. " +
     "Help the user with their questions, files, and research tasks. " +
@@ -511,7 +517,16 @@ export async function buildChatContext(
     images,
     searchResults,
     contextSources,
-    hasSources: (searchResults?.length ?? 0) > 0 || contextSources.length > 0,
+    // Attachments are sources too — their extracted text (attachmentBlock) and/or
+    // rendered pages (images) are IN the prompt. Without counting them, an answer
+    // grounded purely in an uploaded PDF (the lecture-prep flow) took the
+    // no-source self-check branch and got a false "answered without sources" note
+    // instead of being cross-checked against the file.
+    hasSources:
+      (searchResults?.length ?? 0) > 0 ||
+      contextSources.length > 0 ||
+      !!attachmentBlock ||
+      images.length > 0,
   };
 }
 
@@ -577,7 +592,12 @@ function buildHistoryText(history: ChatMessage[]): string {
   const lines: string[] = [];
   let totalChars = 0;
 
-  for (const msg of recent) {
+  // Walk NEWEST-first and stop at the char cap, so when the window is char-heavy
+  // we keep the turns CLOSEST to the current question (the ones a follow-up like
+  // "그거 다시 설명해줘" refers to) instead of the oldest. Reverse back to
+  // chronological order for the prompt.
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const msg = recent[i]!;
     // Skip empty turns (an aborted/failed reply persists as "") — a bare
     // "Assistant:" line adds nothing and degenerate history has been seen to
     // derail some models.
@@ -585,10 +605,11 @@ function buildHistoryText(history: ChatMessage[]): string {
     const role = msg.role === "user" ? "User" : "Assistant";
     const content = msg.content.slice(0, 1500); // per-message cap
     const line = `${role}: ${content}`;
+    if (totalChars + line.length > 12_000 && lines.length > 0) break;
     totalChars += line.length;
-    if (totalChars > 12_000) break;
     lines.push(line);
   }
+  lines.reverse();
 
   return lines.join("\n");
 }

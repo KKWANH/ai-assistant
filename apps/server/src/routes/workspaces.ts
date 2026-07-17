@@ -355,16 +355,18 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       if (deleteFiles) {
         // A workspace can be rooted anywhere on the host, so an rm -rf of its
         // root is genuinely dangerous. Refuse obviously-catastrophic targets —
-        // the filesystem root, the user's home directory, or any top-level
-        // (single-segment) directory like /Users or /tmp — even though the user
-        // opted in. Anything deeper is removed.
+        // the filesystem root, the user's home directory, or any shallow
+        // (< 3-segment) path, which covers not just /Users and /tmp but mount
+        // roots like /Volumes/<drive> (macOS) or /mnt/<x> (Linux) that would wipe
+        // a whole external/removable volume — even though the user opted in.
+        // Real workspaces live several levels deep; anything deeper is removed.
         try {
           const resolved = path.resolve(workspace.rootPath);
           const segments = resolved.split(path.sep).filter(Boolean);
           const isUnsafe =
             resolved === path.parse(resolved).root ||
             resolved === path.resolve(os.homedir()) ||
-            segments.length < 2;
+            segments.length < 3;
           if (isUnsafe) {
             logger.warn({ rootPath: resolved }, "Refused to delete workspace files — unsafe root path");
           } else if (fs.existsSync(resolved)) {

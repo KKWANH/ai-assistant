@@ -98,7 +98,10 @@ const FRONTIER_PROVIDER_ORDER: ProviderId[] = ["gemini", "anthropic", "openai", 
 // An id absent from the provider's registry models is ignored (see pickTierModel),
 // so a registry rename degrades gracefully instead of 400ing the vendor API.
 const TIER_MODELS: Partial<Record<ProviderId, { frontier: string; strong: string }>> = {
-  gemini: { frontier: "gemini-2.5-flash", strong: "gemini-2.5-pro" },
+  // strong = the current premium rung (kept in step with the model-catalog
+  // refresh — 2.5-pro is now a hidden prior generation, so escalating to it
+  // would move a Gemini 3.5-flash user SIDEWAYS onto an older model).
+  gemini: { frontier: "gemini-2.5-flash", strong: "gemini-3.1-pro-preview" },
 };
 
 /**
@@ -141,13 +144,14 @@ export function resolveTierSettings(tier: ModelTier): Settings {
   return buildSettings(provider, pickTierModel(provider, tier === "frontier-strong" ? "strong" : "frontier"));
 }
 
-/** Parse a local model's parameter size from its tag — the last "Nb" token:
- *  "qwen3:8b" → 8, "qwen3:0.6b" → 0.6, "llama3.1:70b" → 70. 0 when there's no
- *  size tag (e.g. an embedding model), so those never win the "biggest" pick. */
+/** Parse a local model's parameter size from its tag — the LARGEST "Nb" token:
+ *  "qwen3:8b" → 8, "qwen3:0.6b" → 0.6, "llama3.1:70b" → 70. Max (not last) so a
+ *  MoE tag like "qwen3:30b-a3b" reads as its 30B total, not the 3B active-expert
+ *  suffix. 0 when there's no size tag (e.g. an embedding model), so those never
+ *  win the "biggest" pick. */
 function localParamSize(model: string): number {
-  const matches = [...model.matchAll(/(\d+(?:\.\d+)?)\s*b\b/gi)];
-  const last = matches[matches.length - 1];
-  return last ? Number.parseFloat(last[1]!) : 0;
+  const sizes = [...model.matchAll(/(\d+(?:\.\d+)?)\s*b\b/gi)].map((m) => Number.parseFloat(m[1]!));
+  return sizes.length ? Math.max(...sizes) : 0;
 }
 
 /**

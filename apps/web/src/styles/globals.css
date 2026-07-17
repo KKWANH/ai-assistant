@@ -317,8 +317,11 @@ body {
    `position: relative` as unlayered CSS, which outranks the utility, so the nav
    stayed IN FLOW and reserved its full width — squeezing the main canvas to a
    sliver on phones. `nav.glass-control` (higher specificity) restores `fixed`;
-   a fixed element still anchors the sheen/specular pseudo-elements. */
-@media (width < 48rem) {
+   a fixed element still anchors the sheen/specular pseudo-elements.
+   max-width (not `width < 48rem` range syntax): the range form needs WebKit
+   16.4+ / newer WebKitGTK, and this override MUST fire in the desktop shell and
+   on older mobile Safari — matches Tailwind md=48rem (768px). */
+@media (max-width: 767.98px) {
   nav.glass-control {
     position: fixed;
   }

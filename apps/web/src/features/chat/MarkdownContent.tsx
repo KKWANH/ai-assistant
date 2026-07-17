@@ -34,8 +34,14 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
   // Code blocks — chat-specific: a ```html / ```svg block renders as a live
   // sandboxed preview (with a code toggle) instead of a listing.
   code({ className, children, ...props }) {
-    const isBlock = className?.startsWith("language-");
-    const lang = isBlock ? className!.slice("language-".length).toLowerCase() : "";
+    const lang = className?.startsWith("language-")
+      ? className.slice("language-".length).toLowerCase()
+      : "";
+    // A fenced block WITHOUT a language tag gets no `language-*` class, so also
+    // treat multi-line content as a block — otherwise a plain ``` block (common
+    // in answers: logs, shell output) falls to the inline branch and, since `pre`
+    // renders only its children, its newlines collapse into one run.
+    const isBlock = !!lang || String(children ?? "").includes("\n");
     if (lang === "html" || lang === "svg") {
       return <CodeBlockVisualization lang={lang} code={String(children ?? "").replace(/\n$/, "")} />;
     }

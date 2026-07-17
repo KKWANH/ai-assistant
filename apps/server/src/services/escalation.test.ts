@@ -44,8 +44,15 @@ test("cloud user escalates WITHIN their own provider — never cross-vendor (pri
 });
 
 test("no escalation when the provider's strong rung equals the current model", () => {
-  // claude-sonnet-4-6 IS Anthropic's resolvable strong rung → nothing higher.
-  assert.equal(resolveEscalation(S("anthropic", "claude-sonnet-4-6"), true, []), null);
+  // claude-sonnet-5 IS Anthropic's resolvable strong rung (its default) → nothing
+  // higher to reach for on this provider.
+  assert.equal(resolveEscalation(S("anthropic", "claude-sonnet-5"), true, []), null);
+});
+
+test("MoE size tag parses as total params, not the active-expert suffix", () => {
+  // qwen3:30b-a3b is a 30B model (3B active) — it must outrank a dense 8B.
+  const esc = resolveEscalation(S("ollama", "qwen3:8b"), true, ["qwen3:8b", "qwen3:30b-a3b"]);
+  assert.equal(esc?.model, "qwen3:30b-a3b");
 });
 
 test("a non-Ollama local provider (vLLM) is never handed an Ollama model", () => {

@@ -41,7 +41,10 @@ if (!root) throw new Error("Root element not found");
 // fetches ko (etc.) up front to avoid an English flash for non-English users.
 async function boot() {
   const bootLocale = (localStorage.getItem("ariadne.locale") as Locale | null) ?? "en";
-  await ensureLocale(bootLocale);
+  // Best-effort: a failed locale-chunk fetch (stale deploy, offline) must NOT
+  // block the whole app from mounting — English is bundled as the fallback, and
+  // the provider re-attempts the load. Never leave the user a blank screen.
+  await ensureLocale(bootLocale).catch(() => {});
 
   ReactDOM.createRoot(root!).render(
     <React.StrictMode>

@@ -1368,7 +1368,12 @@ export function ChatComposer({
                       {t("chat.composer.provider")}
                     </p>
                     <div className="flex flex-col gap-0.5">
+                      {/* Until provider status has loaded (or if the request
+                          failed) we don't KNOW a provider is unconfigured, so
+                          don't gate on it — otherwise every keyed provider shows
+                          disabled for the first ~second after opening the menu. */}
                       {SELECTABLE_PROVIDERS.map((p) => {
+                        const statusKnown = providerStatus !== undefined;
                         const status = providerStatus?.find((s) => s.id === p);
                         const reachable = status?.configured ?? false;
                         const isActive = p === currentProvider;
@@ -1378,7 +1383,7 @@ export function ChatComposer({
                         // providers (Ollama/vLLM) keep their own reachability flow,
                         // and the active provider is never disabled (so you can see
                         // your current pick even if its key was cleared).
-                        const selectable = reachable || isLocal || isActive;
+                        const selectable = !statusKnown || reachable || isLocal || isActive;
                         return (
                           <button
                             key={p}
@@ -1395,7 +1400,7 @@ export function ChatComposer({
                             onClick={() => { if (selectable) void handleProviderChange(p); }}
                           >
                             <span>{PROVIDER_LABELS[p]}</span>
-                            {p !== "mock" && (
+                            {p !== "mock" && statusKnown && (
                               reachable ? (
                                 <span className="text-2xs text-success">✓</span>
                               ) : isLocal ? (
