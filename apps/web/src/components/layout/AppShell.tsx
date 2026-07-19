@@ -86,6 +86,7 @@ import { CommandMenu } from "../ui/CommandMenu";
 import type { CommandItem } from "../ui/CommandMenu";
 import { FirstRunWizard } from "../../features/onboarding/FirstRunWizard";
 import { useToast } from "../ui/Toast";
+import { useConfirm } from "../ui/ConfirmDialog";
 import { Inspector } from "./Inspector";
 import { SidePanel } from "./SidePanel";
 import { DeleteWorkspaceDialog } from "../../features/workspace/DeleteWorkspaceDialog";
@@ -465,12 +466,21 @@ export function AppShell({ children }: AppShellProps) {
   const { data: me } = useMe();
   const updateMode = useUpdateMode();
   const logout = useLogout();
+  const { confirm } = useConfirm();
   const updateWorkspace = useUpdateWorkspace();
   const deleteEmptyChats = useDeleteEmptyChats();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useT();
+
+  // Sign-out asks first — an accidental tap on the nav/sidebar button used to log
+  // the family straight out; a small confirm makes it deliberate.
+  const handleSignOut = async () => {
+    if (await confirm({ title: t("nav.signOut"), message: t("nav.signOut.confirm"), confirmLabel: t("nav.signOut") })) {
+      void logout.mutateAsync();
+    }
+  };
 
   // Workspaces stay manually orderable by drag. Compute the moved item's new
   // sort_order (a midpoint of its neighbours, so one write), then optimistically
@@ -952,7 +962,7 @@ export function AppShell({ children }: AppShellProps) {
                   label={t("nav.signOut")}
                   description={t("nav.signOut.desc")}
                   size="sm"
-                  onClick={() => void logout.mutateAsync()}
+                  onClick={handleSignOut}
                 >
                   <LogOut className="h-3.5 w-3.5" />
                 </IconButton>
@@ -1244,7 +1254,7 @@ export function AppShell({ children }: AppShellProps) {
                 <IconButton
                   label={t("nav.signOut")}
                   size="xs"
-                  onClick={() => void logout.mutateAsync()}
+                  onClick={handleSignOut}
                 >
                   <LogOut className="h-3 w-3" />
                 </IconButton>

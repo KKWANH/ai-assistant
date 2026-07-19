@@ -74,6 +74,7 @@ const en = {
   "nav.scripts": "Scripts",
   "nav.signOut": "Sign out",
   "nav.signOut.desc": "Sign out of this device",
+  "nav.signOut.confirm": "Sign out? You'll need your username and password to sign back in.",
   "nav.helpAndTutorial": "Help & tutorial",
   "nav.helpAndTutorial.desc": "Guided tour and the full tutorial",
   "nav.toggleTheme": "Toggle theme",

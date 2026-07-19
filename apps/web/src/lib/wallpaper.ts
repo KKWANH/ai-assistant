@@ -20,16 +20,19 @@ export interface Wallpaper {
   swatch: string;
 }
 
-// Each dark preset is a MULTI-STOP, multi-hue gradient (bright saturated corner
-// → mid tone → near-black) so the glass, blurring it, shows real colour
-// VARIATION across its surface — that variation is what reads as "glassy" (a
-// flat single tone blurs to a flat panel). A second, offset conic-ish accent
-// glow adds cross-surface change without floating "orbs".
+// Each dark preset = several soft radial colour GLOWS (top-left hero + top-right
+// accent + a lower glow) fading to transparent over a near-black base. Layering
+// glows over a base — rather than one opaque hero gradient that paints the whole
+// canvas near-black past its midpoint — keeps real colour VARIATION in every
+// region (including the lower half, where the composer + content cards sit), so
+// translucent glass surfaces there pick up a tint instead of reading flat. Smooth
+// glows only, no hard-edged "orbs". The lower glow is what lets the floating
+// composer and the (now more translucent) cards hold colour.
 export const WALLPAPERS: Wallpaper[] = [
-  { key: "midnight", label: "미드나잇", css: "radial-gradient(120% 130% at 14% -8%, rgb(46 42 86), rgb(22 24 52) 40%, rgb(6 7 14) 80%), radial-gradient(90% 90% at 92% 8%, rgb(58 30 74), transparent 55%)", cssLight: "radial-gradient(120% 130% at 14% -8%, rgb(226 226 246), rgb(238 238 248) 50%, rgb(250 250 252) 85%)", swatch: "linear-gradient(135deg, rgb(52 40 92), rgb(9 9 14))" },
-  { key: "graphite", label: "그래파이트", css: "radial-gradient(120% 130% at 14% -8%, rgb(54 54 66), rgb(26 26 34) 46%, rgb(8 8 11) 84%), radial-gradient(90% 90% at 92% 8%, rgb(40 44 58), transparent 55%)", cssLight: "radial-gradient(120% 130% at 14% -8%, rgb(236 236 240), rgb(244 244 247) 50%, rgb(250 250 251) 85%)", swatch: "linear-gradient(135deg, rgb(56 56 68), rgb(9 9 11))" },
-  { key: "ocean", label: "오션", css: "radial-gradient(120% 130% at 14% -8%, rgb(20 78 122), rgb(10 40 72) 42%, rgb(3 9 20) 82%), radial-gradient(90% 90% at 92% 8%, rgb(18 92 96), transparent 55%)", cssLight: "radial-gradient(120% 130% at 14% -8%, rgb(214 234 248), rgb(236 245 251) 50%, rgb(248 251 253) 85%)", swatch: "linear-gradient(135deg, rgb(22 92 120), rgb(4 12 26))" },
-  { key: "violet", label: "바이올렛", css: "radial-gradient(120% 130% at 14% -8%, rgb(78 36 122), rgb(42 22 74) 42%, rgb(9 6 20) 82%), radial-gradient(90% 90% at 92% 8%, rgb(122 40 96), transparent 55%)", cssLight: "radial-gradient(120% 130% at 14% -8%, rgb(238 226 250), rgb(246 240 252) 50%, rgb(251 249 253) 85%)", swatch: "linear-gradient(135deg, rgb(96 44 132), rgb(12 6 24))" },
+  { key: "midnight", label: "미드나잇", css: "radial-gradient(92% 78% at 12% -8%, rgb(74 58 140), transparent 55%), radial-gradient(76% 66% at 90% 2%, rgb(100 42 114), transparent 50%), radial-gradient(120% 85% at 66% 116%, rgb(30 52 120), transparent 56%), rgb(8 8 15)", cssLight: "radial-gradient(92% 78% at 12% -8%, rgb(223 218 249), transparent 62%), radial-gradient(76% 66% at 90% 2%, rgb(242 223 246), transparent 58%), radial-gradient(120% 85% at 66% 116%, rgb(220 228 250), transparent 62%), rgb(250 250 252)", swatch: "linear-gradient(135deg, rgb(84 60 148), rgb(9 9 16))" },
+  { key: "graphite", label: "그래파이트", css: "radial-gradient(92% 78% at 12% -8%, rgb(70 70 84), transparent 55%), radial-gradient(76% 66% at 90% 2%, rgb(54 58 74), transparent 50%), radial-gradient(120% 85% at 66% 116%, rgb(46 50 64), transparent 56%), rgb(8 8 11)", cssLight: "radial-gradient(92% 78% at 12% -8%, rgb(230 230 236), transparent 62%), radial-gradient(76% 66% at 90% 2%, rgb(232 234 240), transparent 58%), radial-gradient(120% 85% at 66% 116%, rgb(228 230 236), transparent 62%), rgb(250 250 251)", swatch: "linear-gradient(135deg, rgb(64 64 78), rgb(9 9 11))" },
+  { key: "ocean", label: "오션", css: "radial-gradient(92% 78% at 12% -8%, rgb(26 98 150), transparent 55%), radial-gradient(76% 66% at 90% 2%, rgb(20 112 118), transparent 50%), radial-gradient(120% 85% at 66% 116%, rgb(16 62 110), transparent 56%), rgb(4 10 20)", cssLight: "radial-gradient(92% 78% at 12% -8%, rgb(212 234 249), transparent 62%), radial-gradient(76% 66% at 90% 2%, rgb(216 244 246), transparent 58%), radial-gradient(120% 85% at 66% 116%, rgb(214 232 250), transparent 62%), rgb(248 251 253)", swatch: "linear-gradient(135deg, rgb(24 100 138), rgb(4 12 26))" },
+  { key: "violet", label: "바이올렛", css: "radial-gradient(92% 78% at 12% -8%, rgb(98 46 150), transparent 55%), radial-gradient(76% 66% at 90% 2%, rgb(142 46 110), transparent 50%), radial-gradient(120% 85% at 66% 116%, rgb(56 38 130), transparent 56%), rgb(10 6 20)", cssLight: "radial-gradient(92% 78% at 12% -8%, rgb(236 224 250), transparent 62%), radial-gradient(76% 66% at 90% 2%, rgb(248 226 242), transparent 58%), radial-gradient(120% 85% at 66% 116%, rgb(228 224 250), transparent 62%), rgb(251 249 253)", swatch: "linear-gradient(135deg, rgb(112 48 156), rgb(12 6 24))" },
   { key: "aurora", label: "오로라", css: "linear-gradient(135deg, rgb(14 70 86) 0%, rgb(30 34 96) 42%, rgb(78 28 96) 78%, rgb(30 16 40) 100%)", cssLight: "linear-gradient(135deg, rgb(216 240 244), rgb(230 230 250) 45%, rgb(247 230 246))", swatch: "linear-gradient(135deg, rgb(16 78 92), rgb(34 32 100) 50%, rgb(92 34 104))" },
   { key: "black", label: "순수 블랙", css: "#000000", cssLight: "#ffffff", swatch: "#000000" },
 ];

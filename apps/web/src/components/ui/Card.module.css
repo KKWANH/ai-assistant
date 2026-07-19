@@ -2,12 +2,13 @@
 .card {
   border-radius: var(--radius-xl);
   border: 1px solid rgb(var(--border));
-  /* Glass: a slightly translucent fill lets the wallpaper's color variation
-     bleed through (cards sit on a static gradient, so translucency alone reads
-     as frosted — no backdrop-filter layer needed), and a faint top hairline is
-     the rim light. Content stays high-contrast on the near-opaque fill. */
-  background-color: rgb(var(--card) / 0.82);
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+  /* Glass: a translucent fill lets the wallpaper's colour variation bleed through
+     (cards sit on a static gradient, so translucency alone reads as frosted — no
+     backdrop-filter layer needed), and a faint top hairline is the rim light. At
+     ~0.64 the card picks up a real tint from the multi-hue wallpaper instead of
+     reading as an opaque slab, while the dark fill keeps light text high-contrast. */
+  background-color: rgb(var(--card) / 0.64);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
 }
 
 .interactive {

@@ -67,6 +67,7 @@ const ko: Record<TranslationKey, string> = {
   "nav.scripts": "스크립트",
   "nav.signOut": "로그아웃",
   "nav.signOut.desc": "이 기기에서 로그아웃",
+  "nav.signOut.confirm": "로그아웃하시겠어요? 다시 로그인하려면 아이디와 비밀번호가 필요해요.",
   "nav.helpAndTutorial": "도움말 및 튜토리얼",
   "nav.helpAndTutorial.desc": "둘러보기 가이드와 전체 튜토리얼",
   "nav.toggleTheme": "테마 전환",
