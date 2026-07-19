@@ -333,33 +333,44 @@ body {
    The shared CodeBlock renders <code class="hljs">…</code>. */
 .hljs-comment,
 .hljs-quote { color: rgb(var(--muted-foreground)); font-style: italic; }
+/* Blue — keywords, types, tags, sections: the structural skeleton. Mirrors the
+   file/surface editors (WorkspaceFileEditor), where keyword/type/tag are --info,
+   so chat code blocks and the editors colour code the same way. `--accent` is a
+   near-white surface tint in this theme, so keywords were rendering invisible. */
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-built_in,
 .hljs-name,
 .hljs-tag,
-.hljs-doctag { color: rgb(var(--accent)); }
-.hljs-string,
-.hljs-title,
+.hljs-type,
 .hljs-section,
+.hljs-doctag { color: rgb(var(--info)); }
+/* Green — strings and additions. */
+.hljs-string,
+.hljs-regexp,
 .hljs-selector-class,
 .hljs-template-tag,
 .hljs-addition { color: rgb(var(--success)); }
+/* Amber — numbers, literals, attributes, meta. */
 .hljs-number,
 .hljs-literal,
 .hljs-symbol,
 .hljs-bullet,
 .hljs-meta,
-.hljs-selector-id,
-.hljs-link { color: rgb(var(--warning)); }
-.hljs-variable,
-.hljs-template-variable,
 .hljs-attr,
 .hljs-attribute,
+.hljs-selector-id { color: rgb(var(--warning)); }
+/* Function / class names — plain foreground but semibold, so they read as names
+   without washing the whole block blue (matches the editor's treatment). */
+.hljs-title { color: rgb(var(--foreground)); font-weight: 600; }
+/* Variables and properties stay plain foreground — colouring them too makes
+   everything blue and defeats the point of highlighting the keywords. */
+.hljs-variable,
+.hljs-template-variable,
 .hljs-property,
-.hljs-params,
-.hljs-type { color: rgb(var(--info)); }
+.hljs-params { color: rgb(var(--foreground)); }
 .hljs-deletion { color: rgb(var(--destructive)); }
+.hljs-link { color: rgb(var(--info)); text-decoration: underline; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 
