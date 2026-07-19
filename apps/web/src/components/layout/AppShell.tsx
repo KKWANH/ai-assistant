@@ -98,8 +98,8 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-/** Monochrome Ariadne mark — her thread wound into a spiral: the clew that
- *  traces the one path through the labyrinth. Inherits the current text color. */
+/** Monochrome Ariadne mark — a spun web (minimal corner web): radial spokes from
+ *  an anchor corner + a connecting thread. Inherits the current text color. */
 function Logo({ className }: { className?: string }) {
   return (
     <svg
@@ -107,12 +107,13 @@ function Logo({ className }: { className?: string }) {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.9}
+      strokeWidth={2.3}
       strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M3.5 16 A11.5 11.5 0 0 1 26.5 16 A9.5 9.5 0 0 1 7.5 16 A7.5 7.5 0 0 1 22.5 16 A5.5 5.5 0 0 1 11.5 16 A2.25 2.25 0 0 1 16 16" />
-      <circle cx="16" cy="16" r="1.7" fill="currentColor" stroke="none" />
+      <path d="M7 25 7 7 M7 25 16 9 M7 25 24 17 M7 25 25 25" />
+      <path d="M7 13 14 14.5 20.5 19 23 25" />
     </svg>
   );
 }
