@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
   <!-- Ariadne — her thread wound into a spiral: the clew that traces the one
-       path through the labyrinth. -->
-  <rect width="32" height="32" rx="7" fill="#18181b"/>
+       path through the labyrinth. Favicon = a flat solid tile (reads cleanly at
+       16px, where a glass/gradient just turns to mud); the symbol is unchanged. -->
+  <rect width="32" height="32" rx="7" fill="#4a3a8c"/>
   <path d="M3.5 16 A11.5 11.5 0 0 1 26.5 16 A9.5 9.5 0 0 1 7.5 16 A7.5 7.5 0 0 1 22.5 16 A5.5 5.5 0 0 1 11.5 16 A2.25 2.25 0 0 1 16 16"
         fill="none" stroke="#fafafa" stroke-width="1.9" stroke-linecap="round"/>
   <circle cx="16" cy="16" r="1.7" fill="#fafafa"/>
