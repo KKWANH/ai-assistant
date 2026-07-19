@@ -21,6 +21,7 @@ import remarkGfm from "remark-gfm";
 import remarkCjkFriendly from "remark-cjk-friendly";
 import CodeBlockVisualization from "./CodeBlockVisualization";
 import { baseMarkdownComponents } from "../../lib/markdownBase";
+import { CodeBlock } from "../../components/ui/CodeBlock";
 
 const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   // Shared body prose (paragraphs, lists, tables, quotes, rules, links).
@@ -46,13 +47,7 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>["components
       return <CodeBlockVisualization lang={lang} code={String(children ?? "").replace(/\n$/, "")} />;
     }
     if (isBlock) {
-      return (
-        <pre className="my-2 rounded-md bg-surface-3 border border-border px-3 py-2 text-[0.85em] font-mono overflow-x-auto whitespace-pre-wrap">
-          <code className={className} {...props}>
-            {children}
-          </code>
-        </pre>
-      );
+      return <CodeBlock language={lang || undefined} code={String(children ?? "").replace(/\n$/, "")} />;
     }
     return (
       <code

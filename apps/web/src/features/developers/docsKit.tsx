@@ -13,9 +13,10 @@ import { Link } from "react-router-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkCjkFriendly from "remark-cjk-friendly";
-import { Check, Copy, Hash, Info, Lightbulb, AlertTriangle, AlertOctagon } from "lucide-react";
+import { Hash, Info, Lightbulb, AlertTriangle, AlertOctagon } from "lucide-react";
 import { SystemDiagram, RequestLifecycleDiagram, DataModelDiagram } from "./diagrams";
 import { baseMarkdownComponents } from "../../lib/markdownBase";
+import { CodeBlock } from "../../components/ui/CodeBlock";
 
 /** Diagrams embeddable from markdown via a ```diagram fenced block (first line =
  *  id, the rest = an optional caption). Keeps architecture pages pure markdown. */
@@ -121,37 +122,6 @@ export function useScrollSpy(ids: string[], rootEl: HTMLElement | null): string 
 // ---------------------------------------------------------------------------
 // Building blocks
 // ---------------------------------------------------------------------------
-
-/** Copy-able code block with a language tag — the docs.* staple. */
-export function CodeBlock({ language, code }: { language?: string; code: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => { setCopied(false); }, 1400);
-    });
-  };
-  return (
-    <div className="group relative my-4 overflow-hidden rounded-xl border border-border bg-surface-2">
-      <div className="flex items-center justify-between border-b border-border/70 bg-surface-3/50 px-3 py-1.5">
-        <span className="text-2xs font-mono uppercase tracking-wider text-muted-foreground">
-          {language || "text"}
-        </span>
-        <button
-          onClick={copy}
-          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground"
-          aria-label="Copy code"
-        >
-          {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-      <pre className="overflow-x-auto p-4 text-xs leading-relaxed font-mono text-foreground">
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
-}
 
 const CALLOUTS = {
   NOTE: { cls: "border-info/40 bg-info/5", label: "text-info", Icon: Info },

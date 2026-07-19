@@ -327,6 +327,42 @@ body {
   }
 }
 
+/* ── Syntax highlighting (highlight.js) ──────────────────────────────────
+   Map hljs token classes onto the app's semantic theme colours (all CSS vars),
+   so code colouring tracks dark/light automatically — no per-theme hljs sheet.
+   The shared CodeBlock renders <code class="hljs">…</code>. */
+.hljs-comment,
+.hljs-quote { color: rgb(var(--muted-foreground)); font-style: italic; }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag,
+.hljs-doctag { color: rgb(var(--accent)); }
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-selector-class,
+.hljs-template-tag,
+.hljs-addition { color: rgb(var(--success)); }
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-link { color: rgb(var(--warning)); }
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-params,
+.hljs-type { color: rgb(var(--info)); }
+.hljs-deletion { color: rgb(var(--destructive)); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+
 /* ── AV polish: shared animations ──────────────────────────────────────── */
 @keyframes ariadne-fade-in {
   from { opacity: 0; }
