@@ -98,8 +98,8 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-/** Monochrome Ariadne mark — a spun web (minimal corner web): radial spokes from
- *  an anchor corner + a connecting thread. Inherits the current text color. */
+/** Monochrome Ariadne mark — the hexagonal web: an outer hexagon + a concentric
+ *  inner hexagon + six spokes from the centre. Inherits the current text color. */
 function Logo({ className }: { className?: string }) {
   return (
     <svg
@@ -107,13 +107,14 @@ function Logo({ className }: { className?: string }) {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.3}
+      strokeWidth={1.7}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M7 25 7 7 M7 25 16 9 M7 25 24 17 M7 25 25 25" />
-      <path d="M7 13 14 14.5 20.5 19 23 25" />
+      <path d="M16 3 L27.26 9.5 L27.26 22.5 L16 29 L4.74 22.5 L4.74 9.5 Z" />
+      <path d="M16 9.2 L21.89 12.6 L21.89 19.4 L16 22.8 L10.11 19.4 L10.11 12.6 Z" />
+      <path d="M16 16 L16 3 M16 16 L27.26 9.5 M16 16 L27.26 22.5 M16 16 L16 29 M16 16 L4.74 22.5 M16 16 L4.74 9.5" />
     </svg>
   );
 }
