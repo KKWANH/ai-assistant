@@ -266,27 +266,6 @@ fn restart_server(handle: &tauri::AppHandle, app_url: &str) {
     });
 }
 
-/// macOS: put the bare Ariadne symbol (no background tile) in the Dock via
-/// `NSDockTile.contentView`. The bundle `.icns` (frosted glass) still drives the
-/// Cmd+Tab app switcher — the switcher reads the app icon, not the dock tile — so
-/// the two intentionally differ (Dock = bare symbol, switcher = glass). Fully
-/// guarded: any missing piece just leaves the default glass icon in the Dock.
-#[cfg(target_os = "macos")]
-fn set_dock_icon() {
-    use objc2::{AnyThread, MainThreadMarker};
-    use objc2_app_kit::{NSApplication, NSImage, NSImageView};
-    use objc2_foundation::NSData;
-    let Some(mtm) = MainThreadMarker::new() else { return };
-    let data = NSData::with_bytes(include_bytes!("../icons/dock-icon.png"));
-    let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) else {
-        return;
-    };
-    let view = NSImageView::imageViewWithImage(&image, mtm);
-    let tile = NSApplication::sharedApplication(mtm).dockTile();
-    tile.setContentView(Some(&view));
-    tile.display();
-}
-
 fn main() {
     let url = format!("http://127.0.0.1:{PORT}");
 
@@ -423,10 +402,6 @@ fn main() {
                 }
                 navigate_main(&boot_handle, &boot_url);
             });
-
-            // Dock shows the bare symbol; the glass .icns stays for Cmd+Tab.
-            #[cfg(target_os = "macos")]
-            set_dock_icon();
 
             Ok(())
         })

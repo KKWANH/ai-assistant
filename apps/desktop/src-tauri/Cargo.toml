@@ -21,15 +21,6 @@ tauri = { version = "2", features = ["tray-icon", "webview-data-url"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-# macOS Dock tile: render the bare symbol (no tile) in the Dock via
-# NSDockTile.contentView, while the bundle .icns (frosted glass) still drives the
-# Cmd+Tab switcher — the switcher reads the app icon, not the dock tile. objc2* are
-# already in the tree (Tauri uses them); we just enable the classes we touch.
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder", "NSDockTile", "NSImage", "NSImageView", "NSControl", "NSView"] }
-objc2-foundation = { version = "0.3", features = ["NSData"] }
-
 [profile.release]
 opt-level = "s"
 lto = true
