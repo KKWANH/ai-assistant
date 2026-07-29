@@ -19,6 +19,11 @@ import remarkGfm from "remark-gfm";
 // Lets `**bold**` / `*italic*` parse when the delimiters touch CJK characters
 // (e.g. `**공**과`) — plain CommonMark flanking rules reject those as emphasis.
 import remarkCjkFriendly from "remark-cjk-friendly";
+// Math: $x^2$ inline and $$…$$ display. Both the plugins and KaTeX's stylesheet
+// ride THIS lazy chunk, so a chat with no formulas never downloads them.
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import CodeBlockVisualization from "./CodeBlockVisualization";
 import { baseMarkdownComponents } from "../../lib/markdownBase";
 import { CodeBlock } from "../../components/ui/CodeBlock";
@@ -79,7 +84,11 @@ const MarkdownContent = memo(function MarkdownContent({ content }: { content: st
     // the old denser 14px read as cramped (user feedback). Headings/code inside
     // are em-based so everything scales with the setting together.
     <div className="text-foreground leading-[1.75]" style={{ fontSize: "var(--chat-font, 16px)" }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={markdownComponents}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkMath]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, errorColor: "rgb(var(--destructive))" }]]}
+        components={markdownComponents}
+      >
         {content}
       </ReactMarkdown>
     </div>
