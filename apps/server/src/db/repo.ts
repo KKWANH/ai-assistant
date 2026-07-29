@@ -596,9 +596,18 @@ export function dbGetWorkspaceUsage(workspaceId: string): UsageSummary {
 export function dbCreateChat(c: Chat): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO chats (id, title, workspace_id, created_by, created_at, updated_at, session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(c.id, c.title, c.workspaceId ?? null, c.createdBy ?? null, c.createdAt, c.updatedAt, c.sessionId ?? null);
+    `INSERT INTO chats (id, title, workspace_id, created_by, created_at, updated_at, session_id, scope)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    c.id,
+    c.title,
+    c.workspaceId ?? null,
+    c.createdBy ?? null,
+    c.createdAt,
+    c.updatedAt,
+    c.sessionId ?? null,
+    c.scope ?? null,
+  );
 }
 
 const CHAT_SELECT = `
@@ -734,6 +743,7 @@ function rowToChat(row: Record<string, unknown>): Chat {
     updatedAt: row["updated_at"] as string,
     sortOrder: (row["sort_order"] as number | null) ?? null,
     sessionId: (row["session_id"] as string | null) ?? null,
+    scope: (row["scope"] as string | null) ?? null,
   };
 }
 

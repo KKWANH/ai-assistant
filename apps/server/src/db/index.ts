@@ -404,6 +404,14 @@ function runMigrations(db: DatabaseSync): void {
   const chats = addColumnIfMissing(db, "chats");
   chats("sort_order", "REAL");
   chats("session_id", "TEXT");
+  // scope: an opaque, project-owned key tying a chat to a sub-entity of its
+  // workspace (a lecture week, …). Core stores and exact-matches it, never
+  // parses it. NULL → a plain workspace chat.
+  chats("scope", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_chats_workspace_scope
+      ON chats(workspace_id, scope);
+  `);
 
   const runs = addColumnIfMissing(db, "runs");
   runs("created_by", "TEXT");

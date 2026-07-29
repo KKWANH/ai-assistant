@@ -31,6 +31,29 @@ function deckFileName(title: string): string {
   return `${base}.pptx`;
 }
 
+/**
+ * Where a generated file belongs. When the request names a course + week whose
+ * folder exists, the file is filed INSIDE that week — so it shows up as one of
+ * the week's materials instead of piling up, disconnected, at the workspace
+ * root (which is where every deliverable used to land). Returns a path
+ * RELATIVE to the workspace root: it doubles as the download key, since
+ * /deck-file resolves its `name` under the root the same way.
+ * Falls back to the bare file name when there's no such folder.
+ */
+function weekRelPath(
+  rootPath: string,
+  fileName: string,
+  course?: string,
+  week?: string,
+): string {
+  const c = course?.trim();
+  const w = week?.trim();
+  if (!c || !w) return fileName;
+  const folder = safeResolveUnderRoot(path.resolve(rootPath), path.join(c, w));
+  if (!folder || !fs.existsSync(folder)) return fileName;
+  return path.join(c, w, fileName);
+}
+
 export async function lectureRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/workspaces/:id/lecture", async (req, reply) => {
     const ws = await requireWorkspace(req.params.id, req, reply, "read");
@@ -116,7 +139,7 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       try {
         const deck = await generateDeckOutline(topic, grounding, provider, undefined, courseMemo);
         const pptx = await buildPptx(deck);
-        const fileName = deckFileName(deck.title);
+        const fileName = weekRelPath(ws.rootPath, deckFileName(deck.title), req.body?.course, req.body?.week);
         const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
         if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
         fs.writeFileSync(dest, pptx);
@@ -131,7 +154,7 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
   // picks per-slide images, so the saved file embeds them. Write-gated; it
   // overwrites the same-named .pptx. buildPptx fetches each picked image
   // (SSRF-guarded, size-capped) and embeds it beside the bullets.
-  app.post<{ Params: { id: string }; Body: { deck?: Deck } }>(
+  app.post<{ Params: { id: string }; Body: { deck?: Deck; course?: string; week?: string } }>(
     "/workspaces/:id/deck-rebuild",
     async (req, reply) => {
       const ws = await requireWorkspace(req.params.id, req, reply, "write");
@@ -142,7 +165,9 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       }
       try {
         const pptx = await buildPptx(deck);
-        const fileName = deckFileName(deck.title);
+        // Same week folder as the original generate → overwrites it rather than
+        // leaving a second copy at the root.
+        const fileName = weekRelPath(ws.rootPath, deckFileName(deck.title), req.body?.course, req.body?.week);
         const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
         if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
         fs.writeFileSync(dest, pptx);
@@ -154,7 +179,7 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // Generate a lecturer's spoken script (.docx) from a deck.
-  app.post<{ Params: { id: string }; Body: { deck?: Deck; course?: string } }>(
+  app.post<{ Params: { id: string }; Body: { deck?: Deck; course?: string; week?: string } }>(
     "/workspaces/:id/script",
     async (req, reply) => {
       const ws = await requireWorkspace(req.params.id, req, reply, "write");
@@ -181,7 +206,8 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
       try {
         const script = await generateScript(deck, courseMemo, provider);
         const docx = await buildScriptDocx(deck.title, script);
-        const fileName = `${deckFileName(deck.title).replace(/\.pptx$/, "")} 스크립트.docx`;
+        const baseName = `${deckFileName(deck.title).replace(/\.pptx$/, "")} 스크립트.docx`;
+        const fileName = weekRelPath(ws.rootPath, baseName, req.body?.course, req.body?.week);
         const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
         if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
         fs.writeFileSync(dest, docx);
@@ -244,7 +270,8 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
         const coverage = await checkCoverage(exam, grounding, auditProvider);
 
         const docx = await buildExamDocx(exam, coverage);
-        const fileName = `${scope.replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "시험"} 문제.docx`;
+        const baseName = `${scope.replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "시험"} 문제.docx`;
+        const fileName = weekRelPath(ws.rootPath, baseName, req.body?.course, req.body?.week);
         const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
         if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
         fs.writeFileSync(dest, docx);
@@ -297,7 +324,8 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
           return reply.status(422).send({ error: "Materials were too thin to generate this document" });
         }
         const docx = await buildDocDocx(doc);
-        const fileName = `${scope.replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 50) || "산출물"} ${DOC_SPECS[type].label}.docx`;
+        const baseName = `${scope.replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 50) || "산출물"} ${DOC_SPECS[type].label}.docx`;
+        const fileName = weekRelPath(ws.rootPath, baseName, req.body?.course, req.body?.week);
         const dest = safeResolveUnderRoot(path.resolve(ws.rootPath), fileName);
         if (!dest) return reply.status(400).send({ error: "Unsafe file name" });
         fs.writeFileSync(dest, docx);

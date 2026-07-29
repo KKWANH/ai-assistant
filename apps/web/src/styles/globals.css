@@ -1,4 +1,11 @@
 @import "tailwindcss";
+/* Project verticals (projects/<name>/web/**) render inside this app but live
+   OUTSIDE it, so Tailwind's automatic source detection — rooted at apps/web —
+   never sees them. Without this, a project's class only works if core happens
+   to use the identical class: `grid-cols-3` silently did nothing in the lecture
+   views because core only ever wrote `sm:`/`lg:grid-cols-3`. Scan them too, so
+   a vertical can style itself with the full utility set. */
+@source "../../../../projects";
 @import "./tokens.css";
 
 @theme inline {

@@ -144,6 +144,8 @@ export type ReportDecisionInput = z.infer<typeof ReportDecisionSchema>;
 export const CreateChatSchema = z.object({
   title: z.string().max(200).optional(),
   workspaceId: z.string().nullable().optional(),
+  /** Opaque project-owned sub-entity key — see Chat.scope. Core stores it as-is. */
+  scope: z.string().max(400).nullable().optional(),
 });
 export type CreateChatInput = z.infer<typeof CreateChatSchema>;
 

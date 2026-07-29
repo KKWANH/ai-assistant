@@ -1,77 +1,24 @@
 /**
- * LectureView — the lecture-prep "custom project UI": a semester workspace
- * shown as course cards → weeks → materials, with controls to add a course
- * or week (scaffolds folders) and to open a week's chat. Reads the live
- * folder structure from GET /api/workspaces/:id/lecture.
+ * LectureView — the lecture-prep home: the semester's COURSES.
+ *
+ * This used to be the whole vertical on one page (every course, every week and
+ * every per-week action inline), which left nowhere to put a week's own
+ * conversations or its generated files. It's now the index of a three-level
+ * structure: courses → CourseView (weeks) → WeekView (the work).
  */
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, FileText, Plus, MessageSquarePlus, Presentation, Loader2, LayoutGrid, BookText, ClipboardList, FileStack } from "lucide-react";
-import type { Deck, Exam, CoverageReport, DocType, GeneratedDoc } from "../types.js";
+import { FolderOpen, Plus, LayoutGrid, BookText, MessageSquare, ChevronRight } from "lucide-react";
 import * as api from "./api";
 import { getWorkspace } from "@ariadne/web/src/lib/api";
-import { useCreateChat, useWorkspaces } from "@ariadne/web/src/lib/queries";
-import { DeckPreview } from "./DeckPreview";
-import { ExamPreview } from "./ExamPreview";
-import { DocPreview } from "./DocPreview";
 import { ContextEditor } from "@ariadne/web/src/features/workspace/ContextEditor";
-
-/** The deliverables the per-week "산출물" menu offers (MW3 fan-out). */
-const DOC_TYPES: { type: DocType; label: string }[] = [
-  { type: "handout", label: "유인물" },
-  { type: "worksheet", label: "워크시트" },
-  { type: "reading", label: "참고문헌" },
-  { type: "syllabus", label: "강의계획" },
-];
-
-/** Toggle an id within a string[] (immutable). */
-const toggleId = (arr: string[], id: string): string[] =>
-  arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
-
-/** Opt-in cross-workspace pull picker (MW5): a collapsible row of chips for the
- *  other workspaces a deliverable can also be grounded in. Renders nothing when
- *  there are none. */
-function PullSources({
-  options,
-  selected,
-  onToggle,
-}: {
-  options: { id: string; name: string }[];
-  selected: string[];
-  onToggle: (id: string) => void;
-}) {
-  if (options.length === 0) return null;
-  return (
-    <details className="mt-3">
-      <summary className="cursor-pointer select-none text-xs text-muted-foreground">
-        다른 워크스페이스에서도 가져오기{selected.length > 0 ? ` (${selected.length})` : ""}
-      </summary>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {options.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            onClick={() => onToggle(o.id)}
-            className={`rounded px-2 py-1 text-2xs ${
-              selected.includes(o.id)
-                ? "bg-accent text-accent-foreground"
-                : "bg-surface-2 text-muted-foreground hover:bg-surface-3"
-            }`}
-          >
-            {o.name}
-          </button>
-        ))}
-      </div>
-    </details>
-  );
-}
+import { useCourseChatTotals } from "./weekChats";
 
 export function LectureView() {
   const { id: workspaceId = "" } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const createChat = useCreateChat();
 
   const { data: ws } = useQuery({
     queryKey: ["workspace", workspaceId],
@@ -84,108 +31,24 @@ export function LectureView() {
     enabled: !!workspaceId,
   });
   const scaffold = useMutation({
-    mutationFn: (v: { course: string; week?: string }) =>
-      api.scaffoldLectureFolder(workspaceId, v.course, v.week),
+    mutationFn: (course: string) => api.scaffoldLectureFolder(workspaceId, course),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["lecture", workspaceId] }),
   });
 
-  // Inline name input — works on mobile (window.prompt does not on phones).
-  const [namePrompt, setNamePrompt] = useState<
-    { mode: "course"; value: string } | { mode: "week"; course: string; value: string } | null
-  >(null);
-  const addCourse = () => setNamePrompt({ mode: "course", value: "" });
-  const addWeek = (course: string) => setNamePrompt({ mode: "week", course, value: "" });
-  const submitName = () => {
-    const name = namePrompt?.value.trim();
-    if (!namePrompt || !name) return;
-    if (namePrompt.mode === "course") scaffold.mutate({ course: name });
-    else scaffold.mutate({ course: namePrompt.course, week: name });
-    setNamePrompt(null);
-  };
-  const openWeekChat = (course: string, week: string) => {
-    createChat.mutate(
-      { workspaceId, title: `${course} · ${week}` },
-      { onSuccess: (chat) => navigate(`/chat/${chat.id}`) },
-    );
-  };
-
-  // Opt-in cross-workspace pull (MW5): other workspaces a deliverable can also
-  // be grounded in. Shared across the slide / exam / document modals.
-  const { data: allWorkspaces } = useWorkspaces();
-  const otherWorkspaces = (allWorkspaces ?? [])
-    .filter((w) => w.id !== workspaceId)
-    .map((w) => ({ id: w.id, name: w.name }));
-  const [pullSources, setPullSources] = useState<string[]>([]);
-  const togglePull = (id: string) => setPullSources((s) => toggleId(s, id));
-
-  const [deckResult, setDeckResult] = useState<{ deck: Deck; fileName: string; course: string } | null>(null);
-  const genDeck = useMutation({
-    mutationFn: (v: { topic: string; course: string; week: string; sources: string[] }) =>
-      api.generateDeck(workspaceId, v.topic, v.course, v.week, v.sources),
-    onSuccess: (r, v) => setDeckResult({ ...r, course: v.course }),
-  });
-  const [slidePrompt, setSlidePrompt] = useState<{ course: string; week: string; topic: string } | null>(null);
-  const makeSlides = (course: string, week: string) => {
-    setPullSources([]);
-    setSlidePrompt({ course, week, topic: "" });
-  };
-  const submitSlides = () => {
-    const topic = slidePrompt?.topic.trim();
-    if (slidePrompt && topic) {
-      genDeck.mutate({ topic, course: slidePrompt.course, week: slidePrompt.week, sources: pullSources });
-      setSlidePrompt(null);
-    }
-  };
-
-  const [examResult, setExamResult] = useState<{ exam: Exam; coverage: CoverageReport; fileName: string } | null>(
-    null,
+  const courses = data?.courses ?? [];
+  const chatTotals = useCourseChatTotals(
+    workspaceId,
+    courses.map((c) => c.name),
   );
-  const genExam = useMutation({
-    mutationFn: (v: { course: string; week: string; count: number; sources: string[] }) =>
-      api.generateExam(workspaceId, v.course, v.week, v.count, v.sources),
-    onSuccess: (r) => setExamResult(r),
-  });
-  const [examPrompt, setExamPrompt] = useState<{ course: string; week: string; count: number } | null>(null);
-  const makeExam = (course: string, week: string) => {
-    setPullSources([]);
-    setExamPrompt({ course, week, count: 8 });
-  };
-  const submitExam = () => {
-    if (examPrompt) {
-      genExam.mutate({ ...examPrompt, sources: pullSources });
-      setExamPrompt(null);
-    }
-  };
 
-  const [docResult, setDocResult] = useState<
-    { doc: GeneratedDoc; fileName: string; type: DocType; label: string } | null
-  >(null);
-  const genDoc = useMutation({
-    mutationFn: (v: { type: DocType; course: string; week: string; sources: string[] }) =>
-      api.generateDoc(workspaceId, v.type, v.course, v.week, v.sources),
-    onSuccess: (r, v) =>
-      setDocResult({ ...r, type: v.type, label: DOC_TYPES.find((d) => d.type === v.type)?.label ?? "" }),
-  });
-  const [docPrompt, setDocPrompt] = useState<{ course: string; week: string } | null>(null);
-  const makeDoc = (course: string, week: string) => {
-    setPullSources([]);
-    setDocPrompt({ course, week });
+  // Inline name input — window.prompt doesn't work on phones.
+  const [newCourse, setNewCourse] = useState<string | null>(null);
+  const submitCourse = () => {
+    const name = newCourse?.trim();
+    if (!name) return;
+    scaffold.mutate(name);
+    setNewCourse(null);
   };
-  const submitDoc = (type: DocType) => {
-    if (docPrompt) {
-      genDoc.mutate({ ...docPrompt, type, sources: pullSources });
-      setDocPrompt(null);
-    }
-  };
-
-  const [memoEdit, setMemoEdit] = useState<{ course: string; memo: string } | null>(null);
-  const saveMemo = useMutation({
-    mutationFn: (v: { course: string; memo: string }) => api.setCourseMemo(workspaceId, v.course, v.memo),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["lecture", workspaceId] });
-      setMemoEdit(null);
-    },
-  });
 
   const [contextOpen, setContextOpen] = useState(false);
 
@@ -210,7 +73,7 @@ export function LectureView() {
               <BookText className="h-3.5 w-3.5" /> 지침
             </button>
             <button
-              onClick={addCourse}
+              onClick={() => setNewCourse("")}
               className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-surface-3"
             >
               <Plus className="h-3.5 w-3.5" /> 과목 추가
@@ -218,16 +81,16 @@ export function LectureView() {
           </div>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          {ws?.name ?? "한 학기"} · 과목별 주차 자료를 한 곳에서 관리합니다.
+          {ws?.name ?? "한 학기"} · 과목을 열면 주차별로 준비할 수 있어요.
         </p>
 
         {isLoading && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
 
-        {data && data.courses.length === 0 && (
+        {data && courses.length === 0 && (
           <div className="rounded-xl border border-dashed border-border p-8 text-center">
             <p className="mb-3 text-sm text-muted-foreground">아직 과목이 없습니다.</p>
             <button
-              onClick={addCourse}
+              onClick={() => setNewCourse("")}
               className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground"
             >
               <Plus className="h-4 w-4" /> 첫 과목 추가
@@ -235,242 +98,65 @@ export function LectureView() {
           </div>
         )}
 
-        <div className="space-y-4">
-          {data?.courses.map((c) => (
-            <div key={c.path} className="rounded-xl border border-border bg-surface-2 p-4">
-              <div className="flex items-center justify-between">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {courses.map((c) => (
+            <button
+              key={c.path}
+              onClick={() => navigate(`/workspaces/${workspaceId}/lecture/c/${encodeURIComponent(c.name)}`)}
+              className="group rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-border-strong"
+            >
+              <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2 font-medium">
                   <FolderOpen className="h-4 w-4 shrink-0 text-accent" />
                   <span className="truncate">{c.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">· {c.weeks.length}주차</span>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <button
-                    onClick={() => setMemoEdit({ course: c.name, memo: c.memo })}
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                    title="과목 메모 — 줄기·교수 스타일·수강생 수준 (슬라이드에 자동 반영)"
-                  >
-                    <FileText className="h-3 w-3" /> 메모{c.memo.trim() ? " ●" : ""}
-                  </button>
-                  <button
-                    onClick={() => addWeek(c.name)}
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <Plus className="h-3 w-3" /> 주차
-                  </button>
-                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
               </div>
-
-              {c.files.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {c.files.map((f) => (
-                    <span
-                      key={f.path}
-                      className="inline-flex items-center gap-1 rounded bg-card px-1.5 py-0.5 text-2xs text-muted-foreground"
-                    >
-                      <FileText className="h-3 w-3" /> {f.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-3 space-y-1.5">
-                {c.weeks.length === 0 && (
-                  <p className="text-xs text-muted-foreground">주차를 추가하세요.</p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>{c.weeks.length}주차</span>
+                {(chatTotals[c.name] ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" />
+                    대화 {chatTotals[c.name]}
+                  </span>
                 )}
-                {c.weeks.map((w) => (
-                  <div
-                    key={w.path}
-                    className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex min-w-0 items-center gap-2 text-sm">
-                      <span className="shrink-0 font-medium">{w.name}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground">자료 {w.materials.length}</span>
-                      {w.materials.length > 0 && (
-                        <span className="truncate text-2xs text-muted-foreground/70">
-                          {w.materials.map((m) => m.name).join(", ")}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 sm:gap-3">
-                      <button
-                        onClick={() => makeSlides(c.name, w.name)}
-                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <Presentation className="h-3.5 w-3.5" /> 슬라이드
-                      </button>
-                      <button
-                        onClick={() => makeExam(c.name, w.name)}
-                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <ClipboardList className="h-3.5 w-3.5" /> 시험
-                      </button>
-                      <button
-                        onClick={() => makeDoc(c.name, w.name)}
-                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <FileStack className="h-3.5 w-3.5" /> 산출물
-                      </button>
-                      <button
-                        onClick={() => openWeekChat(c.name, w.name)}
-                        className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-                      >
-                        <MessageSquarePlus className="h-3.5 w-3.5" /> 자료 만들기
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                {c.memo.trim() && <span>메모 ●</span>}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
 
-      {slidePrompt && (
+      {newCourse !== null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setSlidePrompt(null)}
+          onClick={() => setNewCourse(null)}
         >
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-sm font-semibold">슬라이드 만들기</h3>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {slidePrompt.course} · {slidePrompt.week} — 이 주차 자료를 근거로 덱을 생성합니다.
-            </p>
+          <div
+            className="w-full max-w-sm rounded-xl border border-border bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-3 text-sm font-semibold">새 과목</h3>
             <input
               autoFocus
-              value={slidePrompt.topic}
-              onChange={(e) => setSlidePrompt({ ...slidePrompt, topic: e.target.value })}
+              value={newCourse}
+              onChange={(e) => setNewCourse(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") submitSlides();
+                if (e.key === "Enter") submitCourse();
               }}
-              placeholder="슬라이드 주제 (예: 바로크 조각 — 베르니니)"
-              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <PullSources options={otherWorkspaces} selected={pullSources} onToggle={togglePull} />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => setSlidePrompt(null)}
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
-              >
-                취소
-              </button>
-              <button
-                onClick={submitSlides}
-                disabled={!slidePrompt.topic.trim()}
-                className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
-              >
-                생성
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {examPrompt && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setExamPrompt(null)}
-        >
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-sm font-semibold">시험 만들기</h3>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {examPrompt.course} · {examPrompt.week} — 이 주차 자료를 근거로 문항을 생성하고, 출제 커버리지를 점검합니다.
-            </p>
-            <label className="flex items-center gap-2 text-sm">
-              문항 수
-              <input
-                type="number"
-                min={3}
-                max={20}
-                value={examPrompt.count}
-                onChange={(e) =>
-                  setExamPrompt({ ...examPrompt, count: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitExam();
-                }}
-                className="w-20 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </label>
-            <PullSources options={otherWorkspaces} selected={pullSources} onToggle={togglePull} />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => setExamPrompt(null)}
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
-              >
-                취소
-              </button>
-              <button onClick={submitExam} className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground">
-                생성
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {docPrompt && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setDocPrompt(null)}
-        >
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-sm font-semibold">산출물 만들기</h3>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {docPrompt.course} · {docPrompt.week} — 이 주차 자료를 근거로 생성할 산출물을 고르세요.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {DOC_TYPES.map((d) => (
-                <button
-                  key={d.type}
-                  onClick={() => submitDoc(d.type)}
-                  className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm hover:bg-surface-3"
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <PullSources options={otherWorkspaces} selected={pullSources} onToggle={togglePull} />
-            <div className="mt-3 flex justify-end">
-              <button
-                onClick={() => setDocPrompt(null)}
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {namePrompt && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setNamePrompt(null)}
-        >
-          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-3 text-sm font-semibold">
-              {namePrompt.mode === "course" ? "새 과목" : `주차 추가 · ${namePrompt.course}`}
-            </h3>
-            <input
-              autoFocus
-              value={namePrompt.value}
-              onChange={(e) => setNamePrompt({ ...namePrompt, value: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitName();
-              }}
-              placeholder={namePrompt.mode === "course" ? "과목 이름 (예: 조형예술론)" : "주차 이름 (예: 03주차)"}
+              placeholder="과목 이름 (예: 조형예술론)"
               className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <div className="mt-3 flex justify-end gap-2">
               <button
-                onClick={() => setNamePrompt(null)}
+                onClick={() => setNewCourse(null)}
                 className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
               >
                 취소
               </button>
               <button
-                onClick={submitName}
-                disabled={!namePrompt.value.trim() || scaffold.isPending}
+                onClick={submitCourse}
+                disabled={!newCourse.trim() || scaffold.isPending}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
               >
                 추가
@@ -478,100 +164,6 @@ export function LectureView() {
             </div>
           </div>
         </div>
-      )}
-
-      {memoEdit && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setMemoEdit(null)}
-        >
-          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-sm font-semibold">{memoEdit.course} · 과목 메모</h3>
-            <p className="mb-3 text-xs text-muted-foreground">
-              이 과목의 줄기·교수 스타일·수강생 수준을 적어두면, 이 과목 슬라이드 생성에 자동 반영됩니다.
-            </p>
-            <textarea
-              value={memoEdit.memo}
-              onChange={(e) => setMemoEdit({ ...memoEdit, memo: e.target.value })}
-              rows={8}
-              placeholder="예: 학부 2학년 대상. 작품 분석 중심, 미술사 맥락을 곁들임. 어려운 용어는 쉽게 풀어 설명. 매 강의 도판 3–4점."
-              className="w-full resize-y rounded-md border border-border bg-surface-2 p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => setMemoEdit(null)}
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-3"
-              >
-                취소
-              </button>
-              <button
-                onClick={() => saveMemo.mutate(memoEdit)}
-                disabled={saveMemo.isPending}
-                className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground disabled:opacity-50"
-              >
-                {saveMemo.isPending ? "저장 중…" : "저장"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {genDeck.isPending && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm">
-            <Loader2 className="h-5 w-5 animate-spin text-accent" />
-            슬라이드 생성 중… (자료를 근거로 덱을 만들고 있어요 · 1–2분)
-          </div>
-        </div>
-      )}
-
-      {genExam.isPending && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm">
-            <Loader2 className="h-5 w-5 animate-spin text-accent" />
-            시험 생성 중… (문항 생성 + 커버리지 점검 · 1–2분)
-          </div>
-        </div>
-      )}
-
-      {genDoc.isPending && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 text-sm">
-            <Loader2 className="h-5 w-5 animate-spin text-accent" />
-            산출물 생성 중… (자료를 근거로 문서를 만드는 중 · 1분)
-          </div>
-        </div>
-      )}
-
-      {deckResult && (
-        <DeckPreview
-          workspaceId={workspaceId}
-          deck={deckResult.deck}
-          fileName={deckResult.fileName}
-          course={deckResult.course}
-          onClose={() => setDeckResult(null)}
-        />
-      )}
-
-      {examResult && (
-        <ExamPreview
-          workspaceId={workspaceId}
-          exam={examResult.exam}
-          coverage={examResult.coverage}
-          fileName={examResult.fileName}
-          onClose={() => setExamResult(null)}
-        />
-      )}
-
-      {docResult && (
-        <DocPreview
-          workspaceId={workspaceId}
-          type={docResult.type}
-          doc={docResult.doc}
-          fileName={docResult.fileName}
-          label={docResult.label}
-          onClose={() => setDocResult(null)}
-        />
       )}
 
       {contextOpen && <ContextEditor workspaceId={workspaceId} onClose={() => setContextOpen(false)} />}

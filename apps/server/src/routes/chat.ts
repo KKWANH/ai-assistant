@@ -804,7 +804,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid request body", detail: parsed.error.message });
     }
-    const { title, workspaceId } = parsed.data;
+    const { title, workspaceId, scope } = parsed.data;
     // Don't let a chat be created against a workspace the account can't view
     // (or one that doesn't exist) — that reference is what the answer path
     // trusts when it loads workspace files.
@@ -819,6 +819,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       createdBy: req.account?.id ?? null,
       createdByName: req.account?.displayName ?? null,
       sessionId: req.sessionId ?? null,
+      scope: scope ?? null,
       createdAt: ts,
       updatedAt: ts,
     };

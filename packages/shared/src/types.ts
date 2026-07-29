@@ -732,6 +732,15 @@ export interface Chat {
   /** Manual sidebar order (drag-to-reorder). null = unset → falls back to
    *  recency (updated_at), so unreordered chats still bump on activity. */
   sortOrder?: number | null;
+  /**
+   * Opaque, PROJECT-OWNED key tying this chat to a sub-entity of its workspace
+   * (a lecture week, a paper section, …). Core never parses or interprets it —
+   * it only stores it and filters by exact match, so a project can ask "the
+   * chats for this thing" instead of guessing from the title. null = a plain
+   * workspace chat. Convention: `"<project>:<path>"`, e.g.
+   * `"lecture:조형예술론2/02주차"`.
+   */
+  scope?: string | null;
   /** Populated by GET /api/chats/:id. */
   messages?: ChatMessage[];
 }

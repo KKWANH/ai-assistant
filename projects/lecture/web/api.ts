@@ -40,12 +40,15 @@ export const generateDoc = (id: string, type: DocType, course?: string, week?: s
 export const setCourseMemo = (id: string, course: string, memo: string) =>
   request<{ ok: true }>("POST", `/workspaces/${id}/lecture/memo`, { course, memo });
 
-export const generateScript = (id: string, deck: Deck, course?: string) =>
-  request<{ fileName: string }>("POST", `/workspaces/${id}/script`, { deck, course });
+/** course/week file the .docx alongside the deck it belongs to (see weekRelPath). */
+export const generateScript = (id: string, deck: Deck, course?: string, week?: string) =>
+  request<{ fileName: string }>("POST", `/workspaces/${id}/script`, { deck, course, week });
 
-/** Rebuild a deck's .pptx after picking per-slide images (embeds them). */
-export const rebuildDeck = (id: string, deck: Deck) =>
-  request<{ fileName: string }>("POST", `/workspaces/${id}/deck-rebuild`, { deck });
+/** Rebuild a deck's .pptx after picking per-slide images (embeds them). Passes
+ *  course/week so the rebuild overwrites the deck in its week folder rather than
+ *  writing a second copy at the workspace root. */
+export const rebuildDeck = (id: string, deck: Deck, course?: string, week?: string) =>
+  request<{ fileName: string }>("POST", `/workspaces/${id}/deck-rebuild`, { deck, course, week });
 
 export const deckFileUrl = (id: string, fileName: string) =>
   `/api/workspaces/${id}/deck-file?name=${encodeURIComponent(fileName)}`;

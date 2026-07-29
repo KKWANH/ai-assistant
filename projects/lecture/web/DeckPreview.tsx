@@ -39,12 +39,15 @@ export function DeckPreview({
   deck,
   fileName,
   course,
+  week,
   onClose,
 }: {
   workspaceId: string;
   deck: Deck;
   fileName: string;
   course?: string;
+  /** Files the script/rebuilt deck into the same week folder as the deck. */
+  week?: string;
   onClose: () => void;
 }) {
   // Local, mutable copy so picked images persist across the preview session.
@@ -53,10 +56,10 @@ export function DeckPreview({
   const [picking, setPicking] = useState<number | null>(null);
 
   const genScript = useMutation({
-    mutationFn: () => generateScript(workspaceId, localDeck, course),
+    mutationFn: () => generateScript(workspaceId, localDeck, course, week),
   });
   const rebuild = useMutation({
-    mutationFn: () => rebuildDeck(workspaceId, localDeck),
+    mutationFn: () => rebuildDeck(workspaceId, localDeck, course, week),
   });
 
   const setSlideImage = (i: number, img: ImageResult | null) => {
