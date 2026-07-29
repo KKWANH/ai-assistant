@@ -75,7 +75,7 @@ export function CourseView() {
           </div>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          {c?.weeks.length ?? 0}주차 · 주차를 열면 대화·자료·산출물이 한 곳에 모입니다.
+          {c?.weeks.length ?? 0}개 주차 · 주차를 누르면 그 주차의 대화와 자료가 모여 있어요.
         </p>
 
         {isLoading && <p className="text-sm text-muted-foreground">불러오는 중…</p>}

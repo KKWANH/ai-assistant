@@ -77,14 +77,27 @@ function PullSources({
   );
 }
 
-/** Section wrapper — keeps the three blocks visually parallel. */
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+/** Section wrapper — keeps the blocks visually parallel. `hint` says, in plain
+ *  words, what the block is for: this page is used by a lecturer who doesn't
+ *  want to guess what a heading means. */
+function Section({
+  title,
+  hint,
+  action,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mb-5">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+    <section className="mb-6">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {action}
       </div>
+      {hint && <p className="mb-2 text-xs text-muted-foreground">{hint}</p>}
       {children}
     </section>
   );
@@ -168,10 +181,10 @@ export function WeekView() {
 
   const busy = genDeck.isPending || genExam.isPending || genDoc.isPending;
   const busyLabel = genDeck.isPending
-    ? "슬라이드 생성 중… (자료를 근거로 덱을 만들고 있어요 · 1–2분)"
+    ? "슬라이드 만드는 중… (1–2분쯤 걸려요)"
     : genExam.isPending
-      ? "시험 생성 중… (문항 생성 + 커버리지 점검 · 1–2분)"
-      : "산출물 생성 중… (자료를 근거로 문서를 만드는 중 · 1분)";
+      ? "시험 만드는 중… (문제를 만들고 빠진 개념을 점검해요 · 1–2분)"
+      : "수업 자료 만드는 중… (1분쯤 걸려요)";
 
   return (
     <div className="h-full overflow-y-auto">
@@ -189,11 +202,16 @@ export function WeekView() {
         {/* 대화 — existing threads first, so work is resumed, not restarted. */}
         <Section
           title="대화"
+          hint={
+            chats.length > 0
+              ? "이어서 하려면 아래 대화를 누르세요. 새로 시작할 때만 ‘새 대화’를 누르시면 됩니다."
+              : "AI와 이야기하며 강의안과 학생용 설명을 만드는 곳이에요."
+          }
           action={
             <button
               onClick={startChat}
               disabled={createChat.isPending}
-              className="inline-flex items-center gap-1 text-xs text-accent hover:underline disabled:opacity-50"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-3 disabled:opacity-50"
             >
               <MessageSquarePlus className="h-3.5 w-3.5" /> 새 대화
             </button>
@@ -202,23 +220,26 @@ export function WeekView() {
           {chats.length === 0 ? (
             <button
               onClick={startChat}
-              className="w-full rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground hover:border-border-strong hover:text-foreground"
+              className="w-full rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground hover:border-border-strong hover:text-foreground"
             >
-              이 주차의 첫 대화를 시작하세요 — 자료를 올리고 강의안·스크립트를 만들 수 있어요.
+              이 주차의 첫 대화를 시작하세요
+              <span className="mt-1 block text-xs">
+                파일(PDF·PPT)을 올리고 “학생용 설명 만들어줘”처럼 말하면 됩니다.
+              </span>
             </button>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {chats.map((chat) => (
                 <Link
                   key={chat.id}
                   to={`/chat/${chat.id}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 hover:border-border-strong"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 hover:border-border-strong"
                 >
                   <span className="flex min-w-0 items-center gap-2 text-sm">
-                    <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">{chat.title}</span>
                   </span>
-                  <span className="shrink-0 text-2xs text-muted-foreground">
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {chat.updatedAt.slice(0, 10)}
                   </span>
                 </Link>
@@ -228,54 +249,61 @@ export function WeekView() {
         </Section>
 
         {/* 자료 — what's filed under this week. */}
-        <Section title="자료">
+        <Section title="자료" hint="이 주차에 모인 파일이에요. 여기서 만든 파일도 이 자리에 쌓입니다.">
           {!w || w.materials.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-xs text-muted-foreground">
-              아직 자료가 없습니다. 대화에 파일을 첨부하거나, 이 주차 폴더에 넣어두면 여기에 표시됩니다.
+            <p className="rounded-lg border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
+              아직 자료가 없습니다. 대화에 파일을 첨부하시면 여기에 함께 보입니다.
             </p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {w.materials.map((m) => (
                 <span
                   key={m.path}
-                  className="inline-flex items-center gap-1 rounded bg-card px-2 py-1 text-2xs text-muted-foreground"
+                  className="inline-flex items-center gap-1 rounded bg-card px-2 py-1 text-xs text-muted-foreground"
                 >
-                  <FileText className="h-3 w-3" /> {m.name}
+                  <FileText className="h-3.5 w-3.5" /> {m.name}
                 </span>
               ))}
             </div>
           )}
         </Section>
 
-        {/* 만들기 — the generators, grounded in this week. */}
-        <Section title="만들기">
-          <div className="grid grid-cols-3 gap-2">
+        {/* 만들기 — the generators, grounded in this week. Each button says what
+            comes OUT of it: "슬라이드" alone doesn't tell you a .pptx appears. */}
+        <Section title="만들기" hint="이 주차 자료를 근거로 AI가 초안을 만들어 드려요. 만든 파일은 위 ‘자료’에 저장됩니다.">
+          <div className="grid gap-2 sm:grid-cols-3">
             <button
               onClick={() => {
                 setPullSources([]);
                 setSlidePrompt("");
               }}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border bg-card px-3 py-3 text-xs hover:border-border-strong"
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-4 hover:border-border-strong"
             >
-              <Presentation className="h-4 w-4 text-accent" /> 슬라이드
+              <Presentation className="h-5 w-5 text-accent" />
+              <span className="text-sm font-medium">슬라이드</span>
+              <span className="text-xs text-muted-foreground">PPT 초안 만들기</span>
             </button>
             <button
               onClick={() => {
                 setPullSources([]);
                 setExamPrompt(8);
               }}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border bg-card px-3 py-3 text-xs hover:border-border-strong"
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-4 hover:border-border-strong"
             >
-              <ClipboardList className="h-4 w-4 text-accent" /> 시험
+              <ClipboardList className="h-5 w-5 text-accent" />
+              <span className="text-sm font-medium">시험</span>
+              <span className="text-xs text-muted-foreground">문제 + 빠진 개념 점검</span>
             </button>
             <button
               onClick={() => {
                 setPullSources([]);
                 setDocPrompt(true);
               }}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border bg-card px-3 py-3 text-xs hover:border-border-strong"
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-4 hover:border-border-strong"
             >
-              <FileStack className="h-4 w-4 text-accent" /> 산출물
+              <FileStack className="h-5 w-5 text-accent" />
+              <span className="text-sm font-medium">수업 자료</span>
+              <span className="text-xs text-muted-foreground">유인물·워크시트 등</span>
             </button>
           </div>
         </Section>
@@ -376,9 +404,9 @@ export function WeekView() {
           onClick={() => setDocPrompt(false)}
         >
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-sm font-semibold">산출물 만들기</h3>
+            <h3 className="mb-1 text-sm font-semibold">수업 자료 만들기</h3>
             <p className="mb-3 text-xs text-muted-foreground">
-              {course} · {week} — 이 주차 자료를 근거로 생성할 산출물을 고르세요.
+              {course} · {week} — 어떤 자료를 만들까요?
             </p>
             <div className="grid grid-cols-2 gap-2">
               {DOC_TYPES.map((d) => (

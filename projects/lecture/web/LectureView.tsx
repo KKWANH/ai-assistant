@@ -81,7 +81,7 @@ export function LectureView() {
           </div>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          {ws?.name ?? "한 학기"} · 과목을 열면 주차별로 준비할 수 있어요.
+          과목을 누르면 주차별로 준비할 수 있어요.
         </p>
 
         {isLoading && <p className="text-sm text-muted-foreground">불러오는 중…</p>}
