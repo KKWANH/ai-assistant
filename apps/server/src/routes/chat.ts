@@ -36,6 +36,7 @@ import {
 } from "../db/repo.js";
 import { loadActionDefs } from "../services/actions.js";
 import { getProvider } from "../providers/index.js";
+import { TurnTimer } from "../services/turnTimer.js";
 import { meteringProvider } from "../runs/engine.js";
 import { createAlert } from "../services/alerts.js";
 import { accountOverLimit } from "../services/limits.js";
@@ -190,6 +191,8 @@ interface StreamReplyResult {
   model: string | null;
   /** Image-search results when the message asked to find images. */
   images?: ImageResult[] | null;
+  /** Where this turn's wall time went — persisted on the assistant message. */
+  timings?: import("../services/turnTimer.js").TurnTimings;
 }
 
 /**
@@ -203,6 +206,11 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     mode, accountLocale, accountContext, accountId, allowLocalExec, emit, controller, assistantMsgId,
     shouldGenerateTitle,
   } = opts;
+
+  // Where this turn's time goes. Every meteringProvider below reports its call
+  // time here, so `providerMs` is the model's share and the rest is ours.
+  const timer = new TurnTimer();
+  const onCallMs = (ms: number) => timer.addProviderMs(ms);
 
   // Per-workspace model override (P2 configurability): a workspace can pin its
   // own provider + model for its chats. Both unset → inherit the account-global
@@ -238,7 +246,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       ? await resolveOllamaModel(settings.model)
       : settings.model;
   const rawProvider = await getProvider({ provider: settings.provider, model });
-  const provider = meteringProvider(rawProvider, assistantMsgId, model, accountId, chat.workspaceId ?? null);
+  const provider = meteringProvider(rawProvider, assistantMsgId, model, accountId, chat.workspaceId ?? null, onCallMs);
   // Model actually used to produce the answer — updated if difficulty-aware
   // escalation (D) bumps a hard question to a stronger model on the direct path.
   // Returned as response metadata so the UI/metering reflect what really ran.
@@ -354,6 +362,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       triageModelName,
       accountId,
       chat.workspaceId ?? null,
+        onCallMs,
     );
     triagePromise = triage(triageProvider, userContent, triageNeeds, controller.signal).catch(() => null);
   }
@@ -379,6 +388,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
                 tm,
                 accountId,
                 chat.workspaceId ?? null,
+        onCallMs,
               );
             }
           }
@@ -411,6 +421,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         rm,
         accountId,
         chat.workspaceId ?? null,
+        onCallMs,
       ),
     );
   };
@@ -562,6 +573,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
           escModel,
           accountId,
           chat.workspaceId ?? null,
+        onCallMs,
         );
         producedProvider = esc.provider;
         producedModel = escModel;
@@ -590,6 +602,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     }
 
     emit({ type: "status", text: "Building context…" });
+    timer.start("context");
     let contextResult;
     try {
       // Reuse the retrieval we kicked off alongside triage when the final params
@@ -621,8 +634,10 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         hasSources: false,
       };
     }
+    timer.end("context");
     contextSearchResults = contextResult.searchResults;
 
+    timer.start("answer");
     // Post-answer verification note — shared by the vision / rigorous / standard
     // branches (H2, optimistic grounding). The answer already streamed (fast);
     // this appends a SHORT note only when something needs saying:
@@ -635,6 +650,14 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     //    answers (arXiv 2310.01798), so it flags, never rewrites.
     // Runs on the fast triage tier; fails safe (no note on error/abort).
     const appendVerifyNote = async (): Promise<void> => {
+      timer.start("verify");
+      try {
+        await runVerifyNote();
+      } finally {
+        timer.end("verify");
+      }
+    };
+    const runVerifyNote = async (): Promise<void> => {
       if (!assistantContent.trim() || controller.signal.aborted) return;
       // Micro-answers ("네, 맞아요") aren't worth a verification round-trip.
       if (!contextResult.hasSources && assistantContent.trim().length < 60) return;
@@ -653,6 +676,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
         vModel,
         accountId,
         chat.workspaceId ?? null,
+        onCallMs,
       );
       const note = contextResult.hasSources
         ? await groundCheckNote(verifyProvider, assistantContent, contextResult.prompt, controller.signal)
@@ -721,7 +745,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
               prompt: contextResult.prompt + `\n\n--- Draft answer to critique and improve ---\n${draft.text}`,
               signal: controller.signal,
             },
-            (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+            (delta) => { timer.markFirstToken(); assistantContent += delta; emit({ type: "delta", text: delta }); },
             (status) => { emit({ type: "status", text: status }); },
           );
         } catch (err) {
@@ -740,7 +764,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
       } else {
         await answerProvider.completeStream(
           { system: contextResult.system, prompt: contextResult.prompt, signal: controller.signal },
-          (delta) => { assistantContent += delta; emit({ type: "delta", text: delta }); },
+          (delta) => { timer.markFirstToken(); assistantContent += delta; emit({ type: "delta", text: delta }); },
           (status) => { emit({ type: "status", text: status }); },
         );
         // Cross-check against sources, or flag memory-only specifics — see
@@ -773,6 +797,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
   // applies the title to the DB asynchronously, eliminating the
   // post-stream spinner lag.
 
+  timer.end("answer");
   return {
     assistantContent,
     agentTrace,
@@ -780,6 +805,7 @@ async function streamAssistantReply(opts: StreamReplyOptions): Promise<StreamRep
     titlePromise: chatTitlePromise,
     provider: producedProvider,
     model: producedModel,
+    timings: timer.toJSON(),
   };
 }
 
@@ -1109,6 +1135,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           agent: agentTrace,
           provider: replyProvider,
           model: replyModel,
+          timings: replyResult.timings ?? null,
           createdAt: now(),
         };
         dbInsertMessage(assistantMsg);
@@ -1313,6 +1340,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
           agent: result.agentTrace,
           provider: result.provider,
           model: result.model,
+          timings: result.timings ?? null,
           createdAt: now(),
         };
         dbInsertMessage(assistantMsg);

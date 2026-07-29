@@ -368,6 +368,10 @@ function runMigrations(db: DatabaseSync): void {
 
   const chatMessages = addColumnIfMissing(db, "chat_messages");
   chatMessages("agent_json", "TEXT");
+  // timings_json — where this turn's wall time went (TurnTimings: total, ttft,
+  // per-phase, provider share). One row per assistant message; null on user
+  // messages and on anything from before timing was collected.
+  chatMessages("timings_json", "TEXT");
   // revisions_json — past versions of a user message's content, retained
   // when the message was edited.
   chatMessages("revisions_json", "TEXT");
@@ -432,6 +436,10 @@ function runMigrations(db: DatabaseSync): void {
   // rows from before this migration (and on usage not attributed to an account).
   const usageEvents = addColumnIfMissing(db, "usage_events");
   usageEvents("account_id", "TEXT");
+  // duration_ms — wall time of THIS provider call. usage_events is already one
+  // row per call, so this makes model latency queryable per provider/model
+  // (p50/p95) and separates "the model was slow" from "we were slow".
+  usageEvents("duration_ms", "INTEGER");
   // workspace_id so per-workspace token usage is a direct SUM, not a JOIN
   // through run_id (which is a run id for runs but a message id for chats).
   // Recorded at the metering wrapper going forward; one-time backfill below.

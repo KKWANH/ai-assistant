@@ -477,17 +477,20 @@ export interface UsageEventRow {
   /** Workspace the usage is attributed to (for per-workspace usage); null for
    *  workspace-less chats and model comparisons. */
   workspaceId?: string | null;
+  /** Wall time of this provider call, ms — the model's own latency. */
+  durationMs?: number | null;
   createdAt: string;
 }
 
 export function dbInsertUsageEvent(e: UsageEventRow): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO usage_events (id,run_id,provider,model,input_tokens,output_tokens,cost_usd,account_id,workspace_id,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO usage_events (id,run_id,provider,model,input_tokens,output_tokens,cost_usd,account_id,workspace_id,duration_ms,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     e.id, e.runId, e.provider, e.model,
-    e.inputTokens, e.outputTokens, e.costUsd, e.accountId ?? null, e.workspaceId ?? null, e.createdAt
+    e.inputTokens, e.outputTokens, e.costUsd, e.accountId ?? null, e.workspaceId ?? null,
+    e.durationMs ?? null, e.createdAt
   );
 }
 
@@ -756,8 +759,8 @@ export function dbInsertMessage(m: ChatMessage): void {
   db.prepare(
     `INSERT INTO chat_messages
        (id, chat_id, role, content, attachments_json, web_search, search_results_json,
-        agent_json, revisions_json, provider, model, images_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        agent_json, revisions_json, provider, model, images_json, timings_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     m.id,
     m.chatId,
@@ -771,6 +774,7 @@ export function dbInsertMessage(m: ChatMessage): void {
     m.provider ?? null,
     m.model ?? null,
     m.images && m.images.length > 0 ? JSON.stringify(m.images) : null,
+    m.timings ? JSON.stringify(m.timings) : null,
     m.createdAt
   );
 }
@@ -845,6 +849,7 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
     webSearch: Boolean(row["web_search"]),
     searchResults: j<SearchResult[] | null>(row["search_results_json"] as string | null, null),
     images: j<import("@ariadne/shared").ImageResult[] | null>(row["images_json"] as string | null, null),
+    timings: j<import("@ariadne/shared").TurnTimings | null>(row["timings_json"] as string | null, null),
     agent: j<AgentTrace | null>(row["agent_json"] as string | null, null),
     provider: (row["provider"] as string | null) ?? null,
     model: (row["model"] as string | null) ?? null,

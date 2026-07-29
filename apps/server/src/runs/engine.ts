@@ -34,8 +34,18 @@ import type { Snapshot } from "@ariadne/shared";
  * Wraps a provider so every `complete()` call records a usage_events row.
  * `model` is passed separately because it lives on Settings, not AiProvider.
  */
-export function meteringProvider(inner: AiProvider, runId: string, model: string, accountId: string | null = null, workspaceId: string | null = null): AiProvider {
-  const recordUsage = (usage: import("../providers/index.js").ProviderUsage) => {
+export function meteringProvider(
+  inner: AiProvider,
+  runId: string,
+  model: string,
+  accountId: string | null = null,
+  workspaceId: string | null = null,
+  /** Called with each provider call's wall time — lets a caller (e.g. TurnTimer)
+   *  separate model latency from its own. Every call passes through here, so
+   *  this is the one place that sees it. */
+  onCallMs?: (ms: number) => void,
+): AiProvider {
+  const recordUsage = (usage: import("../providers/index.js").ProviderUsage, durationMs?: number) => {
     const { inputTokens, outputTokens, cacheReadTokens = 0, cacheCreationTokens = 0 } = usage;
     const costUsd = costOf(model, inputTokens, outputTokens, {
       readTokens: cacheReadTokens,
@@ -57,6 +67,7 @@ export function meteringProvider(inner: AiProvider, runId: string, model: string
         costUsd,
         accountId,
         workspaceId,
+        durationMs: durationMs ?? null,
         createdAt: new Date().toISOString(),
       });
     } catch (err) {
@@ -64,28 +75,40 @@ export function meteringProvider(inner: AiProvider, runId: string, model: string
     }
   };
 
+  /** Time a provider call, report it, and meter its usage — one wrapper so no
+   *  call path can be instrumented in one place and forgotten in another. */
+  const timed = async <T extends { usage?: import("../providers/index.js").ProviderUsage }>(
+    call: () => Promise<T>,
+  ): Promise<T> => {
+    const t0 = performance.now();
+    try {
+      const result = await call();
+      const ms = performance.now() - t0;
+      onCallMs?.(ms);
+      if (result.usage) recordUsage(result.usage, Math.round(ms));
+      return result;
+    } catch (err) {
+      // A failed call still consumed wall time — the user waited for it, so a
+      // slow *failure* has to show up in the numbers too.
+      onCallMs?.(performance.now() - t0);
+      throw err;
+    }
+  };
+
   const wrapped: AiProvider = {
     id: inner.id,
     async complete(req) {
-      const result = await inner.complete(req);
-      if (result.usage) recordUsage(result.usage);
-      return result;
+      return timed(() => inner.complete(req));
     },
     async completeStream(req, onDelta, onStatus) {
-      const result = await inner.completeStream(req, onDelta, onStatus);
-      if (result.usage) recordUsage(result.usage);
-      return result;
+      return timed(() => inner.completeStream(req, onDelta, onStatus));
     },
   };
 
   // Pass through completeWithImages if the underlying provider supports it
   if (inner.completeWithImages) {
     const innerVision = inner.completeWithImages.bind(inner);
-    wrapped.completeWithImages = async (req) => {
-      const result = await innerVision(req);
-      if (result.usage) recordUsage(result.usage);
-      return result;
-    };
+    wrapped.completeWithImages = async (req) => timed(() => innerVision(req));
   }
 
   return wrapped;

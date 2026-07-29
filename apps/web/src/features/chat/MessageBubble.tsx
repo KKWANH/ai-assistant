@@ -646,6 +646,33 @@ export interface MessageBubbleProps {
   queryHint?: string;
 }
 
+
+/** "27.5초" / "1분 5초" — a duration a person reads, not milliseconds. */
+export function formatDuration(ms: number): string {
+  const sec = ms / 1000;
+  if (sec < 60) return `${sec < 10 ? sec.toFixed(1) : Math.round(sec)}초`;
+  const m = Math.floor(sec / 60);
+  const r = Math.round(sec % 60);
+  return r ? `${m}분 ${r}초` : `${m}분`;
+}
+
+/** Hover text: was it the model, or us? That's the only question a slow answer
+ *  raises, so answer it directly instead of dumping every phase. */
+function describeTimings(t: import("@ariadne/shared").TurnTimings): string {
+  const parts = [`전체 ${formatDuration(t.totalMs)}`];
+  if (t.providerMs != null) {
+    parts.push(`모델 ${formatDuration(t.providerMs)}`);
+    const ours = Math.max(0, t.totalMs - t.providerMs);
+    parts.push(`준비 ${formatDuration(ours)}`);
+  }
+  if (t.ttftMs != null) parts.push(`첫 글자까지 ${formatDuration(t.ttftMs)}`);
+  const phases = Object.entries(t.phases || {})
+    .filter(([, v]) => v >= 100)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k} ${formatDuration(v)}`);
+  return parts.join(" · ") + (phases.length ? `\n단계: ${phases.join(", ")}` : "");
+}
+
 function MessageBubbleImpl({ message, workspaceId, queryHint }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -739,6 +766,20 @@ function MessageBubbleImpl({ message, workspaceId, queryHint }: MessageBubblePro
             {/* Footer: timestamp + provider/model (hover-revealed). Model
                 metadata is stamped per-message at insert time — older rows
                 may be null and just hide the badge. */}
+            {/* How long this answer took. Always visible (not hover-revealed):
+                when a reply is slow, "how slow, and was it the model or us?" is
+                the first thing you want, and hiding it behind a hover means
+                nobody ever sees it. Hover gives the breakdown. */}
+            {message.timings && (
+              <span
+                className="mt-1 inline-flex w-fit items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-2xs text-muted-foreground"
+                title={describeTimings(message.timings)}
+              >
+                <Clock className="h-3 w-3" />
+                {formatDuration(message.timings.totalMs)}
+              </span>
+            )}
+
             <span className="text-2xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex items-center gap-2">
               <span>{time}</span>
               {(message.provider || message.model) && (

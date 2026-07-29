@@ -633,7 +633,8 @@ export interface ChatMessage {
   model?: string | null;
   /** Past content versions for an edited user message — oldest first. */
   revisions?: MessageRevision[];
-  createdAt: string;
+  createdAt: string;  /** Timing breakdown for this turn (assistant messages only). */
+  timings?: TurnTimings | null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -715,6 +716,20 @@ export type ChatStreamEvent =
    *  `done` no longer blocks on the title model call. */
   | { type: "chat_updated"; chatId: string; title: string }
   | { type: "error"; error: string };
+
+/**
+ * Where one chat turn's wall time went. Phases may overlap (triage and context
+ * run concurrently on purpose), so they need not sum to `totalMs` — `totalMs`
+ * is the only authority on elapsed time. `providerMs` is the share spent
+ * waiting on the model, which is what separates "the model is slow" from
+ * "we are slow".
+ */
+export interface TurnTimings {
+  totalMs: number;
+  ttftMs?: number;
+  phases: Record<string, number>;
+  providerMs?: number;
+}
 
 export interface Chat {
   id: string;
