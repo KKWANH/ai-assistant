@@ -1803,3 +1803,110 @@ export function dbUpsertFileIndex(db: DatabaseSync, workspaceId: string, filePat
     headings
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Latency stats — "why is it slow?", answered from collected data.
+ * ------------------------------------------------------------------ */
+
+export interface ModelLatency {
+  provider: string;
+  model: string;
+  /** Number of calls measured. Shown so a 2-sample row isn't read as fact. */
+  calls: number;
+  p50Ms: number;
+  p95Ms: number;
+  /** Output tokens per second — the throughput number that explains a slow model. */
+  tokensPerSec: number | null;
+}
+
+export interface LatencyStats {
+  /** Per model, slowest median first. */
+  models: ModelLatency[];
+  /** Turn-level: what the USER waited, and how much of it was the model. */
+  turns: {
+    count: number;
+    p50Ms: number;
+    p95Ms: number;
+    p50TtftMs: number | null;
+    /** Share of total wall time spent waiting on a provider, 0–1. */
+    providerShare: number | null;
+  };
+}
+
+/** Percentile of a sorted array (nearest-rank). */
+function pct(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const i = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return Math.round(sorted[i]!);
+}
+
+export function dbGetLatencyStats(): LatencyStats {
+  const db = getDb();
+  // Per-model call latency. Percentiles (not the mean) because latency is
+  // long-tailed: one 90s outlier moves an average and hides the typical case.
+  const rows = db
+    .prepare(
+      `SELECT provider, model, duration_ms AS ms, output_tokens AS out
+         FROM usage_events
+        WHERE duration_ms IS NOT NULL AND duration_ms > 0`,
+    )
+    .all() as Array<{ provider: string; model: string; ms: number; out: number }>;
+
+  const byModel = new Map<string, { provider: string; model: string; ms: number[]; out: number; total: number }>();
+  for (const r of rows) {
+    const key = `${r.provider}/${r.model}`;
+    const e = byModel.get(key) ?? { provider: r.provider, model: r.model, ms: [], out: 0, total: 0 };
+    e.ms.push(r.ms);
+    e.out += r.out ?? 0;
+    e.total += r.ms;
+    byModel.set(key, e);
+  }
+  const models: ModelLatency[] = [...byModel.values()]
+    .map((e) => {
+      const sorted = [...e.ms].sort((a, b) => a - b);
+      return {
+        provider: e.provider,
+        model: e.model,
+        calls: sorted.length,
+        p50Ms: pct(sorted, 50),
+        p95Ms: pct(sorted, 95),
+        tokensPerSec: e.total > 0 && e.out > 0 ? Math.round((e.out / (e.total / 1000)) * 10) / 10 : null,
+      };
+    })
+    .sort((a, b) => b.p50Ms - a.p50Ms);
+
+  // Turn level: the wait a person actually experienced.
+  const turnRows = db
+    .prepare(`SELECT timings_json FROM chat_messages WHERE timings_json IS NOT NULL`)
+    .all() as Array<{ timings_json: string }>;
+  const totals: number[] = [];
+  const ttfts: number[] = [];
+  let sumTotal = 0;
+  let sumProvider = 0;
+  for (const r of turnRows) {
+    try {
+      const t = JSON.parse(r.timings_json) as { totalMs: number; ttftMs?: number; providerMs?: number };
+      if (typeof t.totalMs === "number") {
+        totals.push(t.totalMs);
+        sumTotal += t.totalMs;
+        if (typeof t.providerMs === "number") sumProvider += t.providerMs;
+      }
+      if (typeof t.ttftMs === "number") ttfts.push(t.ttftMs);
+    } catch {
+      /* a malformed row must not break the report */
+    }
+  }
+  totals.sort((a, b) => a - b);
+  ttfts.sort((a, b) => a - b);
+
+  return {
+    models,
+    turns: {
+      count: totals.length,
+      p50Ms: pct(totals, 50),
+      p95Ms: pct(totals, 95),
+      p50TtftMs: ttfts.length ? pct(ttfts, 50) : null,
+      providerShare: sumTotal > 0 ? Math.round((sumProvider / sumTotal) * 100) / 100 : null,
+    },
+  };
+}
