@@ -30,6 +30,35 @@ export interface ModelPrice {
   outUsd: number;
 }
 
+/**
+ * Tokens in one full A4 page of prose (~11pt, single-spaced, mixed Korean and
+ * English). Deliberately round: this is a yardstick, not a measurement.
+ *
+ * Prices are quoted per 1M tokens, which is precise but reads as expensive and
+ * means nothing to someone preparing a lecture — "a page" is the unit they
+ * actually think in, and at this scale the honest answer is "fractions of a
+ * cent per page".
+ */
+export const TOKENS_PER_A4_PAGE = 1000;
+
+/** The same price expressed per A4 page instead of per million tokens. */
+export function pricePerPage(p: ModelPrice): ModelPrice {
+  return {
+    inUsd: (p.inUsd * TOKENS_PER_A4_PAGE) / 1_000_000,
+    outUsd: (p.outUsd * TOKENS_PER_A4_PAGE) / 1_000_000,
+  };
+}
+
+/** Format a per-page cost — cents below a dollar, since every real value is.
+ *  Trailing zeros are stripped so it reads as a price, not a measurement. */
+export function formatPageCost(usd: number): string {
+  if (usd <= 0) return "$0";
+  if (usd >= 1) return `$${usd.toFixed(2)}`;
+  const cents = usd * 100;
+  const trimmed = cents.toFixed(cents < 0.1 ? 2 : 1).replace(/\.?0+$/, "");
+  return `${trimmed || "0"}¢`;
+}
+
 // Derived from the shared PROVIDER_REGISTRY — the single source of truth for
 // models. Add a model there, not here. (traitKey is a plain string in the
 // registry; the keys all exist in the i18n dictionaries, so the cast is safe.)

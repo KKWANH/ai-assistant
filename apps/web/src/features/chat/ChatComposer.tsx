@@ -37,7 +37,7 @@ import { Tooltip } from "../../components/ui/Tooltip";
 import { Select } from "../../components/ui/Select";
 import { useWorkspaces, useSettings, useUpdateSettings, useUpdateWorkspace, useProviderStatus, useMe, useSkills } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
-import { modelInfo, modelPrice } from "../../lib/modelInfo";
+import { modelInfo, modelPrice, pricePerPage, formatPageCost } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import {
@@ -777,9 +777,9 @@ export function ChatComposer({
         {modelIsFree
           ? t("model.price.free")
           : !isSimple && currentModelPrice
-            ? t("model.price.perMillion", {
-                in: `$${currentModelPrice.inUsd}`,
-                out: `$${currentModelPrice.outUsd}`,
+            ? t("model.price.perPage", {
+                in: formatPageCost(pricePerPage(currentModelPrice).inUsd),
+                out: formatPageCost(pricePerPage(currentModelPrice).outUsd),
               })
             : `${t("model.tip.cost")}: ${t(`model.cost.${currentModelInfo.costTier}`)}`}
       </span>

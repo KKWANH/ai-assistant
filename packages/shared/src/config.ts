@@ -119,9 +119,13 @@ export const PROVIDER_REGISTRY: Record<ProviderId, ProviderDescriptor> = {
   },
   moonshot: {
     id: "moonshot", label: "Moonshot / Kimi", kind: "openai", envKey: "MOONSHOT_API_KEY", keyUrl: "https://platform.kimi.ai/console/api-keys",
-    defaultModel: "kimi-k2.6",
+    defaultModel: "kimi-k3",
     // Pricing USD/1M tokens, list cache-miss input (platform.kimi.ai, ~2026-07). Cached input is far cheaper.
     models: [
+      // K3 (API live 2026-07-16): 2.8T MoE, native vision, 1M context, always-on
+      // max reasoning — the reasoning trace is billed at the OUTPUT rate, so a
+      // chatty think can cost more than the visible answer. Pricier than K2.6.
+      { id: "kimi-k3", label: "Kimi K3", traitKey: "model.trait.kimi", speed: "normal", costTier: "mid", vision: true, pricing: { inUsd: 3, outUsd: 15 } },
       { id: "kimi-k2.6", label: "Kimi K2.6", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", vision: true, pricing: { inUsd: 0.95, outUsd: 4 } },
       { id: "kimi-k2.5", label: "Kimi K2.5", traitKey: "model.trait.kimi", speed: "normal", costTier: "low", pricing: { inUsd: 0.6, outUsd: 3 } },
       { id: "kimi-for-coding", label: "Kimi for Coding", traitKey: "model.trait.kimiCoding", speed: "normal", costTier: "low", pricing: { inUsd: 0, outUsd: 0 } },
