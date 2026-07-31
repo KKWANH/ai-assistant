@@ -4,23 +4,31 @@
  * (conversations / materials), so it's obvious where work is and isn't.
  */
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, FileText, MessageSquare, Paperclip } from "lucide-react";
 import * as api from "./api";
 import { useCourseChatCounts } from "./weekChats";
+import { useLectureParams, resolveName, weekPath, lectureHomePath } from "./lectureRoute";
+import { getWorkspace } from "@ariadne/web/src/lib/api";
 
 export function CourseView() {
-  const { id: workspaceId = "", course: courseParam = "" } = useParams<{ id: string; course: string }>();
-  const course = decodeURIComponent(courseParam);
+  const { workspaceId, courseSegment } = useLectureParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
 
+  const { data: ws } = useQuery({
+    queryKey: ["workspace", workspaceId],
+    queryFn: () => getWorkspace(workspaceId),
+    enabled: !!workspaceId,
+  });
   const { data, isLoading } = useQuery({
     queryKey: ["lecture", workspaceId],
     queryFn: () => api.getLectureStructure(workspaceId),
     enabled: !!workspaceId,
   });
+  // The URL carries a slug ("2026-2-조형예술론2"); the real name has spaces.
+  const course = resolveName(courseSegment, (data?.courses ?? []).map((x) => x.name)) ?? "";
   const c = data?.courses.find((x) => x.name === course);
 
   const scaffold = useMutation({
@@ -50,7 +58,7 @@ export function CourseView() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl p-4 sm:p-6">
         <Link
-          to={`/workspaces/${workspaceId}/lecture`}
+          to={lectureHomePath(ws?.name ?? "")}
           className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5" /> 강의 준비
@@ -110,11 +118,7 @@ export function CourseView() {
           {c?.weeks.map((w) => (
             <button
               key={w.path}
-              onClick={() =>
-                navigate(
-                  `/workspaces/${workspaceId}/lecture/c/${encodeURIComponent(course)}/w/${encodeURIComponent(w.name)}`,
-                )
-              }
+              onClick={() => navigate(weekPath(ws?.name ?? "", course, w.name))}
               className="group flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-border-strong"
             >
               <span className="min-w-0 truncate text-sm font-medium">{w.name}</span>

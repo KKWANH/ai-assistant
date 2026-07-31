@@ -7,16 +7,17 @@
  * structure: courses → CourseView (weeks) → WeekView (the work).
  */
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, Plus, LayoutGrid, BookText, MessageSquare, ChevronRight } from "lucide-react";
 import * as api from "./api";
 import { getWorkspace } from "@ariadne/web/src/lib/api";
 import { ContextEditor } from "@ariadne/web/src/features/workspace/ContextEditor";
 import { useCourseChatTotals } from "./weekChats";
+import { useLectureParams, coursePath } from "./lectureRoute";
 
 export function LectureView() {
-  const { id: workspaceId = "" } = useParams<{ id: string }>();
+  const { workspaceId } = useLectureParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
 
@@ -102,7 +103,7 @@ export function LectureView() {
           {courses.map((c) => (
             <button
               key={c.path}
-              onClick={() => navigate(`/workspaces/${workspaceId}/lecture/c/${encodeURIComponent(c.name)}`)}
+              onClick={() => navigate(coursePath(ws?.name ?? "", c.name))}
               className="group rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-border-strong"
             >
               <div className="flex items-start justify-between gap-2">

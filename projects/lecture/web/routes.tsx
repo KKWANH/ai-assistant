@@ -5,13 +5,17 @@
  * bundle only loads when a lecture project is opened.
  *
  * Three levels, because a semester is three levels deep:
- *   /lecture                        → the courses
- *   /lecture/c/:course              → one course's weeks
- *   /lecture/c/:course/w/:week      → ONE WEEK — its chats, materials, outputs
+ *   /lecture/:ws                    → the courses
+ *   /lecture/:ws/:course            → one course's weeks
+ *   /lecture/:ws/:course/:week      → ONE WEEK — its chats, materials, outputs
  * The week page is the unit the work actually happens in; without it there was
  * nowhere to hang a week's existing conversations or its generated files.
- * Course/week names are path segments (encodeURIComponent'd), and the `c`/`w`
- * markers keep a course named "w" from colliding with the week segment.
+ *
+ * Each level is registered TWICE: the short readable form above (used by every
+ * in-app link and by anything you'd paste to someone) and the original
+ * `/workspaces/:id/lecture/c/:course/w/:week`, so links already shared — and
+ * the workspace shell's own "screen" tab, which lives under /workspaces/:id —
+ * keep working. See lectureRoute.ts for how a slug resolves to a workspace.
  */
 import { lazy } from "react";
 import type { ReactElement } from "react";
@@ -24,6 +28,11 @@ const CourseView = lazy(() => import("./CourseView").then((m) => ({ default: m.C
 const WeekView = lazy(() => import("./WeekView").then((m) => ({ default: m.WeekView })));
 
 export const lectureRoutes = [
+  // Short, readable — what the app links to.
+  { path: "/lecture/:ws", element: <LectureView /> },
+  { path: "/lecture/:ws/:course", element: <CourseView /> },
+  { path: "/lecture/:ws/:course/:week", element: <WeekView /> },
+  // Original — kept so previously shared links still resolve.
   { path: "/workspaces/:id/lecture", element: <LectureView /> },
   { path: "/workspaces/:id/lecture/c/:course", element: <CourseView /> },
   { path: "/workspaces/:id/lecture/c/:course/w/:week", element: <WeekView /> },

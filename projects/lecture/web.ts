@@ -9,7 +9,10 @@ export const project: ProjectWebModule = {
     descKey: "workspace.dialog.starterLectureDesc",
   },
   // Lecture projects open straight to their lecture view (the immersive home).
-  resolveHome: (ws) => (ws.category === "lecture" ? `/workspaces/${ws.id}/lecture` : null),
+  // Short readable path (see web/lectureRoute.ts) — the sidebar is where most
+  // lecture links originate, so it should hand out the shareable form.
+  resolveHome: (ws) =>
+    ws.category === "lecture" ? `/lecture/${ws.name.trim().replace(/[/\\]+/g, "-").replace(/\s+/g, "-")}` : null,
   // Per-project chat starters — what a lecture-prep chat is usually for.
   chatStarters: (ws) =>
     ws.category === "lecture"

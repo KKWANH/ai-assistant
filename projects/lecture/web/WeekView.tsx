@@ -10,7 +10,7 @@
  * this page can find them.
  */
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -30,6 +30,8 @@ import { DeckPreview } from "./DeckPreview";
 import { ExamPreview } from "./ExamPreview";
 import { DocPreview } from "./DocPreview";
 import { useWeekChats, weekScope, weekTitle } from "./weekChats";
+import { useLectureParams, resolveName, coursePath } from "./lectureRoute";
+import { getWorkspace } from "@ariadne/web/src/lib/api";
 
 /** The deliverables the "산출물" menu offers (MW3 fan-out). */
 const DOC_TYPES: { type: DocType; label: string }[] = [
@@ -105,23 +107,25 @@ function Section({
 }
 
 export function WeekView() {
-  const {
-    id: workspaceId = "",
-    course: courseParam = "",
-    week: weekParam = "",
-  } = useParams<{ id: string; course: string; week: string }>();
-  const course = decodeURIComponent(courseParam);
-  const week = decodeURIComponent(weekParam);
+  const { workspaceId, courseSegment, weekSegment } = useLectureParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const createChat = useCreateChat();
 
+  const { data: ws } = useQuery({
+    queryKey: ["workspace", workspaceId],
+    queryFn: () => getWorkspace(workspaceId),
+    enabled: !!workspaceId,
+  });
   const { data } = useQuery({
     queryKey: ["lecture", workspaceId],
     queryFn: () => api.getLectureStructure(workspaceId),
     enabled: !!workspaceId,
   });
+  // URL segments are slugs ("0주차-강의설계"); the real names carry spaces.
+  const course = resolveName(courseSegment, (data?.courses ?? []).map((x) => x.name)) ?? "";
   const c = data?.courses.find((x) => x.name === course);
+  const week = resolveName(weekSegment, (c?.weeks ?? []).map((x) => x.name)) ?? "";
   const w = c?.weeks.find((x) => x.name === week);
 
   // The week's existing conversations — the whole point of this page.
@@ -201,7 +205,7 @@ export function WeekView() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-4 sm:p-6">
         <Link
-          to={`/workspaces/${workspaceId}/lecture/c/${encodeURIComponent(course)}`}
+          to={coursePath(ws?.name ?? "", course)}
           className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5" /> {course}
