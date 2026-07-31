@@ -495,13 +495,6 @@ export const getFxRates = (base: string, currencies: string[]) =>
     `/market/fx?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(currencies.join(","))}`,
   );
 
-// AS — Real-time world news (GDELT). Used by the global monitor surface.
-export const getWorldNews = (query: string, max = 20) =>
-  request<{ query: string; items: Array<{ title: string; url: string; domain: string; date: string }>; error?: string }>(
-    "GET",
-    `/market/worldnews?q=${encodeURIComponent(query)}&max=${String(max)}`,
-  );
-
 // AS — Symbol search by name (no LLM). Used by the surface add flow.
 export const searchSymbols = (query: string, max = 7) =>
   request<{ query: string; matches: Array<{ symbol: string; name: string; exchange: string; type: string }>; error?: string }>(
