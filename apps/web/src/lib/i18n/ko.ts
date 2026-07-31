@@ -1205,6 +1205,7 @@ const ko: Record<TranslationKey, string> = {
   // A4 한 장(약 1,000토큰) 기준 — 100만 토큰 단가는 정확하지만 비싸 보이고, 강의를
   // 준비하는 사람에게 와닿는 단위는 "한 장"이라서.
   "model.price.perPage": "A4 한 장당 읽기 {in} / 쓰기 {out}",
+  "model.tip.measuredPerPage": "실측 A4 한 장에 약 {sec}초",
   "model.trait.opus": "가장 정교한 추론 — 복잡하고 까다로운 작업에",
   "model.trait.sonnet": "품질과 속도가 균형 잡힌 범용 모델",
   "model.trait.haiku": "빠르고 가벼운 응답에",

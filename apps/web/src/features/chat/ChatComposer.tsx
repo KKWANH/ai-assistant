@@ -35,9 +35,9 @@ import type { ProviderId } from "@ariadne/shared";
 import { Button } from "../../components/ui/Button";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { Select } from "../../components/ui/Select";
-import { useWorkspaces, useSettings, useUpdateSettings, useUpdateWorkspace, useProviderStatus, useMe, useSkills } from "../../lib/queries";
+import { useWorkspaces, useSettings, useUpdateSettings, useUpdateWorkspace, useProviderStatus, useMe, useSkills, useLatencyStats } from "../../lib/queries";
 import { useUIStore } from "../../lib/store";
-import { modelInfo, modelPrice, pricePerPage, formatPageCost } from "../../lib/modelInfo";
+import { modelInfo, modelPrice, pricePerPage, formatPageCost, TOKENS_PER_A4_PAGE } from "../../lib/modelInfo";
 import { useToast } from "../../components/ui/Toast";
 import { useT } from "../../lib/i18n";
 import {
@@ -761,6 +761,11 @@ export function ChatComposer({
   // Rich hover tooltip for the model picker — friendly name, what it's good
   // at, relative speed, and price (exact $ in standard mode, a tier in easy).
   const currentModelInfo = modelInfo(currentModel);
+  // Seconds to write one A4 page at this model's MEASURED throughput. Null until
+  // the model has actually been used — we never guess a number we haven't seen.
+  const { data: latencyStats } = useLatencyStats();
+  const measuredTps = latencyStats?.models.find((m) => m.model === currentModel)?.tokensPerSec ?? null;
+  const measuredSecPerPage = measuredTps ? Math.round(TOKENS_PER_A4_PAGE / measuredTps) : null;
   const currentModelPrice = modelPrice(currentModel);
   const modelIsFree =
     currentModelPrice !== null &&
@@ -772,6 +777,15 @@ export function ChatComposer({
       <span className="text-muted-foreground">{t(currentModelInfo.traitKey)}</span>
       <span className="text-2xs text-muted-foreground">
         {t("model.tip.speed")}: {t(`model.speed.${currentModelInfo.speed}`)}
+        {/* Measured, not the registry's static guess: a model labelled
+            "moderate" was really producing ~13 tokens/sec, i.e. over a minute
+            per page. Same A4 unit as the price, so both read together. */}
+        {measuredSecPerPage != null && (
+          <span className="text-foreground">
+            {" "}
+            · {t("model.tip.measuredPerPage", { sec: String(measuredSecPerPage) })}
+          </span>
+        )}
       </span>
       <span className="text-2xs text-muted-foreground">
         {modelIsFree

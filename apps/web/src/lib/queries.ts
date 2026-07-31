@@ -413,6 +413,16 @@ export function useUsage() {
   });
 }
 
+/** Measured per-model latency. Cached hard — it's a slow-moving aggregate and
+ *  every composer render would otherwise re-ask. */
+export function useLatencyStats() {
+  return useQuery({
+    queryKey: ["usage", "latency"],
+    queryFn: api.getLatencyStats,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useWorkspaceUsage(workspaceId: string) {
   return useQuery({
     queryKey: [...qk.usage, workspaceId] as const,

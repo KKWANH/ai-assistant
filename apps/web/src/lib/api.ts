@@ -383,6 +383,24 @@ export const setAccountContext = (context: string) =>
 export const getUsage = () =>
   request<UsageSummary>("GET", "/usage");
 
+/** Measured latency, so the model picker can show what a model ACTUALLY costs
+ *  in time — the registry's static "speed: moderate" label said Moderate for a
+ *  model measuring ~13 tokens/sec. */
+export interface ModelLatency {
+  provider: string;
+  model: string;
+  calls: number;
+  p50Ms: number;
+  p95Ms: number;
+  tokensPerSec: number | null;
+}
+export interface LatencyStats {
+  models: ModelLatency[];
+  turns: { count: number; p50Ms: number; p95Ms: number; p50TtftMs: number | null; providerShare: number | null };
+}
+export const getLatencyStats = () =>
+  request<LatencyStats>("GET", "/usage/latency");
+
 export const getWorkspaceUsage = (id: string) =>
   request<UsageSummary>("GET", `/workspaces/${id}/usage`);
 
@@ -475,6 +493,13 @@ export const getFxRates = (base: string, currencies: string[]) =>
   request<{ base: string; rates: Record<string, number> }>(
     "GET",
     `/market/fx?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(currencies.join(","))}`,
+  );
+
+// AS — Real-time world news (GDELT). Used by the global monitor surface.
+export const getWorldNews = (query: string, max = 20) =>
+  request<{ query: string; items: Array<{ title: string; url: string; domain: string; date: string }>; error?: string }>(
+    "GET",
+    `/market/worldnews?q=${encodeURIComponent(query)}&max=${String(max)}`,
   );
 
 // AS — Symbol search by name (no LLM). Used by the surface add flow.

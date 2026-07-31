@@ -1207,6 +1207,7 @@ const en = {
   "model.price.free": "Free · runs on your machine",
   "model.price.perMillion": "{in} in / {out} out per 1M tokens",
   "model.price.perPage": "{in} to read / {out} to write, per A4 page",
+  "model.tip.measuredPerPage": "measured ~{sec}s per A4 page",
   "model.trait.opus": "Most sophisticated reasoning — for complex, demanding work",
   "model.trait.sonnet": "A balanced all-rounder — quality and speed",
   "model.trait.haiku": "Fast and lightweight — for quick replies",
