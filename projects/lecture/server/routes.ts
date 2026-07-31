@@ -24,6 +24,7 @@ import { resolveTierSettings } from "@ariadne/server/src/config.js";
 import { getProvider } from "@ariadne/server/src/providers/index.js";
 import { resolveOllamaModel } from "@ariadne/server/src/services/ollamaModels.js";
 import { safeResolveUnderRoot } from "@ariadne/server/src/security/pathGuard.js";
+import { dbListChats, dbListMessages } from "@ariadne/server/src/db/repo.js";
 
 /** A filesystem-safe .pptx filename derived from a deck title. */
 function deckFileName(title: string): string {
@@ -60,6 +61,55 @@ export async function lectureRoutes(app: FastifyInstance): Promise<void> {
     if (!ws) return;
     return reply.send(getLectureStructure(ws.rootPath));
   });
+
+  /**
+   * A week's materials that live in CHATS rather than on disk.
+   *
+   * The lecturer's actual habit is to attach a PDF/PPT to the conversation, not
+   * to drop it in the week folder — so the week page's 자료 list, which only
+   * scanned the folder, stayed empty no matter how many files she had uploaded.
+   * This returns the attachments from the chats belonging to this week (by the
+   * `scope` key, or the legacy title convention for chats made before scope
+   * existed), so the page can show both sources together.
+   *
+   * Only the requester's own chats, unless admin: a shared workspace must not
+   * leak one account's uploads to another.
+   */
+  app.get<{ Params: { id: string }; Querystring: { course?: string; week?: string } }>(
+    "/workspaces/:id/lecture/week-attachments",
+    async (req, reply) => {
+      const ws = await requireWorkspace(req.params.id, req, reply, "read");
+      if (!ws) return;
+      const course = (req.query.course ?? "").trim();
+      const week = (req.query.week ?? "").trim();
+      if (!course || !week) return reply.status(400).send({ error: "course and week are required" });
+
+      const scope = `lecture:${course}/${week}`;
+      const legacyTitle = `${course} · ${week}`;
+      const isAdmin = req.account?.role === "admin";
+      const chats = dbListChats().filter(
+        (c) =>
+          c.workspaceId === ws.id &&
+          (isAdmin || c.createdBy === req.account?.id) &&
+          (c.scope ? c.scope === scope : c.title === legacyTitle),
+      );
+
+      const attachments = chats.flatMap((c) =>
+        dbListMessages(c.id).flatMap((m) =>
+          (m.attachments ?? []).map((a) => ({
+            id: a.id,
+            name: a.name,
+            mediaType: a.mediaType,
+            size: a.size,
+            kind: a.kind,
+            chatId: c.id,
+            createdAt: m.createdAt,
+          })),
+        ),
+      );
+      return reply.send({ attachments });
+    },
+  );
 
   app.post<{ Params: { id: string }; Body: { course?: string; week?: string } }>(
     "/workspaces/:id/lecture/folder",

@@ -20,6 +20,7 @@ import {
   ClipboardList,
   FileStack,
   FileText,
+  Paperclip,
   Loader2,
 } from "lucide-react";
 import type { Deck, Exam, CoverageReport, DocType, GeneratedDoc } from "../types.js";
@@ -125,6 +126,16 @@ export function WeekView() {
 
   // The week's existing conversations — the whole point of this page.
   const chats = useWeekChats(workspaceId, course, week);
+
+  // Files attached inside those conversations. Without this, 자료 stayed empty
+  // for a week that had several PDFs uploaded — they were in the chat, not the
+  // folder, and only the folder was ever scanned.
+  const { data: attachmentData } = useQuery({
+    queryKey: ["lecture", workspaceId, "week-attachments", course, week],
+    queryFn: () => api.getWeekAttachments(workspaceId, course, week),
+    enabled: !!workspaceId && !!course && !!week,
+  });
+  const chatFiles = attachmentData?.attachments ?? [];
 
   const startChat = () =>
     createChat.mutate(
@@ -259,20 +270,43 @@ export function WeekView() {
 
         {/* 자료 — what's filed under this week. */}
         <Section title="자료" hint="이 주차에 모인 파일이에요. 여기서 만든 파일도 이 자리에 쌓입니다.">
-          {!w || w.materials.length === 0 ? (
+          {(w?.materials.length ?? 0) === 0 && chatFiles.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
               아직 자료가 없습니다. 대화에 파일을 첨부하시면 여기에 함께 보입니다.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {w.materials.map((m) => (
-                <span
-                  key={m.path}
-                  className="inline-flex items-center gap-1 rounded bg-card px-2 py-1 text-xs text-muted-foreground"
-                >
-                  <FileText className="h-3.5 w-3.5" /> {m.name}
-                </span>
-              ))}
+            <div className="flex flex-col gap-2">
+              {(w?.materials.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {w?.materials.map((m) => (
+                    <span
+                      key={m.path}
+                      className="inline-flex items-center gap-1 rounded bg-card px-2 py-1 text-xs text-muted-foreground"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> {m.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {chatFiles.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-2xs text-muted-foreground">대화에 올린 파일</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {chatFiles.map((f) => (
+                      <a
+                        key={f.id}
+                        href={`/api/uploads/${f.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`${f.name} — 눌러서 열기`}
+                        className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:border-border-strong hover:text-foreground"
+                      >
+                        <Paperclip className="h-3.5 w-3.5" /> {f.name}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Section>

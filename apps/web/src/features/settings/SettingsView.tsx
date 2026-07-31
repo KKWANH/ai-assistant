@@ -426,15 +426,15 @@ export function SettingsView() {
                 {locale === "ko" ? "메시지 본문의 크기 (기본 보통)" : "Message body size (default Medium)"}
               </p>
             </div>
-            <SegmentedControl<"15" | "16" | "17" | "18">
+            <SegmentedControl<"16" | "18" | "21" | "24">
               ariaLabel={locale === "ko" ? "채팅 글자 크기" : "Chat text size"}
-              value={String(chatFontSize) as "15" | "16" | "17" | "18"}
+              value={String(chatFontSize) as "16" | "18" | "21" | "24"}
               onChange={(next) => setChatFontSize(Number(next))}
               options={[
-                { value: "15", label: locale === "ko" ? "작게" : "S" },
-                { value: "16", label: locale === "ko" ? "보통" : "M" },
-                { value: "17", label: locale === "ko" ? "크게" : "L" },
-                { value: "18", label: locale === "ko" ? "최대" : "XL" },
+                { value: "16", label: locale === "ko" ? "작게" : "S" },
+                { value: "18", label: locale === "ko" ? "보통" : "M" },
+                { value: "21", label: locale === "ko" ? "크게" : "L" },
+                { value: "24", label: locale === "ko" ? "최대" : "XL" },
               ]}
             />
           </div>

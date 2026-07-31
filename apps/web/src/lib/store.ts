@@ -104,11 +104,11 @@ export function loadWallpaper(): string {
 // Chat message text size (px). Message bodies read it via the --chat-font CSS
 // var so every chat surface scales together; adjustable in Settings → 화면.
 const CHAT_FONT_KEY = "ariadne.chatFont.v1";
-export const DEFAULT_CHAT_FONT = 16;
+export const DEFAULT_CHAT_FONT = 18;
 export function loadChatFontSize(): number {
   try {
     const n = Number(localStorage.getItem(CHAT_FONT_KEY));
-    return n >= 14 && n <= 20 ? n : DEFAULT_CHAT_FONT;
+    return n >= 14 && n <= 24 ? n : DEFAULT_CHAT_FONT;
   } catch {
     return DEFAULT_CHAT_FONT;
   }

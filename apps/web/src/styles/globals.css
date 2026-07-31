@@ -166,9 +166,9 @@ html {
   font-family: var(--font-sans);
   /* Global UI scale. The whole layout is rem-based, so this single knob
      scales every spacing, width, icon and font together — like viewing the
-     UI ~25% zoomed. Radii above are scaled to match. The 100dvh app shell
+     UI ~37% zoomed. Radii above are scaled to match. The 100dvh app shell
      stays correct (no overflow) and portaled dialogs scale too. */
-  font-size: 20px;
+  font-size: 22px;
   /* Hangul reads better with slightly looser leading than Latin. */
   line-height: 1.6;
   /* Korean line-wrapping: break between words (어절), never inside one — the
@@ -195,7 +195,7 @@ html.light {
    rem-based layout fits a phone screen. Matches Tailwind's `md` breakpoint. */
 @media (max-width: 767px) {
   html {
-    font-size: 16px;
+    font-size: 17px;
   }
 }
 

@@ -37,6 +37,23 @@ export const generateDoc = (id: string, type: DocType, course?: string, week?: s
     sources,
   });
 
+/** Files attached to this week's CHATS — the lecturer's real habit is to attach
+ *  a PDF to the conversation, not to drop it in the week folder. */
+export interface WeekAttachment {
+  id: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  kind: "image" | "file";
+  chatId: string;
+  createdAt: string;
+}
+export const getWeekAttachments = (id: string, course: string, week: string) =>
+  request<{ attachments: WeekAttachment[] }>(
+    "GET",
+    `/workspaces/${id}/lecture/week-attachments?course=${encodeURIComponent(course)}&week=${encodeURIComponent(week)}`,
+  );
+
 export const setCourseMemo = (id: string, course: string, memo: string) =>
   request<{ ok: true }>("POST", `/workspaces/${id}/lecture/memo`, { course, memo });
 
