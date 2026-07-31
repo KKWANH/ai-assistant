@@ -614,7 +614,8 @@ export function dbCreateChat(c: Chat): void {
 }
 
 const CHAT_SELECT = `
-  SELECT c.*, a.display_name AS created_by_name
+  SELECT c.*, a.display_name AS created_by_name,
+         (SELECT COUNT(*) FROM chat_messages m WHERE m.chat_id = c.id) AS message_count
   FROM chats c
   LEFT JOIN accounts a ON a.id = c.created_by
 `;
@@ -747,6 +748,7 @@ function rowToChat(row: Record<string, unknown>): Chat {
     sortOrder: (row["sort_order"] as number | null) ?? null,
     sessionId: (row["session_id"] as string | null) ?? null,
     scope: (row["scope"] as string | null) ?? null,
+    messageCount: (row["message_count"] as number | null) ?? undefined,
   };
 }
 

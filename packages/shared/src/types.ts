@@ -756,6 +756,10 @@ export interface Chat {
    * `"lecture:조형예술론2/02주차"`.
    */
   scope?: string | null;
+  /** How many messages the chat holds. Decorated on list reads so a caller can
+   *  tell a real conversation from an empty one that was opened and abandoned —
+   *  otherwise several chats on the same subject look identical. */
+  messageCount?: number;
   /** Populated by GET /api/chats/:id. */
   messages?: ChatMessage[];
 }

@@ -239,8 +239,17 @@ export function WeekView() {
                     <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">{chat.title}</span>
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {chat.updatedAt.slice(0, 10)}
+                  <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                    {/* Several chats on one week share a title and a date, so the
+                        row needs something that actually distinguishes them —
+                        and an abandoned empty one should say so rather than
+                        looking like the others. */}
+                    {chat.messageCount === 0 ? (
+                      <span className="rounded bg-surface-3 px-1.5 py-0.5">비어 있음</span>
+                    ) : chat.messageCount ? (
+                      <span>{chat.messageCount}개 메시지</span>
+                    ) : null}
+                    <span>{chat.updatedAt.slice(0, 10)}</span>
                   </span>
                 </Link>
               ))}
