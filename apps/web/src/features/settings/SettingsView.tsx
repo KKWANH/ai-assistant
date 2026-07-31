@@ -17,7 +17,7 @@ import {
   Palette,
   ExternalLink,
 } from "lucide-react";
-import { PROVIDERS, SELECTABLE_PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
+import { SELECTABLE_PROVIDERS, PROVIDER_LABELS, PROVIDER_REGISTRY } from "@ariadne/shared";
 import type { AccountMode, ProviderId } from "@ariadne/shared";
 import {
   useSettings,
@@ -59,13 +59,39 @@ function SectionHeading({
   );
 }
 
-/** One provider's API-key field. Write-only — we never read the key back, only
- *  the `configured` flag. Saving an empty value clears it (reverts to env). */
-function ApiKeyRow({ id, label, configured }: { id: ProviderId; label: string; configured: boolean }) {
+/**
+ * One provider: its live status AND its API key, in a single row.
+ *
+ * These were two separate sections listing the same providers and deriving the
+ * same `configured` flag — so "Key required" appeared in one place and the box
+ * to fix it in another, and both had to be kept in sync by hand. The key field
+ * now sits under the status it explains. Keyless providers (Ollama) show status
+ * only, since there is nothing to paste.
+ *
+ * Write-only: the key is never read back, only the `configured` flag.
+ * Saving an empty value clears it (reverting to the env var).
+ */
+function ProviderRow({
+  id,
+  label,
+  configured,
+  isActive,
+  isOllama,
+  installedCount,
+}: {
+  id: ProviderId;
+  label: string;
+  configured: boolean;
+  isActive: boolean;
+  isOllama: boolean;
+  installedCount: number;
+}) {
   const { t } = useT();
   const { toast } = useToast();
   const setKey = useSetProviderKey();
   const [value, setValue] = useState("");
+  const keyUrl = PROVIDER_REGISTRY[id]?.keyUrl;
+  const takesKey = !!PROVIDER_REGISTRY[id]?.envKey;
 
   const submit = async (key: string) => {
     try {
@@ -81,51 +107,98 @@ function ApiKeyRow({ id, label, configured }: { id: ProviderId; label: string; c
     }
   };
 
-  const keyUrl = PROVIDER_REGISTRY[id]?.keyUrl;
   return (
-    <Card className="flex items-center gap-3 px-4 py-2.5">
-      <div className="w-40 shrink-0 flex flex-col gap-0.5">
-        <span className="flex items-center gap-1.5 text-sm text-foreground">
+    <Card
+      className={[
+        "flex flex-col gap-2 px-4 py-2.5",
+        isActive ? "border-accent ring-1 ring-accent/20" : "",
+      ].join(" ")}
+    >
+      <div className="flex items-center gap-3">
+        <span className="flex flex-1 items-center gap-1.5 text-sm text-foreground">
           {configured ? (
-            <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
+            isOllama ? (
+              <Wifi className="h-3.5 w-3.5 shrink-0 text-success" />
+            ) : (
+              <CheckCircle className="h-3.5 w-3.5 shrink-0 text-success" />
+            )
+          ) : isOllama ? (
+            <WifiOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           ) : (
-            <KeyRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <XCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )}
           {label}
+          {isActive && (
+            <Star
+              className="h-3 w-3 shrink-0 fill-accent text-accent"
+              aria-label={t("settings.providers.active")}
+            />
+          )}
         </span>
-        {keyUrl && !configured && (
-          <a
-            href={keyUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={keyUrl}
-            className="ml-5 inline-flex w-fit items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-2xs font-medium text-accent transition-colors hover:bg-accent/20"
-          >
-            {t("settings.apiKeys.getKey")} <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-        )}
+        <div className="flex items-center gap-2">
+          {isActive && (
+            <span className="text-xs font-medium text-accent">{t("settings.providers.active")}</span>
+          )}
+          {/* Self-hosted providers (Ollama, vLLM) never take an API key, so
+              "Key required" was both wrong and unactionable — there is no field
+              to fill. They report reachability instead. */}
+          {!takesKey ? (
+            configured ? (
+              <span className="text-xs text-success">
+                {isOllama
+                  ? t("settings.providers.reachable", {
+                      n: installedCount,
+                      s: installedCount !== 1 ? "s" : "",
+                    })
+                  : t("settings.providers.active")}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">{t("settings.providers.notRunning")}</span>
+            )
+          ) : configured ? (
+            <span className="text-xs text-success">{t("settings.providers.apiKeySet")}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">{t("settings.providers.keyRequired")}</span>
+          )}
+        </div>
       </div>
-      <Input
-        type="password"
-        autoComplete="off"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder={configured ? t("settings.apiKeys.placeholderSet") : t("settings.apiKeys.placeholder")}
-        className="flex-1 font-mono text-xs"
-      />
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => void submit(value)}
-        disabled={!value.trim() || setKey.isPending}
-        loading={setKey.isPending}
-      >
-        {t("settings.apiKeys.save")}
-      </Button>
-      {configured && (
-        <Button variant="ghost" size="sm" onClick={() => void submit("")} disabled={setKey.isPending}>
-          {t("settings.apiKeys.clear")}
-        </Button>
+
+      {takesKey && (
+        <div className="flex items-center gap-2">
+          <Input
+            type="password"
+            autoComplete="off"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={configured ? t("settings.apiKeys.placeholderSet") : t("settings.apiKeys.placeholder")}
+            className="flex-1 font-mono text-xs"
+          />
+          {keyUrl && !configured && (
+            <a
+              href={keyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={keyUrl}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-2xs font-medium text-accent transition-colors hover:bg-accent/20"
+            >
+              {t("settings.apiKeys.getKey")} <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void submit(value)}
+            disabled={!value.trim() || setKey.isPending}
+            loading={setKey.isPending}
+          >
+            {t("settings.apiKeys.save")}
+          </Button>
+          {configured && (
+            <Button variant="ghost" size="sm" onClick={() => void submit("")} disabled={setKey.isPending}>
+              {t("settings.apiKeys.clear")}
+            </Button>
+          )}
+        </div>
       )}
     </Card>
   );
@@ -212,110 +285,34 @@ export function SettingsView() {
         description={t("settings.description")}
       />
 
-      {/* Provider status overview — live. The active provider/model is
-          chosen in the chat composer; this is a read-only status panel. */}
-      <section>
-        <SectionHeading>
-          {t("settings.providers.heading")}
-          {statusLoading && (
-            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-          )}
-        </SectionHeading>
-        <p className="text-xs text-muted-foreground mb-2">
-          {t("settings.providers.pickInChat")}
-        </p>
-        <div className="flex flex-col gap-1.5">
-          {SELECTABLE_PROVIDERS.map((pid) => {
-            const live = liveProviders?.find((p) => p.id === pid);
-            const fallback = settings.providers.find((p) => p.id === pid);
-            const configured = live?.configured ?? fallback?.configured ?? false;
-            const label = PROVIDER_LABELS[pid];
-            const isActive = settings.provider === pid;
-            const isOllama = pid === "ollama";
-            const installedCount = live?.models?.length ?? 0;
-
-            return (
-              <Card
-                key={pid}
-                className={[
-                  "flex items-center gap-3 px-4 py-2.5",
-                  isActive ? "border-accent ring-1 ring-accent/20" : "",
-                ].join(" ")}
-              >
-                <span className="flex items-center gap-1.5 flex-1 text-sm text-foreground">
-                  {configured ? (
-                    isOllama ? (
-                      <Wifi className="h-3.5 w-3.5 text-success shrink-0" />
-                    ) : (
-                      <CheckCircle className="h-3.5 w-3.5 text-success shrink-0" />
-                    )
-                  ) : isOllama ? (
-                    <WifiOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  )}
-                  {label}
-                  {isActive && (
-                    <Star
-                      className="h-3 w-3 text-accent fill-accent shrink-0"
-                      aria-label={t("settings.providers.active")}
-                    />
-                  )}
-                </span>
-                <div className="flex items-center gap-2">
-                  {isActive && (
-                    <span className="text-xs font-medium text-accent">
-                      {t("settings.providers.active")}
-                    </span>
-                  )}
-                  {isOllama ? (
-                    configured ? (
-                      <span className="text-xs text-success">
-                        {t("settings.providers.reachable", {
-                          n: installedCount,
-                          s: installedCount !== 1 ? "s" : "",
-                        })}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {t("settings.providers.notRunning")}
-                      </span>
-                    )
-                  ) : configured ? (
-                    <span className="text-xs text-success">
-                      {t("settings.providers.apiKeySet")}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t("settings.providers.keyRequired")}
-                    </span>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* API keys — paste a provider key in-app; no shell env var needed.
-          Saved to the local settings table and used over the env var. */}
+      {/* Providers — status and key in one place. They used to be two
+          sections over the same list: the status said "key required" while the
+          field to fix it lived further down the page. */}
       <section>
         <SectionHeading icon={<KeyRound className="h-3.5 w-3.5" />}>
-          {t("settings.apiKeys.heading")}
+          {t("settings.providers.heading")}
+          {statusLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </SectionHeading>
         <p className="text-xs text-muted-foreground mb-2">
-          {t("settings.apiKeys.subtitle")}{" "}
+          {t("settings.providers.pickInChat")}{" "}
           <Link to="/developers/api-keys" className="text-accent hover:underline">
             {t("settings.apiKeys.guide")} →
           </Link>
         </p>
         <div className="flex flex-col gap-1.5">
-          {PROVIDERS.filter((pid) => PROVIDER_REGISTRY[pid].envKey).map((pid) => {
+          {SELECTABLE_PROVIDERS.map((pid) => {
             const live = liveProviders?.find((p) => p.id === pid);
             const fallback = settings.providers.find((p) => p.id === pid);
-            const configured = live?.configured ?? fallback?.configured ?? false;
             return (
-              <ApiKeyRow key={pid} id={pid} label={PROVIDER_LABELS[pid]} configured={configured} />
+              <ProviderRow
+                key={pid}
+                id={pid}
+                label={PROVIDER_LABELS[pid]}
+                configured={live?.configured ?? fallback?.configured ?? false}
+                isActive={settings.provider === pid}
+                isOllama={pid === "ollama"}
+                installedCount={live?.models?.length ?? 0}
+              />
             );
           })}
         </div>
